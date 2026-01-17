@@ -6,8 +6,9 @@ import { EconomyCommand } from './EconomyCommand';
 import { QuoteCommand } from './QuoteCommand';
 import { CepCommand } from './CepCommand';
 import { ProfileCommand } from './ProfileCommand';
-import { SmsCommand } from './SmsCommand';
 import { HelpCommand } from './HelpCommand';
+import { GeminiCommand } from './GeminiCommand';
+import { SinhalaCommand } from './SinhalaCommand';
 
 /**
  * Initializes and registers all available commands
@@ -19,7 +20,10 @@ export const initializeCommands = (): void => {
   commandDispatcher.register(new QuoteCommand());
   commandDispatcher.register(new CepCommand());
   commandDispatcher.register(new ProfileCommand());
-  commandDispatcher.register(new SmsCommand());
+
+  // AI Commands
+  commandDispatcher.register(new GeminiCommand());
+  commandDispatcher.register(new SinhalaCommand());
 
   console.log(
     `✅ ${commandDispatcher.getAllCommands().length} commands registered`,

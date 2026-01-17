@@ -1,12 +1,35 @@
+# Environment
 .env
+.env.local
+
+# Build output
 dist
+
+# Dependencies
 node_modules
 *.lock
 package-lock.json
-src/config/integrantes.json
+
+# IDE
 .idea
+.vscode
+
+# WhatsApp session data - NEVER commit this!
+auth_info/
+src/auth_info/
 .wwebjs_*
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Data files
 src/data/*
 !src/data/.gitkeep
-.DS_Store
+src/config/integrantes.json
 
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*

@@ -34,21 +34,34 @@ class CommandDispatcher {
     message: Message,
     args: string[],
   ): Promise<void> {
+    console.log(`   📤 Dispatching command: "${commandName}"`);
+
     // Resolve alias to real command name
     const resolvedName = this.aliases.get(commandName) || commandName;
+    console.log(`   🔍 Resolved to: "${resolvedName}"`);
+
     const command = this.commands.get(resolvedName);
 
     if (command) {
+      console.log(`   ✅ Command found: ${command.name}`);
       try {
+        console.log(`   ⚡ Executing command...`);
         await command.execute(message, args);
+        console.log(`   ✅ Command executed successfully`);
       } catch (error) {
-        console.error(`❌ Error executing command '${resolvedName}':`, error);
-        await message.reply(
-          '⚠️ An error occurred while executing the command. Please try again later.',
-        );
+        console.error(`   ❌ Error executing command '${resolvedName}':`, error);
+        try {
+          await message.reply(
+            '⚠️ An error occurred while executing the command. Please try again later.',
+          );
+        } catch (replyError) {
+          console.error(`   ❌ Failed to send error reply:`, replyError);
+        }
       }
+    } else {
+      console.log(`   ⚠️ Command not found: "${commandName}"`);
+      console.log(`   📋 Available commands: ${Array.from(this.commands.keys()).join(', ')}`);
     }
-    // If command doesn't exist, do nothing (silent)
   }
 
   /**
