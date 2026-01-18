@@ -32,7 +32,9 @@
   },
   "scripts": {
     "lint": "eslint . --fix --ext .js,.ts",
-    "dev": "tsnd --respawn --transpile-only --ignore-watch node_modules -r dotenv/config src/index.ts"
+    "dev": "tsnd --respawn --transpile-only --ignore-watch node_modules -r dotenv/config src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
