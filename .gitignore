@@ -1,5 +1,4 @@
 # Environment
-.env
 .env.local
 
 # Build output
