@@ -8,8 +8,25 @@ import {
 } from './services/whatsapp';
 import { sendMessageWithMemory, clearConversation } from './services/gemini';
 import { getRegistrationMessage, getPaymentMessage, getCVMessage } from './config/links-config';
+import { createServer } from 'http';
 
 console.log('🤖 WhatsApp AI Bot starting...');
+
+// Health check server for Render.com
+const PORT = process.env.PORT || 8080;
+const server = createServer((req, res) => {
+    if (req.url === '/health' || req.url === '/') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok', service: 'whatsapp-bot' }));
+    } else {
+        res.writeHead(404);
+        res.end('Not Found');
+    }
+});
+
+server.listen(PORT, () => {
+    console.log(`🌐 Health check server running on port ${PORT}`);
+});
 
 /**
  * Main message handler
