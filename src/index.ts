@@ -151,7 +151,9 @@ async function handleCommand(jid: string, text: string): Promise<void> {
         case '!pay':
         case '!bank':
             console.log('   💳 Sending payment details...');
-            await sendMessage(jid, getPaymentMessage());
+            // Extract argument if exists (e.g., "!payment singapore" -> "singapore")
+            const paymentArg = text.split(' ').slice(1).join(' ');
+            await sendMessage(jid, getPaymentMessage(paymentArg));
             break;
 
         case '!cv':
