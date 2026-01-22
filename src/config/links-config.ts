@@ -12,25 +12,25 @@ export const REGISTRATION_CONFIG = {
     },
 
     // Registration message in Sinhala
-    message: `📝 *පාඨමාලා හා රැකියා සඳහා ලියාපදිංචි වන්න!*
+    message: `📝 *පාඨමාලා හා රැකියා සඳහා ලියාපදිංචි වන්න*
 
 කරුණාකර ඔබට අදාළ අංශය තෝරා Link එක Click කරන්න:
 
-1️⃣ *ඊශ්‍රායල ඉදිකිරීම් රැකියා:*
-👉 https://forms.gle/QYmcNAswCa8ZsgkG9
+1. *ඊශ්‍රායල ඉදිකිරීම් රැකියා:*
+https://forms.gle/QYmcNAswCa8ZsgkG9
 
-2️⃣ *ජපන් භාෂා පාඨමාලාව (04 වන කණ්ඩායම):*
-👉 https://forms.gle/ngHvU95auJ2XopyX6
+2. *ජපන් භාෂා පාඨමාලාව (04 වන කණ්ඩායම):*
+https://forms.gle/ngHvU95auJ2XopyX6
 
-3️⃣ *බර වාහන පුහුණු ලියාපදිංචිය:*
-👉 https://forms.gle/h71N2aR8Ve1k31RZ8
+3. *බර වාහන පුහුණු ලියාපදිංචිය:*
+https://forms.gle/h71N2aR8Ve1k31RZ8
 
-4️⃣ *සිංගප්පූරු රැකියා පුහුණු අයදුම්පත:*
-👉 https://forms.gle/gAs8CX4rQf2ER2zYA
+4. *සිංගප්පූරු රැකියා පුහුණු අයදුම්පත:*
+https://forms.gle/gAs8CX4rQf2ER2zYA
 
-✅ *උපදෙස්:*
-• අදාළ Link එක වෙත ගොස් form එක පුරවන්න.
-• ඔබගේ නිවැරදි තොරතුරු ඇතුළත් කිරීමට වග බලා ගන්න.`
+*උපදෙස්:*
+• අදාළ Link එක වෙත ගොස් form එක සම්පූර්ණ කරන්න.
+• ඔබගේ තොරතුරු නිවැරදිව ඇතුළත් කිරීමට වග බලා ගන්න.`
 };
 
 // --- Payment Configuration ---
@@ -144,47 +144,47 @@ export const BANK_ACCOUNTS: Record<string, PaymentCategoryItem> = {
 
 export const PAYMENT_CONFIG = {
     // Default message when no category is selected
-    defaultMessage: `� *ගෙවීම් විස්තර (Payment Details)*
+    defaultMessage: `💳 *ගෙවීම් විස්තර (Payment Details)*
 
 කරුණාකර ඔබට අදාළ ගෙවීම් කාණ්ඩය තෝරන්න:
 
-1️⃣ *Welding / Israel Training / Auto*
+1. *Welding / Israel Training / Auto*
 👉 \`!payment welding\`
 
-2️⃣ *Heavy Machinery / Construction*
+2. *Heavy Machinery / Construction*
 👉 \`!payment heavy\`
 
-3️⃣ *Language Courses (Japanese/Korean)*
+3. *Language Courses (Japanese/Korean)*
 👉 \`!payment language\`
 
-4️⃣ *Singapore Courses & Tests*
+4. *Singapore Courses & Tests*
 👉 \`!payment singapore\`
 
-5️⃣ *Israel Placement (Job Fees)*
+5. *Israel Placement (Job Fees)*
 👉 \`!payment israel-job\`
 
-6️⃣ *Israel Trade Test*
+6. *Israel Trade Test*
 👉 \`!payment israel-test\`
 
-⚠️ *වැදගත්:* අදාළ අරමුණ සඳහා නිවැරදි ගිණුම් අංකය භාවිතා කරන්න.`
+*වැදගත්:* අදාළ අරමුණ සඳහා නිවැරදි ගිණුම් අංකය භාවිතා කරන්න.`
 };
 
 export const CV_CONFIG = {
     // CV submission link
     formUrl: 'https://forms.gle/YOUR_CV_FORM_ID',
 
-    message: `📄 *CV එක submit කරන්න!*
+    message: `📄 *CV එක submit කරන්න*
 
 👉 *CV Submission Form:*
 {{FORM_URL}}
 
-*Upload කරන්න:*
+*Upload කළ යුතු ලිපිගොනු:*
 • ඔබේ CV (PDF format)
 • Service Certificates
 • Training Certificates
 • Photos/Videos of work
 
-✅ Submit කළ පසු අපි review කරන්නම්!`
+✅ Submit කළ පසු අපි එය පරීක්ෂා කර බලන්නම්.`
 };
 
 /**
@@ -231,7 +231,7 @@ export function getPaymentMessage(query?: string): string {
 
 ${accountsText}
 
-⚠️ *වැදගත්:*
+*වැදගත්:*
 • ගෙවීම් කළ පසු slip එක WhatsApp කරන්න.
 • Slip එකේ ඔබේ නම සහ දුරකථන අංකය ලියන්න.`;
     }
@@ -246,4 +246,3 @@ ${accountsText}
 export function getCVMessage(): string {
     return CV_CONFIG.message.replace('{{FORM_URL}}', CV_CONFIG.formUrl);
 }
-

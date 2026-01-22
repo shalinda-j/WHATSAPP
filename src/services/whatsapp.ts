@@ -101,11 +101,15 @@ async function connectToWhatsApp(): Promise<void> {
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
       if (type !== 'notify') return;
 
-      for (const message of messages) {
+      // Process all messages in parallel using Promise.all
+      // This ensures that one slow message (waiting for AI) doesn't block others
+      await Promise.all(messages.map(async (message) => {
         // Ignore status broadcasts
-        if (message.key.remoteJid?.includes('status@broadcast')) continue;
+        if (message.key.remoteJid?.includes('status@broadcast')) return;
 
-        // Call all registered message handlers
+        // Call all registered message handlers for this message
+        // We await handlers here to ensure this specific message is fully processed,
+        // but since we are inside Promise.all(map), other messages run in parallel.
         for (const handler of messageHandlers) {
           try {
             await handler(message);
@@ -113,7 +117,7 @@ async function connectToWhatsApp(): Promise<void> {
             console.error('❌ Message handler error:', error);
           }
         }
-      }
+      }));
     });
 
   } catch (error: any) {

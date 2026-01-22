@@ -6,8 +6,10 @@ import {
     isFromMe,
     getSenderJid,
 } from './services/whatsapp';
-import { sendMessageWithMemory, clearConversation } from './services/zhipu';
+import { sendMessageWithMemory as sendGeminiMessage, clearConversation as clearGeminiConversation, detectBookingIntent } from './services/gemini';
+import { sendMessageWithMemory as sendZhipuMessage, clearConversation as clearZhipuConversation } from './services/zhipu';
 import { getRegistrationMessage, getPaymentMessage, getCVMessage } from './config/links-config';
+import { handleBookingMessage, startBookingFlow, handleSpecificDateRequest } from './services/BookingService';
 import { createServer } from 'http';
 
 console.log('🤖 WhatsApp AI Bot starting...');
@@ -58,6 +60,13 @@ onMessage(async (message) => {
             return;
         }
 
+        // 1. Check if user is in a booking flow
+        const handledByBooking = await handleBookingMessage(jid, text);
+        if (handledByBooking) {
+            console.log('   📅 Handled by BookingService');
+            return;
+        }
+
         // Handle commands starting with !
         if (text.startsWith('!')) {
             console.log(`   🤖 Processing command: ${text}`);
@@ -71,8 +80,18 @@ onMessage(async (message) => {
             // Show typing indicator
             await sendTyping(jid);
 
-            // Get AI response
-            const response = await sendMessageWithMemory(jid, text);
+            // 3. Check for natural language booking intent
+            // This is "Tool Calling" via NLP
+            // Note: If Gemini fails (IP Invalid), this returns null and we proceed to Zhipu
+            const bookingIntent = await detectBookingIntent(text);
+            if (bookingIntent && bookingIntent.intent === 'CHECK_AVAILABILITY' && bookingIntent.date && bookingIntent.time) {
+                console.log(`   📅 Specific booking request: ${bookingIntent.date} @ ${bookingIntent.time}`);
+                await handleSpecificDateRequest(jid, bookingIntent.date, bookingIntent.time);
+                return;
+            }
+
+            // Get AI response (Using Zhipu/GLM as primary)
+            const response = await sendZhipuMessage(jid, text);
 
             console.log('   📤 Sending AI response...');
             const sent = await sendMessage(jid, `🤖 ${response}`);
@@ -114,20 +133,20 @@ async function handleCommand(jid: string, text: string): Promise<void> {
         case '!help':
             await sendMessage(
                 jid,
-                `🏗️ *ජොබ් අසිස්ට් - Job Assist Bot*\n\n` +
-                `*ඊශ්‍රායල ඉදිකිරීම් රැකියා විශේෂඥයා*\n\n` +
-                `*Commands:*\n` +
-                `• \`!help\` - උදව්\n` +
-                `• \`!jobs\` - පවතින රැකියා\n` +
-                `• \`!register\` - ලියාපදිංචි වන්න 📝\n` +
-                `• \`!payment\` - ගෙවීම් විස්තර 💳\n` +
-                `• \`!cv\` - CV submit කරන්න 📄\n` +
-                `• \`!clear\` - කතාබහ මකන්න\n\n` +
-                `*ඕනෑම පණිවුඩයක් යවන්න:*\n` +
-                `• රැකියා තොරතුරු\n` +
-                `• ගාස්තු විස්තර\n` +
-                `• සුදුසුකම් පරීක්ෂාව\n\n` +
-                `Powered by Gemini AI 🧠`
+                `🏗️ *Job Assist Bot (ජොබ් අසිස්ට්)*
+
+*ඊශ්‍රායල ඉදිකිරීම් රැකියා විශේෂඥයා*
+
+*Available Commands:*
+• \`!help\` - උදව් ලබාගන්න
+• \`!jobs\` - පවතින රැකියා ඇබෑර්තු
+• \`!visit\` - පැමිණීමට වේලාවක් වෙන්කරගන්න
+• \`!register\` - ලියාපදිංචි වන්න
+• \`!payment\` - ගෙවීම් විස්තර ලබාගන්න
+• \`!cv\` - CV submit කරන්න
+• \`!clear\` - කතාබහ අලුතින් අරඹන්න
+
+*ඔබට අවශ්‍ය දේ පණිවුඩයක් ලෙස එවන්න.*`
             );
             break;
 
@@ -136,7 +155,8 @@ async function handleCommand(jid: string, text: string): Promise<void> {
             break;
 
         case '!clear':
-            clearConversation(jid);
+            clearGeminiConversation(jid);
+            clearZhipuConversation(jid);
             await sendMessage(jid, '🗑️ කතාබහ ඉතිහාසය මකා දැමුවා!\nදැන් අලුතින් ආරම්භ කරමු! 🏗️');
             break;
 
@@ -164,17 +184,26 @@ async function handleCommand(jid: string, text: string): Promise<void> {
         case '!jobs':
             await sendMessage(
                 jid,
-                `📋 *පවතින රැකියා ඇබෑර්තු:*\n\n` +
-                `⚡ *Electricians* - 10 ක්\n` +
-                `🛣️ *Asphalt Teams* - 2 Teams\n` +
-                `🔧 *Plumbers* - 40 ක්\n` +
-                `🚛 *Concrete Pump Drivers* - 30 ක්\n` +
-                `🚜 *Excavator/JCB Operators*\n` +
-                `🧹 *Heavy Duty Cleaners* - 15 ක්\n` +
-                `🏠 *Gypsum/Tile Fixers* - 100 බැගින්\n\n` +
-                `📝 ලියාපදිංචි වන්න: \`!register\`\n` +
-                `ඔබේ trade එක කියන්න! 👷`
+                `📋 *පවතින රැකියා ඇබෑර්තු:*
+
+⚡ *Electricians* - 10 ක්
+🛣️ *Asphalt Teams* - 2 Teams
+🔧 *Plumbers* - 40 ක්
+🚛 *Concrete Pump Drivers* - 30 ක්
+🚜 *Excavator/JCB Operators*
+🧹 *Heavy Duty Cleaners* - 15 ක්
+🏠 *Gypsum/Tile Fixers* - 100 බැගින්
+
+📝 ලියාපදිංචි වීමට \`!register\` භාවිතා කරන්න.`
             );
+            break;
+
+        case '!visit':
+        case '!schedule':
+        case '!appointment':
+        case '!book':
+            console.log('   📅 Starting booking flow...');
+            await startBookingFlow(jid);
             break;
 
         default:

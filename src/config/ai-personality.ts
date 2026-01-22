@@ -1,395 +1,108 @@
+import { JCETI_DATA } from './companies/jceti';
+import { GLOBAL_WORKFORCE_DATA } from './companies/global-workforce';
+import { SINGAPORE_DATA } from './companies/singapore';
+import { ISRAEL_DATA } from './companies/israel';
+
 /**
- * AI Personality Configuration for Job Recruitment Bot
- * Comprehensive Training Data for Israel, Singapore, Japan, Europe Jobs
- * Jayalath JCETI (Jayalath Construction Equipment Training Institute) Specialist
+ * AI Personality Configuration
+ * 
+ * SETUP:
+ * Change 'BS_SCOPE' to control what data the bot knows.
+ * Options: 
+ *  - 'ALL'    : Loads everything (Default)
+ *  - 'JCETI'  : Only Training Institute data
+ *  - 'GLOBAL' : Only Foreign Recruitment data
+ *  - 'SG'     : Only Singapore data
  */
+const BOT_SCOPE = 'ALL' as 'ALL' | 'JCETI' | 'GLOBAL' | 'SG';
 
-export const AI_PERSONALITY = `
-ඔබ "ජයලත් AI" (Jayalath AI) නම් ජයලත් AI සහායකයෙක්. ඔබ Jayalath Global Workforce  ආයතනය හරහා විදේශ රැකියා බඳවා ගැනීම සඳහා විශේෂිත ය.
+// --- Dynamic Data Loading ---
+let knowledgeBase = '';
 
-*ඔබේ ප්රධාන කාර්යය:*
-- ඊශ්රායල, සිංගප්පූරු, ජපාන, යුරෝපීය රැකියා පිළිබඳ තොරතුරු ලබා දීම
-- ජයලත් JCETI /JOVTI පුහුණු වැඩසටහන් පිළිබඳ මග පෙන්වීම
-- අයදුම්කරුවන්ගේ සුදුසුකම් පරීක්ෂා කිරීම (Screening)
-- Training,Trade test, NVQ සහතික, ගාස්තු පිළිබඳ පැහැදිලි කිරීම
+// Helper to add data with a separator
+const addData = (data: string) => {
+    knowledgeBase += data + '\n\n---\n\n';
+};
 
-*ප්රතිචාර ආකෘතිය:*
-- සිංහල භාෂාවෙන් පිළිතුරු දෙන්න
-- WhatsApp formatting භාවිත කරන්න (bold, italic)
-- Emoji භාවිත කරන්න: 🏗️👷✅📋💰🇮🇱🇸🇬🇯🇵
-- කෙටි හා පැහැදිලිව පිළිතුරු දෙන්න
-
-*වැදගත්:*
-- නිවැරදි ගාස්තු පමණක් කියන්න
-- ජයලත් පුහුණු මධ්යස්ථානය  TVEC/SLBFE ලියාපදංචි පුහුණු ආයතනයක් වන අතර ඊට අනුබද්ධව ආයතන කීපයක් විවීධ රටවල් ඉලක්ක කර ගෙන Training හා Assement කටයුතුවල නිරතවේ;
-`;
+if (BOT_SCOPE === 'ALL') {
+    addData(JCETI_DATA);
+    addData(GLOBAL_WORKFORCE_DATA);
+    addData(ISRAEL_DATA);
+    addData(SINGAPORE_DATA);
+} else if (BOT_SCOPE === 'JCETI') {
+    addData(JCETI_DATA);
+} else if (BOT_SCOPE === 'GLOBAL') {
+    addData(GLOBAL_WORKFORCE_DATA);
+    addData(ISRAEL_DATA);
+    addData(SINGAPORE_DATA); // Singapore often falls under global recruitment
+} else if (BOT_SCOPE === 'SG') {
+    addData(SINGAPORE_DATA);
+}
 
 export const JOB_KNOWLEDGE_BASE = `
-# 🌍 විදේශ රැකියා දත්ත පදනම (Complete Job Knowledge Base)
-
-## 🏢 ජයලත් ආයතනය (Jayalath Institute)
-
-### ජයලත් ඉදිකිරීම් උපකරණ පුහුණු ආයතනය (JCETI - Jayalath Construction Equipment Training Institute)
-- 1999 සිට ආරම්භ කළ *ලංකාවේ පළමු  යන්ත්රෝපකරණ  පුහුණු පාසලයී* (The first private  owned construction  machinery training institute in Sri Lanka)
-  ලමුන් 30,000 - 40,000 ක් පමණ දැනට පුහුණුව ලබා දී ඇත. 
-
-- "ජයලත් ග්ලෝබල්" (Jayalath Global) - AI සහායකයෙකු (AI Assistant) ලෙස ක්රියා කරයි
-- *ආවරණය කරන අංශ 4:* Training (පුහුණුව), Testing (පරීක්ෂණ), Placement (රැකියා ස්ථානගත කිරීම), Finance (මූල්ය පහසුකම්)
-- විදේශීය නියෝජිතයින් (Foreign Principals) සෘජුවම ගෙන්වා Selection කරයි
-- වීසා, ගිවිසුම්, මූල්ය කටයුතු ජයලත් ආයතනයේ මැදිහත්වීමෙන් සිදු වේ
-- හුදෙක් විදේශ රැකියා ඒජන්සියක් නොව, *සම්පූර්ණ විසඳුම් සපයන මධ්යස්ථානයකි*
-
-*JCETI හරහා ක්රියාත්මක වන පාඨමාලා:*
-
-🔧 *බර යන්ත්ර (Heavy Machinery) පුහුණුව:*
-- ෆෝක්ලිෆ්ට්, බැකෝ ලෝඩර්, එක්ස්කැවේටර්, ප්රයිම් මූවර්
-
-🏗️ *සාමාන්ය ඉදිකිරීම් (General Construction):*
-- ටයිල්, ප්ලාස්ටර්, ඉලෙක්ට්රිකල්, ප්ලම්බිං, ෂටරින්, බාබෙන්ඩින් (පැය 120)
-- *සිංගප්පූරුව ඇතුළු සියලුම රටවල් සඳහා*
-
-🗣️ *භාෂා මධ්යස්ථානය (Language Center):*
-- ජපන් (N5, N4), ජර්මන්, කොරියන්
-
-🔧 *වෙල්ඩින්:*
-- FCW, MIG, TIG, MAG
-
-🏥 *වෙනත් අංශ:*
-- සෞඛ්ය සේවා (Healthcare)
-- ආගන්තුක සත්කාර (Hospitality)
-- ගෘහස්ථ හා ගෘහස්ථ නොවන සේවා (Domestic & Non-Domestic Service Sector)
-
----
-
-## 🇮🇱 ඊශ්රායල රැකියා (Israel Jobs)
-
-### පවතින රැකියා ඇබෑර්තු:
-| රැකියාව | අවශ්ය ගණන | Screening Questions |
-|---------|-----------|---------------------|
-| Electricians | 10 | ඉංග්රීසි, Electrical Drawings |
-| Asphalt Teams | 2 Teams | 11 දෙනෙක් team එකකට |
-| Plumbers | 40 | Water distribution line අත්දැකීම් |
-| Concrete Pump Drivers | 30 | Boom Truck experience |
-| Excavator/JCB Operators | - | Project experience |
-| Heavy Duty Cleaners | 15 | Physical fitness |
-| Gypsum/Tile Fixers | 100 each | Laser භාවිතය |
-
-### මූලික සුදුසුකම්:
-- ✅ ඉදිකිරීම් ක්ෂේත්රයේ අවම *වසර 3ක* පළපුරුද්දක්
-- ✅ වයස: *අවුරුදු 25-45* අතර
-- ✅ ඊශ්රායලයේ පවුලේ සාමාජිකයන් නැති විය යුතුයි
-- ✅ අපරාධ වාර්තා නොතිබිය යුතුයි
-- ✅ *මූලික ඉංග්රීසි* දැනුම අනිවාර්ය
-
-### වැටුප් (Renovations Field):
-- ජිප්සම් කාර්පෙන්ටර් / ටයිල් ෆික්සර්: *මසකට ෂෙකල් 6,188* (පැයකට ෂෙකල් 34)
-
-### ගාස්තු:
-- සාමාන්ය අංශ: *USD 8,650*
-- විශේෂිත අංශ (Heavy Machinery): *USD 9,000 - 9,500*
-- ගිවිසුම අත්සන් කරන අවස්ථාවේ: *USD 1,000* (Non-refundable)
-
-### ක්රියාවලිය:
-1. දේශීය නිපුණතා පරීක්ෂණය
-2. Foreign Principal ඉදිරියේ අවසන් පරීක්ෂණය
-3. ගිවිසුම ලැබීමට මාස 1.5-2
-4. ලේඛන: පරිවර්තන, දිවුරුම් ප්රකාශ, පොලිස් වාර්තා
-
-### 📊 ඊශ්රායල රැකියා සාරාංශය (Israel Job Market Summary):
-
-*A. සේවාදායකයින් සහ වැටුප් (Clients & Salaries):*
-
-| සේවාදායකයා (Client) | රැකියා ක්ෂේත්රය | තනතුරු (Positions) | වැටුප (NIS - ෂෙකල්) | ශ්රී ලංකාවේ පරීක්ෂණ කාලය |
-|---------------------|----------------|---------------------|--------------------|-----------------------|
-|  | ඉදිකිරීම් (Construction) | Steel Fixer, Mason, Shuttering Carpenter | 8,000 | |
-| යන්ත්ර ක්රියාකරුවන් | | Excavator Operator | 10,000 | |
-| වෙල්ඩින් | | Welder | 9,000 | |
-| | | Barbender | 8,400 | |
-| ඉදිකිරීම් | | Tile Fixer | 8,024 | |
-| Renovations | අලුත්වැඩියා(Renovations) | Gypsum Carpenter, Tile Fixer | 6,188 | |
-
- *B. වැටුප් සැසඳීම (SalaryComparison):*
-- 💰 *ඉහළම වැටුප:* එක්ස්කැවේටර් ක්රියාකරුවන් (NIS 10,000)
-- 💵 *මධ්යම වැටුප:* වෙල්ඩර් (NIS 9,000) සහ ස්ටීල් ෆික්සර්/මේසන් (NIS 8,400)
-- 📊 *ආරම්භක වැටුප:* ජිප්සම් සහ අලුත්වැඩියා අංශයේ ටයිල් ෆික්සර්වරුන් (NIS 6,188)
-
-*C. කොන්දේසි සහ නියමයන් (Terms & Conditions):*
-- ✅ *පළපුරුද්ද:* ඉදිකිරීම් ක්ෂේත්රයේ වසර 3කට වැඩි පළපුරුද්ද අනිවාර්ය වේ
-- ✅ *වයස් සීමාව:* අවුරුදු 25 - 45 අතර විය යුතුය
-- ✅ *භාෂාව:* ඉංග්රීසි භාෂාවෙන් මූලික සන්නිවේදන හැකියාව අනිවාර්ය වේ (Must)
-- ✅ *පවුල් පසුබිම:* ඊශ්රායලයේ සේවය කරන හෝ ජීවත් වන දෙමාපියන්, බිරිඳ හෝ දරුවන් නොසිටිය යුතුය
-- ✅ *පහසුකම්:* නවාතැන් සහ ප්රවාහනය සේවා යෝජකයා විසින් සපයනු ලැබේ
-- ✅ *විශ්රාම වැටුප් (Pension):* මසකට NIS 700 බැගින් සේවා යෝජකයා විසින් බැංකු ගිණුමට තැන්පත් කරනු ලබන අතර, සේවය නිම වී යන විට එය ආපසු ලබා ගත හැක
-
-### 🎯 ඊශ්රායල ස්කිල් ටෙස්ට් සහ Gap Filling:
-- ✅ *නොමිලේ කුසලතා පරීක්ෂාව:* අයදුම්කරුවන්ට ආයතනයට පැමිණ තම කුසලතාවය නොමිලේ පරීක්ෂා කර ගත හැක
-- 📊 *ශ්රේණිගත කිරීම (Grading):* පරීක්ෂණයෙන් පසු අයදුම්කරුවන්ව ශ්රේණිගත කරනු ලැබේ
-- 📚 *Gap Filling Training:* අමතර පුහුණුවක් අවශ්ය නම් (Skill Gap) ඒ සඳහා පමණක් පුහුණුව ලබා දේ
-- 💰 *ගාස්තුව:* පළමු දිනට *රු. 5,000/-* | ඉන්පසු දිනකට *රු. 1,500/-*
-- 🎯 *සෘජු පරීක්ෂණ:* හොඳ පළපුරුද්දක් ඇති අයට පුහුණුවක් නොමැතිව *කෙලින්ම විදේශ නියෝජිතයින් ඉදිරියේ Final Test* එකට පෙනී සිටිය හැක
-
----
-
-## 🇸🇬 සිංගප්පූරු රැකියා (Singapore Jobs)
-
-### සුදුසුකම්:
-- *BCA (Building & Construction Authority) අනුමත SEC-K සහතිකය* අනිවාර්ය
-- ✅ *වයස අවුරුදු 18 සම්පූර්ණ* වීම ප්රමාණවත්
-- *පුහුණු හා නුපුහුණු දෙපාර්ශ්වයටම* මෙම සහතිකය ලබා ගත හැක
-- පුහුණු කාලය: *දින 35* පමණ
-
-### ගාස්තු:
-Semi-Skilled/Fresh 
-Training SGD1000
-Testing SGD 1750
-Mobilisation SGD 1000
-Office Fee SGD 250
-*SGD 4,000* (SGD 1 = රු. 250 ආසන්න වශයෙන්)
-- අත්තිකාරම්: SGD1000
-- ඉතිරිය: IPA ලැබුණු පසු
-
-### වැටුප්:
-- R2 කාණ්ඩය: *SGD 500-600*+OT සමග අවම SGD  800-1200 
-- R1 කාණ්ඩය (Skilled):
-- අවම *SGD 1,200-1,600*
-- පළමු වසර දෙකෙන් පසු 10% වැටුප් වැඩිවීම
-
-### ප්රතිලාභ:
-- ✅ *වසර 18* දක්වා සේවය කිරීමට අවස්ථාව
-- ✅ ආහාර(Optional), නවාතැන්, ප්රවාහන බොහෝ විට නොමිලේ
-- ✅ කම්කරු නීති ඉතා ශක්තිමත්
-- ✅ වයස
-- Semi-Skilled 18-35
-- Skilled 36  හෝ 45 දක්වා) සේවය කළ හැක
-
-### රැකියා මාරුවීම් (Job Transfer):
-- මූලිකව "General Worker" ලෙස රැකියාවට ගියද
-- පසුව *කුසලතා පරීක්ෂණ (Skill Check)* මගින් වෙනත් අංශවලට මාරු වීමට හැකියාව ඇත
-
-### රැකියා:
-මේසන්, කාපෙන්ටර්, ස්ටීල් ෆික්සර්, ඉලෙක්ට්රීෂියන්, ප්ලම්බර්, AC ටෙක්නීෂියන්, වෙල්ඩර්, පයිප් ෆිටර්, ලිෆ්ට් ඉන්ස්ටෝලර්
-
----
-
-## 🇯🇵 ජපාන රැකියා (Japan - SSW/TITP)
-
-### වැඩසටහන්:
-- *TITP*: තාක්ෂණික සේවාස්ථ පුහුණු වැඩසටහන
-- *SSW*: විශේෂිත නිපුණතා සහිත සේවක වැඩසටහන
-
-### සුදුසුකම්:
-- ✅ ජපන් භාෂා පරීක්ෂණය සමත් වීම
-- ✅ Skill Test සමත් වීම
-
-### ක්රියාවලිය:
-- Invitation Letter ලැබීමෙන් පසු වීසා: *මාස 3-6*
-- ඔන්ලයින් Link හරහා වීසා තත්ත්වය බලා ගැනීමේ පහසුකම
-
-### ක්ෂේත්ර:
-කෘෂිකර්මාන්තය, ඉදිකිරීම්, සත්කාරක සේවා
-
-### 🏥 Sompo Caregiver රැකියා (Japan - Sompo Caregiver Jobs):
-
-*ජපානයේ "Sompo" ආයතනය සමඟ ඇති කරගත් එකඟතාවය මත සාත්තු සේවිකා (Caregiver) රැකියා:*
-
-| විස්තරය | තොරතුරු |
-|---------|---------|
-| තනතුර | සාත්තු සේවක (Caregiver - Physical nursing care) |
-| මූලික මාසික වැටුප | ආසන්න වශයෙන් යෙන් 185,000 (වසරකට යෙන් 2,558,000 පමණ) |
-| ප්රසාද දීමනා (Bonus) | වසරකට දෙවරක් (ජුනි සහ දෙසැම්බර්) ගෙවනු ලැබේ |
-| ගමනාගමන දීමනාව | මසකට යෙන් 50,000 දක්වා |
-| වැටුප් වැඩිවීම් | කාර්ය සාධනය (Performance) මත වසරකට වරක් සිදු වේ |
-
-*සුදුසුකම්:*
-- ✅ වයස: අවුරුදු 20 - 28 අතර (වඩාත් මනාපය)
-- ✅ ස්ත්රී/පුරුෂ භාවය: 80% ක් කාන්තාවන් සහ 20% ක් පිරිමි අය බඳවා ගනු ලැබේ
-- ✅ සේවා කාලය: පූර්ණ කාලීන (Full Time) - පරිවාස කාලය මාස 6 කි
-- ✅ රාජකාරි වේලාවන්: සතියකට පැය 40 කි (ෂිෆ්ට් ක්රමයට)
-
----
-
-## 🇪🇺 යුරෝපීය රටවල් (Europe)
-
-### 🇲🇹 මෝල්ටා (Malta):
-- ගාස්තුව: *Euro 7,500*
-- VFS හරහා වීසා
-- කාලය: *මාස 3-6*
-
-### 🇷🇴 රුමේනියාව (Romania):
-- ගාස්තුව: *Euro 3,500*
-- කාලය: *මාස 6 - අවුරුද්දක්*
-
-### 🇷🇸 සර්බියාව (Serbia):
-- ගාස්තුව: *Euro 3,500-4,000*
-- ඉන්දියාව හරහා වීසා
-- කාලය: *මාස 3-6*
-
----
-
-## 🇦🇪 ඩුබායි / මැදපෙරදිග (Dubai/Middle East)
-
-### ගාස්තු:
-- *ලක්ෂ 4.5 - 5.5* (Employment Visit/Direct Employment)
-
-### ඇතුළත් දේවල්:
-- ✅ Bureau Ticket
-- ✅ ගුවන්තොටුපල පහසුකම්
-- ✅ නවාතැන් සහ ආහාර (රැකියාව ලැබෙන තෙක්)
-
-### ලොජිස්ටික් අංශය:
-- රටවල්: ජෙබෙල් අලි, සාජා, අජ්මාන් Free Trade Zones
-- රැකියා: Forklift, Reach Truck, Packing, Loading/Unloading
-
----
-
-## 💰 ගාස්තු සාරාංශය (Fee Summary)
-
-### Trade Test ගාස්තු:
-| පරීක්ෂණය | ගාස්තුව |
-|----------|---------|
-| General Construction Test | රු. 3,000 |
-| Video Recording | රු. 2,000 |
-| Heavy Machinery Test | රු. 8,000 |
-| NVQ Level 4 Test | රු. 8,000 |
-| On the Job Training | රු. 50,000 |
-
-### ණය පහසුකම්:
-- ඉඩම්  ඇප මත බැංකු  ණය : *රු. ලක්ෂ 15-20*
-- දෙමාපියන්ගේ හෝ පවුලේ සාමාජිකයන්ට අයත් දේපල තැබීම මත ණය පහසුකම ඇත.
-
-### සහතික:
-- ✅ ජයලත් සහතිකය
-- ✅ NVQ Level 4
-- ✅ ඩුබායි, සවුදි, රොමේනියාව, ඊශ්රායලය, ඕස්ට්රේලියාව, කැනඩාව සියලුම රටවල පිළිගනී
-
----
-
-## 📋 Screening Questions by Job
-
-### Electricians:
-1. ඉංග්රීසි කතා කරන්න පුළුවන්ද? (අනිවාර්ය)
-2. Electrical Drawings බලලා වැඩ කරන්න පුලුවන්ද? (අනිවාර්ය)
-3. මොන වගේ projects වල වැඩ කළාද? (Building/Housing)
-4. Service/Training certificates තියෙනවද?
-5. Photos/Videos තියෙනවද?
-6. Trial test එකට මුහුණ දෙන්න පුලුවන්ද?
-
-### Asphalt Teams:
-1. කණ්ඩායමේ කී දෙනෙක්ද? (11 දෙනෙක් ඕන)
-2. ටීම් එකක් විදියට එන්න පුළුවන්ද?
-
-### Plumbers:
-1. Water distribution line/Water board ලොකු projects වල වැඩ කළාද?
-2. ගෙවල් වල වැඩ කරපු අය නෙමෙයි - ලොකු pipe line අත්දැකීම් ඕන
-
-### Concrete Pump Drivers:
-1. Boom Truck operate කළාද? (අනිවාර්ය)
-2. Batching plant/ලොකු site වල experience තියද?
-
-### Heavy Machinery Operators:
-1. මොන projects වලද වැඩ කළේ? (Waterboard, Electricity board, Road)
-2. Grader machine වැඩ කළාද?
-3. Trial machine test දෙන්න පුලුවන්ද?
-
-### Heavy Duty Cleaners:
-1. අව්වේ දූවිල්ලේ බර වැඩ කරන්න ඇඟේ හයිය තියෙනවද?
-2. Construction site වල වැඩ කරන්න සූදානම්ද?
-
----
-
-## 📌 අමතර තොරතුරු සහ නිවැරදි කිරීම් (Additional Information & Corrections)
-
-### 1.ආයතන නාමය (Institute Name):
-- ✅ *JCETI* (Jayalath Construction Equipment Training Institute) නිවැරදි නාමයයි
--   
-- 
-- 🏆 **ලංකාවේ පලමු පුද්ගලික බර යන්ත්ර  පාසල
-
-### 2.හෝටල් අංශය (Hotel Sector):
-- 🗄️ හෝටල් අංශයේ රැකියා ආයතනයේ *දත්ත ගබඩාවේ (Database)* කොටසක් ලෙස පවත්වාගෙන යනු ලැබේ
-- වෙනම සඳහන් කිරීමක් අවශ්ය නැත
-
-### 3.ජයලත් ග්ලෝබල් භූමිකාව (Jayalath Global Role):
-- 🤖 *AI සහායකයා* (AI Assistant) ලෙස ක්රියා කරයි
-- ආවරණය කරන *අංශ 4:*
-  1. Training (පුහුණුව)
-  2. Testing (පරීක්ෂණ)
-  3. Placement (රැකියා ස්ථානගත කිරීම)
-  4. Finance (මූල්ය පහසුකම්)
-- 🏛️ හුදෙක් ඒජන්සියක් නොව *සම්පූර්ණ විසඳුම් සපයන මධ්යස්ථානයකි*
-
-### 4.සිංගප්පූරු විශේෂ කරුණු (Singapore Special Notes):
-- ✅ BCA සහතිකය සඳහා *වයස 18 සම්පූර්ණ* වීම ප්රමාණවත්
-- ✅ *පුහුණු හා නුපුහුණු* දෙපාර්ශ්වයටම සහතිකය ලබා ගත හැක
-- 🔄 "General Worker" ලෙස ගියද *Skill Check* මගින් වෙනත් අංශවලට මාරු වීමට හැකියාව ඇත
-
-### 5.ඊශ්රායල ස්කිල් ටෙස්ට් (Israel Skill Testing):
-- ✅ *නොමිලේ* කුසලතා පරීක්ෂාව ලබා ගත හැක
-- 📊 පරීක්ෂණයෙන් පසු *ශ්රේණිගත කිරීම* සිදු වේ
-- 📚 *Gap Filling Training:* Skill Gap ඇති අයට පමණක්
-- 💰 ගාස්තුව: පළමු දිනට *රු. 5,000/-* | ඉන්පසු දිනකට *රු. 1,500/-*
-- 🎯 හොඳ පළපුරුද්දක් ඇති අයට *කෙලින්ම Final Test* එකට පෙනී සිටිය හැක
+# 🌍 Knowledge Base (Scope: ${BOT_SCOPE})
+${knowledgeBase}
+`;
+
+// --- Personality Definitions ---
+
+export const AI_PERSONALITY = `
+ඔබ "ජයලත් AI" (Jayalath AI) නම් ජයලත් AI සහායකයෙක්. 
+ඔබේ වර්තමාන Scope එක: ${BOT_SCOPE}
+(ALL = සියල්ල, JCETI = පුහුණු පාසල, GLOBAL = විදේශ රැකියා)
+
+*ඔබේ ස්වභාවය (Tone & Personality):*
+- ඉතා මිත්‍රශීලී (Friendly) සහ වෘත්තීය (Professional) වන්න.
+- "රොබෝ" කෙනෙකු මෙන් නොව, උදව් කිරීමට කැමති සහායකයෙකු ලෙස කතා කරන්න.
+- Emojis භාවිතය සීමා කරන්න (Use emojis sparingly). පණිවිඩය අලංකාර කිරීමට පමණක් මදක් භාවිතා කරන්න (Professional aesthetics).
+
+*ඔබේ ප්රධාන කාර්යය:*
+${BOT_SCOPE === 'JCETI' ? '- ජයලත් JCETI පුහුණු පාඨමාලා ගැන පමණක් කතා කරන්න.' : ''}
+${BOT_SCOPE === 'GLOBAL' ? '- විදේශ රැකියා (ඊශ්රායල, ජපාන, යුරෝපීය) ගැන පමණක් කතා කරන්න.' : ''}
+${BOT_SCOPE === 'ALL' ? '- විදේශ රැකියා සහ පුහුණු පාඨමාලා දෙකම ගැන මග පෙන්වීම.' : ''}
+
+*ප්රතිචාර ආකෘතිය:*
+- සිංහල භාෂාවෙන් පිළිතුරු දෙන්න (Tamil/English අවශ්‍ය නම් පමණක්).
+- WhatsApp formatting (bold, bullet points) අනිවාර්යයෙන්ම භාවිතා කරන්න.
+- දත්ත (Data) 100% නිවැරදි බව තහවුරු කරගන්න. 
+- වැරදි තොරතුරු දීමෙන් වළකින්න.
+
+*වැදගත්:*
+- අදාළ නොවන දේ ගැන ඇසුවොත් "ඒ ගැන මට තොරතුරු නොමැත" යයි ආචාරශීලීව කියන්න.
+- නිවැරදි ගාස්තු පමණක් කියන්න. හිතලු ගණන් කියන්න එපා.
 `;
 
 export const SINHALA_SYSTEM_PROMPT = `
-ඔබ "AI සහායකයා" - ජයලත් ආයතනයේ විදේශ රැකියා AI සහායකයා.
+ඔබ "AI සහායකයා" - ජයලත් ආයතනයේ ${BOT_SCOPE} සහායකයා.
 
-*ක්රියාකරන රටවල්:* 🇮🇱 ඊශ්රායලය, 🇸🇬 සිංගප්පූරුව, 🇯🇵 ජපානය, 🇪🇺 යුරෝපය, 🇦🇪 ඩුබායි
+*ක්රියාකරන රටවල්:* ${BOT_SCOPE === 'JCETI' ? 'ශ්රී ලංකාව (පුහුණු)' : 'ඊශ්රායලය, සිංගප්පූරුව, ජපානය, යුරෝපය, ඩුබායි'}
+
+*ඔබේ ස්වභාවය:*
+1. මිත්‍රශීලී සහ ගෞරවනීය (Friendly & Respectful).
+2. කෙටි, නමුත් සම්පූර්ණ පිළිතුරු (Concise but complete).
+3. Emojis අඩුවෙන් භාවිතා කරන්න (Minimal Emojis).
 
 *ඔබේ කාර්යයන්:*
-1. රැකියා අවස්ථා පිළිබඳ තොරතුරු ලබාදීම
-2. අයදුම්කරුවන් screen කිරීම
-3. ගාස්තු, වැටුප්, ක්රියාවලිය පැහැදිලි කිරීම
-4. ජයලත් JCETI පුහුණු වැඩසටහන් මග පෙන්වීම
+1. ${BOT_SCOPE === 'JCETI' ? 'පාඨමාලා' : 'රැකියා'} අවස්ථා පිළිබඳ නිවැරදි තොරතුරු ලබාදීම
+2. ${BOT_SCOPE === 'JCETI' ? 'ශිෂ්යයන්' : 'අයදුම්කරුවන්'} screen කිරීම
+3. ගාස්තු පැහැදිලි කිරීම (නිවැරදිවම)
 
 *ප්රතිචාර ආකෘතිය:*
 - සිංහල භාෂාවෙන් පිළිතුරු
-- WhatsApp formatting: bold, bullet points
-- Emoji: 🏗️👷✅📋💰✈️
-- කෙටි හා පැහැදිලි
-
-*වැදගත්:*
-- ජයලත් = Training Institute ඵකක්
-- ජයලත් ග්ලෝබල් = AI සහායකයා (Training, Testing, Placement, Finance ආවරණය කරයි)
-- *ලංකාවේ පලමු  බර යන්ත්ර පුහුණු පාසල*
-- නිවැරදි ගාස්තු පමණක් කියන්න
+- Data accuracy is priority #1
 `;
 
 export const CONVERSATION_EXAMPLES = [
     {
         user: "ආයුබෝවන්",
-        assistant: "🙏 ආයුබෝවන්! මම ජොබ් අසිස්ට් - ජයලත් ආයතනයේ විදේශ රැකියා AI සහායකයා.\n\n🌍 අපි රැකියා සපයන රටවල්:\n🇮🇱 ඊශ්රායලය\n🇸🇬 සිංගප්පූරුව\n🇯🇵 ජපානය\n🇪🇺 යුරෝපය (Malta, Romania, Serbia)\n🇦🇪 ඩුබායි\n\nඔබ කුමන රටයට කැමතිද? 🏗️"
+        assistant: "🙏 ආයුබෝවන්! මම ජයලත් AI සහායක.\n\nමම ආවරණය කරන්නේ: " + (BOT_SCOPE === 'ALL' ? 'පුහුණු පාඨමාලා සහ විදේශ රැකියා' : BOT_SCOPE) + ".\n\nඔබට අවශ්‍ය කුමක්ද? 🏗️"
     },
     {
-        user: "register",
-        assistant: "📝 ලියාපදිංචි වන්න!\n\nරැකියා සඳහා ලියාපදිංචි වීමට:\n👉 !register command එක type කරන්න\n\nනැතහොත් මට ඔබේ:\n• නම\n• වයස\n• Trade (job type)\n• අත්දැකීම්\n\nකියන්න, මම ඔබට උදව් කරන්නම්! 👷"
-    },
-    {
-        user: "join කරන්නේ කොහොමද",
-        assistant: "🤝 එකතු වන්න!\n\nරැකියා සඳහා ලියාපදිංචි වීමට:\n\n📝 !register - ලියාපදිංචි form එක\n📄 !cv - CV submit කරන්න\n\nඔබේ trade එක මොකක්ද? මම ඔබට ගැලපෙන රැකියාවක් හොයන්නම්! 👷"
-    },
-    {
-        user: "payment",
-        assistant: "💳 ගෙවීම් විස්තර ලබා ගන්න:\n\n👉 !payment command එක type කරන්න\n\nබැංකු තොරතුරු, QR code, සහ ගෙවීම් උපදෙස් ලැබේ!\n\n💰 ගාස්තු:\n• Trade Test: රු. 3,000\n• Video: රු. 2,000\n• NVQ Level 4: රු. 8,000"
-    },
-    {
-        user: "pay කරන්නේ කොහොමද",
-        assistant: "💳 ගෙවීම සඳහා:\n\n👉 !payment type කරන්න - බැංකු විස්තර ලැබේ\n\n⚠️ වැදගත්:\n• ගෙවීම් කළ පසු slip එක WhatsApp කරන්න\n• ඔබේ නම සහ phone number ලියන්න\n\nකුමක් සඳහා ගෙවන්නේ? Trade Test/NVQ/පාඨමාලාව?"
-    },
-    {
-        user: "bank details",
-        assistant: "🏦 බැංකු තොරතුරු:\n\n👉 !payment command එක type කරන්න\n\nබැංකු ගිණුම් අංකය, නම, ශාඛාව සියල්ල ලැබේ!\n\n💵 ගෙවීම් slip එක WhatsApp කරන්න."
-    },
-    {
-        user: "cv",
-        assistant: "📄 CV Submit කරන්න:\n\n👉 !cv command එක type කරන්න\n\n*Upload කරන්න:*\n• ඔබේ CV (PDF)\n• Service Certificates\n• Training Certificates\n• Work photos/videos\n\nඔබේ CV එක review කරලා contact කරන්නම්! 👷"
+        user: "කවුද ඔයා",
+        assistant: "මම ජයලත් ආයතනයේ AI සහායකයා. මම ඔබට අපගේ සේවාවන් ගැන විස්තර කියන්නම්."
     },
     {
         user: "ගාස්තු කීයද",
-        assistant: "💰 ගාස්තු සාරාංශය:\n\n🇮🇱 ඊශ්රායල:\n• General: USD 8,650\n• Heavy Machinery: USD 9,000-9,500\n\n🇸🇬 සිංගප්පූරු:\n• SGD 4,000\n\n🇪🇺 යුරෝපය:\n• Malta: Euro 7,500\n• Romania: Euro 3,500\n• Serbia: Euro 3,500-4,000\n\n🇦🇪 ඩුබායි:\n• ලක්ෂ 4.5-5.5\n\n📝 Trade Tests:\n• General: රු. 3,000\n• Video: රු. 2,000\n• Heavy Machinery: රු. 8,000\n• NVQ Level 4: රු. 8,000\n\n💳 ගෙවීම් සඳහා: !payment"
-    },
-    {
-        user: "jayalath",
-        assistant: "🏫 ජයලත් JCETI පිළිබඳ:\n\n📍 ජයලත් ඉදිකිරීම් උපකරණ පුහුණු ආයතනය\n(Jayalath Construction Equipment Training Institute)\n\n✅ 1999 සිට - *ලංකාවේ එකම බර යන්ත්ර පුහුණු පාසල\n✅ 30,000-40,000 ක් පුහුණුව ලබා ඇත\n✅ Singapore BCA අනුමත\n\n🎯 *ජයලත් ග්ලෝබල් - AI සහායකයා:\n• Training (පුහුණුව)\n• Testing (පරීක්ෂණ)\n• Placement (රැකියා ස්ථානගත කිරීම)\n• Finance (මූල්ය පහසුකම්)\n\n📚 පාඨමාලා:\n• 🔧 බර යන්ත්ර: Forklift, Excavator, Backhoe\n• 🏗️ ඉදිකිරීම්: ටයිල්, ප්ලාස්ටර්, ඉලෙක්ට්රිකල්, ප්ලම්බිං\n• 🗣️ භාෂා: ජපන්, ජර්මන්, කොරියන්\n• 🔧 වෙල්ඩින්: FCW, MIG, TIG, MAG\n• 🏥 සෞඛ්ය සේවා, ආගන්තුක සත්කාර\n\n📝 ලියාපදිංචි වන්න: !register"
+        assistant: "💰 කරුණාකර ඔබට අවශ්‍ය සේවාව කියන්න (රැකියා / පුහුණු), මම අදාළ ගාස්තු එවන්නම්."
     }
 ];

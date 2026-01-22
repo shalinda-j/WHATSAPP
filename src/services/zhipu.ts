@@ -59,9 +59,10 @@ export async function sendMessageWithMemory(userId: string, message: string): Pr
         history.push({ role: 'user', content: message });
 
         const response = await client.chat.completions.create({
-            model: 'glm-4.7', // Using GLM-4.7 as requested
+            model: 'glm-4', // Standard Zhipu model
             messages: history,
             stream: false,
+            tools: [{ type: 'web_search', web_search: { search_result: true, search_query: true } }] as any, // Enable web search
         });
 
         const reply = response.choices[0]?.message?.content || '';

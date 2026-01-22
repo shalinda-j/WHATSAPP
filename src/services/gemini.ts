@@ -130,4 +130,42 @@ export async function transcribeAudio(audioBase64: string, mimeType: string = 'a
   }
 }
 
+
+/**
+ * Detect booking intent from natural language
+ */
+export async function detectBookingIntent(text: string): Promise<{ intent: 'CHECK_AVAILABILITY' | 'NONE'; date?: string; time?: string } | null> {
+  try {
+    const result = await model.generateContent([
+      {
+        text: `You are a booking intent detector. Analyze the user's message.
+                If they are asking to schedule a visit, appointment, or suggesting a time, return a JSON object.
+                Current Date: ${new Date().toISOString()}
+
+                Output Format (JSON Only):
+                {
+                    "intent": "CHECK_AVAILABILITY",
+                    "date": "YYYY-MM-DD",
+                    "time": "HH:mm" (24-hour format)
+                }
+
+                If no specific time is mentioned, default time to "09:00".
+                If no specific date is mentioned, use tomorrow's date.
+                If the user is NOT asking to book or check availability, return:
+                { "intent": "NONE" }
+
+                User Message: "${text}"`
+      }
+    ]);
+
+    const responseText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(responseText);
+
+  } catch (error) {
+    console.error('Intent detection error:', error);
+    return null;
+  }
+}
+
 export { model, genAI };
+
