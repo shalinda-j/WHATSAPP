@@ -6,7 +6,7 @@ import {
     isFromMe,
     getSenderJid,
 } from './services/whatsapp';
-import { sendMessageWithMemory, clearConversation } from './services/gemini';
+import { sendMessageWithMemory, clearConversation } from './services/zhipu';
 import { getRegistrationMessage, getPaymentMessage, getCVMessage } from './config/links-config';
 import { createServer } from 'http';
 

@@ -3,21 +3,34 @@
  */
 
 export const REGISTRATION_CONFIG = {
-    // Google Form for job registration
-    formUrl: 'https://forms.gle/YOUR_FORM_ID_HERE',
+    // Registration Links
+    forms: {
+        israel: 'https://forms.gle/QYmcNAswCa8ZsgkG9',
+        japan: 'https://forms.gle/ngHvU95auJ2XopyX6',
+        heavy: 'https://forms.gle/h71N2aR8Ve1k31RZ8',
+        singapore: 'https://forms.gle/gAs8CX4rQf2ER2zYA'
+    },
 
     // Registration message in Sinhala
-    message: `📝 *රැකියා සඳහා ලියාපදිංචි වන්න!*
+    message: `📝 *පාඨමාලා හා රැකියා සඳහා ලියාපදිංචි වන්න!*
 
-👉 *Registration Form:*
-{{FORM_URL}}
+කරුණාකර ඔබට අදාළ අංශය තෝරා Link එක Click කරන්න:
 
-*ලියාපදිංචි වීමට:*
-1. ඉහත link එක click කරන්න
-2. ඔබේ විස්තර පුරවන්න
-3. Submit කරන්න
+1️⃣ *ඊශ්‍රායල ඉදිකිරීම් රැකියා:*
+👉 https://forms.gle/QYmcNAswCa8ZsgkG9
 
-✅ ඔබව අපි ඉක්මනින් සම්බන්ධ කරගනිමු!`
+2️⃣ *ජපන් භාෂා පාඨමාලාව (04 වන කණ්ඩායම):*
+👉 https://forms.gle/ngHvU95auJ2XopyX6
+
+3️⃣ *බර වාහන පුහුණු ලියාපදිංචිය:*
+👉 https://forms.gle/h71N2aR8Ve1k31RZ8
+
+4️⃣ *සිංගප්පූරු රැකියා පුහුණු අයදුම්පත:*
+👉 https://forms.gle/gAs8CX4rQf2ER2zYA
+
+✅ *උපදෙස්:*
+• අදාළ Link එක වෙත ගොස් form එක පුරවන්න.
+• ඔබගේ නිවැරදි තොරතුරු ඇතුළත් කිරීමට වග බලා ගන්න.`
 };
 
 // --- Payment Configuration ---
@@ -178,7 +191,7 @@ export const CV_CONFIG = {
  * Generate registration message with actual URL
  */
 export function getRegistrationMessage(): string {
-    return REGISTRATION_CONFIG.message.replace('{{FORM_URL}}', REGISTRATION_CONFIG.formUrl);
+    return REGISTRATION_CONFIG.message;
 }
 
 /**
