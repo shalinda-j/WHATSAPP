@@ -61,7 +61,7 @@ export const GLOBAL_WORKFORCE_DATA = `
 ## 🇦🇪 මැදපෙරදිග (UAE/KSA/Oman/Kuwait/Qatar/Bahrain)
 **ක්ෂේත්‍ර:** Logistics & Warehouse (Jebel Ali Free Zone ඇතුළුව).
 - **රැකියා:** Forklift, Reach Truck, Packing, Loading/Unloading.
-- **පැකේජය:** ලක්ෂ 4.5 - 5.5 (Training/Testing/Placement).
+- **පැකේජය:** ගාස්තු විස්තර දැනගැනීමට ආයතනයට පැමිණෙන්න ("පැමිණ, පරීක්ෂා කර බලා, සෑහීමකට පත්වේ නම් පමණක් ගෙවන්න").
 - **ඇතුළත් දේවල්:** Bureau Ticket, Airport Facilities, Accommodation & Food (until active).
 
 ---

@@ -76,7 +76,7 @@ export function getChatSession(userId: string): ChatSession {
         },
         {
           role: 'model',
-          parts: [{ text: '🙏 ආයුබෝවන්! මම ජොබ් අසිස්ට් - ඔබේ ඊශ්‍රායල ඉදිකිරීම් රැකියා AI සහායකයා. මම ඔබට උදව් කරන්න සූදානම්!' }]
+          parts: [{ text: '🙏 ආයුබෝවන්! මම ජයලත් ග්ලොබල් AI - ඔබේ විදේශ රැකියා AI සහායකයා. මම ඔබට උදව් කරන්න සූදානම්!' }]
         },
         // Add example conversations for better responses
         ...buildExampleHistory()

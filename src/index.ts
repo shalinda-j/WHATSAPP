@@ -6,7 +6,8 @@ import {
     isFromMe,
     getSenderJid,
 } from './services/whatsapp';
-import { sendMessageWithMemory, clearConversation, detectBookingIntent } from './services/zhipu';
+import { sendMessageWithMemory as sendGeminiMessage, clearConversation as clearGeminiConversation } from './services/gemini';
+import { sendMessageWithMemory as sendZhipuMessage, clearConversation as clearZhipuConversation, detectBookingIntent } from './services/zhipu';
 import { getRegistrationMessage, getPaymentMessage, getCVMessage } from './config/links-config';
 import { handleBookingMessage, startBookingFlow, handleSpecificDateRequest } from './services/BookingService';
 import { createServer } from 'http';
@@ -93,10 +94,24 @@ onMessage(async (message) => {
                 }
             }
 
-            // Get AI response (Using Zhipu/GLM as primary)
-            const response = await sendMessageWithMemory(jid, text);
+            // Get AI response (Using Gemini as primary, Zhipu as fallback)
+            let response: string;
+            try {
+                response = await sendGeminiMessage(jid, text);
+            } catch (geminiError: any) {
+                console.log('   ⚠️ Gemini failed, trying Zhipu fallback...');
+                response = await sendZhipuMessage(jid, text);
+            }
 
             console.log('   📤 Sending AI response...');
+
+            // Check if response is empty and provide fallback
+            if (!response || response.trim() === '') {
+                await sendMessage(jid, '🙏 කරුණාකර නැවත උත්සාහ කරන්න. ඔබේ ප්‍රශ්නය මට තේරුම් ගන්න බැරි විය.');
+                console.log('   ⚠️ Empty response from AI, sent fallback message');
+                return;
+            }
+
             const sent = await sendMessage(jid, `🤖 ${response}`);
 
             if (sent) {
@@ -136,7 +151,7 @@ async function handleCommand(jid: string, text: string): Promise<void> {
         case '!help':
             await sendMessage(
                 jid,
-                `🏗️ *Job Assist Bot (ජොබ් අසිස්ට්)*
+                `🏗️ *Jayalath Global AI (ජයලත් ග්ලොබල් AI)*
 
 *ඊශ්‍රායල ඉදිකිරීම් රැකියා විශේෂඥයා*
 
@@ -158,7 +173,8 @@ async function handleCommand(jid: string, text: string): Promise<void> {
             break;
 
         case '!clear':
-            clearConversation(jid);
+            clearGeminiConversation(jid);
+            clearZhipuConversation(jid);
             await sendMessage(jid, '🗑️ කතාබහ ඉතිහාසය මකා දැමුවා!\nදැන් අලුතින් ආරම්භ කරමු! 🏗️');
             break;
 

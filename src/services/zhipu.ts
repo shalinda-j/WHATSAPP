@@ -40,7 +40,7 @@ function getChatHistory(userId: string): ChatCompletionMessageParam[] {
             },
             {
                 role: 'assistant',
-                content: '🙏 ආයුබෝවන්! මම ජයලත් AI - ඔබේ විදේශ රැකියා AI සහායකයා. මම ඔබට උදව් කරන්න සූදානම්!'
+                content: '🙏 ආයුබෝවන්! මම ජයලත් ග්ලොබල් AI - ඔබේ විදේශ රැකියා AI සහායකයා. මම ඔබට උදව් කරන්න සූදානම්!'
             },
             ...buildExampleHistory()
         ]);

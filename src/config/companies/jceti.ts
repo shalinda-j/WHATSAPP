@@ -41,10 +41,9 @@ Nugadolawatta, Pasyala, Sri Lanka.
 - **Welding:** FCAW, MIG, TIG, MAG.
 
 ### 💰 ගාස්තු (Local):
-- Trade Test (General): රු. 3,000
-- Video Recording: රු. 2,000
-- Heavy Machinery Test: රු. 8,000
-- Gap Filling (1st Day): රු. 5,000 (+1500/day)
+- පාඨමාලා සහ විභාග ගාස්තු දැනගැනීමට කරුණාකර ජයලත් ආයතනයට පැමිණෙන්න.
+- "පැමිණ, පරීක්ෂා කර බලා, සෑහීමකට පත්වේ නම් පමණක් ගෙවන්න."
+- දුරකථනයෙන් මිළ ගණන් ලබාදීම සිදු නොකෙරේ.
 
 ### 📞 විමසීම් (Hotlines):
 - Heavy Machinery: 071 531 2072
