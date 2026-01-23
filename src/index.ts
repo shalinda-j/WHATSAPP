@@ -6,8 +6,7 @@ import {
     isFromMe,
     getSenderJid,
 } from './services/whatsapp';
-import { sendMessageWithMemory as sendGeminiMessage, clearConversation as clearGeminiConversation } from './services/gemini';
-import { sendMessageWithMemory as sendZhipuMessage, clearConversation as clearZhipuConversation, detectBookingIntent } from './services/zhipu';
+import { sendMessageWithMemory, clearConversation, detectBookingIntent } from './services/zhipu';
 import { getRegistrationMessage, getPaymentMessage, getCVMessage } from './config/links-config';
 import { handleBookingMessage, startBookingFlow, handleSpecificDateRequest } from './services/BookingService';
 import { createServer } from 'http';
@@ -80,18 +79,22 @@ onMessage(async (message) => {
             // Show typing indicator
             await sendTyping(jid);
 
-            // 3. Check for natural language booking intent
-            // This is "Tool Calling" via NLP
-            // Note: If Gemini fails (IP Invalid), this returns null and we proceed to Zhipu
-            const bookingIntent = await detectBookingIntent(text);
-            if (bookingIntent && bookingIntent.intent === 'CHECK_AVAILABILITY' && bookingIntent.date && bookingIntent.time) {
-                console.log(`   📅 Specific booking request: ${bookingIntent.date} @ ${bookingIntent.time}`);
-                await handleSpecificDateRequest(jid, bookingIntent.date, bookingIntent.time);
-                return;
+            // 3. Check for natural language booking intent using Zhipu GLM
+            // Only check if message contains date/time related keywords (performance optimization)
+            const bookingKeywords = ['tomorrow', 'today', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'am', 'pm', 'morning', 'afternoon', 'evening', 'visit', 'appointment', 'schedule', 'book', 'meet', 'හෙට', 'අද', 'පැමිණ', 'හමුවීම', 'වේලාව'];
+            const hasBookingKeyword = bookingKeywords.some(keyword => text.toLowerCase().includes(keyword));
+
+            if (hasBookingKeyword) {
+                const bookingIntent = await detectBookingIntent(text);
+                if (bookingIntent && bookingIntent.intent === 'CHECK_AVAILABILITY' && bookingIntent.date && bookingIntent.time) {
+                    console.log(`   📅 Specific booking request: ${bookingIntent.date} @ ${bookingIntent.time}`);
+                    await handleSpecificDateRequest(jid, bookingIntent.date, bookingIntent.time);
+                    return;
+                }
             }
 
             // Get AI response (Using Zhipu/GLM as primary)
-            const response = await sendZhipuMessage(jid, text);
+            const response = await sendMessageWithMemory(jid, text);
 
             console.log('   📤 Sending AI response...');
             const sent = await sendMessage(jid, `🤖 ${response}`);
@@ -155,8 +158,7 @@ async function handleCommand(jid: string, text: string): Promise<void> {
             break;
 
         case '!clear':
-            clearGeminiConversation(jid);
-            clearZhipuConversation(jid);
+            clearConversation(jid);
             await sendMessage(jid, '🗑️ කතාබහ ඉතිහාසය මකා දැමුවා!\nදැන් අලුතින් ආරම්භ කරමු! 🏗️');
             break;
 

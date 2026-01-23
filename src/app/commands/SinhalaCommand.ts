@@ -1,6 +1,6 @@
 import { BaseCommand } from '../utils/BaseCommand';
 import type { Message } from 'whatsapp-web.js';
-import { generateSinhalaResponse } from '../../services/gemini';
+import { generateSinhalaResponse } from '../../services/zhipu';
 import { client } from '../../services/whatsapp';
 
 /**

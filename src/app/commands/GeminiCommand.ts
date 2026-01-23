@@ -1,15 +1,15 @@
 import { BaseCommand } from '../utils/BaseCommand';
 import type { Message } from 'whatsapp-web.js';
-import { sendMessageWithMemory, clearConversation } from '../../services/gemini';
+import { sendMessageWithMemory, clearConversation } from '../../services/zhipu';
 import { client } from '../../services/whatsapp';
 
 /**
- * AI Chat Command - Chat with Gemini AI with conversation memory
+ * AI Chat Command - Chat with Zhipu GLM AI with conversation memory
  */
 export class GeminiCommand extends BaseCommand {
     name = 'ai';
-    description = 'Chat with Gemini AI (has conversation memory)';
-    aliases = ['gemini', 'chat', 'ask', 'gpt'];
+    description = 'Chat with AI (has conversation memory)';
+    aliases = ['glm', 'chat', 'ask', 'gpt'];
 
     async execute(message: Message, args: string[]): Promise<void> {
         try {

@@ -5,10 +5,10 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-// Initialize Zhipu AI client (via OpenAI SDK)
+// Initialize Zhipu AI client (via OpenAI SDK) for z.ai platform
 const client = new OpenAI({
     apiKey: process.env.ZHIPU_API_KEY || process.env.GLM_API_KEY || '',
-    baseURL: 'https://open.bigmodel.cn/api/paas/v4/',
+    baseURL: 'https://api.z.ai/api/paas/v4/', // z.ai API endpoint
 });
 
 // Store chat histories for memory
@@ -40,43 +40,66 @@ function getChatHistory(userId: string): ChatCompletionMessageParam[] {
             },
             {
                 role: 'assistant',
-                content: '🙏 ආයුබෝවන්! මම ජොබ් අසිස්ට් - ඔබේ ඊශ්‍රායල ඉදිකිරීම් රැකියා AI සහායකයා. මම ඔබට උදව් කරන්න සූදානම්!'
+                content: '🙏 ආයුබෝවන්! මම ජයලත් AI - ඔබේ විදේශ රැකියා AI සහායකයා. මම ඔබට උදව් කරන්න සූදානම්!'
             },
             ...buildExampleHistory()
         ]);
     }
+
+    const history = chatHistories.get(userId)!;
+
+    // Limit history to last 10 messages (keep system prompt + last 9 exchanges)
+    if (history.length > 20) {
+        const systemPrompt = history[0]; // Keep system prompt
+        const recentMessages = history.slice(-18); // Keep last 18 messages
+        chatHistories.set(userId, [systemPrompt, ...recentMessages]);
+    }
+
     return chatHistories.get(userId)!;
 }
 
 /**
- * Generate a response using Zhipu AI (GLM-4-Flash)
+ * Generate a response using Zhipu AI (GLM-4-Flash) with retry logic
  */
-export async function sendMessageWithMemory(userId: string, message: string): Promise<string> {
-    try {
-        const history = getChatHistory(userId);
+export async function sendMessageWithMemory(userId: string, message: string, retries = 3): Promise<string> {
+    const history = getChatHistory(userId);
 
-        // Add user message to history
-        history.push({ role: 'user', content: message });
+    // Add user message to history
+    history.push({ role: 'user', content: message });
 
-        const response = await client.chat.completions.create({
-            model: 'glm-4-flash', // Fast & free Zhipu model
-            messages: history,
-            stream: false,
-            tools: [{ type: 'web_search', web_search: { search_result: true, search_query: true } }] as any, // Enable web search
-        });
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const response = await client.chat.completions.create({
+                model: 'glm-4.7-flash', // Free z.ai model
+                messages: history,
+                stream: false,
+                max_tokens: 1024, // Limit response length for faster processing
+            });
 
-        const reply = response.choices[0]?.message?.content || '';
+            const reply = response.choices[0]?.message?.content || '';
 
-        // Add assistant reply to history
-        if (reply) {
-            history.push({ role: 'assistant', content: reply });
+            // Add assistant reply to history
+            if (reply) {
+                history.push({ role: 'assistant', content: reply });
+            }
+
+            return reply;
+        } catch (error: any) {
+            const isRateLimit = error?.status === 429 || error?.code === '1302';
+
+            if (isRateLimit && attempt < retries) {
+                const delay = attempt * 2000; // 2s, 4s, 6s
+                console.log(`⏳ Rate limited, waiting ${delay / 1000}s before retry ${attempt + 1}/${retries}...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue;
+            }
+
+            console.error('Zhipu API error:', error);
+            throw error;
         }
-
-        return reply;
-    } catch (error) {
-        console.error('Zhipu API error:', error);
-        throw error;
     }
+
+    throw new Error('Max retries exceeded');
 }
 
 /**
@@ -85,6 +108,33 @@ export async function sendMessageWithMemory(userId: string, message: string): Pr
 export function clearConversation(userId: string): void {
     chatHistories.delete(userId);
     console.log(`🗑️ Conversation cleared for: ${userId}`);
+}
+
+/**
+ * Generate a Sinhala response using Zhipu AI (GLM-4-Flash)
+ */
+export async function generateSinhalaResponse(prompt: string): Promise<string> {
+    try {
+        const response = await client.chat.completions.create({
+            model: 'glm-4.7-flash',
+            messages: [
+                {
+                    role: 'system',
+                    content: `${SINHALA_SYSTEM_PROMPT}\n\n${JOB_KNOWLEDGE_BASE}`
+                },
+                {
+                    role: 'user',
+                    content: prompt
+                }
+            ],
+            stream: false,
+        });
+
+        return response.choices[0]?.message?.content || '';
+    } catch (error) {
+        console.error('Zhipu Sinhala API error:', error);
+        throw error;
+    }
 }
 
 /**
@@ -120,7 +170,7 @@ export async function transcribeAudio(audioBase64: string, mimeType: string = 'a
 export async function detectBookingIntent(text: string): Promise<{ intent: 'CHECK_AVAILABILITY' | 'NONE'; date?: string; time?: string } | null> {
     try {
         const response = await client.chat.completions.create({
-            model: 'glm-4-flash',
+            model: 'glm-4.7-flash',
             messages: [
                 {
                     role: 'system',

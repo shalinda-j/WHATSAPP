@@ -1,5 +1,5 @@
 import type { Message } from 'whatsapp-web.js';
-import { transcribeAudio, sendMessageWithMemory } from '../../services/gemini';
+import { transcribeAudio, sendMessageWithMemory } from '../../services/zhipu';
 import { client } from '../../services/whatsapp';
 
 /**
