@@ -2,54 +2,52 @@ export const JCETI_DATA = `
 ## 🏢 ජයලත් ඉදිකිරීම් උපකරණ පුහුණු ආයතනය (JCETI)
 *(Jayalath Construction Equipment Training Institute)*
 
-ශ්‍රී ලංකාවේ පළමු පුද්ගලික අංශයේ ඉදිකිරීම් යන්ත්‍ර පුහුණු පාසල (First Private Owned Construction Equipment Training Institute).
+🏆 **ශ්‍රී ලංකාවේ පළමු පුද්ගලික අංශයේ ඉදිකිරීම් යන්ත්‍ර පුහුණු පාසල** (First Private Owned Construction Equipment Training Institute).
 
-### ආයතනික පෙරදසුන (Corporate Structure):
-- **Jayalath Global Workforce (JGWF):** AI සහායකයා (AI Assistant) හා පහසුකම් සපයන්නා. Testing, Training, Placement, Finance හසුරුවයි.
-- **Jayalath Chiu Teng Lanka Pvt Ltd:** සිංගප්පූරු පාඨමාලා සඳහා රජයේ අනුමත එකම ආයතනය.
-- **JOVTI:** විදේශීය රැකියා (General Construction, Healthcare, Hospitality) පුහුණුව.
+---
+
+### 🏛️ ආයතනික ව්‍යුහය (Corporate Structure):
+
+1. **Jayalath Construction Equipment Training Institute (JCETI):**
+   - Construction Equipment Operator Training & Assessment.
+   - Automotive Training & Assessment.
+
+2. **Jayalath Overseas Vocational Training Institute Pvt Ltd (JOVTI):**
+   - විදේශ රැකියා ඉලක්ක කරගත් පුහුණුව.
+   - General Construction, Language (Japanese, Korean, German), Healthcare, Hospitality.
+   - Domestic & Non-domestic service sector training.
+
+3. **Jayalath Chiu Teng Lanka Pvt Ltd (JCT):**
+   - සිංගප්පූරු පාඨමාලා සඳහා රජයේ අනුමත එකම ආයතනය.
+   - BCA (SEC-K) සහතිකය පිරිනමයි.
+
+4. **Jayalath Global Workforce (JGWF):**
+   - "AI Assistant" & Facilitator.
+   - Training, Testing, Placement, Finance අංශ 4 කළමනාකරණය කරයි.
+
+---
 
 ### 📍 පුහුණු මධ්යස්ථානය (Training Center):
 Jayalath Campus,
-Attanagalla Road,
-(off Kandy Road),
-Nugadolawatta,
-Pasyala,
-Sri Lanka.
+Attanagalla Road (off Kandy Road),
+Nugadolawatta, Pasyala, Sri Lanka.
+
+---
 
 ### 📚 පාඨමාලා (Courses):
+- **Heavy Machinery:** Forklift, Backhoe Loader, Excavator, Prime Mover.
+- **Construction:** Tile, Plaster, Electrical, Plumbing, Shuttering, Barbending.
+- **Language:** Japanese, Korean, German.
+- **Welding:** FCAW, MIG, TIG, MAG.
 
-🔧 *බර යන්ත්ර (Heavy Machinery Operators):*
-- ෆෝක්ලිෆ්ට් (Forklift)
-- බැකෝ ලෝඩර් (Backhoe Loader)
-- එක්ස්කැවේටර් (Excavator)
-- ප්‍රයිම් මූවර් (Prime Mover)
-
-🏗️ *සාමාන්‍ය ඉදිකිරීම් (General Construction):*
-- ටයිල්, ප්ලාස්ටර්, ඉලෙක්ට්රිකල්, ප්ලම්බිං, ෂටරින්, බාබෙන්ඩින්.
-- විදේශ රැකියා ඉලක්ක කරගත් විශේෂ පුහුණුව.
-
-🗣️ *භාෂා පාඨමාලා (Language):*
-- ජපන්, කොරියන්, ජර්මන්.
-
-### 💰 දේශීය පුහුණු ගාස්තු (Local Fees):
-| සේවාව | ගාස්තුව (LKR) |
-|-------|---------------|
-| Trade Test (Skill Test) - General | 3,000 |
-| Video Recording | 2,000 |
-| Heavy Machinery Test | 8,000 |
-| NVQ Level 3 Test | 8,000 |
-| On the Job Training | 50,000 |
-| Gap Filling Training (First Day) | 5,000 |
-| Gap Filling (Additional Days) | 1,500 per day |
+### 💰 ගාස්තු (Local):
+- Trade Test (General): රු. 3,000
+- Video Recording: රු. 2,000
+- Heavy Machinery Test: රු. 8,000
+- Gap Filling (1st Day): රු. 5,000 (+1500/day)
 
 ### 📞 විමසීම් (Hotlines):
-- **Heavy Machinery:** +94 71 531 2072
-- **Language Centre:** +94 71 864 3864
-- **Automobile:** +94 70 757 7088
-- **Holiness (Hotline):** +94 70 250 3503
-
-### 🎯 විශේෂ පහසුකම්:
-- **මූල්‍ය පහසුකම් (Finance):** මුදල් නැති අයට වුවද දේපළ ඇප මත බැංකු ණය ලබා දිය හැක (CRIB ගැටළු බලපාන්නේ නැත).
-- **Grading:** පරීක්ෂණ වලින් පසු A/B/C ලෙස ශ්‍රේණිගත කිරීමක් සිදු කෙරේ.
+- Heavy Machinery: 071 531 2072
+- Language: 071 864 3864
+- Hotline: 070 250 3503
 `;

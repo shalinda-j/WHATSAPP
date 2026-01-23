@@ -1,10 +1,20 @@
 export const GLOBAL_WORKFORCE_DATA = `
-## 🌍 Jayalath Global Workforce (Foreign Recruitment)
+## 🌍 Jayalath Global Workforce (Foreign Recruitment) - JGWF
 
 ### කාර්යභාරය (Role):
-- **AI Assistant & Facilitator:** AI තාක්ෂණය සහ මානව සම්පත් කළමනාකරණය ඒකාබද්ධව.
-- **Services:** Training (පුහුණුව), Testing (පරීක්ෂණ), Placement (රැකියා), Finance (මූල්‍ය).
-- **Process:** දේශීය/විදේශීය පුහුණු ශ්‍රමිකයින් ගෝලීය රැකියා ඇණවුම් (Job Orders) සඳහා ලියාපදිංචි ඒජන්සි වෙත යොමු කිරීම.
+- **AI Assistant & Facilitator:** "AI සහායකයෙකු" සහ පහසුකම් සපයන්නෙකු ලෙස ක්‍රියා කරයි.
+- **Core Areas:** Training (පුහුණුව), Testing (පරීක්ෂණ), Placement (රැකියා ස්ථානගත කිරීම), Finance (මූල්‍ය).
+- **Process:** දේශීය හා විදේශීය පුහුණු ආයතන මගින් පුහුණු වන ශ්‍රමිකයින් ගෝලීය වශයෙන් ලබා ගන්නා විදේශීය ඇණවුම් (Job Orders) සඳහා ලියාපදිංචි රැකියා නියෝජිත ඒජන්සි වෙත බෙදා හැරීම සහ යොමු කිරීම.
+- **Goal:** 100% රැකියා ඉලක්ක කර ගත් රැකියා ගතකිරීමක් සහ නීතිමය ක්‍රියාමාර්ග සම්පූර්ණ කිරීම.
+
+---
+
+### 🏭 ආවරණය කරන ක්ෂේත්‍ර (Sectors):
+1. **Construction Logistics**
+2. **Oil and Gas, Shipyard Marine**
+3. **Process and Manufacturing**
+4. **Health and Elder Care**
+5. **Service and Hospitality**
 
 ---
 
@@ -14,39 +24,54 @@ export const GLOBAL_WORKFORCE_DATA = `
 ---
 
 ## 🇯🇵 ජපානය (Japan)
-**ක්ෂේත්‍ර:** Construction, Renovation, Caregiver (Sompo).
 
-### රැකියා වර්ග:
-1. **TITP (Trainee):** නුපුහුණු ශ්‍රමිකයින් සඳහා. භාෂා පුහුණුව අනිවාර්යයි.
-2. **SSW (Skilled Worker):** පුහුණු ශ්‍රමිකයින් සඳහා. Skill Test & Language Test සමත් විය යුතුය.
+**ක්ෂේත්‍ර (Fields):**
+ඉදිකිරීම් (Construction), ඉදිකිරීම් යන්ත්‍ර ඔපරේටර් (Machine Operator), සහ අලුත්වැඩියා අංශයට (Renovation) විශාල ඉල්ලුමක් ඇත. 
+*ඔබ ශ්‍රී ලාංකීය පුරවැසියෙක් නම් **JOVTI** (Jayalath Overseas Vocational Training Institute) ආයතනය මගින් ජපන් භාෂා පුහුණුව ලබා, JLPT හෝ Language Skill Certificate ලබා ගත යුතුය.*
 
-**Sompo Caregiver (සාත්තු සේවා):**
-- වැටුප: යෙන් 185,000 + දීමනා.
-- වයස: 20-28.
+### රැකියා ස්වභාවය (Job Nature):
+මෙය ආකාර දෙකකට සිදුවේ.
 
-*පහසුකම්:*
-- වීසා තත්ත්වය (Visa Status) ඔන්ලයින් පරීක්ෂා කළ හැක.
-- විනිවිදභාවයෙන් යුත් ඩිජිටල් ක්‍රමවේදය.
+#### 01. Unskilled (නුපුහුණු):
+- මූලිකව තමන්ට කැමති අංශයක් තෝරාගෙන ජපන් භාෂාව (Language Test Results) යටතේ **TITP** (Technical Intern Training Program) හරහා ජපානයට අයදුම් කළ යුතුය.
+- මෙම ක්‍රියාවලිය ජපානය හා ශ්‍රී ලංකා රජය අනුමත විශේෂ ආයතනයක් (**Sending Organisation**) හරහා සිදු කෙරේ.
+
+#### 02. Skilled (පුහුණු):
+- මූලිකව තමන්ට කැමති අංශයක් තෝරාගෙන **SSW** (Specified Skilled Worker) Category එකට අදාළව පරීක්ෂණයට මුහුණ දිය යුතුය.
+- මේ සඳහා පුහුණු කටයුතු **JOVTI** මගින් සිදු කරනු ලැබේ.
+
+---
+
+### 💰 මූල්‍ය පහසුකම් (Finance):
+- **ණය පහසුකම්:** මුදල් නොමැති අයට (CRIB ගැටළු තිබුණද) දෙමාපියන්ගේ/පවුලේ සාමාජිකයෙකුගේ දේපළ ඇප මත බැංකු ණය පහසුකම් සලසා දිය හැක.
+- **අවශ්‍ය දේ:** ඔබේ උනන්දුව සහ කැපවීම පමණි.
+
+*දැනුම්දීම:* ඔබ කිසියම් සේවාවක් ජයලත් පුහුණු මධ්‍යස්ථානය මගින් ලබාගෙන ඇත්නම්, ඒ සඳහා ගෙවන ලද මුදල රිසිට්පත් ඉදිරිපත් කිරීමෙන් අපගේ සේවාව ලබා ගැනීමේදී හානිපූරණය (Refund/Deduct) කළ හැක.
 
 ---
 
 ## 🇪🇺 යුරෝපීය රැකියා (Europe)
-- 🇲🇹 **මෝල්ටා (Malta):** මාස 3-6 වීසා.
-- 🇷🇴 **රුමේනියාව (Romania):** මාස 6-12 වීසා.
+වීසා කාලය: මාස 3 - 12 අතර.
+- 🇲🇹 **මෝල්ටා (Malta)**
+- 🇷🇴 **රුමේනියාව (Romania)**
 - 🇷🇸 **සර්බියාව (Serbia)**
 
 ---
 
-## 🇦🇪 ඩුබායි / මැදපෙරදිග (Dubai)
-**ක්ෂේත්‍ර:** Logistics & Warehouse (Jebel Ali Free Zone).
-- රැකියා: Forklift, Reach Truck, Packing.
-- පැකේජය: ලක්ෂ 4.5 - 5.5 (Ticket & Accommodation included).
+## 🇦🇪 මැදපෙරදිග (UAE/KSA/Oman/Kuwait/Qatar/Bahrain)
+**ක්ෂේත්‍ර:** Logistics & Warehouse (Jebel Ali Free Zone ඇතුළුව).
+- **රැකියා:** Forklift, Reach Truck, Packing, Loading/Unloading.
+- **පැකේජය:** ලක්ෂ 4.5 - 5.5 (Training/Testing/Placement).
+- **ඇතුළත් දේවල්:** Bureau Ticket, Airport Facilities, Accommodation & Food (until active).
 
 ---
 
-### 💰 විශේෂ සේවා & මූල්‍ය (Special Services):
-- **Gap Filling Training:** පළපුරුද්ද අඩු අය සඳහා වේගවත් පුහුණුව.
-- **Finance:** මුදල් නොමැති අයට දෙමාපියන්/පවුලේ සාමාජිකයෙකුගේ දේපළ ඇප මත ණය පහසුකම්.
-- **CRIB Status:** ණය ලබා ගැනීමට බාධාවක් නොවේ.
-- **Hotel Database:** හෝටල් ක්ෂේත්‍රයේ අය සඳහා වෙනම දත්ත ගබඩාවක් පවත්වාගෙන යයි.
+### 💻 පහසුකම් සහ විනිවිදභාවය:
+- **Visa Status:** අයදුම්කරුවන්ට නිවසේ සිටම ඔන්ලයින් ලින්ක් එකක් හරහා වීසා තත්ත්වය පරීක්ෂා කර ගත හැක.
+- **Transparency:** ඩිජිටල් ක්‍රමවේද හරහා දෝෂ සහ ප්‍රමාදයන් පිළිබඳව අයදුම්කරුවන් දැනුවත් කිරීම.
+- **Databases:** හෝටල්/සාත්තු/Service Sector සඳහා වෙනම දත්ත ගබඩාවක් පවත්වාගෙන යනු ලැබේ.
+
+### 💰 මූල්‍ය පහසුකම් (Finance):
+- **ණය පහසුකම්:** මුදල් නොමැති අයට (CRIB ගැටළු තිබුණද) දෙමාපියන්ගේ/පවුලේ සාමාජිකයෙකුගේ දේපළ ඇප මත බැංකු ණය ලබා ගත හැක.
+- **Requirements:** උනන්දුව සහ කැපවීම පමණි.
 `;
