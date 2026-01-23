@@ -59,7 +59,7 @@ export async function sendMessageWithMemory(userId: string, message: string): Pr
         history.push({ role: 'user', content: message });
 
         const response = await client.chat.completions.create({
-            model: 'glm-4', // Standard Zhipu model
+            model: 'glm-4-flash', // Fast & free Zhipu model
             messages: history,
             stream: false,
             tools: [{ type: 'web_search', web_search: { search_result: true, search_query: true } }] as any, // Enable web search
@@ -100,7 +100,7 @@ export async function transcribeAudio(audioBase64: string, mimeType: string = 'a
 
         const transcription = await client.audio.transcriptions.create({
             file: fs.createReadStream(tempFilePath),
-            model: 'glm-4-voice', // Or 'whisper-1' if they fully emulate it, but Zhipu usually uses 'glm-4-voice' or specific ASR models
+            model: 'glm-asr', // Zhipu ASR model for transcription
         });
 
         // Clean up temp file
@@ -111,5 +111,48 @@ export async function transcribeAudio(audioBase64: string, mimeType: string = 'a
         console.error('Audio transcription error:', error);
         // Fallback or rethrow
         throw error;
+    }
+}
+
+/**
+ * Detect booking intent from natural language using Zhipu GLM
+ */
+export async function detectBookingIntent(text: string): Promise<{ intent: 'CHECK_AVAILABILITY' | 'NONE'; date?: string; time?: string } | null> {
+    try {
+        const response = await client.chat.completions.create({
+            model: 'glm-4-flash',
+            messages: [
+                {
+                    role: 'system',
+                    content: `You are a booking intent detector. Analyze the user's message.
+If they are asking to schedule a visit, appointment, or suggesting a time, return a JSON object.
+Current Date: ${new Date().toISOString()}
+
+Output Format (JSON Only):
+{
+    "intent": "CHECK_AVAILABILITY",
+    "date": "YYYY-MM-DD",
+    "time": "HH:mm" (24-hour format)
+}
+
+If no specific time is mentioned, default time to "09:00".
+If no specific date is mentioned, use tomorrow's date.
+If the user is NOT asking to book or check availability, return:
+{ "intent": "NONE" }`
+                },
+                {
+                    role: 'user',
+                    content: text
+                }
+            ],
+            stream: false,
+        });
+
+        const responseText = response.choices[0]?.message?.content || '';
+        const cleanedText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        return JSON.parse(cleanedText);
+    } catch (error) {
+        console.error('Intent detection error (Zhipu):', error);
+        return null;
     }
 }

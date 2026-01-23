@@ -6,8 +6,8 @@ import {
     isFromMe,
     getSenderJid,
 } from './services/whatsapp';
-import { sendMessageWithMemory as sendGeminiMessage, clearConversation as clearGeminiConversation, detectBookingIntent } from './services/gemini';
-import { sendMessageWithMemory as sendZhipuMessage, clearConversation as clearZhipuConversation } from './services/zhipu';
+import { sendMessageWithMemory as sendGeminiMessage, clearConversation as clearGeminiConversation } from './services/gemini';
+import { sendMessageWithMemory as sendZhipuMessage, clearConversation as clearZhipuConversation, detectBookingIntent } from './services/zhipu';
 import { getRegistrationMessage, getPaymentMessage, getCVMessage } from './config/links-config';
 import { handleBookingMessage, startBookingFlow, handleSpecificDateRequest } from './services/BookingService';
 import { createServer } from 'http';
