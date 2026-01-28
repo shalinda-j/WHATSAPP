@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
+import { api } from '../config';
 
 interface User {
     id: string;
@@ -25,9 +25,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         if (token) {
             localStorage.setItem('token', token);
-            axios.get('/api/auth/me', {
-                headers: { Authorization: `Bearer ${token}` }
-            })
+            // api instance already handles variable base URL and Authorization header
+            api.get('/api/auth/me')
                 .then(res => setUser(res.data))
                 .catch(() => {
                     logout();

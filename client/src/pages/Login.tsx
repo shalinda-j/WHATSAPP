@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { useAuth } from '../context/AuthContext';
-import axios from 'axios';
+import { api } from '../config';
 import { useNavigate } from 'react-router-dom';
 
 export default function Login() {
@@ -15,7 +15,7 @@ export default function Login() {
         if (token) navigate('/dashboard');
 
         // Check if setup is needed
-        axios.get('/api/auth/setup-check').then(res => {
+        api.get('/api/auth/setup-check').then(res => {
             if (res.data.needsSetup) setNeedsSetup(true);
         });
     }, [token, navigate]);
@@ -24,12 +24,12 @@ export default function Login() {
         e.preventDefault();
         try {
             if (needsSetup) {
-                await axios.post('/api/auth/setup', { username, password });
+                await api.post('/api/auth/setup', { username, password });
                 // Then login
-                const res = await axios.post('/api/auth/login', { username, password });
+                const res = await api.post('/api/auth/login', { username, password });
                 login(res.data.token);
             } else {
-                const res = await axios.post('/api/auth/login', { username, password });
+                const res = await api.post('/api/auth/login', { username, password });
                 login(res.data.token);
             }
         } catch (err: any) {
