@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../config';
-import { Smartphone, Plus, Trash, Wifi, WifiOff, Loader, RefreshCw } from 'lucide-react';
+import { Smartphone, Plus, Trash, Wifi, WifiOff, Loader } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 interface Session {
@@ -127,7 +127,7 @@ export default function Sessions() {
                                         <div className="bg-white p-2 rounded-lg border shadow-sm">
                                             <QRCodeSVG value={session.qr} size={180} />
                                         </div>
-                                        <p className="text-xs text-gray-500 mt-3 text-center">Open WhatsApp > Settings > Linked Devices > Link a Device</p>
+                                        <p className="text-xs text-gray-500 mt-3 text-center">Open WhatsApp → Settings → Linked Devices → Link a Device</p>
                                     </div>
                                 ) : session.status === 'connected' ? (
                                     <div className="text-center">
