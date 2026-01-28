@@ -5,9 +5,13 @@ const mongoose = require('mongoose');
 
 // --- Mongoose Schema ---
 const AuthSchema = new mongoose.Schema({
-    key: { type: String, required: true, unique: true },
+    sessionId: { type: String, required: true, default: 'default' }, // Added to partition sessions
+    key: { type: String, required: true },
     value: { type: mongoose.Schema.Types.Mixed, required: true }
 });
+
+// Compound unique index to allow same 'key' across different 'sessionId'
+AuthSchema.index({ sessionId: 1, key: 1 }, { unique: true });
 
 // Prevent overwriting model if it already exists (hot reload safety)
 let AuthModel: any;
@@ -38,18 +42,18 @@ export const connectToMongoDB = async (uri: string): Promise<void> => {
 };
 
 // --- Auth Adapter ---
-export const useMongoDBAuthState = async (collectionName: string = 'auth_info'): Promise<{ state: AuthenticationState, saveCreds: () => Promise<void> }> => {
+export const useMongoDBAuthState = async (sessionId: string = 'default'): Promise<{ state: AuthenticationState, saveCreds: () => Promise<void>, clearState: () => Promise<void> }> => {
 
     // Helper to read data
     const readData = async (key: string): Promise<any> => {
         try {
-            const data = await AuthModel.findOne({ key });
+            const data = await AuthModel.findOne({ sessionId, key });
             if (data && data.value) {
                 return JSON.parse(JSON.stringify(data.value), BufferJSON.reviver);
             }
             return null;
         } catch (error) {
-            console.error(`Error reading auth key ${key}:`, error);
+            console.error(`Error reading auth key ${key} for session ${sessionId}:`, error);
             return null;
         }
     };
@@ -59,21 +63,31 @@ export const useMongoDBAuthState = async (collectionName: string = 'auth_info'):
         try {
             const jsonValue = JSON.parse(JSON.stringify(value, BufferJSON.replacer));
             await AuthModel.findOneAndUpdate(
-                { key },
+                { sessionId, key },
                 { value: jsonValue },
                 { upsert: true, new: true }
             );
         } catch (error) {
-            console.error(`Error writing auth key ${key}:`, error);
+            console.error(`Error writing auth key ${key} for session ${sessionId}:`, error);
         }
     };
 
     // Helper to remove data
     const removeData = async (key: string): Promise<void> => {
         try {
-            await AuthModel.deleteOne({ key });
+            await AuthModel.deleteOne({ sessionId, key });
         } catch (error) {
-            console.error(`Error deleting auth key ${key}:`, error);
+            console.error(`Error deleting auth key ${key} for session ${sessionId}:`, error);
+        }
+    };
+
+    // Explicitly expose method to clear entire session
+    const clearState = async (): Promise<void> => {
+        try {
+            await AuthModel.deleteMany({ sessionId });
+            console.log(`🧹 Cleared all auth data for session: ${sessionId}`);
+        } catch (error) {
+            console.error(`Error clearing session ${sessionId}:`, error);
         }
     };
 
@@ -117,6 +131,7 @@ export const useMongoDBAuthState = async (collectionName: string = 'auth_info'):
         },
         saveCreds: async () => {
             await writeData('creds', creds);
-        }
+        },
+        clearState
     };
 };

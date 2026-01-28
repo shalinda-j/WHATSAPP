@@ -25,6 +25,7 @@ function AppRoutes() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="datasets" element={<Datasets />} />
         <Route path="config" element={<Config />} />
+        <Route path="sessions" element={<Sessions />} />
       </Route>
     </Routes>
   );

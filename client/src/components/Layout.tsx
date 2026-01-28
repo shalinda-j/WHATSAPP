@@ -1,7 +1,7 @@
 
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, Database, Settings, LogOut, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, Database, Settings, LogOut, MessageSquare, Smartphone } from 'lucide-react';
 
 export default function Layout() {
     const { logout } = useAuth();
@@ -29,6 +29,9 @@ export default function Layout() {
                         </Link>
                         <Link to="/datasets" className={`flex items-center px-4 py-2 rounded transition-colors hover:bg-gray-700 ${isActive('/datasets')}`}>
                             <Database className="mr-3 h-5 w-5" /> Datasets
+                        </Link>
+                        <Link to="/sessions" className={`flex items-center px-4 py-2 rounded transition-colors hover:bg-gray-700 ${isActive('/sessions')}`}>
+                            <Smartphone className="mr-3 h-5 w-5" /> Linked Devices
                         </Link>
                         <Link to="/config" className={`flex items-center px-4 py-2 rounded transition-colors hover:bg-gray-700 ${isActive('/config')}`}>
                             <Settings className="mr-3 h-5 w-5" /> Configuration
