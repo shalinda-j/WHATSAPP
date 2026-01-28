@@ -36,7 +36,7 @@ export default function Config() {
 
     const fetchConfigs = async () => {
         try {
-            const res = await api.get('/config');
+            const res = await api.get('/api/config');
             if (Array.isArray(res.data)) {
                 setConfigs(res.data);
             } else {
@@ -50,7 +50,7 @@ export default function Config() {
 
     const handleDelete = async (id: string) => {
         if (window.confirm('Are you sure?')) {
-            await api.delete(`/config/${id}`);
+            await api.delete(`/api/config/${id}`);
             fetchConfigs();
         }
     };
@@ -82,9 +82,9 @@ export default function Config() {
             }
 
             if (editingId) {
-                await api.put(`/config/${editingId}`, formData);
+                await api.put(`/api/config/${editingId}`, formData);
             } else {
-                await api.post('/config', formData);
+                await api.post('/api/config', formData);
             }
             setIsEditing(false);
             fetchConfigs();
