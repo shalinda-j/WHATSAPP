@@ -5,30 +5,82 @@ import {
     getMessageText,
     isFromMe,
     getSenderJid,
+    downloadWhatsAppAudio,
+    sendVoiceMessage,
+    connectToWhatsApp,
+    disconnectWhatsApp
 } from './services/whatsapp';
-import { sendMessageWithMemory as sendGeminiMessage, clearConversation as clearGeminiConversation } from './services/gemini';
-import { sendMessageWithMemory as sendZhipuMessage, clearConversation as clearZhipuConversation, detectBookingIntent } from './services/zhipu';
+import { connectToMongoDB } from './services/MongoAuthService';
+import { transcribeAudio, generateSpeech } from './services/voice';
+import { aiLoadBalancer } from './services/AILoadBalancer';
+import { detectBookingIntent } from './services/gemini';
 import { getRegistrationMessage, getPaymentMessage, getCVMessage } from './config/links-config';
 import { handleBookingMessage, startBookingFlow, handleSpecificDateRequest } from './services/BookingService';
-import { createServer } from 'http';
+import app from './server/app';
+import mongoose from 'mongoose';
 
-console.log('🤖 WhatsApp AI Bot starting...');
-
-// Health check server for Render.com
 const PORT = process.env.PORT || 8080;
-const server = createServer((req, res) => {
-    if (req.url === '/health' || req.url === '/') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok', service: 'whatsapp-bot' }));
-    } else {
-        res.writeHead(404);
-        res.end('Not Found');
-    }
-});
+let server: any;
 
-server.listen(PORT, () => {
-    console.log(`🌐 Health check server running on port ${PORT}`);
-});
+async function startServer() {
+    // 1. Connect to Database
+    if (process.env.MONGODB_URI) {
+        await connectToMongoDB(process.env.MONGODB_URI);
+    } else {
+        console.warn('⚠️ No MONGODB_URI found. Some features (Admin Panel) may not work.');
+    }
+
+    // 2. Start Admin API
+    server = app.listen(PORT, () => {
+        console.log(`🚀 Admin API Server running on port ${PORT}`);
+        console.log(`🌐 Health check: http://localhost:${PORT}/health`);
+    });
+
+    // 3. Connect to WhatsApp
+    await connectToWhatsApp();
+}
+
+/**
+ * SUCCESSFUL SHUTDOWN HANDLER
+ * Prevents "Conflict" errors by ensuring the old session is dead before the new one starts.
+ */
+const gracefulShutdown = async (signal: string) => {
+    console.log(`\n🛑 Received ${signal}. Closing connections gracefully...`);
+
+    try {
+        // 1. Close WhatsApp Socket
+        console.log('   🔌 Disconnecting WhatsApp...');
+        await disconnectWhatsApp();
+
+        // 2. Close MongoDB
+        if (mongoose.connection.readyState === 1) {
+            console.log('   🍃 Closing MongoDB...');
+            await mongoose.connection.close();
+        }
+
+        // 3. Close Server
+        if (server) {
+            console.log('   🔒 Closing HTTP Server...');
+            server.close();
+        }
+
+        console.log('✅ Shutdown complete. Exiting.');
+        process.exit(0);
+    } catch (err) {
+        console.error('❌ Error during shutdown:', err);
+        process.exit(1);
+    }
+};
+
+// Handle process termination signals
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+// Handle ts-node-dev restart signal
+process.on('SIGUSR2', () => gracefulShutdown('SIGUSR2'));
+
+startServer();
+
 
 /**
  * Main message handler
@@ -37,7 +89,7 @@ server.listen(PORT, () => {
 onMessage(async (message) => {
     try {
         const jid = getSenderJid(message);
-        const text = getMessageText(message);
+        let text = getMessageText(message);
 
         // Debug: Log incoming messages
         console.log(`📩 Message: "${text.substring(0, 50)}..." from ${jid}`);
@@ -58,6 +110,29 @@ onMessage(async (message) => {
         if (jid.includes('@broadcast')) {
             console.log('   (Ignoring broadcast message)');
             return;
+        }
+
+        // Check for Audio Message
+        let isVoiceMessage = false;
+        if (message.message?.audioMessage) {
+            console.log('   🎤 Voice message detected! Downloading...');
+            const audioBuffer = await downloadWhatsAppAudio(message);
+
+            if (audioBuffer) {
+                try {
+                    const transcription = await transcribeAudio(audioBuffer);
+                    console.log(`   📝 Transcription: "${transcription}"`);
+                    text = transcription;
+                    isVoiceMessage = true;
+                } catch (err: any) {
+                    console.error('   ❌ Transcription failed:', err);
+                    await sendMessage(jid, '⚠️ Voice transcription failed. Please try text.');
+                    return;
+                }
+            } else {
+                console.error('   ❌ Failed to download audio');
+                return;
+            }
         }
 
         // 1. Check if user is in a booking flow
@@ -94,13 +169,13 @@ onMessage(async (message) => {
                 }
             }
 
-            // Get AI response (Using Gemini as primary, Zhipu as fallback)
+            // Get AI response (Using Load Balancer)
             let response: string;
             try {
-                response = await sendGeminiMessage(jid, text);
-            } catch (geminiError: any) {
-                console.log('   ⚠️ Gemini failed, trying Zhipu fallback...');
-                response = await sendZhipuMessage(jid, text);
+                response = await aiLoadBalancer.sendMessage(jid, text);
+            } catch (aiError: any) {
+                console.error('   ❌ AI Load Balancer failed:', aiError);
+                throw aiError;
             }
 
             console.log('   📤 Sending AI response...');
@@ -112,12 +187,23 @@ onMessage(async (message) => {
                 return;
             }
 
-            const sent = await sendMessage(jid, `🤖 ${response}`);
-
-            if (sent) {
-                console.log('   ✅ AI response sent');
+            if (isVoiceMessage) {
+                try {
+                    console.log('   🗣️ Generating voice response...');
+                    const audioResponse = await generateSpeech(response);
+                    await sendVoiceMessage(jid, audioResponse);
+                    console.log('   ✅ AI voice response sent');
+                } catch (ttsError) {
+                    console.error('   ❌ TTS failed:', ttsError);
+                    await sendMessage(jid, `🤖 ${response}`);
+                }
             } else {
-                console.log('   ❌ Failed to send response');
+                const sent = await sendMessage(jid, `🤖 ${response}`);
+                if (sent) {
+                    console.log('   ✅ AI response sent');
+                } else {
+                    console.log('   ❌ Failed to send response');
+                }
             }
         } catch (aiError: any) {
             console.error('   ❌ AI response error:', aiError.message || aiError);
@@ -173,8 +259,7 @@ async function handleCommand(jid: string, text: string): Promise<void> {
             break;
 
         case '!clear':
-            clearGeminiConversation(jid);
-            clearZhipuConversation(jid);
+            aiLoadBalancer.clearConversation(jid);
             await sendMessage(jid, '🗑️ කතාබහ ඉතිහාසය මකා දැමුවා!\nදැන් අලුතින් ආරම්භ කරමු! 🏗️');
             break;
 

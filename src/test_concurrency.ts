@@ -1,4 +1,4 @@
-import { sendMessageWithMemory } from './services/zhipu';
+import { sendMessageWithMemory } from './services/gemini';
 import dotenv from 'dotenv';
 dotenv.config();
 

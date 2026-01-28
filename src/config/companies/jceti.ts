@@ -35,10 +35,29 @@ Nugadolawatta, Pasyala, Sri Lanka.
 ---
 
 ### 📚 පාඨමාලා (Courses):
-- **Heavy Machinery:** Forklift, Backhoe Loader, Excavator, Prime Mover.
-- **Construction:** Tile, Plaster, Electrical, Plumbing, Shuttering, Barbending.
-- **Language:** Japanese, Korean, German.
+
+#### 🇯🇵 ජපන් භාෂාව (Japanese Language):
+- **මට්ටම් (Levels):** N5, N4, N3, N2.
+- **විෂය නිර්දේශය (Syllabus):**
+  - Akuru (Writing Systems: Hiragana, Katakana, Kanji).
+  - Vyakara (Grammar).
+  - Spoken (Speaking Practice).
+  - Listening (Audio Training).
+- **සහතික (Certificates):** පාඨමාලාව අවසානයේ රජයේ ලියාපදිංචි සහ ජාත්‍යන්තරව පිළිගත් සහතිකයක් (Internationally Recognized Certificate).
+- **වෙනත්:** NAT/JLPT විභාග සඳහා සූදානම් කිරීම.
+
+#### 🏗️ බර වාහන ක්‍රියාකරු (Heavy Machinery):
+- **Machines:** Forklift, Backhoe Loader, Excavator, Prime Mover.
+- **පුහුණුව:** න්‍යායික (Theory) සහ ප්‍රායෝගික (Practical) පුහුණුව.
+- **ආරක්ෂාව (Safety):** වැඩබිම් ආරක්ෂාව සහ යන්ත්‍ර නඩත්තුව.
+
+#### 🛠️ ඉදිකිරීම් (Construction):
+- Tile, Plaster, Electrical, Plumbing, Shuttering, Barbending.
+- NVQ මට්ටමට අනුකූල පුහුණුව.
+
+#### ⚡ වෙනත්:
 - **Welding:** FCAW, MIG, TIG, MAG.
+- **Korean / German** භාෂා පන්ති.
 
 ### 💰 ගාස්තු (Local):
 - පාඨමාලා සහ විභාග ගාස්තු දැනගැනීමට කරුණාකර ජයලත් ආයතනයට පැමිණෙන්න.

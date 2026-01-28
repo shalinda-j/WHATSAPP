@@ -1,5 +1,6 @@
 import type { Message } from 'whatsapp-web.js';
-import { transcribeAudio, sendMessageWithMemory } from '../../services/zhipu';
+import { transcribeAudio } from '../../services/zhipu';
+import { aiLoadBalancer } from '../../services/AILoadBalancer';
 import { client } from '../../services/whatsapp';
 
 /**
@@ -43,7 +44,8 @@ export class VoiceHandler {
             console.log(`   MIME Type: ${media.mimetype}`);
             console.log(`   Data length: ${media.data.length} chars`);
 
-            // Transcribe the audio using Gemini
+            // Transcribe the audio using Zhipu (via existing service)
+            // Note: using transcribeAudio from zhipu service as before
             const transcription = await transcribeAudio(media.data, media.mimetype);
             console.log(`   Transcription: ${transcription}`);
 
@@ -61,9 +63,9 @@ export class VoiceHandler {
                 lowerText.startsWith('tell me');
 
             if (isQuestion && transcription.length > 10) {
-                // If it's a question, get an AI response
+                // If it's a question, get an AI response via Load Balancer
                 const contact = await message.getContact();
-                const aiResponse = await sendMessageWithMemory(contact.id._serialized, transcription);
+                const aiResponse = await aiLoadBalancer.sendMessage(contact.id._serialized, transcription);
 
                 await client.sendMessage(message.from,
                     `🎤 *Voice Transcription:*\n"${transcription}"\n\n` +

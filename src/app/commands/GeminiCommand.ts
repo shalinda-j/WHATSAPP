@@ -1,10 +1,10 @@
 import { BaseCommand } from '../utils/BaseCommand';
 import type { Message } from 'whatsapp-web.js';
-import { sendMessageWithMemory, clearConversation } from '../../services/zhipu';
+import { aiLoadBalancer } from '../../services/AILoadBalancer';
 import { client } from '../../services/whatsapp';
 
 /**
- * AI Chat Command - Chat with Zhipu GLM AI with conversation memory
+ * AI Chat Command - Chat with AI with conversation memory (Load Balanced)
  */
 export class GeminiCommand extends BaseCommand {
     name = 'ai';
@@ -21,14 +21,14 @@ export class GeminiCommand extends BaseCommand {
         // Handle clear command
         if (args[0]?.toLowerCase() === 'clear') {
             const contact = await message.getContact();
-            clearConversation(contact.id._serialized);
+            aiLoadBalancer.clearConversation(contact.id._serialized);
             await client.sendMessage(message.from, '🧹 Conversation history cleared! Starting fresh.');
             return;
         }
 
         if (args.length === 0) {
             await client.sendMessage(message.from,
-                '🤖 *Gemini AI Assistant*\n\n' +
+                '🤖 *Jayalath AI Assistant*\n\n' +
                 '📖 *Usage:*\n' +
                 '• `!ai <your question>` - Ask anything\n' +
                 '• `!ai clear` - Clear conversation history\n\n' +
@@ -41,7 +41,7 @@ export class GeminiCommand extends BaseCommand {
 
         try {
             const contact = await message.getContact();
-            const response = await sendMessageWithMemory(contact.id._serialized, question);
+            const response = await aiLoadBalancer.sendMessage(contact.id._serialized, question);
 
             await client.sendMessage(message.from, `🤖 ${response}`);
         } catch (error: any) {

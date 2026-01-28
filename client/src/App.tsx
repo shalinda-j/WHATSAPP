@@ -1,0 +1,43 @@
+
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import type { ReactNode } from 'react';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import Datasets from './pages/Datasets';
+import Config from './pages/Config';
+import Layout from './components/Layout';
+
+const ProtectedRoute = ({ children }: { children: ReactNode }) => {
+  const { token, loading } = useAuth();
+  if (loading) return <div>Loading...</div>;
+  if (!token) return <Navigate to="/login" />;
+  return children;
+};
+
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+
+      <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+        <Route index element={<Navigate to="/dashboard" />} />
+        <Route path="dashboard" element={<Dashboard />} />
+        <Route path="datasets" element={<Datasets />} />
+        <Route path="config" element={<Config />} />
+      </Route>
+    </Routes>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </BrowserRouter>
+  );
+}
+
+export default App;

@@ -4,23 +4,36 @@ import makeWASocket, {
   WASocket,
   proto,
   fetchLatestBaileysVersion,
+  downloadMediaMessage,
 } from '@whiskeysockets/baileys';
 import * as qrcode from 'qrcode-terminal';
 import pino from 'pino';
 import { resolve } from 'path';
 import { mkdirSync, existsSync } from 'fs';
+import { connectToMongoDB, useMongoDBAuthState } from './MongoAuthService';
 
 // Logger with configurable output
 const logger = pino({
   level: process.env.DEBUG === 'true' ? 'debug' : 'warn'
 });
 
-// Auth state directory
+// Auth state directory (fallback)
 const AUTH_DIR = resolve(__dirname, '..', 'auth_info');
 
-// Ensure auth directory exists
+// Ensure auth directory exists (fallback)
 if (!existsSync(AUTH_DIR)) {
   mkdirSync(AUTH_DIR, { recursive: true });
+}
+
+// Track connection details
+let currentQR: string | null = null;
+let connectionStatus: string = 'disconnected';
+
+/**
+ * Get current Status
+ */
+function getConnectionStatus() {
+  return { status: connectionStatus, qr: currentQR };
 }
 
 // Socket instance
@@ -39,18 +52,35 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 async function connectToWhatsApp(): Promise<void> {
   try {
     connectionAttempts++;
+    connectionStatus = 'connecting';
     console.log(`🔄 Connection attempt ${connectionAttempts}...`);
 
-    const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+    let authState;
+    let saveCreds;
+
+    // Use MongoDB if available, otherwise file system
+    if (process.env.MONGODB_URI) {
+      console.log('📦 Using MongoDB for session storage...');
+      await connectToMongoDB(process.env.MONGODB_URI);
+      const auth = await useMongoDBAuthState('auth_info');
+      authState = auth.state;
+      saveCreds = auth.saveCreds;
+    } else {
+      console.log('📂 Using file system for session storage (WARNING: Ephemeral)...');
+      const auth = await useMultiFileAuthState(AUTH_DIR);
+      authState = auth.state;
+      saveCreds = auth.saveCreds;
+    }
+
     const { version } = await fetchLatestBaileysVersion();
 
     console.log(`📱 Using WA version: ${version.join('.')}`);
 
     sock = makeWASocket({
       version,
-      auth: state,
+      auth: authState,
       logger,
-      printQRInTerminal: false,
+      printQRInTerminal: false, // We handle it manually
       browser: ['WhatsApp AI Bot', 'Chrome', '120.0.0'],
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000,
@@ -64,22 +94,25 @@ async function connectToWhatsApp(): Promise<void> {
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
-      // Show QR code
       if (qr) {
+        currentQR = qr;
+        connectionStatus = 'scan_qr';
         connectionAttempts = 0; // Reset attempts when QR is shown
         console.log('\n📲 Scan this QR code with WhatsApp to connect:\n');
         qrcode.generate(qr, { small: true });
         console.log('\n⏳ Waiting for QR code scan...\n');
       }
 
-      // Handle connection states
       if (connection === 'close') {
+        currentQR = null;
+        connectionStatus = 'disconnected';
         const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
         console.log(`⚠️ Connection closed. Status: ${statusCode}`);
 
         if (shouldReconnect && connectionAttempts < MAX_RECONNECT_ATTEMPTS) {
+          connectionStatus = 'reconnecting';
           const delay = Math.min(connectionAttempts * 2000, 10000);
           console.log(`   Reconnecting in ${delay / 1000}s...`);
           setTimeout(() => connectToWhatsApp(), delay);
@@ -89,10 +122,13 @@ async function connectToWhatsApp(): Promise<void> {
           console.log(`❌ Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached.`);
         }
       } else if (connection === 'open') {
+        currentQR = null;
+        connectionStatus = 'connected';
         connectionAttempts = 0;
         console.log('✅ WhatsApp connected successfully!');
         console.log('💬 Ready to receive messages...');
       } else if (connection === 'connecting') {
+        connectionStatus = 'connecting';
         console.log('🔄 Connecting to WhatsApp...');
       }
     });
@@ -145,6 +181,45 @@ async function sendMessage(jid: string, text: string): Promise<boolean> {
     return true;
   } catch (error: any) {
     console.error('❌ Failed to send message:', error.message || error);
+    return false;
+  }
+}
+
+/**
+ * Download media from message
+ */
+async function downloadWhatsAppAudio(message: proto.IWebMessageInfo): Promise<Buffer | null> {
+  try {
+    const buffer = await downloadMediaMessage(
+      message,
+      'buffer',
+      {}
+    );
+    return buffer as Buffer;
+  } catch (error: any) {
+    console.error('❌ Failed to download media:', error.message || error);
+    return null;
+  }
+}
+
+/**
+ * Send a voice message
+ */
+async function sendVoiceMessage(jid: string, audioBuffer: Buffer): Promise<boolean> {
+  if (!sock) {
+    console.error('❌ Socket not connected');
+    return false;
+  }
+
+  try {
+    await sock.sendMessage(jid, {
+      audio: audioBuffer,
+      mimetype: 'audio/mp4',
+      ptt: true // Send as "Push to Talk" (voice note)
+    });
+    return true;
+  } catch (error: any) {
+    console.error('❌ Failed to send voice message:', error.message || error);
     return false;
   }
 }
@@ -205,8 +280,22 @@ function getSenderJid(message: proto.IWebMessageInfo): string {
   return message.key.remoteJid || '';
 }
 
-// Initialize connection
-connectToWhatsApp();
+
+/**
+ * Gracefully disconnect WhatsApp
+ */
+async function disconnectWhatsApp(): Promise<void> {
+  if (sock) {
+    try {
+      console.log('🔌 Closing WhatsApp connection...');
+      sock.end(undefined);
+      sock = null;
+      connectionStatus = 'disconnected';
+    } catch (error) {
+      console.error('❌ Error closing socket:', error);
+    }
+  }
+}
 
 export {
   sendMessage,
@@ -217,4 +306,9 @@ export {
   isFromMe,
   getSenderJid,
   connectToWhatsApp,
+  disconnectWhatsApp,
+  downloadWhatsAppAudio,
+  sendVoiceMessage,
+  getConnectionStatus,
 };
+

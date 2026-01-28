@@ -1,12 +1,13 @@
 import { GoogleGenerativeAI, ChatSession } from '@google/generative-ai';
 import { AI_PERSONALITY, SINHALA_SYSTEM_PROMPT, JOB_KNOWLEDGE_BASE, CONVERSATION_EXAMPLES } from '../config/ai-personality';
+import { AIService, AIChatMessage } from '../interfaces/AIService';
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 // Use gemini-2.5-flash (stable, good quotas)
 const model = genAI.getGenerativeModel({
-  model: 'gemini-2.5-flash',
+  model: 'gemini-1.5-flash',
   systemInstruction: `${AI_PERSONALITY}\n\n${JOB_KNOWLEDGE_BASE}`
 });
 
@@ -168,4 +169,55 @@ export async function detectBookingIntent(text: string): Promise<{ intent: 'CHEC
 }
 
 export { model, genAI };
+
+export class GeminiService implements AIService {
+  name: string;
+  private apiKey: string;
+  private modelName: string;
+  private genAI: GoogleGenerativeAI;
+
+  constructor(config: { apiKey: string; model?: string; providerType?: string }) {
+    this.apiKey = config.apiKey;
+    this.modelName = config.model || 'gemini-1.5-flash';
+    this.name = `Gemini (${this.modelName})`;
+    this.genAI = new GoogleGenerativeAI(this.apiKey);
+  }
+
+  async generateResponse(messages: AIChatMessage[]): Promise<string> {
+    try {
+      // Extract system prompt
+      const systemMessage = messages.find(m => m.role === 'system');
+      const systemInstruction = systemMessage ? systemMessage.content : undefined;
+
+      // Convert history (excluding system)
+      const history = messages
+        .filter(m => m.role !== 'system')
+        .map(m => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }]
+        }));
+
+      if (history.length === 0) return '';
+
+      const lastMessage = history.pop(); // Remove last message to send it
+      if (!lastMessage) return '';
+
+      // Get model with dynamic system instruction
+      const modelInstance = this.genAI.getGenerativeModel({
+        model: this.modelName,
+        systemInstruction: systemInstruction || `${AI_PERSONALITY}\n\n${JOB_KNOWLEDGE_BASE}`
+      });
+
+      const chat = modelInstance.startChat({
+        history: history as any
+      });
+
+      const result = await chat.sendMessage(lastMessage.parts[0].text);
+      return result.response.text();
+    } catch (error) {
+      console.error(`GeminiService (${this.modelName}) error:`, error);
+      throw error;
+    }
+  }
+}
 
