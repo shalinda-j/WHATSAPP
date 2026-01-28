@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-// Get API URL from env or default to localhost for dev
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+// Get API URL from env or default to relative path (for same-domain deployment)
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 export const api = axios.create({
     baseURL: API_URL,
