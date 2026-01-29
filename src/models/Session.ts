@@ -1,6 +1,6 @@
 import mongoose, { Document, Schema, CallbackWithoutResultAndOptionalError } from 'mongoose';
 
-interface ISession extends Document {
+interface ISession {
     sessionId: string;
     sessionName?: string;
     status: 'connecting' | 'connected' | 'disconnected' | 'scan_qr' | 'reconnecting';
@@ -29,7 +29,7 @@ SessionSchema.pre('save', function (next: CallbackWithoutResultAndOptionalError)
     next();
 });
 
-const Session = mongoose.model<ISession>('Session', SessionSchema);
+const Session = mongoose.model('Session', SessionSchema as any) as unknown as mongoose.Model<ISession>;
 
 export default Session;
 
