@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Datasets from './pages/Datasets';
 import Config from './pages/Config';
+import Sessions from './pages/Sessions';
 import Layout from './components/Layout';
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
