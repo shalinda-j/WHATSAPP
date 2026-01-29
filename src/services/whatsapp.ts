@@ -232,7 +232,7 @@ export async function sendVoiceMessage(jid: string, audioBuffer: Buffer, session
   return true;
 }
 
-export function getSocket(sessionId: string = 'default') {
+export function getSocket(sessionId: string = 'default'): WASocket | undefined {
   return manager.getSocket(sessionId);
 }
 
