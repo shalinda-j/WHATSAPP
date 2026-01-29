@@ -1,4 +1,4 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema, CallbackWithoutResultAndOptionalError } from 'mongoose';
 
 interface ISession extends Document {
     sessionId: string;
@@ -24,7 +24,7 @@ const SessionSchema = new Schema<ISession>({
     updatedAt: { type: Date, default: Date.now }
 });
 
-SessionSchema.pre('save', function (next) {
+SessionSchema.pre('save', function (next: CallbackWithoutResultAndOptionalError) {
     this.updatedAt = new Date();
     next();
 });
