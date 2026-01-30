@@ -251,9 +251,11 @@ export function getSenderJid(message: proto.IWebMessageInfo): string {
   return message.key.remoteJid || '';
 }
 
-export function getConnectionStatus() {
-  // For legacy single-session polling
-  // In real multi-session app, use DB or API
-  return { status: 'managed-by-db', qr: null };
+export async function getConnectionStatus() {
+  const session = await Session.findOne({ sessionId: 'default' });
+  return {
+    status: session?.status || 'disconnected',
+    qr: session?.qr || null
+  };
 }
 
