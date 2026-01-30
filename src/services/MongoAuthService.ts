@@ -36,6 +36,22 @@ export const connectToMongoDB = async (uri: string): Promise<void> => {
         await mongoose.connection.db.admin().command({ ping: 1 });
         console.log("✅ Pinged your deployment. You successfully connected to MongoDB!");
 
+        // --- Migration: Drop stale `key_1` index if it exists ---
+        try {
+            const collection = mongoose.connection.db.collection('authcredentials');
+            const indexes = await collection.indexes();
+            const staleIndex = indexes.find((idx: any) => idx.name === 'key_1');
+            if (staleIndex) {
+                await collection.dropIndex('key_1');
+                console.log("🔧 Dropped stale 'key_1' index from authcredentials collection.");
+            }
+        } catch (migrationError: any) {
+            // Ignore if index doesn't exist or collection doesn't exist yet
+            if (migrationError.codeName !== 'IndexNotFound' && migrationError.codeName !== 'NamespaceNotFound') {
+                console.warn("⚠️ Migration warning:", migrationError.message);
+            }
+        }
+
     } catch (error) {
         console.error('❌ MongoDB Connection Error:', error);
     }
