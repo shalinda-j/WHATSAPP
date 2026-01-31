@@ -134,6 +134,7 @@ export default function Config() {
                                     <option value="anthropic">Anthropic (Claude)</option>
                                     <option value="google">Google (Gemini)</option>
                                     <option value="groq">Groq</option>
+                                    <option value="openrouter">OpenRouter (Multi-Provider)</option>
                                     <option value="local">Local (Ollama/LM Studio)</option>
                                 </select>
                             </div>
@@ -153,8 +154,20 @@ export default function Config() {
                                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
                                     value={formData.aiModel || ''}
                                     onChange={e => setFormData({ ...formData, aiModel: e.target.value })}
-                                    placeholder="e.g. gpt-4-turbo"
+                                    placeholder={
+                                        formData.providerType === 'openrouter'
+                                            ? 'e.g. openai/gpt-4o, anthropic/claude-3-opus'
+                                            : 'e.g. gpt-4-turbo'
+                                    }
                                 />
+                                {formData.providerType === 'openrouter' && (
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        Format: provider/model-name.
+                                        <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
+                                            Browse models →
+                                        </a>
+                                    </p>
+                                )}
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>

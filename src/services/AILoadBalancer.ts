@@ -4,6 +4,8 @@ import { AI_PERSONALITY, JOB_KNOWLEDGE_BASE, CONVERSATION_EXAMPLES } from '../co
 import Dataset from '../models/Dataset';
 
 import { OpenAIService } from './openai';
+import { GroqService } from './groq';
+import { OpenRouterService } from './openrouter';
 
 import Config from '../models/Config';
 
@@ -37,8 +39,20 @@ export class AILoadBalancer {
                             model: conf.aiModel,
                             providerType: 'openai'
                         }));
+                    } else if (conf.providerType === 'groq') {
+                        this.services.push(new GroqService({
+                            apiKey: conf.apiKey,
+                            model: conf.aiModel,
+                            providerType: 'groq'
+                        }));
+                    } else if (conf.providerType === 'openrouter') {
+                        this.services.push(new OpenRouterService({
+                            apiKey: conf.apiKey,
+                            model: conf.aiModel,
+                            providerType: 'openrouter'
+                        }));
                     }
-                    // Add other providers here (e.g. OpenAI)
+                    // Add other providers here (e.g. Anthropic)
                 }
             }
 
@@ -77,7 +91,16 @@ export class AILoadBalancer {
             // Extract model name from "Gemini (gemini-1.5-flash)" -> "gemini-1.5-flash"
             const modelMatch = providerName.match(/\((.*?)\)/);
             const modelName = modelMatch ? modelMatch[1] : '';
-            const providerType = providerName.toLowerCase().includes('gemini') ? 'google' : 'openai';
+
+            // Determine provider type from service name
+            let providerType = 'openai'; // default
+            if (providerName.toLowerCase().includes('gemini')) {
+                providerType = 'google';
+            } else if (providerName.toLowerCase().includes('groq')) {
+                providerType = 'groq';
+            } else if (providerName.toLowerCase().includes('openrouter')) {
+                providerType = 'openrouter';
+            }
 
             if (modelName) {
                 await Config.updateOne(
