@@ -29,8 +29,8 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', async (req, res) => {
     try {
-        const { name, content, scope, isActive } = req.body;
-        const newDataset = new Dataset({ name, content, scope, isActive });
+        const { name, content, scope, category, isActive } = req.body;
+        const newDataset = new Dataset({ name, content, scope, category, isActive });
         await newDataset.save();
         res.json(newDataset);
     } catch (err: any) {
@@ -40,10 +40,10 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
     try {
-        const { name, content, scope, isActive } = req.body;
+        const { name, content, scope, category, isActive } = req.body;
         const updatedDataset = await Dataset.findByIdAndUpdate(
             req.params.id,
-            { name, content, scope, isActive },
+            { name, content, scope, category, isActive },
             { new: true }
         );
         res.json(updatedDataset);

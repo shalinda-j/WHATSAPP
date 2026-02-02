@@ -3,7 +3,8 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface IDataset extends Document {
     name: string;
     content: string;
-    scope: 'JCETI' | 'GLOBAL' | 'SG' | 'ALL';
+    scope: string; // Now a free-text field for any company/region name
+    category?: 'company' | 'faq' | 'promotion' | 'other';
     isActive: boolean;
     createdAt: Date;
     updatedAt: Date;
@@ -14,8 +15,12 @@ const DatasetSchema = new Schema({
     content: { type: String, required: true },
     scope: {
         type: String,
-        enum: ['JCETI', 'GLOBAL', 'SG', 'ALL'],
-        default: 'ALL'
+        default: 'ALL' // Default to ALL if not specified
+    },
+    category: {
+        type: String,
+        enum: ['company', 'faq', 'promotion', 'other'],
+        default: 'company'
     },
     isActive: { type: Boolean, default: true }
 } as any, {

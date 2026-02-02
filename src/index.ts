@@ -11,6 +11,7 @@ import {
     disconnectWhatsApp
 } from './services/whatsapp';
 import { connectToMongoDB } from './services/MongoAuthService';
+import { seedAIProviders } from './services/AIProviderSeeder';
 import { transcribeAudio, generateSpeech } from './services/voice';
 import { aiLoadBalancer } from './services/AILoadBalancer';
 import { analyzeLeadIntent } from './services/gemini';
@@ -26,6 +27,8 @@ async function startServer() {
     // 1. Connect to Database
     if (process.env.MONGODB_URI) {
         await connectToMongoDB(process.env.MONGODB_URI);
+        // Seed AI providers from .env into the Config collection
+        await seedAIProviders();
     } else {
         console.warn('⚠️ No MONGODB_URI found. Some features (Admin Panel) may not work.');
     }

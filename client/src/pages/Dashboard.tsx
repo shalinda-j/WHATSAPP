@@ -33,7 +33,7 @@ export default function Dashboard() {
 
     const fetchAIProviders = async () => {
         try {
-            const res = await api.get('/api/config');
+            const res = await api.get('/config');
             if (Array.isArray(res.data)) {
                 const providers = res.data.filter((config: any) => config.isProvider === true);
                 setAiProviders(providers);

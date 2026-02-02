@@ -2,11 +2,15 @@ import { useState, useEffect } from 'react';
 import api from '../utils/api';
 import { Plus, Trash, Edit, Save, X } from 'lucide-react';
 
+// Common preset scopes
+const PRESET_SCOPES = ['ALL', 'JCETI', 'GLOBAL', 'SG', 'ISRAEL', 'JAPAN'];
+
 interface Dataset {
     _id: string;
     name: string;
     content: string;
-    scope: 'JCETI' | 'GLOBAL' | 'SG' | 'ALL';
+    scope: string; // Now accepts any string for custom companies
+    category?: 'company' | 'faq' | 'promotion' | 'other';
     isActive: boolean;
 }
 
@@ -14,7 +18,9 @@ export default function Datasets() {
     const [datasets, setDatasets] = useState<Dataset[]>([]);
     const [isEditing, setIsEditing] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
-    const [formData, setFormData] = useState<Partial<Dataset>>({ name: '', content: '', scope: 'ALL', isActive: true });
+    const [formData, setFormData] = useState<Partial<Dataset>>({ name: '', content: '', scope: 'ALL', category: 'company', isActive: true });
+    const [useCustomScope, setUseCustomScope] = useState(false);
+    const [customScope, setCustomScope] = useState('');
 
     useEffect(() => {
         fetchDatasets();
@@ -35,21 +41,31 @@ export default function Datasets() {
     const handleEdit = (ds: Dataset) => {
         setFormData(ds);
         setEditingId(ds._id);
+        // Check if scope is a custom one
+        const isCustom = !PRESET_SCOPES.includes(ds.scope);
+        setUseCustomScope(isCustom);
+        setCustomScope(isCustom ? ds.scope : '');
         setIsEditing(true);
     };
 
     const handleCreate = () => {
-        setFormData({ name: '', content: '', scope: 'ALL', isActive: true });
+        setFormData({ name: '', content: '', scope: 'ALL', category: 'company', isActive: true });
         setEditingId(null);
+        setUseCustomScope(false);
+        setCustomScope('');
         setIsEditing(true);
     };
 
     const handleSave = async () => {
         try {
+            const dataToSave = {
+                ...formData,
+                scope: useCustomScope ? customScope.toUpperCase() : formData.scope
+            };
             if (editingId) {
-                await api.put(`/datasets/${editingId}`, formData);
+                await api.put(`/datasets/${editingId}`, dataToSave);
             } else {
-                await api.post('/datasets', formData);
+                await api.post('/datasets', dataToSave);
             }
             setIsEditing(false);
             fetchDatasets();
@@ -78,23 +94,68 @@ export default function Datasets() {
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">Scope</label>
+                        <label className="block text-sm font-medium text-gray-700">Scope (Company/Region)</label>
+                        <div className="flex items-center gap-4 mt-1">
+                            <label className="inline-flex items-center">
+                                <input
+                                    type="radio"
+                                    checked={!useCustomScope}
+                                    onChange={() => setUseCustomScope(false)}
+                                    className="form-radio"
+                                />
+                                <span className="ml-2 text-sm">Preset</span>
+                            </label>
+                            <label className="inline-flex items-center">
+                                <input
+                                    type="radio"
+                                    checked={useCustomScope}
+                                    onChange={() => setUseCustomScope(true)}
+                                    className="form-radio"
+                                />
+                                <span className="ml-2 text-sm">New Company</span>
+                            </label>
+                        </div>
+                        {!useCustomScope ? (
+                            <select
+                                className="mt-2 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                value={formData.scope}
+                                onChange={e => setFormData({ ...formData, scope: e.target.value })}
+                            >
+                                <option value="ALL">ALL (Global Knowledge)</option>
+                                <option value="JCETI">JCETI (Training Institute)</option>
+                                <option value="GLOBAL">GLOBAL (Workforce Recruitment)</option>
+                                <option value="SG">SG (Singapore)</option>
+                                <option value="ISRAEL">ISRAEL</option>
+                                <option value="JAPAN">JAPAN</option>
+                            </select>
+                        ) : (
+                            <input
+                                className="mt-2 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="Enter new company name (e.g., KOREA, UAE, QATAR)"
+                                value={customScope}
+                                onChange={e => setCustomScope(e.target.value)}
+                            />
+                        )}
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Category</label>
                         <select
                             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                            value={formData.scope}
+                            value={formData.category || 'company'}
                             // @ts-ignore
-                            onChange={e => setFormData({ ...formData, scope: e.target.value })}
+                            onChange={e => setFormData({ ...formData, category: e.target.value })}
                         >
-                            <option value="ALL">ALL</option>
-                            <option value="JCETI">JCETI</option>
-                            <option value="GLOBAL">GLOBAL</option>
-                            <option value="SG">SG (Singapore)</option>
+                            <option value="company">Company Info</option>
+                            <option value="faq">FAQ</option>
+                            <option value="promotion">Promotions</option>
+                            <option value="other">Other</option>
                         </select>
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Content</label>
                         <textarea
                             rows={15}
+                            placeholder="Enter company info, FAQs, or other knowledge the chatbot should use..."
                             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
                             value={formData.content}
                             onChange={e => setFormData({ ...formData, content: e.target.value })}
@@ -130,6 +191,7 @@ export default function Datasets() {
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Scope</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Active</th>
                             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
@@ -141,6 +203,11 @@ export default function Datasets() {
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                     <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
                                         {ds.scope}
+                                    </span>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800 capitalize">
+                                        {ds.category || 'company'}
                                     </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{ds.isActive ? '✅' : '❌'}</td>
