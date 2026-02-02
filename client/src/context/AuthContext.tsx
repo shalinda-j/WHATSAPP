@@ -22,6 +22,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
     const [loading, setLoading] = useState(true);
 
+    const login = (newToken: string) => {
+        setToken(newToken);
+    };
+
+    const logout = () => {
+        setToken(null);
+        localStorage.removeItem('token');
+        setUser(null);
+    };
+
     useEffect(() => {
         if (token) {
             localStorage.setItem('token', token);
@@ -34,20 +44,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .finally(() => setLoading(false));
         } else {
             localStorage.removeItem('token');
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setUser(null);
             setLoading(false);
         }
     }, [token]);
-
-    const login = (newToken: string) => {
-        setToken(newToken);
-    };
-
-    const logout = () => {
-        setToken(null);
-        localStorage.removeItem('token');
-        setUser(null);
-    };
 
     return (
         <AuthContext.Provider value={{ user, token, login, logout, loading }}>
@@ -56,6 +57,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => {
     const context = useContext(AuthContext);
     if (!context) throw new Error('useAuth must be used within an AuthProvider');

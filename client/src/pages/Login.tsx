@@ -32,14 +32,14 @@ export default function Login() {
                 const res = await api.post('/api/auth/login', { username, password });
                 login(res.data.token);
             }
-        } catch (err: any) {
+        } catch (err: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
             setError(err.response?.data?.message || 'Login failed');
         }
     };
 
     return (
-        <div className="flex items-center justify-center min-h-screen bg-gray-100">
-            <div className="px-8 py-6 mt-4 text-left bg-white shadow-lg rounded-xl w-96">
+        <div className="flex items-center justify-center min-h-screen bg-gray-100 px-4">
+            <div className="px-8 py-6 mt-4 text-left bg-white shadow-lg rounded-xl w-full max-w-md">
                 <h3 className="text-2xl font-bold text-center text-gray-700">
                     {needsSetup ? 'Admin Setup' : 'Admin Login'}
                 </h3>

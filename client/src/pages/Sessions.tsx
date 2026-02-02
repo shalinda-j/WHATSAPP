@@ -20,7 +20,9 @@ export default function Sessions() {
     const fetchSessions = async () => {
         try {
             const res = await api.get('/api/sessions');
-            setSessions(res.data);
+            // Support both old and new API response formats safely
+            const sessionList = Array.isArray(res.data) ? res.data : res.data.sessions;
+            setSessions(sessionList || []);
             setLoading(false);
         } catch (error) {
             console.error('Failed to fetch sessions', error);
@@ -42,7 +44,7 @@ export default function Sessions() {
         try {
             await api.post('/api/sessions', { sessionName: name });
             await fetchSessions();
-        } catch (error) {
+        } catch {
             alert('Failed to create session');
         } finally {
             setCreating(false);
@@ -54,7 +56,7 @@ export default function Sessions() {
         try {
             await api.delete(`/api/sessions/${id}`);
             fetchSessions();
-        } catch (error) {
+        } catch {
             alert('Failed to delete session');
         }
     };

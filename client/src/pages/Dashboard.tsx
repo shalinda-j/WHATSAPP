@@ -14,8 +14,14 @@ interface AIProvider {
     isActive?: boolean;
 }
 
+interface ConnectionStatus {
+    status: 'connected' | 'disconnected' | 'scan_qr' | 'connecting' | 'reconnecting';
+    qr?: string | null;
+    activeSessions?: number;
+}
+
 export default function Dashboard() {
-    const [status, setStatus] = useState<any>({ status: 'disconnected', qr: null });
+    const [status, setStatus] = useState<ConnectionStatus>({ status: 'disconnected', qr: null });
     const [loading, setLoading] = useState(true);
     const [aiProviders, setAiProviders] = useState<AIProvider[]>([]);
     const [aiLoading, setAiLoading] = useState(true);
@@ -35,6 +41,7 @@ export default function Dashboard() {
         try {
             const res = await api.get('/config');
             if (Array.isArray(res.data)) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const providers = res.data.filter((config: any) => config.isProvider === true);
                 setAiProviders(providers);
             }
@@ -60,7 +67,7 @@ export default function Dashboard() {
             await api.post('/whatsapp/reconnect');
             alert('Reconnection initiated');
             fetchStatus();
-        } catch (err) {
+        } catch {
             alert('Error initiating reconnection');
         }
     };
@@ -165,6 +172,10 @@ export default function Dashboard() {
                         <div className="flex justify-between">
                             <span className="text-gray-600">AI Providers</span>
                             <span className="font-medium">{activeProviders.length} active</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-gray-600">Connected Devices</span>
+                            <span className="font-medium">{status.activeSessions || 0}</span>
                         </div>
                     </div>
                 </div>

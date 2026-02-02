@@ -186,6 +186,13 @@ export class WhatsAppSessionManager {
     // For now, the loop handles it on 'loggedOut', but manual delete might need it too.
   }
 
+  /**
+   * Get the count of active sessions
+   */
+  getActiveSessionsCount(): number {
+    return this.sessions.size;
+  }
+
   // Legacy support methods (migrating old single-file functions to use 'default' session)
   static instance = new WhatsAppSessionManager();
 }
@@ -255,7 +262,13 @@ export async function getConnectionStatus() {
   const session = await Session.findOne({ sessionId: 'default' });
   return {
     status: session?.status || 'disconnected',
-    qr: session?.qr || null
+    qr: session?.qr || null,
+    activeSessions: manager.getActiveSessionsCount()
   };
+
+}
+
+export function getActiveSessionCount(): number {
+  return manager.getActiveSessionsCount();
 }
 

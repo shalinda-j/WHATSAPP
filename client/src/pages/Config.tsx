@@ -30,10 +30,6 @@ export default function Config() {
         apiKey: '', aiModel: '', isActive: false
     });
 
-    useEffect(() => {
-        fetchConfigs();
-    }, []);
-
     const fetchConfigs = async () => {
         try {
             const res = await api.get('/api/config');
@@ -47,6 +43,11 @@ export default function Config() {
             console.error("Failed to fetch configs", error);
         }
     };
+
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        fetchConfigs();
+    }, []);
 
     const handleDelete = async (id: string) => {
         if (window.confirm('Are you sure?')) {
@@ -76,20 +77,23 @@ export default function Config() {
 
     const handleSave = async () => {
         try {
+            // Create a copy to avoid mutating state directly
+            const payload = { ...formData };
             // For AI providers, key should be unique, so we generate one if not set
-            if (formData.isProvider && !formData.key) {
-                formData.key = `provider_${formData.providerType}_${Date.now()}`;
+            if (payload.isProvider && !payload.key) {
+                payload.key = `provider_${payload.providerType}_${Date.now()}`;
             }
 
             if (editingId) {
-                await api.put(`/api/config/${editingId}`, formData);
+                await api.put(`/api/config/${editingId}`, payload);
             } else {
-                await api.post('/api/config', formData);
+                await api.post('/api/config', payload);
             }
             setIsEditing(false);
             fetchConfigs();
-        } catch (err: any) {
-            alert('Error saving: ' + err.message);
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            alert('Error saving: ' + message);
         }
     };
 
@@ -329,33 +333,35 @@ export default function Config() {
 
             {activeTab === 'general' && (
                 <div className="bg-white rounded-xl shadow-md overflow-hidden">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Key</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Value</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {generalConfigs.map(c => (
-                                <tr key={c._id} className="hover:bg-gray-50">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{c.key}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 break-all max-w-xs truncate">{c.value}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{c.description}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                        <button onClick={() => handleEdit(c)} className="text-indigo-600 hover:text-indigo-900 mr-4">
-                                            <Edit className="h-4 w-4" />
-                                        </button>
-                                        <button onClick={() => handleDelete(c._id)} className="text-red-600 hover:text-red-900">
-                                            <Trash className="h-4 w-4" />
-                                        </button>
-                                    </td>
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Key</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Value</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {generalConfigs.map(c => (
+                                    <tr key={c._id} className="hover:bg-gray-50">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{c.key}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 break-all max-w-xs truncate">{c.value}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{c.description}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <button onClick={() => handleEdit(c)} className="text-indigo-600 hover:text-indigo-900 mr-4">
+                                                <Edit className="h-4 w-4" />
+                                            </button>
+                                            <button onClick={() => handleDelete(c._id)} className="text-red-600 hover:text-red-900">
+                                                <Trash className="h-4 w-4" />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                     {generalConfigs.length === 0 && (
                         <div className="p-8 text-center text-gray-500">No general configs found.</div>
                     )}

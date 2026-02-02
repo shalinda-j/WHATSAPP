@@ -22,14 +22,15 @@ export default function Datasets() {
     const [useCustomScope, setUseCustomScope] = useState(false);
     const [customScope, setCustomScope] = useState('');
 
-    useEffect(() => {
-        fetchDatasets();
-    }, []);
-
     const fetchDatasets = async () => {
         const res = await api.get('/datasets');
         setDatasets(res.data);
     };
+
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        fetchDatasets();
+    }, []);
 
     const handleDelete = async (id: string) => {
         if (window.confirm('Are you sure?')) {
@@ -69,8 +70,9 @@ export default function Datasets() {
             }
             setIsEditing(false);
             fetchDatasets();
-        } catch (err: any) {
-            alert('Error saving: ' + err.message);
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            alert('Error saving: ' + message);
         }
     };
 
@@ -142,7 +144,7 @@ export default function Datasets() {
                         <select
                             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                             value={formData.category || 'company'}
-                            // @ts-ignore
+                            // @ts-expect-error - legacy code support
                             onChange={e => setFormData({ ...formData, category: e.target.value })}
                         >
                             <option value="company">Company Info</option>
@@ -186,43 +188,45 @@ export default function Datasets() {
             </div>
 
             <div className="bg-white rounded-xl shadow-md overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Scope</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Active</th>
-                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {datasets.map(ds => (
-                            <tr key={ds._id} className="hover:bg-gray-50">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{ds.name}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                                        {ds.scope}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800 capitalize">
-                                        {ds.category || 'company'}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{ds.isActive ? '✅' : '❌'}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                    <button onClick={() => handleEdit(ds)} className="text-indigo-600 hover:text-indigo-900 mr-4">
-                                        <Edit className="h-4 w-4" />
-                                    </button>
-                                    <button onClick={() => handleDelete(ds._id)} className="text-red-600 hover:text-red-900">
-                                        <Trash className="h-4 w-4" />
-                                    </button>
-                                </td>
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Scope</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Active</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {datasets.map(ds => (
+                                <tr key={ds._id} className="hover:bg-gray-50">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{ds.name}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                                            {ds.scope}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800 capitalize">
+                                            {ds.category || 'company'}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{ds.isActive ? '✅' : '❌'}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                        <button onClick={() => handleEdit(ds)} className="text-indigo-600 hover:text-indigo-900 mr-4">
+                                            <Edit className="h-4 w-4" />
+                                        </button>
+                                        <button onClick={() => handleDelete(ds._id)} className="text-red-600 hover:text-red-900">
+                                            <Trash className="h-4 w-4" />
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
                 {datasets.length === 0 && (
                     <div className="p-8 text-center text-gray-500">No datasets found. Create one to get started.</div>
                 )}

@@ -9,7 +9,12 @@ const manager = WhatsAppSessionManager.instance;
 router.get('/', async (req, res) => {
     try {
         const sessions = await Session.find().sort({ createdAt: -1 });
-        res.json(sessions);
+        const activeCount = manager.getActiveSessionsCount();
+        res.json({
+            sessions,
+            activeCount,
+            total: sessions.length
+        });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
