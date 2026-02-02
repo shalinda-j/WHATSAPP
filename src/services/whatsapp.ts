@@ -12,6 +12,7 @@ import { resolve } from 'path';
 import { mkdirSync, existsSync } from 'fs';
 import { connectToMongoDB, useMongoDBAuthState } from './MongoAuthService';
 import Session from '../models/Session';
+import { SecurityService } from './SecurityService';
 
 // Logger
 const logger = pino({ level: process.env.DEBUG === 'true' ? 'debug' : 'warn' });
@@ -126,10 +127,20 @@ export class WhatsAppSessionManager {
         }
       });
 
+
       // Handle Messages
       sock.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
         await Promise.all(messages.map(async (msg) => {
+
+          const text = getMessageText(msg);
+          // Global Security Middleware
+          // If the message is deemed unsafe, we silently drop it or log it.
+          if (text && !SecurityService.isSafe(text)) {
+            console.warn(`🛡️ Blocked unsafe message from ${msg.key.remoteJid}: ${text.substring(0, 50)}...`);
+            return;
+          }
+
           for (const handler of messageHandlers) {
             try {
               await handler(msg, sock, sessionId);
