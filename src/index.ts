@@ -13,7 +13,7 @@ import {
 import { connectToMongoDB } from './services/MongoAuthService';
 import { transcribeAudio, generateSpeech } from './services/voice';
 import { aiLoadBalancer } from './services/AILoadBalancer';
-import { detectBookingIntent } from './services/gemini';
+import { analyzeLeadIntent } from './services/gemini';
 import { getRegistrationMessage, getPaymentMessage, getCVMessage } from './config/links-config';
 import { handleBookingMessage, startBookingFlow, handleSpecificDateRequest } from './services/BookingService';
 import app from './server/app';
@@ -155,16 +155,16 @@ onMessage(async (message) => {
             // Show typing indicator
             await sendTyping(jid);
 
-            // 3. Check for natural language booking intent using Zhipu GLM
+            // 3. New Lead & Intent Analysis
             // Only check if message contains date/time related keywords (performance optimization)
             const bookingKeywords = ['tomorrow', 'today', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'am', 'pm', 'morning', 'afternoon', 'evening', 'visit', 'appointment', 'schedule', 'book', 'meet', 'හෙට', 'අද', 'පැමිණ', 'හමුවීම', 'වේලාව'];
             const hasBookingKeyword = bookingKeywords.some(keyword => text.toLowerCase().includes(keyword));
 
             if (hasBookingKeyword) {
-                const bookingIntent = await detectBookingIntent(text);
-                if (bookingIntent && bookingIntent.intent === 'CHECK_AVAILABILITY' && bookingIntent.date && bookingIntent.time) {
-                    console.log(`   📅 Specific booking request: ${bookingIntent.date} @ ${bookingIntent.time}`);
-                    await handleSpecificDateRequest(jid, bookingIntent.date, bookingIntent.time);
+                const leadAnalysis = await analyzeLeadIntent(text);
+                if (leadAnalysis && leadAnalysis.intent === 'Check Availability' && leadAnalysis.bookingDetails?.date && leadAnalysis.bookingDetails?.time) {
+                    console.log(`   📅 Specific booking request: ${leadAnalysis.bookingDetails.date} @ ${leadAnalysis.bookingDetails.time}`);
+                    await handleSpecificDateRequest(jid, leadAnalysis.bookingDetails.date, leadAnalysis.bookingDetails.time);
                     return;
                 }
             }

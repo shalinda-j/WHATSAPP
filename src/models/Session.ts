@@ -1,4 +1,4 @@
-import mongoose, { Document, Schema, CallbackWithoutResultAndOptionalError } from 'mongoose';
+import mongoose, { Document, Schema } from 'mongoose';
 
 interface ISession {
     sessionId: string;
@@ -24,9 +24,9 @@ const SessionSchema = new Schema<ISession>({
     updatedAt: { type: Date, default: Date.now }
 });
 
-SessionSchema.pre('save', function (next: CallbackWithoutResultAndOptionalError) {
+// Modern Mongoose 7+ pre-save hook (no 'next' callback needed for async)
+SessionSchema.pre('save', async function () {
     this.updatedAt = new Date();
-    next();
 });
 
 const Session = mongoose.model('Session', SessionSchema as any) as unknown as mongoose.Model<ISession>;

@@ -2,13 +2,36 @@ import { GoogleGenerativeAI, ChatSession } from '@google/generative-ai';
 import { AI_PERSONALITY, SINHALA_SYSTEM_PROMPT, JOB_KNOWLEDGE_BASE, CONVERSATION_EXAMPLES } from '../config/ai-personality';
 import { AIService, AIChatMessage } from '../interfaces/AIService';
 
+import Dataset from '../models/Dataset';
+
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-// Use gemini-2.5-flash (stable, good quotas)
+// Helper to fetch dynamic knowledge base
+async function getDynamicKnowledgeBase(): Promise<string> {
+  try {
+    // Fetch all active datasets
+    const datasets = await Dataset.find({ isActive: true });
+
+    let dynamicContent = '';
+    if (datasets.length > 0) {
+      dynamicContent = '\n\n# 📂 Dynamic Datasets (From Admin Panel)\n';
+      datasets.forEach(ds => {
+        dynamicContent += `\n## ${ds.name} (${ds.scope})\n${ds.content}\n---\n`;
+      });
+    }
+
+    // Combine with static defaults
+    return `${JOB_KNOWLEDGE_BASE}${dynamicContent}`;
+  } catch (error) {
+    console.error('Error fetching datasets:', error);
+    return JOB_KNOWLEDGE_BASE; // Fallback to static
+  }
+}
+
+// Ensure model is initialized (Note: System instruction will be set per-request for dynamic updates)
 const model = genAI.getGenerativeModel({
   model: 'gemini-1.5-flash',
-  systemInstruction: `${AI_PERSONALITY}\n\n${JOB_KNOWLEDGE_BASE}`
 });
 
 // Store chat sessions for conversation memory
@@ -33,11 +56,14 @@ function buildExampleHistory() {
  */
 export async function generateResponse(prompt: string): Promise<string> {
   try {
-    const result = await model.generateContent([
-      { text: AI_PERSONALITY },
-      { text: JOB_KNOWLEDGE_BASE },
-      { text: prompt }
-    ]);
+    const dynamicKB = await getDynamicKnowledgeBase();
+
+    const result = await model.generateContent({
+      contents: [
+        { role: 'user', parts: [{ text: prompt }] }
+      ],
+      systemInstruction: `${AI_PERSONALITY}\n\n${dynamicKB}`
+    });
     return result.response.text();
   } catch (error) {
     console.error('Gemini API error:', error);
@@ -50,11 +76,14 @@ export async function generateResponse(prompt: string): Promise<string> {
  */
 export async function generateSinhalaResponse(prompt: string): Promise<string> {
   try {
-    const result = await model.generateContent([
-      { text: SINHALA_SYSTEM_PROMPT },
-      { text: JOB_KNOWLEDGE_BASE },
-      { text: prompt }
-    ]);
+    const dynamicKB = await getDynamicKnowledgeBase();
+
+    const result = await model.generateContent({
+      contents: [
+        { role: 'user', parts: [{ text: prompt }] }
+      ],
+      systemInstruction: `${SINHALA_SYSTEM_PROMPT}\n\n${dynamicKB}`
+    });
     return result.response.text();
   } catch (error) {
     console.error('Gemini API error (Sinhala):', error);
@@ -65,21 +94,18 @@ export async function generateSinhalaResponse(prompt: string): Promise<string> {
 /**
  * Get or create a chat session for a user (enables conversation memory)
  * Now includes job knowledge base and example conversations
+ * Note: Sessions initialized here currently use STATIC knowledge for simplicity.
+ * To use dynamic knowledge in sessions, we'd need to refactor this to be async or inject context per message.
  */
 export function getChatSession(userId: string): ChatSession {
   if (!chatSessions.has(userId)) {
     const chat = model.startChat({
+      systemInstruction: `${AI_PERSONALITY}\n\n${JOB_KNOWLEDGE_BASE}`, // Use static base for persistent sessions for now
       history: [
-        // Initialize with system instructions and knowledge base
-        {
-          role: 'user',
-          parts: [{ text: `${AI_PERSONALITY}\n\n${JOB_KNOWLEDGE_BASE}` }]
-        },
         {
           role: 'model',
           parts: [{ text: '🙏 ආයුබෝවන්! මම ජයලත් ග්ලොබල් AI - ඔබේ විදේශ රැකියා AI සහායකයා. මම ඔබට උදව් කරන්න සූදානම්!' }]
         },
-        // Add example conversations for better responses
         ...buildExampleHistory()
       ]
     });
@@ -135,27 +161,41 @@ export async function transcribeAudio(audioBase64: string, mimeType: string = 'a
 /**
  * Detect booking intent from natural language
  */
-export async function detectBookingIntent(text: string): Promise<{ intent: 'CHECK_AVAILABILITY' | 'NONE'; date?: string; time?: string } | null> {
+/**
+ * Analyze the user's message for lead qualification data and intent
+ */
+export async function analyzeLeadIntent(text: string): Promise<{
+  intent: 'Check Availability' | 'Lead Info' | 'None';
+  leadData?: { name?: string; age?: string; education?: string; location?: string };
+  bookingDetails?: { date?: string; time?: string };
+  buyingSignal: 'High' | 'Medium' | 'Low';
+  suggestedAction?: 'Book Visit' | 'Ask History' | 'None';
+} | null> {
   try {
     const result = await model.generateContent([
       {
-        text: `You are a booking intent detector. Analyze the user's message.
-                If they are asking to schedule a visit, appointment, or suggesting a time, return a JSON object.
+        text: `You are a Lead Analyzer for a Recruitment Agency. Analyze the user's message.
+                Extract any provided personal details, determine the "Buying Signal", and check for booking requests.
                 Current Date: ${new Date().toISOString()}
+
+                User Message: "${text}"
 
                 Output Format (JSON Only):
                 {
-                    "intent": "CHECK_AVAILABILITY",
-                    "date": "YYYY-MM-DD",
-                    "time": "HH:mm" (24-hour format)
-                }
-
-                If no specific time is mentioned, default time to "09:00".
-                If no specific date is mentioned, use tomorrow's date.
-                If the user is NOT asking to book or check availability, return:
-                { "intent": "NONE" }
-
-                User Message: "${text}"`
+                    "intent": "Check Availability" (asking for time/visit) OR "Lead Info" (providing details) OR "None",
+                    "leadData": {
+                        "name": "Extract if present, else null",
+                        "age": "Extract if present, else null",
+                        "education": "Extract if present (OL/AL/Degree), else null",
+                        "location": "Extract if present, else null"
+                    },
+                    "bookingDetails": {
+                        "date": "YYYY-MM-DD" (if intent is Check Availability, default to tomorrow if unspecified),
+                        "time": "HH:mm" (24-hour format, default 09:00)
+                    },
+                    "buyingSignal": "High" (Asking Price/Location/Visit) OR "Medium" (Asking General Info) OR "Low",
+                    "suggestedAction": "Book Visit" (If signal High) OR "Ask History" (If details missing) OR "None"
+                }`
       }
     ]);
 
@@ -163,7 +203,7 @@ export async function detectBookingIntent(text: string): Promise<{ intent: 'CHEC
     return JSON.parse(responseText);
 
   } catch (error) {
-    console.error('Intent detection error:', error);
+    console.error('Lead analysis error:', error);
     return null;
   }
 }

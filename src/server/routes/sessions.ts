@@ -22,23 +22,37 @@ router.post('/', async (req, res) => {
 
         // If no ID provided, generate one
         const newId = sessionId || `session_${Date.now()}`;
+        const newName = sessionName || `Device ${newId.split('_')[1] || '1'}`;
+
+        console.log(`📲 API: Creating new session: ${newId} (${newName})`);
 
         // Create DB entry if not exists
         let session = await Session.findOne({ sessionId: newId });
         if (!session) {
             session = await Session.create({
                 sessionId: newId,
-                sessionName: sessionName || `Device ${newId.split('_')[1] || '1'}`,
+                sessionName: newName,
                 status: 'connecting'
             });
+            console.log(`   ✅ Session DB entry created for: ${newId}`);
+        } else {
+            console.log(`   ⚠️ Session ${newId} already exists in DB. Reusing.`);
         }
 
-        // Start the socket
-        manager.startSession(newId);
+        // Start the socket (this is async but we don't await it, it runs in background)
+        manager.startSession(newId).catch((err: any) => {
+            console.error(`   ❌ Error during startSession for ${newId}:`, err.message);
+        });
 
-        res.json({ message: 'Session started', sessionId: newId });
+        res.json({ message: 'Session started', sessionId: newId, sessionName: newName });
     } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        console.error('❌ Session creation error:', error);
+        // Provide more detail to the frontend
+        if (error.code === 11000) {
+            res.status(409).json({ error: 'A session with this ID already exists.', code: 'DUPLICATE_SESSION' });
+        } else {
+            res.status(500).json({ error: error.message || 'Unknown error during session creation' });
+        }
     }
 });
 

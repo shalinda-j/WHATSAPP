@@ -13,13 +13,8 @@ const AuthSchema = new mongoose.Schema({
 // Compound unique index to allow same 'key' across different 'sessionId'
 AuthSchema.index({ sessionId: 1, key: 1 }, { unique: true });
 
-// Prevent overwriting model if it already exists (hot reload safety)
-let AuthModel: any;
-try {
-    AuthModel = mongoose.model('AuthCredentials');
-} catch (error) {
-    AuthModel = mongoose.model('AuthCredentials', AuthSchema);
-}
+// Safer model initialization: Check mongoose.models first to prevent OverwriteModelError
+const AuthModel = mongoose.models.AuthCredentials || mongoose.model('AuthCredentials', AuthSchema);
 
 // --- MongoDB Connection Helper ---
 export const connectToMongoDB = async (uri: string): Promise<void> => {
