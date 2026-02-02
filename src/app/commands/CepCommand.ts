@@ -10,16 +10,17 @@ export class CepCommand extends BaseCommand {
   name = 'cep';
   description = 'Search information for a Brazilian postal code';
 
-  async execute(message: proto.IWebMessageInfo, args: string[]): Promise<void> {
+  async execute(message: proto.IWebMessageInfo, args: string[], sessionId: string): Promise<void> {
     const jid = message.key.remoteJid;
     if (!jid) return;
 
-    await this.sendTyping(message);
+    await this.sendTyping(message, sessionId);
 
     // Validate arguments
     if (args.length === 0) {
       await this.reply(message,
         '⚠️ Please provide a postal code.\n\n📖 *Usage:* !cep 01310-100',
+        sessionId,
       );
       return;
     }
@@ -29,6 +30,7 @@ export class CepCommand extends BaseCommand {
     if (cep.length !== 8) {
       await this.reply(message,
         '⚠️ Invalid postal code! The code must have 8 digits.',
+        sessionId,
       );
       return;
     }
@@ -45,10 +47,11 @@ export class CepCommand extends BaseCommand {
         `*Neighborhood:* ${data.neighborhood}\n` +
         `*City:* ${data.city}\n` +
         `*State:* ${data.state}`,
+        sessionId,
       );
     } catch (error) {
       console.error('Error fetching postal code:', error);
-      await this.reply(message, '⚠️ Postal code not found or service unavailable.');
+      await this.reply(message, '⚠️ Postal code not found or service unavailable.', sessionId);
     }
   }
 }

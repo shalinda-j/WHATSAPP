@@ -11,14 +11,14 @@ export class QuoteCommand extends BaseCommand {
   description = 'Mentions all group members (admins only)';
   aliases = ['everyone', 'all', 'todos'];
 
-  async execute(message: proto.IWebMessageInfo, args: string[]): Promise<void> {
+  async execute(message: proto.IWebMessageInfo, args: string[], sessionId: string): Promise<void> {
     const jid = message.key.remoteJid;
     if (!jid) return;
 
-    await this.sendTyping(message);
+    await this.sendTyping(message, sessionId);
 
     // Validate if it's a group
-    const isGroup = await this.requireGroup(message);
+    const isGroup = await this.requireGroup(message, sessionId);
     if (!isGroup) return;
 
     // Get user who sent the message
@@ -36,12 +36,13 @@ export class QuoteCommand extends BaseCommand {
     if (!allowPermissions.length) {
       await this.reply(message,
         '⚠️ You do not have permission to use this command!',
+        sessionId,
       );
       return;
     }
 
     try {
-      const sock = getSocket();
+      const sock = getSocket(sessionId);
       if (!sock) return;
 
       // Fetch group metadata to get participants
@@ -62,7 +63,7 @@ export class QuoteCommand extends BaseCommand {
 
     } catch (error) {
       console.error('Error fetching group members:', error);
-      await this.reply(message, '⚠️ Failed to fetch group members.');
+      await this.reply(message, '⚠️ Failed to fetch group members.', sessionId);
     }
   }
 }

@@ -11,13 +11,13 @@ export class HelpCommand extends BaseCommand {
   description = 'Shows all available commands with their descriptions';
   aliases = ['ajuda', 'comandos', 'commands'];
 
-  async execute(message: proto.IWebMessageInfo, args: string[]): Promise<void> {
+  async execute(message: proto.IWebMessageInfo, args: string[], sessionId: string): Promise<void> {
     console.log('   📝 HelpCommand.execute() called');
     const jid = message.key.remoteJid;
     if (!jid) return;
 
     try {
-      await this.sendTyping(message);
+      await this.sendTyping(message, sessionId);
       console.log('   ✅ Typing indicator sent');
     } catch (e) {
       console.error('   ⚠️ Failed to send typing (continuing anyway)');
@@ -53,7 +53,7 @@ export class HelpCommand extends BaseCommand {
     console.log('   📤 Sending help message...');
     try {
       // Use sendMessage instead of client.sendMessage
-      await sendMessage(jid, helpMessage);
+      await sendMessage(jid, helpMessage, sessionId);
       console.log('   ✅ Help message sent successfully');
     } catch (sendError) {
       console.error('   ❌ Failed to send help message:', sendError);
