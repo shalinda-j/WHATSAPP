@@ -1,4 +1,4 @@
-import type { Message } from 'whatsapp-web.js';
+import { proto } from '@whiskeysockets/baileys';
 
 /**
  * Base interface for all bot commands
@@ -27,5 +27,5 @@ export interface ICommand {
    * @param args - Arguments passed after the command name
    * @returns Promise that resolves when the command finishes
    */
-  execute(message: Message, args: string[]): Promise<Message | void>;
+  execute(message: proto.IWebMessageInfo, args: string[], sessionId: string): Promise<void>;
 }

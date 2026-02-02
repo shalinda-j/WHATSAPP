@@ -1,7 +1,7 @@
-import { client } from '../../services/whatsapp';
+import { getSocket } from '../../services/whatsapp';
 import { company } from '../../config/integrantes.json';
-import type { Message, GroupChat } from 'whatsapp-web.js';
 import { BaseCommand } from '../utils/BaseCommand';
+import { proto } from '@whiskeysockets/baileys';
 
 /**
  * Command to mention all group members
@@ -11,39 +11,58 @@ export class QuoteCommand extends BaseCommand {
   description = 'Mentions all group members (admins only)';
   aliases = ['everyone', 'all', 'todos'];
 
-  async execute(message: Message, args: string[]): Promise<Message | void> {
+  async execute(message: proto.IWebMessageInfo, args: string[]): Promise<void> {
+    const jid = message.key.remoteJid;
+    if (!jid) return;
+
     await this.sendTyping(message);
 
     // Validate if it's a group
-    const groupError = await this.requireGroup(message);
-    if (groupError) return groupError;
+    const isGroup = await this.requireGroup(message);
+    if (!isGroup) return;
 
-    const chat: Partial<GroupChat> = await message.getChat();
-    const {
-      id: { user: contato },
-    } = await message.getContact();
+    // Get user who sent the message
+    const sender = message.key.participant || message.key.remoteJid;
+    if (!sender) return;
+
+    // Extract stats for permission check (using sender number)
+    const senderNumber = sender.replace(/\D/g, ''); // Extract number only
 
     // Check permissions
     const allowPermissions = company.filter(
-      ({ numero, admin }) => numero === contato && admin,
+      ({ numero, admin }) => numero === senderNumber && admin,
     );
 
     if (!allowPermissions.length) {
-      return message.reply(
+      await this.reply(message,
         '⚠️ You do not have permission to use this command!',
       );
+      return;
     }
 
-    // Mention all participants
-    const mentions = [];
+    try {
+      const sock = getSocket();
+      if (!sock) return;
 
-    for (const participant of chat.participants) {
-      const contact = await client.getContactById(participant.id._serialized);
-      mentions.push(contact);
+      // Fetch group metadata to get participants
+      const groupMetadata = await sock.groupMetadata(jid);
+      const participants = groupMetadata.participants;
+
+      // Create mentions list
+      const mentions = participants.map(p => p.id);
+
+      // Build message with @mentions
+      const names = mentions.map((id) => `@${id.split('@')[0]}`).join(' ');
+
+      // Send message with mentions
+      await sock.sendMessage(jid, {
+        text: names,
+        mentions: mentions
+      });
+
+    } catch (error) {
+      console.error('Error fetching group members:', error);
+      await this.reply(message, '⚠️ Failed to fetch group members.');
     }
-
-    const names = mentions.map((mention) => `@${mention.number}`).join(' ');
-
-    return chat.sendMessage(names, { mentions });
   }
 }

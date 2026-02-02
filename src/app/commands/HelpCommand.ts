@@ -1,7 +1,7 @@
-import type { Message } from 'whatsapp-web.js';
 import { BaseCommand } from '../utils/BaseCommand';
 import { commandDispatcher } from '../utils/CommandDispatcher';
-import { client } from '../../services/whatsapp';
+import { sendMessage } from '../../services/whatsapp';
+import { proto } from '@whiskeysockets/baileys';
 
 /**
  * Command to display all available commands with their descriptions and aliases
@@ -11,8 +11,10 @@ export class HelpCommand extends BaseCommand {
   description = 'Shows all available commands with their descriptions';
   aliases = ['ajuda', 'comandos', 'commands'];
 
-  async execute(message: Message, args: string[]): Promise<Message | void> {
+  async execute(message: proto.IWebMessageInfo, args: string[]): Promise<void> {
     console.log('   📝 HelpCommand.execute() called');
+    const jid = message.key.remoteJid;
+    if (!jid) return;
 
     try {
       await this.sendTyping(message);
@@ -50,8 +52,8 @@ export class HelpCommand extends BaseCommand {
 
     console.log('   📤 Sending help message...');
     try {
-      // Use client.sendMessage instead of message.reply to avoid markedUnread error
-      await client.sendMessage(message.from, helpMessage);
+      // Use sendMessage instead of client.sendMessage
+      await sendMessage(jid, helpMessage);
       console.log('   ✅ Help message sent successfully');
     } catch (sendError) {
       console.error('   ❌ Failed to send help message:', sendError);

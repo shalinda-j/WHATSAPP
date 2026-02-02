@@ -1,5 +1,5 @@
 import { commandDispatcher } from '../utils/CommandDispatcher';
-import type { Message } from 'whatsapp-web.js';
+
 
 // Import all commands
 import { EconomyCommand } from './EconomyCommand';
@@ -33,18 +33,25 @@ export const initializeCommands = (): void => {
 // Initialize commands immediately when the module is loaded
 initializeCommands();
 
+import { proto } from '@whiskeysockets/baileys';
+import { getMessageText } from '../../services/whatsapp';
+
+// ... (existing imports)
+
 /**
  * Main command handler
  * Processes messages starting with '!' and dispatches to the appropriate command
  */
-export const CommandHandler = async (message: Message): Promise<void> => {
+export const CommandHandler = async (message: proto.IWebMessageInfo, sessionId: string): Promise<void> => {
+  const text = getMessageText(message);
+
   // Ignore messages that are not commands
-  if (!message.body.startsWith('!')) return;
+  if (!text.startsWith('!')) return;
 
   // Extract command and arguments
-  const commandText = message.body.slice(1); // Remove '!'
+  const commandText = text.slice(1); // Remove '!'
   const [commandName, ...args] = commandText.split(' ');
 
   // Dispatch to the appropriate command
-  await commandDispatcher.dispatch(commandName.toLowerCase(), message, args);
+  await commandDispatcher.dispatch(commandName.toLowerCase(), message, args, sessionId);
 };

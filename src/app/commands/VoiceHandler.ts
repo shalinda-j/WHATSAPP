@@ -1,7 +1,7 @@
-import type { Message } from 'whatsapp-web.js';
-import { transcribeAudio } from '../../services/zhipu';
+import { proto } from '@whiskeysockets/baileys';
+import { transcribeAudio } from '../../services/gemini';
 import { aiLoadBalancer } from '../../services/AILoadBalancer';
-import { client } from '../../services/whatsapp';
+import { sendMessage, downloadWhatsAppAudio, sendTyping } from '../../services/whatsapp';
 
 /**
  * Voice Message Handler
@@ -11,42 +11,53 @@ export class VoiceHandler {
     /**
      * Check if a message is a voice message
      */
-    static isVoiceMessage(message: Message): boolean {
-        return message.hasMedia && message.type === 'ptt';
+    static isVoiceMessage(message: proto.IWebMessageInfo): boolean {
+        // In Baileys, audioMessage implies voice note if ptt is true, but generic check is usually enough
+        const msg = message.message;
+        return !!(msg?.audioMessage || msg?.listMessage || msg?.buttonsMessage);
+        // Strict voice check:
+        // return !!msg?.audioMessage?.ptt;
     }
 
     /**
      * Handle incoming voice messages
      */
-    static async handleVoiceMessage(message: Message): Promise<void> {
-        if (!this.isVoiceMessage(message)) {
+    static async handleVoiceMessage(message: proto.IWebMessageInfo, sessionId: string): Promise<void> {
+        const msg = message.message?.audioMessage;
+        if (!msg) return;
+
+        // Only handle PTT (voice notes)
+        if (!msg.ptt) {
             return;
         }
+
+        const jid = message.key.remoteJid;
+        if (!jid) return;
 
         try {
             // Show typing indicator
             try {
-                const chat = await message.getChat();
-                await chat.sendStateTyping();
+                await sendTyping(jid, sessionId);
             } catch (e) {
                 // Continue even if typing fails
             }
 
             // Download the voice message
-            const media = await message.downloadMedia();
+            const buffer = await downloadWhatsAppAudio(message);
 
-            if (!media || !media.data) {
-                await client.sendMessage(message.from, '⚠️ Could not download voice message.');
+            if (!buffer) {
+                await sendMessage(jid, '⚠️ Could not download voice message.', sessionId);
                 return;
             }
 
             console.log('🎤 Processing voice message...');
-            console.log(`   MIME Type: ${media.mimetype}`);
-            console.log(`   Data length: ${media.data.length} chars`);
+            // mimetype is essential
+            const mimetype = msg.mimetype || 'audio/ogg; codecs=opus';
+            console.log(`   MIME Type: ${mimetype}`);
+            console.log(`   Data length: ${buffer.length} chars`);
 
             // Transcribe the audio using Zhipu (via existing service)
-            // Note: using transcribeAudio from zhipu service as before
-            const transcription = await transcribeAudio(media.data, media.mimetype);
+            const transcription = await transcribeAudio(buffer.toString('base64'), mimetype);
             console.log(`   Transcription: ${transcription}`);
 
             // Check if transcription looks like a question or command
@@ -64,24 +75,24 @@ export class VoiceHandler {
 
             if (isQuestion && transcription.length > 10) {
                 // If it's a question, get an AI response via Load Balancer
-                const contact = await message.getContact();
-                const aiResponse = await aiLoadBalancer.sendMessage(contact.id._serialized, transcription);
+                const aiResponse = await aiLoadBalancer.sendMessage(jid, transcription);
 
-                await client.sendMessage(message.from,
+                await sendMessage(jid,
                     `🎤 *Voice Transcription:*\n"${transcription}"\n\n` +
-                    `🤖 *AI Response:*\n${aiResponse}`
+                    `🤖 *AI Response:*\n${aiResponse}`,
+                    sessionId
                 );
             } else {
                 // Just return the transcription
-                await client.sendMessage(message.from, `🎤 *Voice Transcription:*\n\n"${transcription}"`);
+                await sendMessage(jid, `🎤 *Voice Transcription:*\n\n"${transcription}"`, sessionId);
             }
 
         } catch (error: any) {
             console.error('Voice processing error:', error);
             if (error.message?.includes('429') || error.message?.includes('quota')) {
-                await client.sendMessage(message.from, '⚠️ API quota exceeded. Please try again in a minute.');
+                await sendMessage(jid, '⚠️ API quota exceeded. Please try again in a minute.', sessionId);
             } else {
-                await client.sendMessage(message.from, '⚠️ Could not process voice message. Please try again.');
+                await sendMessage(jid, '⚠️ Could not process voice message. Please try again.', sessionId);
             }
         }
     }

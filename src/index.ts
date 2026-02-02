@@ -19,6 +19,8 @@ import { getRegistrationMessage, getPaymentMessage, getCVMessage } from './confi
 import { handleBookingMessage, startBookingFlow, handleSpecificDateRequest } from './services/BookingService';
 import app from './server/app';
 import mongoose from 'mongoose';
+import { commandDispatcher } from './app/utils/CommandDispatcher';
+import './app/commands';
 
 const PORT = process.env.PORT || 8080;
 let server: any;
@@ -89,7 +91,7 @@ startServer();
  * Main message handler
  * Processes incoming messages and responds with AI
  */
-onMessage(async (message) => {
+onMessage(async (message, sock, sessionId) => {
     try {
         const jid = getSenderJid(message);
         let text = getMessageText(message);
@@ -129,7 +131,7 @@ onMessage(async (message) => {
                     isVoiceMessage = true;
                 } catch (err: any) {
                     console.error('   ❌ Transcription failed:', err);
-                    await sendMessage(jid, '⚠️ Voice transcription failed. Please try text.');
+                    await sendMessage(jid, '⚠️ Voice transcription failed. Please try text.', sessionId);
                     return;
                 }
             } else {
@@ -139,7 +141,7 @@ onMessage(async (message) => {
         }
 
         // 1. Check if user is in a booking flow
-        const handledByBooking = await handleBookingMessage(jid, text);
+        const handledByBooking = await handleBookingMessage(jid, text, sessionId);
         if (handledByBooking) {
             console.log('   📅 Handled by BookingService');
             return;
@@ -148,7 +150,7 @@ onMessage(async (message) => {
         // Handle commands starting with !
         if (text.startsWith('!')) {
             console.log(`   🤖 Processing command: ${text}`);
-            await handleCommand(jid, text);
+            await handleCommand(jid, text, sessionId, message);
             return;
         }
 
@@ -156,7 +158,7 @@ onMessage(async (message) => {
         console.log('   💬 Processing as AI chat...');
         try {
             // Show typing indicator
-            await sendTyping(jid);
+            await sendTyping(jid, sessionId);
 
             // 3. New Lead & Intent Analysis
             // Only check if message contains date/time related keywords (performance optimization)
@@ -167,7 +169,7 @@ onMessage(async (message) => {
                 const leadAnalysis = await analyzeLeadIntent(text);
                 if (leadAnalysis && leadAnalysis.intent === 'Check Availability' && leadAnalysis.bookingDetails?.date && leadAnalysis.bookingDetails?.time) {
                     console.log(`   📅 Specific booking request: ${leadAnalysis.bookingDetails.date} @ ${leadAnalysis.bookingDetails.time}`);
-                    await handleSpecificDateRequest(jid, leadAnalysis.bookingDetails.date, leadAnalysis.bookingDetails.time);
+                    await handleSpecificDateRequest(jid, leadAnalysis.bookingDetails.date, leadAnalysis.bookingDetails.time, sessionId);
                     return;
                 }
             }
@@ -185,7 +187,7 @@ onMessage(async (message) => {
 
             // Check if response is empty and provide fallback
             if (!response || response.trim() === '') {
-                await sendMessage(jid, '🙏 කරුණාකර නැවත උත්සාහ කරන්න. ඔබේ ප්‍රශ්නය මට තේරුම් ගන්න බැරි විය.');
+                await sendMessage(jid, '🙏 කරුණාකර නැවත උත්සාහ කරන්න. ඔබේ ප්‍රශ්නය මට තේරුම් ගන්න බැරි විය.', sessionId);
                 console.log('   ⚠️ Empty response from AI, sent fallback message');
                 return;
             }
@@ -194,14 +196,14 @@ onMessage(async (message) => {
                 try {
                     console.log('   🗣️ Generating voice response...');
                     const audioResponse = await generateSpeech(response);
-                    await sendVoiceMessage(jid, audioResponse);
+                    await sendVoiceMessage(jid, audioResponse, sessionId);
                     console.log('   ✅ AI voice response sent');
                 } catch (ttsError) {
                     console.error('   ❌ TTS failed:', ttsError);
-                    await sendMessage(jid, `🤖 ${response}`);
+                    await sendMessage(jid, `🤖 ${response}`, sessionId);
                 }
             } else {
-                const sent = await sendMessage(jid, `🤖 ${response}`);
+                const sent = await sendMessage(jid, `🤖 ${response}`, sessionId);
                 if (sent) {
                     console.log('   ✅ AI response sent');
                 } else {
@@ -216,12 +218,14 @@ onMessage(async (message) => {
             if (errorMsg.includes('429') || errorMsg.includes('quota')) {
                 await sendMessage(
                     jid,
-                    '⚠️ *API Quota Exceeded*\n\nPlease try again in a minute.'
+                    '⚠️ *API Quota Exceeded*\n\nPlease try again in a minute.',
+                    sessionId
                 );
             } else {
                 await sendMessage(
                     jid,
-                    '⚠️ Sorry, I could not process your message.\nPlease try again or use `!help`'
+                    '⚠️ Sorry, I could not process your message.\nPlease try again or use `!help`',
+                    sessionId
                 );
             }
         }
@@ -233,9 +237,18 @@ onMessage(async (message) => {
 /**
  * Handle bot commands
  */
-async function handleCommand(jid: string, text: string): Promise<void> {
+async function handleCommand(jid: string, text: string, sessionId: string, message: any): Promise<void> {
     const command = text.toLowerCase().split(' ')[0];
 
+    // 1. Try to use the Command Dispatcher (for new class-based commands)
+    const commandName = command.slice(1); // Remove '!'
+    if (commandDispatcher.hasCommand(commandName)) {
+        const args = text.split(' ').slice(1);
+        await commandDispatcher.dispatch(commandName, message, args, sessionId);
+        return;
+    }
+
+    // 2. Fallback to manual switch (legacy/script commands)
     switch (command) {
         case '!help':
             await sendMessage(
@@ -253,24 +266,25 @@ async function handleCommand(jid: string, text: string): Promise<void> {
 • \`!cv\` - CV submit කරන්න
 • \`!clear\` - කතාබහ අලුතින් අරඹන්න
 
-*ඔබට අවශ්‍ය දේ පණිවුඩයක් ලෙස එවන්න.*`
+*ඔබට අවශ්‍ය දේ පණිවුඩයක් ලෙස එවන්න.*`,
+                sessionId
             );
             break;
 
         case '!ping':
-            await sendMessage(jid, '🏓 Pong! Bot is online and ready.');
+            await sendMessage(jid, '🏓 Pong! Bot is online and ready.', sessionId);
             break;
 
         case '!clear':
             aiLoadBalancer.clearConversation(jid);
-            await sendMessage(jid, '🗑️ කතාබහ ඉතිහාසය මකා දැමුවා!\nදැන් අලුතින් ආරම්භ කරමු! 🏗️');
+            await sendMessage(jid, '🗑️ කතාබහ ඉතිහාසය මකා දැමුවා!\nදැන් අලුතින් ආරම්භ කරමු! 🏗️', sessionId);
             break;
 
         case '!register':
         case '!join':
         case '!apply':
             console.log('   📝 Sending registration form...');
-            await sendMessage(jid, getRegistrationMessage());
+            await sendMessage(jid, getRegistrationMessage(), sessionId);
             break;
 
         case '!payment':
@@ -279,12 +293,12 @@ async function handleCommand(jid: string, text: string): Promise<void> {
             console.log('   💳 Sending payment details...');
             // Extract argument if exists (e.g., "!payment singapore" -> "singapore")
             const paymentArg = text.split(' ').slice(1).join(' ');
-            await sendMessage(jid, getPaymentMessage(paymentArg));
+            await sendMessage(jid, getPaymentMessage(paymentArg), sessionId);
             break;
 
         case '!cv':
             console.log('   📄 Sending CV submission form...');
-            await sendMessage(jid, getCVMessage());
+            await sendMessage(jid, getCVMessage(), sessionId);
             break;
 
         case '!jobs':
@@ -300,7 +314,8 @@ async function handleCommand(jid: string, text: string): Promise<void> {
 🧹 *Heavy Duty Cleaners* - 15 ක්
 🏠 *Gypsum/Tile Fixers* - 100 බැගින්
 
-📝 ලියාපදිංචි වීමට \`!register\` භාවිතා කරන්න.`
+📝 ලියාපදිංචි වීමට \`!register\` භාවිතා කරන්න.`,
+                sessionId
             );
             break;
 
@@ -309,13 +324,14 @@ async function handleCommand(jid: string, text: string): Promise<void> {
         case '!appointment':
         case '!book':
             console.log('   📅 Starting booking flow...');
-            await startBookingFlow(jid);
+            await startBookingFlow(jid, sessionId);
             break;
 
         default:
             await sendMessage(
                 jid,
-                `❓ Unknown command: \`${command}\`\n\nUse \`!help\` to see available commands.`
+                `❓ Unknown command: \`${command}\`\n\nUse \`!help\` to see available commands.`,
+                sessionId
             );
     }
 }

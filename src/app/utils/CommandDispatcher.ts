@@ -1,5 +1,6 @@
 import type { ICommand } from '../interfaces/ICommand';
-import type { Message } from 'whatsapp-web.js';
+import { proto } from '@whiskeysockets/baileys';
+import { sendMessage } from '../../services/whatsapp';
 
 /**
  * Dispatcher responsible for managing and executing commands
@@ -31,8 +32,9 @@ class CommandDispatcher {
    */
   async dispatch(
     commandName: string,
-    message: Message,
+    message: proto.IWebMessageInfo,
     args: string[],
+    sessionId: string,
   ): Promise<void> {
     console.log(`   📤 Dispatching command: "${commandName}"`);
 
@@ -46,14 +48,20 @@ class CommandDispatcher {
       console.log(`   ✅ Command found: ${command.name}`);
       try {
         console.log(`   ⚡ Executing command...`);
-        await command.execute(message, args);
+        await command.execute(message, args, sessionId);
         console.log(`   ✅ Command executed successfully`);
       } catch (error) {
         console.error(`   ❌ Error executing command '${resolvedName}':`, error);
         try {
-          await message.reply(
-            '⚠️ An error occurred while executing the command. Please try again later.',
-          );
+          // Use sendMessage instead of message.reply
+          const jid = message.key.remoteJid;
+          if (jid) {
+            await sendMessage(
+              jid,
+              '⚠️ An error occurred while executing the command. Please try again later.',
+              sessionId,
+            );
+          }
         } catch (replyError) {
           console.error(`   ❌ Failed to send error reply:`, replyError);
         }

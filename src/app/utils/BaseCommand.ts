@@ -1,5 +1,6 @@
-import type { Message, Chat } from 'whatsapp-web.js';
-import type { ICommand } from '../interfaces/ICommand';
+import { proto } from '@whiskeysockets/baileys';
+import { ICommand } from '../interfaces/ICommand';
+import { sendTyping, sendMessage } from '../../services/whatsapp';
 
 /**
  * Abstract base class for commands
@@ -10,56 +11,62 @@ export abstract class BaseCommand implements ICommand {
   abstract description: string;
   aliases?: string[];
 
-  abstract execute(message: Message, args: string[]): Promise<Message | void>;
+  abstract execute(message: proto.IWebMessageInfo, args: string[], sessionId: string): Promise<void>;
 
   /**
    * Sends "typing..." state in the chat
    */
-  protected async sendTyping(message: Message): Promise<void> {
-    const chat = await message.getChat();
-    await chat.sendStateTyping();
+  protected async sendTyping(message: proto.IWebMessageInfo, sessionId: string): Promise<void> {
+    const jid = message.key.remoteJid;
+    if (jid) {
+      await sendTyping(jid, sessionId);
+    }
   }
 
   /**
    * Checks if the message was sent in a group
    */
-  protected async isGroup(message: Message): Promise<boolean> {
-    const chat = await message.getChat();
-    return chat.isGroup;
+  protected isGroup(message: proto.IWebMessageInfo): boolean {
+    return message.key.remoteJid?.endsWith('@g.us') || false;
   }
 
   /**
-   * Gets the chat from the message
+   * Reply to a message
    */
-  protected async getChat(message: Message): Promise<Chat> {
-    return message.getChat();
+  protected async reply(message: proto.IWebMessageInfo, text: string, sessionId: string): Promise<void> {
+    const jid = message.key.remoteJid;
+    if (jid) {
+      await sendMessage(jid, text, sessionId);
+    }
   }
 
   /**
    * Validates if the command is being executed in a group
    * Returns error message if not
    */
-  protected async requireGroup(message: Message): Promise<Message | null> {
-    const isGroup = await this.isGroup(message);
+  protected async requireGroup(message: proto.IWebMessageInfo, sessionId: string): Promise<boolean> {
+    const isGroup = this.isGroup(message);
     if (!isGroup) {
-      return message.reply('⚠️ This command can only be used in groups!');
+      await this.reply(message, '⚠️ This command can only be used in groups!', sessionId);
+      return false;
     }
-    return null;
+    return true;
   }
 
   /**
    * Validates if there are enough arguments
    */
-  protected validateArgs(
-    message: Message,
+  protected async validateArgs(
+    message: proto.IWebMessageInfo,
     args: string[],
     minArgs: number,
     usage: string,
-  ): Message | null {
+    sessionId: string,
+  ): Promise<boolean> {
     if (args.length < minArgs) {
-      message.reply(`⚠️ Incorrect usage!\n\n📖 *Usage:* ${usage}`);
-      return message as any;
+      await this.reply(message, `⚠️ Incorrect usage!\n\n📖 *Usage:* ${usage}`, sessionId);
+      return false;
     }
-    return null;
+    return true;
   }
 }

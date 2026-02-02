@@ -33,17 +33,18 @@ export function isUserInBookingSession(jid: string): boolean {
 /**
  * Start the booking flow for a user
  */
-export async function startBookingFlow(jid: string): Promise<void> {
+export async function startBookingFlow(jid: string, sessionId: string): Promise<void> {
     const session: UserSession = { state: BookingInitState.AWAITING_RESPONSE };
     sessions.set(jid, session);
 
-    await sendTyping(jid);
+    await sendTyping(jid, sessionId);
     await sendMessage(
         jid,
         `👋 *Campus Visit Invitation*\n\n` +
         `We would like to invite you to visit our campus for an introduction and skill assessment.\n\n` +
         `Would you like to schedule a visit now?\n` +
-        `(Reply *Yes* to proceed)`
+        `(Reply *Yes* to proceed)`,
+        sessionId
     );
 }
 
@@ -51,7 +52,7 @@ export async function startBookingFlow(jid: string): Promise<void> {
  * Handle incoming messages for users in the booking flow
  * Returns true if the message was consumed, false if it should propagate
  */
-export async function handleBookingMessage(jid: string, text: string): Promise<boolean> {
+export async function handleBookingMessage(jid: string, text: string, sessionId: string): Promise<boolean> {
     const session = sessions.get(jid);
     if (!session || session.state === BookingInitState.IDLE) return false;
 
@@ -68,12 +69,12 @@ export async function handleBookingMessage(jid: string, text: string): Promise<b
             const tomorrow = addDays(new Date(), 1);
             session.selectedDate = tomorrow;
 
-            await sendTimeSlotMenu(jid, tomorrow, session);
+            await sendTimeSlotMenu(jid, tomorrow, session, sessionId);
             return true;
         } else {
             // User rejected or said something else
             sessions.delete(jid);
-            await sendMessage(jid, `👍 No problem. You can schedule a visit later using \`!visit\`.`);
+            await sendMessage(jid, `👍 No problem. You can schedule a visit later using \`!visit\`.`, sessionId);
             return true;
         }
     }
@@ -88,7 +89,7 @@ export async function handleBookingMessage(jid: string, text: string): Promise<b
         const selection = parseInt(cleanText);
         // User must reply with 1..N based on availableSlots length
         if (isNaN(selection) || selection < 1 || selection > session.availableSlots.length) {
-            await sendMessage(jid, `⚠️ Please reply with the number of your preferred time (1-${session.availableSlots.length}).`);
+            await sendMessage(jid, `⚠️ Please reply with the number of your preferred time (1-${session.availableSlots.length}).`, sessionId);
             return true;
         }
 
@@ -97,7 +98,7 @@ export async function handleBookingMessage(jid: string, text: string): Promise<b
 
         if (session.selectedDate) {
             const appointmentTime = setMinutes(setHours(session.selectedDate, selectedHour), 0);
-            await finalizeBooking(jid, appointmentTime);
+            await finalizeBooking(jid, appointmentTime, sessionId);
         }
 
         return true;
@@ -106,7 +107,7 @@ export async function handleBookingMessage(jid: string, text: string): Promise<b
     return false;
 }
 
-async function sendTimeSlotMenu(jid: string, date: Date, session: UserSession): Promise<void> {
+async function sendTimeSlotMenu(jid: string, date: Date, session: UserSession, sessionId: string): Promise<void> {
     const dateStr = format(date, 'EEEE, MMMM do');
 
     // Fetch real availability or mock
@@ -114,7 +115,7 @@ async function sendTimeSlotMenu(jid: string, date: Date, session: UserSession): 
     session.availableSlots = slots;
 
     if (slots.length === 0) {
-        await sendMessage(jid, `📅 Sorry, we have no available slots for ${dateStr}.`);
+        await sendMessage(jid, `📅 Sorry, we have no available slots for ${dateStr}.`, sessionId);
         sessions.delete(jid);
         return;
     }
@@ -130,14 +131,14 @@ async function sendTimeSlotMenu(jid: string, date: Date, session: UserSession): 
 
     menu += `\nReply with the number (e.g., "1") to book.`;
 
-    await sendMessage(jid, menu);
+    await sendMessage(jid, menu, sessionId);
 }
 
-async function finalizeBooking(jid: string, appointmentDate: Date): Promise<void> {
-    const sock = getSocket();
+async function finalizeBooking(jid: string, appointmentDate: Date, sessionId: string): Promise<void> {
+    const sock = getSocket(sessionId);
     if (!sock) return;
 
-    await sendMessage(jid, `✅ *Confirming your appointment...*`);
+    await sendMessage(jid, `✅ *Confirming your appointment...*`, sessionId);
 
     try {
         const title = 'Campus Visit - Jayalath Institute';
@@ -168,7 +169,7 @@ async function finalizeBooking(jid: string, appointmentDate: Date): Promise<void
 
         msg += `Please download the attached file to add this to your calendar.`;
 
-        await sendMessage(jid, msg);
+        await sendMessage(jid, msg, sessionId);
 
         // Send ICS file
         await sock.sendMessage(jid, {
@@ -183,7 +184,7 @@ async function finalizeBooking(jid: string, appointmentDate: Date): Promise<void
 
     } catch (err) {
         console.error('Error booking appointment:', err);
-        await sendMessage(jid, `❌ Sorry, there was an error reserving your slot.`);
+        await sendMessage(jid, `❌ Sorry, there was an error reserving your slot.`, sessionId);
     }
 }
 
@@ -191,7 +192,7 @@ async function finalizeBooking(jid: string, appointmentDate: Date): Promise<void
 /**
  * Handle a specific date request from natural language
  */
-export async function handleSpecificDateRequest(jid: string, dateStr: string, timeStr: string): Promise<boolean> {
+export async function handleSpecificDateRequest(jid: string, dateStr: string, timeStr: string, sessionId: string): Promise<boolean> {
     try {
         const date = new Date(dateStr);
         if (isNaN(date.getTime())) return false;
@@ -207,7 +208,7 @@ export async function handleSpecificDateRequest(jid: string, dateStr: string, ti
             const appointmentTime = new Date(date);
             appointmentTime.setHours(hours, minutes, 0, 0);
 
-            await finalizeBooking(jid, appointmentTime);
+            await finalizeBooking(jid, appointmentTime, sessionId);
             return true;
         } else {
             // Not available
@@ -225,7 +226,7 @@ export async function handleSpecificDateRequest(jid: string, dateStr: string, ti
                 msg += `We are fully booked on ${dateDisplay}.`;
             }
 
-            await sendMessage(jid, msg);
+            await sendMessage(jid, msg, sessionId);
             return true;
         }
 

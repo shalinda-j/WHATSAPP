@@ -1,7 +1,6 @@
-import { client, MessageMedia } from '../../services/whatsapp';
-import { encode } from 'node-base64-image';
-import type { Message } from 'whatsapp-web.js';
+import { getSocket, sendMessage } from '../../services/whatsapp';
 import { BaseCommand } from '../utils/BaseCommand';
+import { proto } from '@whiskeysockets/baileys';
 
 /**
  * Command to view a user's profile picture
@@ -11,47 +10,53 @@ export class ProfileCommand extends BaseCommand {
   description = 'Shows the profile picture of a mentioned user';
   aliases = ['foto', 'avatar', 'pic'];
 
-  async execute(message: Message, args: string[]): Promise<Message> {
+  async execute(message: proto.IWebMessageInfo, args: string[]): Promise<void> {
+    const jid = message.key.remoteJid;
+    if (!jid) return;
+
     await this.sendTyping(message);
 
     // Validate if it's a group
-    const groupError = await this.requireGroup(message);
-    if (groupError) return groupError;
+    const isGroup = await this.requireGroup(message);
+    if (!isGroup) return;
 
     // Get mentioned contact
-    const [contact] = await message.getMentions();
+    // In Baileys, mentions are in message.message.extendedTextMessage.contextInfo.mentionedJid
+    const mentions = message.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+    const contactJid = mentions[0];
 
-    if (!contact) {
-      return message.reply(
+    if (!contactJid) {
+      await this.reply(message,
         '⚠️ Please mention a user.\n\n📖 *Usage:* !perfil @user',
       );
+      return;
     }
 
-    await message.reply('🔍 Searching for profile picture...');
+    await this.reply(message, '🔍 Searching for profile picture...');
 
     try {
-      const uri = await client.getProfilePicUrl(contact.number);
+      const sock = getSocket();
+      if (!sock) {
+        await this.reply(message, '⚠️ Connection error.');
+        return;
+      }
+
+      const uri = await sock.profilePictureUrl(contactJid, 'image').catch(() => null);
 
       if (!uri) {
-        return message.reply('⚠️ This user does not have a profile picture.');
+        await this.reply(message, '⚠️ This user does not have a profile picture.');
+        return;
       }
 
-      const imageProfile = await encode(uri, { string: true });
+      // Send image URL directly (Baileys can send from URL)
+      await sock.sendMessage(jid, {
+        image: { url: uri },
+        caption: '📸 Profile Picture'
+      });
 
-      if (typeof imageProfile === 'string') {
-        const media = new MessageMedia(
-          'image/png',
-          imageProfile,
-          `${contact.number}.png`,
-        );
-
-        return client.sendMessage(message.from, media);
-      }
-
-      return message.reply('⚠️ Error processing the image.');
     } catch (error) {
       console.error('Error fetching profile picture:', error);
-      return message.reply('⚠️ Unable to get the profile picture.');
+      await this.reply(message, '⚠️ Unable to get the profile picture.');
     }
   }
 }

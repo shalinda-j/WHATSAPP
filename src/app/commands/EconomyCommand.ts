@@ -1,6 +1,6 @@
 import axios from 'axios';
-import type { Message } from 'whatsapp-web.js';
 import { BaseCommand } from '../utils/BaseCommand';
+import { proto } from '@whiskeysockets/baileys';
 
 /**
  * Command to query currency exchange rates
@@ -10,7 +10,7 @@ export class EconomyCommand extends BaseCommand {
   description = 'Shows current exchange rates (USD, BTC, EUR)';
   aliases = ['moeda', 'dolar', 'bitcoin'];
 
-  async execute(message: Message, args: string[]): Promise<Message> {
+  async execute(message: proto.IWebMessageInfo, args: string[]): Promise<void> {
     await this.sendTyping(message);
 
     try {
@@ -26,12 +26,12 @@ export class EconomyCommand extends BaseCommand {
           .join('');
       };
 
-      return message.reply(
+      await this.reply(message,
         `💎 *Current Exchange Rates* 💰🤑💹 \n${getAllCurrencies()}`,
       );
     } catch (error) {
       console.error('Error fetching exchange rates:', error);
-      return message.reply(
+      await this.reply(message,
         '⚠️ Unable to get exchange rates at the moment. Please try again later.',
       );
     }

@@ -17,7 +17,7 @@ import Session from '../models/Session';
 const logger = pino({ level: process.env.DEBUG === 'true' ? 'debug' : 'warn' });
 
 // Global message handlers (shared across sessions for now)
-const messageHandlers: Array<(message: proto.IWebMessageInfo, sock: WASocket) => Promise<void>> = [];
+const messageHandlers: Array<(message: proto.IWebMessageInfo, sock: WASocket, sessionId: string) => Promise<void>> = [];
 
 export class WhatsAppSessionManager {
   private sessions: Map<string, WASocket> = new Map();
@@ -132,7 +132,7 @@ export class WhatsAppSessionManager {
         await Promise.all(messages.map(async (msg) => {
           for (const handler of messageHandlers) {
             try {
-              await handler(msg, sock);
+              await handler(msg, sock, sessionId);
             } catch (err) {
               console.error('Handler error:', err);
             }
@@ -202,7 +202,7 @@ export async function disconnectWhatsApp() {
 }
 
 // Forward compatible message registry
-export function onMessage(handler: (message: proto.IWebMessageInfo, sock: WASocket) => Promise<void>) {
+export function onMessage(handler: (message: proto.IWebMessageInfo, sock: WASocket, sessionId: string) => Promise<void>) {
   messageHandlers.push(handler);
 }
 
