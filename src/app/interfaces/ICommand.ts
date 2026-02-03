@@ -27,5 +27,9 @@ export interface ICommand {
    * @param args - Arguments passed after the command name
    * @returns Promise that resolves when the command finishes
    */
-  execute(message: proto.IWebMessageInfo, args: string[], sessionId: string): Promise<void>;
+  execute(
+    message: proto.IWebMessageInfo,
+    args: string[],
+    sessionId: string,
+  ): Promise<void>;
 }

@@ -155,6 +155,61 @@ export default function Datasets() {
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Content</label>
+
+                        {/* File Upload Section */}
+                        <div className="mt-1 mb-3 p-4 border-2 border-dashed border-gray-300 rounded-md bg-gray-50 flex flex-col items-center justify-center text-center">
+                            <label className="cursor-pointer">
+                                <span className="text-blue-600 hover:text-blue-500 font-medium">Upload a file</span>
+                                <span className="text-gray-500"> to auto-extract text</span>
+                                <input
+                                    type="file"
+                                    className="hidden"
+                                    accept=".pdf,.csv,.xlsx,.xls,image/*,text/plain"
+                                    onChange={async (e) => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+
+                                        const formData = new FormData();
+                                        formData.append('file', file);
+
+                                        try {
+                                            // Show loading indicator (you might want to add a proper state for this)
+                                            // const originalText = e.target.parentElement?.innerText;
+                                            if (e.target.parentElement) e.target.parentElement.innerText = "Extracting...";
+
+                                            const token = localStorage.getItem('token');
+                                            const res = await fetch('http://localhost:3000/api/datasets/extract', {
+                                                method: 'POST',
+                                                headers: {
+                                                    'Authorization': `Bearer ${token}`
+                                                },
+                                                body: formData
+                                            });
+
+                                            const data = await res.json();
+
+                                            if (!res.ok) throw new Error(data.message || 'Extraction failed');
+
+                                            // Append extracted text
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                content: (prev.content ? prev.content + '\n\n' : '') + `[Extracted from ${file.name}]:\n${data.text}`
+                                            }));
+                                        } catch (err: unknown) { // Explicitly typed as unknown
+                                            console.error(err);
+                                            // Safely access error message
+                                            const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+                                            alert('Failed to extract text: ' + errorMessage);
+                                        } finally {
+                                            // Reset UI (Basic implementation, improved state handling recommended)
+                                            // Ideally we would use a state variable like isExtracting
+                                        }
+                                    }}
+                                />
+                            </label>
+                            <p className="text-xs text-gray-400 mt-1">Supports PDF, Excel, CSV, Images, Text</p>
+                        </div>
+
                         <textarea
                             rows={15}
                             placeholder="Enter company info, FAQs, or other knowledge the chatbot should use..."

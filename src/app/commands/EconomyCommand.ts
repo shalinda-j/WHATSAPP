@@ -10,7 +10,11 @@ export class EconomyCommand extends BaseCommand {
   description = 'Shows current exchange rates (USD, BTC, EUR)';
   aliases = ['moeda', 'dolar', 'bitcoin'];
 
-  async execute(message: proto.IWebMessageInfo, args: string[], sessionId: string): Promise<void> {
+  async execute(
+    message: proto.IWebMessageInfo,
+    args: string[],
+    sessionId: string,
+  ): Promise<void> {
     await this.sendTyping(message, sessionId);
 
     try {
@@ -26,13 +30,15 @@ export class EconomyCommand extends BaseCommand {
           .join('');
       };
 
-      await this.reply(message,
+      await this.reply(
+        message,
         `💎 *Current Exchange Rates* 💰🤑💹 \n${getAllCurrencies()}`,
         sessionId,
       );
     } catch (error) {
       console.error('Error fetching exchange rates:', error);
-      await this.reply(message,
+      await this.reply(
+        message,
         '⚠️ Unable to get exchange rates at the moment. Please try again later.',
         sessionId,
       );

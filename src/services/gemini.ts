@@ -1,5 +1,10 @@
 import { GoogleGenerativeAI, ChatSession } from '@google/generative-ai';
-import { AI_PERSONALITY, SINHALA_SYSTEM_PROMPT, JOB_KNOWLEDGE_BASE, CONVERSATION_EXAMPLES } from '../config/ai-personality';
+import {
+  AI_PERSONALITY,
+  SINHALA_SYSTEM_PROMPT,
+  JOB_KNOWLEDGE_BASE,
+  CONVERSATION_EXAMPLES,
+} from '../config/ai-personality';
 import { AIService, AIChatMessage } from '../interfaces/AIService';
 
 import Dataset from '../models/Dataset';
@@ -16,7 +21,7 @@ async function getDynamicKnowledgeBase(): Promise<string> {
     let dynamicContent = '';
     if (datasets.length > 0) {
       dynamicContent = '\n\n# 📂 Dynamic Datasets (From Admin Panel)\n';
-      datasets.forEach(ds => {
+      datasets.forEach((ds) => {
         dynamicContent += `\n## ${ds.name} (${ds.scope})\n${ds.content}\n---\n`;
       });
     }
@@ -59,10 +64,8 @@ export async function generateResponse(prompt: string): Promise<string> {
     const dynamicKB = await getDynamicKnowledgeBase();
 
     const result = await model.generateContent({
-      contents: [
-        { role: 'user', parts: [{ text: prompt }] }
-      ],
-      systemInstruction: `${AI_PERSONALITY}\n\n${dynamicKB}`
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      systemInstruction: `${AI_PERSONALITY}\n\n${dynamicKB}`,
     });
     return result.response.text();
   } catch (error) {
@@ -79,10 +82,8 @@ export async function generateSinhalaResponse(prompt: string): Promise<string> {
     const dynamicKB = await getDynamicKnowledgeBase();
 
     const result = await model.generateContent({
-      contents: [
-        { role: 'user', parts: [{ text: prompt }] }
-      ],
-      systemInstruction: `${SINHALA_SYSTEM_PROMPT}\n\n${dynamicKB}`
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      systemInstruction: `${SINHALA_SYSTEM_PROMPT}\n\n${dynamicKB}`,
     });
     return result.response.text();
   } catch (error) {
@@ -104,10 +105,14 @@ export function getChatSession(userId: string): ChatSession {
       history: [
         {
           role: 'model',
-          parts: [{ text: '🙏 ආයුබෝවන්! මම ජයලත් ග්ලොබල් AI - ඔබේ විදේශ රැකියා AI සහායකයා. මම ඔබට උදව් කරන්න සූදානම්!' }]
+          parts: [
+            {
+              text: '🙏 ආයුබෝවන්! මම ජයලත් ග්ලොබල් AI - ඔබේ විදේශ රැකියා AI සහායකයා. මම ඔබට උදව් කරන්න සූදානම්!',
+            },
+          ],
         },
-        ...buildExampleHistory()
-      ]
+        ...buildExampleHistory(),
+      ],
     });
     chatSessions.set(userId, chat);
   }
@@ -117,7 +122,10 @@ export function getChatSession(userId: string): ChatSession {
 /**
  * Send a message with conversation context
  */
-export async function sendMessageWithMemory(userId: string, message: string): Promise<string> {
+export async function sendMessageWithMemory(
+  userId: string,
+  message: string,
+): Promise<string> {
   try {
     const chat = getChatSession(userId);
     const result = await chat.sendMessage(message);
@@ -139,16 +147,21 @@ export function clearConversation(userId: string): void {
 /**
  * Transcribe audio using Gemini's multimodal capabilities
  */
-export async function transcribeAudio(audioBase64: string, mimeType: string = 'audio/ogg'): Promise<string> {
+export async function transcribeAudio(
+  audioBase64: string,
+  mimeType = 'audio/ogg',
+): Promise<string> {
   try {
     const result = await model.generateContent([
       {
         inlineData: {
           mimeType: mimeType,
-          data: audioBase64
-        }
+          data: audioBase64,
+        },
       },
-      { text: 'Transcribe this audio message. Return only the transcription text. If the audio is in Sinhala or any other language, transcribe it in its original language using appropriate Unicode characters. If the audio is about jobs or recruitment, also provide helpful information.' }
+      {
+        text: 'Transcribe this audio message. Return only the transcription text. If the audio is in Sinhala or any other language, transcribe it in its original language using appropriate Unicode characters. If the audio is about jobs or recruitment, also provide helpful information.',
+      },
     ]);
     return result.response.text();
   } catch (error) {
@@ -157,6 +170,31 @@ export async function transcribeAudio(audioBase64: string, mimeType: string = 'a
   }
 }
 
+/**
+ * Extract text from an image (OCR) using Gemini
+ */
+export async function extractTextFromImage(
+  base64Data: string,
+  mimeType: string,
+): Promise<string> {
+  try {
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          mimeType: mimeType,
+          data: base64Data,
+        },
+      },
+      {
+        text: 'Extract all text from this image. Return ONLY the extracted text. Maintain the original formatting as much as possible. If the text is in Sinhala, use Sinhala Unicode.',
+      },
+    ]);
+    return result.response.text();
+  } catch (error) {
+    console.error('Image OCR error:', error);
+    throw error;
+  }
+}
 
 /**
  * Detect booking intent from natural language
@@ -166,7 +204,12 @@ export async function transcribeAudio(audioBase64: string, mimeType: string = 'a
  */
 export async function analyzeLeadIntent(text: string): Promise<{
   intent: 'Check Availability' | 'Lead Info' | 'None';
-  leadData?: { name?: string; age?: string; education?: string; location?: string };
+  leadData?: {
+    name?: string;
+    age?: string;
+    education?: string;
+    location?: string;
+  };
   bookingDetails?: { date?: string; time?: string };
   buyingSignal: 'High' | 'Medium' | 'Low';
   suggestedAction?: 'Book Visit' | 'Ask History' | 'None';
@@ -182,7 +225,7 @@ export async function analyzeLeadIntent(text: string): Promise<{
 
                 Output Format (JSON Only):
                 {
-                    "intent": "Check Availability" (asking for time/visit) OR "Lead Info" (providing details) OR "None",
+                    "intent": "Check Availability" (asking for time/visit) OR "Lead Info" (providing details) OR "Price Enquiry" OR "General Info",
                     "leadData": {
                         "name": "Extract if present, else null",
                         "age": "Extract if present, else null",
@@ -193,15 +236,18 @@ export async function analyzeLeadIntent(text: string): Promise<{
                         "date": "YYYY-MM-DD" (if intent is Check Availability, default to tomorrow if unspecified),
                         "time": "HH:mm" (24-hour format, default 09:00)
                     },
-                    "buyingSignal": "High" (Asking Price/Location/Visit) OR "Medium" (Asking General Info) OR "Low",
-                    "suggestedAction": "Book Visit" (If signal High) OR "Ask History" (If details missing) OR "None"
-                }`
-      }
+                    "buyingSignal": "High" (Asking Price/Location/Visit/Salary) OR "Medium" (Asking General Info/Courses) OR "Low",
+                    "suggestedAction": "Book Visit" (If signal High & Details present) OR "Ask History" (If details missing & asking price) OR "None"
+                }`,
+      },
     ]);
 
-    const responseText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    const responseText = result.response
+      .text()
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
+      .trim();
     return JSON.parse(responseText);
-
   } catch (error) {
     console.error('Lead analysis error:', error);
     return null;
@@ -216,7 +262,11 @@ export class GeminiService implements AIService {
   private modelName: string;
   private genAI: GoogleGenerativeAI;
 
-  constructor(config: { apiKey: string; model?: string; providerType?: string }) {
+  constructor(config: {
+    apiKey: string;
+    model?: string;
+    providerType?: string;
+  }) {
     this.apiKey = config.apiKey;
     this.modelName = config.model || 'gemini-1.5-flash';
     this.name = `Gemini (${this.modelName})`;
@@ -226,15 +276,17 @@ export class GeminiService implements AIService {
   async generateResponse(messages: AIChatMessage[]): Promise<string> {
     try {
       // Extract system prompt
-      const systemMessage = messages.find(m => m.role === 'system');
-      const systemInstruction = systemMessage ? systemMessage.content : undefined;
+      const systemMessage = messages.find((m) => m.role === 'system');
+      const systemInstruction = systemMessage
+        ? systemMessage.content
+        : undefined;
 
       // Convert history (excluding system)
       const history = messages
-        .filter(m => m.role !== 'system')
-        .map(m => ({
+        .filter((m) => m.role !== 'system')
+        .map((m) => ({
           role: m.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: m.content }]
+          parts: [{ text: m.content }],
         }));
 
       if (history.length === 0) return '';
@@ -245,11 +297,12 @@ export class GeminiService implements AIService {
       // Get model with dynamic system instruction
       const modelInstance = this.genAI.getGenerativeModel({
         model: this.modelName,
-        systemInstruction: systemInstruction || `${AI_PERSONALITY}\n\n${JOB_KNOWLEDGE_BASE}`
+        systemInstruction:
+          systemInstruction || `${AI_PERSONALITY}\n\n${JOB_KNOWLEDGE_BASE}`,
       });
 
       const chat = modelInstance.startChat({
-        history: history as any
+        history: history as any,
       });
 
       const result = await chat.sendMessage(lastMessage.parts[0].text);
@@ -260,4 +313,3 @@ export class GeminiService implements AIService {
     }
   }
 }
-

@@ -51,7 +51,10 @@ class CommandDispatcher {
         await command.execute(message, args, sessionId);
         console.log(`   ✅ Command executed successfully`);
       } catch (error) {
-        console.error(`   ❌ Error executing command '${resolvedName}':`, error);
+        console.error(
+          `   ❌ Error executing command '${resolvedName}':`,
+          error,
+        );
         try {
           // Use sendMessage instead of message.reply
           const jid = message.key.remoteJid;
@@ -68,7 +71,11 @@ class CommandDispatcher {
       }
     } else {
       console.log(`   ⚠️ Command not found: "${commandName}"`);
-      console.log(`   📋 Available commands: ${Array.from(this.commands.keys()).join(', ')}`);
+      console.log(
+        `   📋 Available commands: ${Array.from(this.commands.keys()).join(
+          ', ',
+        )}`,
+      );
     }
   }
 

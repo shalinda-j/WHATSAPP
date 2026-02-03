@@ -11,7 +11,11 @@ export class HelpCommand extends BaseCommand {
   description = 'Shows all available commands with their descriptions';
   aliases = ['ajuda', 'comandos', 'commands'];
 
-  async execute(message: proto.IWebMessageInfo, args: string[], sessionId: string): Promise<void> {
+  async execute(
+    message: proto.IWebMessageInfo,
+    args: string[],
+    sessionId: string,
+  ): Promise<void> {
     console.log('   📝 HelpCommand.execute() called');
     const jid = message.key.remoteJid;
     if (!jid) return;

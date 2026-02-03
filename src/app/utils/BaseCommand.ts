@@ -11,12 +11,19 @@ export abstract class BaseCommand implements ICommand {
   abstract description: string;
   aliases?: string[];
 
-  abstract execute(message: proto.IWebMessageInfo, args: string[], sessionId: string): Promise<void>;
+  abstract execute(
+    message: proto.IWebMessageInfo,
+    args: string[],
+    sessionId: string,
+  ): Promise<void>;
 
   /**
    * Sends "typing..." state in the chat
    */
-  protected async sendTyping(message: proto.IWebMessageInfo, sessionId: string): Promise<void> {
+  protected async sendTyping(
+    message: proto.IWebMessageInfo,
+    sessionId: string,
+  ): Promise<void> {
     const jid = message.key.remoteJid;
     if (jid) {
       await sendTyping(jid, sessionId);
@@ -33,7 +40,11 @@ export abstract class BaseCommand implements ICommand {
   /**
    * Reply to a message
    */
-  protected async reply(message: proto.IWebMessageInfo, text: string, sessionId: string): Promise<void> {
+  protected async reply(
+    message: proto.IWebMessageInfo,
+    text: string,
+    sessionId: string,
+  ): Promise<void> {
     const jid = message.key.remoteJid;
     if (jid) {
       await sendMessage(jid, text, sessionId);
@@ -44,10 +55,17 @@ export abstract class BaseCommand implements ICommand {
    * Validates if the command is being executed in a group
    * Returns error message if not
    */
-  protected async requireGroup(message: proto.IWebMessageInfo, sessionId: string): Promise<boolean> {
+  protected async requireGroup(
+    message: proto.IWebMessageInfo,
+    sessionId: string,
+  ): Promise<boolean> {
     const isGroup = this.isGroup(message);
     if (!isGroup) {
-      await this.reply(message, '⚠️ This command can only be used in groups!', sessionId);
+      await this.reply(
+        message,
+        '⚠️ This command can only be used in groups!',
+        sessionId,
+      );
       return false;
     }
     return true;
@@ -64,7 +82,11 @@ export abstract class BaseCommand implements ICommand {
     sessionId: string,
   ): Promise<boolean> {
     if (args.length < minArgs) {
-      await this.reply(message, `⚠️ Incorrect usage!\n\n📖 *Usage:* ${usage}`, sessionId);
+      await this.reply(
+        message,
+        `⚠️ Incorrect usage!\n\n📖 *Usage:* ${usage}`,
+        sessionId,
+      );
       return false;
     }
     return true;

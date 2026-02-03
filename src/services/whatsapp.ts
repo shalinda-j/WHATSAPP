@@ -18,7 +18,13 @@ import { SecurityService } from './SecurityService';
 const logger = pino({ level: process.env.DEBUG === 'true' ? 'debug' : 'warn' });
 
 // Global message handlers (shared across sessions for now)
-const messageHandlers: Array<(message: proto.IWebMessageInfo, sock: WASocket, sessionId: string) => Promise<void>> = [];
+const messageHandlers: Array<
+  (
+    message: proto.IWebMessageInfo,
+    sock: WASocket,
+    sessionId: string,
+  ) => Promise<void>
+> = [];
 
 export class WhatsAppSessionManager {
   private sessions: Map<string, WASocket> = new Map();
@@ -51,12 +57,14 @@ export class WhatsAppSessionManager {
         saveCreds = auth.saveCreds;
         clearState = auth.clearState; // Custom method we added
       } else {
-        console.warn('⚠️ No MongoDB URI found. Falling back to file system (Single Session Only).');
+        console.warn(
+          '⚠️ No MongoDB URI found. Falling back to file system (Single Session Only).',
+        );
         const AUTH_DIR = resolve(__dirname, '..', 'auth_info');
         const auth = await useMultiFileAuthState(AUTH_DIR);
         authState = auth.state;
         saveCreds = auth.saveCreds;
-        clearState = async () => { }; // No-op for file system
+        clearState = async () => {}; // No-op for file system
       }
 
       const { version } = await fetchLatestBaileysVersion();
@@ -102,13 +110,17 @@ export class WhatsAppSessionManager {
 
             if (retries <= WhatsAppSessionManager.MAX_RETRIES) {
               const delay = Math.min(retries * 2000, 10000);
-              console.log(`   Reconnecting session ${sessionId} in ${delay}ms...`);
+              console.log(
+                `   Reconnecting session ${sessionId} in ${delay}ms...`,
+              );
               setTimeout(() => this.startSession(sessionId), delay);
             } else {
               console.error(`❌ Session ${sessionId}: Max retries reached.`);
             }
           } else if (statusCode === DisconnectReason.loggedOut) {
-            console.log(`❌ Session ${sessionId} Logged Out. Cleaning up and restarting for new QR...`);
+            console.log(
+              `❌ Session ${sessionId} Logged Out. Cleaning up and restarting for new QR...`,
+            );
 
             // CRITICAL: Immediate QR Generation Logic
             await clearState(); // Delete creds from DB
@@ -121,36 +133,44 @@ export class WhatsAppSessionManager {
         } else if (connection === 'open') {
           console.log(`✅ Session ${sessionId} Connected!`);
           this.retryCounters.set(sessionId, 0); // Reset retries
-          await this.updateSessionStatus(sessionId, 'connected', undefined, sock.user?.id);
+          await this.updateSessionStatus(
+            sessionId,
+            'connected',
+            undefined,
+            sock.user?.id,
+          );
         } else if (connection === 'connecting') {
           await this.updateSessionStatus(sessionId, 'connecting');
         }
       });
 
-
       // Handle Messages
       sock.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
-        await Promise.all(messages.map(async (msg) => {
-
-          const text = getMessageText(msg);
-          // Global Security Middleware
-          // If the message is deemed unsafe, we silently drop it or log it.
-          if (text && !SecurityService.isSafe(text)) {
-            console.warn(`🛡️ Blocked unsafe message from ${msg.key.remoteJid}: ${text.substring(0, 50)}...`);
-            return;
-          }
-
-          for (const handler of messageHandlers) {
-            try {
-              await handler(msg, sock, sessionId);
-            } catch (err) {
-              console.error('Handler error:', err);
+        await Promise.all(
+          messages.map(async (msg) => {
+            const text = getMessageText(msg);
+            // Global Security Middleware
+            // If the message is deemed unsafe, we silently drop it or log it.
+            if (text && !SecurityService.isSafe(text)) {
+              console.warn(
+                `🛡️ Blocked unsafe message from ${
+                  msg.key.remoteJid
+                }: ${text.substring(0, 50)}...`,
+              );
+              return;
             }
-          }
-        }));
-      });
 
+            for (const handler of messageHandlers) {
+              try {
+                await handler(msg, sock, sessionId);
+              } catch (err) {
+                console.error('Handler error:', err);
+              }
+            }
+          }),
+        );
+      });
     } catch (error) {
       console.error(`❌ startSession error (${sessionId}):`, error);
     }
@@ -159,7 +179,12 @@ export class WhatsAppSessionManager {
   /**
    * Helper to update database status
    */
-  private async updateSessionStatus(sessionId: string, status: string, qr?: string, phoneNumber?: string) {
+  private async updateSessionStatus(
+    sessionId: string,
+    status: string,
+    qr?: string,
+    phoneNumber?: string,
+  ) {
     try {
       await Session.findOneAndUpdate(
         { sessionId },
@@ -167,9 +192,9 @@ export class WhatsAppSessionManager {
           status,
           qr: qr || null,
           phoneNumber: phoneNumber || undefined,
-          updatedAt: new Date()
+          updatedAt: new Date(),
         },
-        { upsert: true }
+        { upsert: true },
       );
     } catch (err) {
       console.error('Failed to update session status in DB', err);
@@ -179,7 +204,7 @@ export class WhatsAppSessionManager {
   /**
    * Get a specific socket
    */
-  getSocket(sessionId: string = 'default'): WASocket | undefined {
+  getSocket(sessionId = 'default'): WASocket | undefined {
     return this.sessions.get(sessionId);
   }
 
@@ -220,37 +245,59 @@ export async function disconnectWhatsApp() {
 }
 
 // Forward compatible message registry
-export function onMessage(handler: (message: proto.IWebMessageInfo, sock: WASocket, sessionId: string) => Promise<void>) {
+export function onMessage(
+  handler: (
+    message: proto.IWebMessageInfo,
+    sock: WASocket,
+    sessionId: string,
+  ) => Promise<void>,
+) {
   messageHandlers.push(handler);
 }
 
 // These functions now need a session ID or default to 'default'
-export async function sendMessage(jid: string, text: string, sessionId: string = 'default'): Promise<boolean> {
+export async function sendMessage(
+  jid: string,
+  text: string,
+  sessionId = 'default',
+): Promise<boolean> {
   const sock = manager.getSocket(sessionId);
   if (!sock) return false;
   await sock.sendMessage(jid, { text });
   return true;
 }
 
-export async function sendTyping(jid: string, sessionId: string = 'default') {
+export async function sendTyping(jid: string, sessionId = 'default') {
   const sock = manager.getSocket(sessionId);
   if (sock) await sock.sendPresenceUpdate('composing', jid);
 }
 
-export async function downloadWhatsAppAudio(message: proto.IWebMessageInfo): Promise<Buffer | null> {
+export async function downloadWhatsAppAudio(
+  message: proto.IWebMessageInfo,
+): Promise<Buffer | null> {
   try {
     return (await downloadMediaMessage(message, 'buffer', {})) as Buffer;
-  } catch (e) { return null; }
+  } catch (e) {
+    return null;
+  }
 }
 
-export async function sendVoiceMessage(jid: string, audioBuffer: Buffer, sessionId: string = 'default'): Promise<boolean> {
+export async function sendVoiceMessage(
+  jid: string,
+  audioBuffer: Buffer,
+  sessionId = 'default',
+): Promise<boolean> {
   const sock = manager.getSocket(sessionId);
   if (!sock) return false;
-  await sock.sendMessage(jid, { audio: audioBuffer, mimetype: 'audio/mp4', ptt: true });
+  await sock.sendMessage(jid, {
+    audio: audioBuffer,
+    mimetype: 'audio/mp4',
+    ptt: true,
+  });
   return true;
 }
 
-export function getSocket(sessionId: string = 'default'): WASocket | undefined {
+export function getSocket(sessionId = 'default'): WASocket | undefined {
   return manager.getSocket(sessionId);
 }
 
@@ -258,7 +305,12 @@ export function getSocket(sessionId: string = 'default'): WASocket | undefined {
 export function getMessageText(message: proto.IWebMessageInfo): string {
   const msg = message.message;
   if (!msg) return '';
-  return msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || '';
+  return (
+    msg.conversation ||
+    msg.extendedTextMessage?.text ||
+    msg.imageMessage?.caption ||
+    ''
+  );
 }
 
 export function isFromMe(message: proto.IWebMessageInfo): boolean {
@@ -274,12 +326,10 @@ export async function getConnectionStatus() {
   return {
     status: session?.status || 'disconnected',
     qr: session?.qr || null,
-    activeSessions: manager.getActiveSessionsCount()
+    activeSessions: manager.getActiveSessionsCount(),
   };
-
 }
 
 export function getActiveSessionCount(): number {
   return manager.getActiveSessionsCount();
 }
-

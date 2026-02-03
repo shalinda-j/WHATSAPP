@@ -1,5 +1,8 @@
 import { Router } from 'express';
-import { getConnectionStatus, connectToWhatsApp } from '../../services/whatsapp';
+import {
+  getConnectionStatus,
+  connectToWhatsApp,
+} from '../../services/whatsapp';
 import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
@@ -9,24 +12,24 @@ const router = Router();
 // Admin Panel needs it.
 
 router.get('/status', async (req, res) => {
-    try {
-        const status = await getConnectionStatus();
-        res.json(status);
-    } catch (err: any) {
-        res.status(500).json({ error: err.message });
-    }
+  try {
+    const status = await getConnectionStatus();
+    res.json(status);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Admin only actions
 router.use(authenticateToken);
 
 router.post('/reconnect', async (req, res) => {
-    try {
-        await connectToWhatsApp();
-        res.json({ message: 'Reconnection initiated' });
-    } catch (err: any) {
-        res.status(500).json({ error: err.message });
-    }
+  try {
+    await connectToWhatsApp();
+    res.json({ message: 'Reconnection initiated' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

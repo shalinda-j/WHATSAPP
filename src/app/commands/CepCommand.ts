@@ -10,7 +10,11 @@ export class CepCommand extends BaseCommand {
   name = 'cep';
   description = 'Search information for a Brazilian postal code';
 
-  async execute(message: proto.IWebMessageInfo, args: string[], sessionId: string): Promise<void> {
+  async execute(
+    message: proto.IWebMessageInfo,
+    args: string[],
+    sessionId: string,
+  ): Promise<void> {
     const jid = message.key.remoteJid;
     if (!jid) return;
 
@@ -18,7 +22,8 @@ export class CepCommand extends BaseCommand {
 
     // Validate arguments
     if (args.length === 0) {
-      await this.reply(message,
+      await this.reply(
+        message,
         '⚠️ Please provide a postal code.\n\n📖 *Usage:* !cep 01310-100',
         sessionId,
       );
@@ -28,7 +33,8 @@ export class CepCommand extends BaseCommand {
     const cep = args[0].replace(/\D/g, ''); // Remove non-numeric characters
 
     if (cep.length !== 8) {
-      await this.reply(message,
+      await this.reply(
+        message,
         '⚠️ Invalid postal code! The code must have 8 digits.',
         sessionId,
       );
@@ -40,18 +46,23 @@ export class CepCommand extends BaseCommand {
         `https://brasilapi.com.br/api/cep/v1/${cep}`,
       );
 
-      await this.reply(message,
+      await this.reply(
+        message,
         `📮 *Postal Code Information*\n\n` +
-        `*Postal Code:* ${data.cep}\n` +
-        `*Street:* ${data.street}\n` +
-        `*Neighborhood:* ${data.neighborhood}\n` +
-        `*City:* ${data.city}\n` +
-        `*State:* ${data.state}`,
+          `*Postal Code:* ${data.cep}\n` +
+          `*Street:* ${data.street}\n` +
+          `*Neighborhood:* ${data.neighborhood}\n` +
+          `*City:* ${data.city}\n` +
+          `*State:* ${data.state}`,
         sessionId,
       );
     } catch (error) {
       console.error('Error fetching postal code:', error);
-      await this.reply(message, '⚠️ Postal code not found or service unavailable.', sessionId);
+      await this.reply(
+        message,
+        '⚠️ Postal code not found or service unavailable.',
+        sessionId,
+      );
     }
   }
 }

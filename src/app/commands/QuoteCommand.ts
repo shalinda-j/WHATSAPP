@@ -11,7 +11,11 @@ export class QuoteCommand extends BaseCommand {
   description = 'Mentions all group members (admins only)';
   aliases = ['everyone', 'all', 'todos'];
 
-  async execute(message: proto.IWebMessageInfo, args: string[], sessionId: string): Promise<void> {
+  async execute(
+    message: proto.IWebMessageInfo,
+    args: string[],
+    sessionId: string,
+  ): Promise<void> {
     const jid = message.key.remoteJid;
     if (!jid) return;
 
@@ -34,7 +38,8 @@ export class QuoteCommand extends BaseCommand {
     );
 
     if (!allowPermissions.length) {
-      await this.reply(message,
+      await this.reply(
+        message,
         '⚠️ You do not have permission to use this command!',
         sessionId,
       );
@@ -50,7 +55,7 @@ export class QuoteCommand extends BaseCommand {
       const participants = groupMetadata.participants;
 
       // Create mentions list
-      const mentions = participants.map(p => p.id);
+      const mentions = participants.map((p) => p.id);
 
       // Build message with @mentions
       const names = mentions.map((id) => `@${id.split('@')[0]}`).join(' ');
@@ -58,9 +63,8 @@ export class QuoteCommand extends BaseCommand {
       // Send message with mentions
       await sock.sendMessage(jid, {
         text: names,
-        mentions: mentions
+        mentions: mentions,
       });
-
     } catch (error) {
       console.error('Error fetching group members:', error);
       await this.reply(message, '⚠️ Failed to fetch group members.', sessionId);

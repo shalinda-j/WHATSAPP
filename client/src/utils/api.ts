@@ -4,15 +4,15 @@ import axios from 'axios';
 // Unless we are dev mode and need to point to backend.
 // In dev, we can use Vite proxy.
 const api = axios.create({
-    baseURL: '/api'
+  baseURL: '/api',
 });
 
-api.interceptors.request.use(config => {
-    const token = localStorage.getItem('token');
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
 });
 
 export default api;

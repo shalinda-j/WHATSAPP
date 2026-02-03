@@ -1,6 +1,5 @@
 import { commandDispatcher } from '../utils/CommandDispatcher';
 
-
 // Import all commands
 import { EconomyCommand } from './EconomyCommand';
 import { QuoteCommand } from './QuoteCommand';
@@ -42,7 +41,10 @@ import { getMessageText } from '../../services/whatsapp';
  * Main command handler
  * Processes messages starting with '!' and dispatches to the appropriate command
  */
-export const CommandHandler = async (message: proto.IWebMessageInfo, sessionId: string): Promise<void> => {
+export const CommandHandler = async (
+  message: proto.IWebMessageInfo,
+  sessionId: string,
+): Promise<void> => {
   const text = getMessageText(message);
 
   // Ignore messages that are not commands
@@ -53,5 +55,10 @@ export const CommandHandler = async (message: proto.IWebMessageInfo, sessionId: 
   const [commandName, ...args] = commandText.split(' ');
 
   // Dispatch to the appropriate command
-  await commandDispatcher.dispatch(commandName.toLowerCase(), message, args, sessionId);
+  await commandDispatcher.dispatch(
+    commandName.toLowerCase(),
+    message,
+    args,
+    sessionId,
+  );
 };

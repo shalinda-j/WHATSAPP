@@ -24,7 +24,7 @@ app.use('/api/sessions', sessionRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
-    res.json({ status: 'ok', service: 'whatsapp-bot-admin-api' });
+  res.json({ status: 'ok', service: 'whatsapp-bot-admin-api' });
 });
 
 // Serve Frontend
@@ -33,7 +33,7 @@ app.use(express.static(CLIENT_BUILD_PATH));
 
 // SPA Fallback
 app.get(/(.*)/, (req, res) => {
-    res.sendFile(path.join(CLIENT_BUILD_PATH, 'index.html'));
+  res.sendFile(path.join(CLIENT_BUILD_PATH, 'index.html'));
 });
 
 export default app;
