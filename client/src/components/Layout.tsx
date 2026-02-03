@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, Database, Settings, LogOut, MessageSquare, Smartphone, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Database, Settings, LogOut, MessageSquare, Smartphone, Menu, X, Globe } from 'lucide-react';
 
 export default function Layout() {
     const { logout } = useAuth();
@@ -56,6 +56,7 @@ export default function Layout() {
                     <nav className="px-2 space-y-2">
                         <NavLink to="/dashboard" icon={LayoutDashboard}>Dashboard</NavLink>
                         <NavLink to="/datasets" icon={Database}>Datasets</NavLink>
+                        <NavLink to="/webhooks" icon={Globe}>Webhooks</NavLink>
                         <NavLink to="/sessions" icon={Smartphone}>Linked Devices</NavLink>
                         <NavLink to="/config" icon={Settings}>Configuration</NavLink>
                     </nav>

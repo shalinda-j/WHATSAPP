@@ -12,14 +12,12 @@ import {
 } from './services/whatsapp';
 import { connectToMongoDB } from './services/MongoAuthService';
 import { seedAIProviders } from './services/AIProviderSeeder';
+import { seedDatasets } from './services/DatasetSeeder';
 import { transcribeAudio, generateSpeech } from './services/voice';
 import { aiLoadBalancer } from './services/AILoadBalancer';
 import { analyzeLeadIntent } from './services/gemini';
-import {
-  getRegistrationMessage,
-  getPaymentMessage,
-  getCVMessage,
-} from './config/links-config';
+import { WebhookService } from './services/WebhookService';
+import { configService } from './services/ConfigService';
 import {
   handleBookingMessage,
   startBookingFlow,
@@ -40,6 +38,7 @@ async function startServer() {
     await connectToMongoDB(process.env.MONGODB_URI);
     // Seed AI providers from .env into the Config collection
     await seedAIProviders();
+    await seedDatasets();
   } else {
     console.warn(
       '⚠️ No MONGODB_URI found. Some features (Admin Panel) may not work.',
@@ -160,7 +159,7 @@ onMessage(async (message, sock, sessionId) => {
 
     // [NEW] 1. Save USER Message to DB
     try {
-      await ChatMessage.create({
+      const savedMsg = await ChatMessage.create({
         userId: jid,
         role: 'user',
         type: messageType,
@@ -169,6 +168,16 @@ onMessage(async (message, sock, sessionId) => {
           sessionId,
           isBooking: false,
         },
+      });
+
+      // [NEW] Trigger Webhook for incoming message
+      WebhookService.triggerWebhook('message.received', {
+        id: savedMsg._id,
+        from: jid,
+        type: messageType,
+        content: text,
+        sessionId,
+        timestamp: new Date(),
       });
     } catch (dbErr) {
       console.error('   ❌ Failed to save user message:', dbErr);
@@ -392,7 +401,11 @@ async function handleCommand(
     case '!join':
     case '!apply':
       console.log('   📝 Sending registration form...');
-      await sendMessage(jid, getRegistrationMessage(), sessionId);
+      await sendMessage(
+        jid,
+        await configService.getRegistrationMessage(),
+        sessionId,
+      );
       break;
 
     case '!payment':
@@ -401,12 +414,16 @@ async function handleCommand(
       console.log('   💳 Sending payment details...');
       // Extract argument if exists (e.g., "!payment singapore" -> "singapore")
       const paymentArg = text.split(' ').slice(1).join(' ');
-      await sendMessage(jid, getPaymentMessage(paymentArg), sessionId);
+      await sendMessage(
+        jid,
+        await configService.getPaymentMessage(paymentArg),
+        sessionId,
+      );
       break;
 
     case '!cv':
       console.log('   📄 Sending CV submission form...');
-      await sendMessage(jid, getCVMessage(), sessionId);
+      await sendMessage(jid, await configService.getCVMessage(), sessionId);
       break;
 
     case '!jobs':

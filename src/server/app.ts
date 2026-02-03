@@ -1,26 +1,28 @@
 import express from 'express';
 import cors from 'cors';
-import { json } from 'body-parser';
 import * as path from 'path';
 
 // Routes
 import authRoutes from './routes/auth';
 import datasetRoutes from './routes/datasets';
-import whatsappRoutes from './routes/whatsapp';
-import configRoutes from './routes/config';
-import sessionRoutes from './routes/sessions';
+import sessionsRouter from './routes/sessions';
+import configRouter from './routes/config';
+import webhookRouter from './routes/webhooks';
+import whatsappRouter from './routes/whatsapp';
 
 const app = express();
 
 app.use(cors());
-app.use(json());
+app.use(express.json());
 
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/datasets', datasetRoutes);
-app.use('/api/whatsapp', whatsappRoutes);
-app.use('/api/config', configRoutes);
-app.use('/api/sessions', sessionRoutes);
+app.use('/api/sessions', sessionsRouter);
+app.use('/api/config', configRouter);
+app.use('/api/datasets', datasetRoutes);
+app.use('/api/webhooks', webhookRouter);
+app.use('/api/whatsapp', whatsappRouter);
 
 // Health check
 app.get('/health', (req, res) => {

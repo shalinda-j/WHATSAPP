@@ -212,10 +212,18 @@ export default function Datasets() {
 
                         <textarea
                             rows={15}
-                            placeholder="Enter company info, FAQs, or other knowledge the chatbot should use..."
+                            placeholder="Enter content (Text or JSON)..."
                             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                            value={formData.content}
-                            onChange={e => setFormData({ ...formData, content: e.target.value })}
+                            value={typeof formData.content === 'object' ? JSON.stringify(formData.content, null, 2) : formData.content}
+                            onChange={e => {
+                                let val: any = e.target.value;
+                                try {
+                                    val = JSON.parse(val);
+                                } catch {
+                                    // keep as string if not valid JSON
+                                }
+                                setFormData({ ...formData, content: val });
+                            }}
                         />
                     </div>
 

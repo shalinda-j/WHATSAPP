@@ -135,9 +135,9 @@ export default function Dashboard() {
                 <div className="bg-white p-6 rounded-xl shadow-md">
                     <h2 className="text-xl font-semibold mb-4">WhatsApp Connection</h2>
 
-                    <div className={`flex items-center text-lg font-medium mb-4 ${getStatusColor(status.status)}`}>
-                        {getStatusIcon(status.status)}
-                        <span className="capitalize">{status.status.replace('_', ' ')}</span>
+                    <div className={`flex items-center text-lg font-medium mb-4 ${getStatusColor(status?.status || 'disconnected')}`}>
+                        {getStatusIcon(status?.status || 'disconnected')}
+                        <span className="capitalize">{(status?.status || 'disconnected').replace('_', ' ')}</span>
                     </div>
 
                     {status.status === 'scan_qr' && status.qr && (

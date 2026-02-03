@@ -8,31 +8,12 @@ import {
 import { AIService, AIChatMessage } from '../interfaces/AIService';
 
 import Dataset from '../models/Dataset';
+import { configService } from './ConfigService';
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-// Helper to fetch dynamic knowledge base
-async function getDynamicKnowledgeBase(): Promise<string> {
-  try {
-    // Fetch all active datasets
-    const datasets = await Dataset.find({ isActive: true });
-
-    let dynamicContent = '';
-    if (datasets.length > 0) {
-      dynamicContent = '\n\n# 📂 Dynamic Datasets (From Admin Panel)\n';
-      datasets.forEach((ds) => {
-        dynamicContent += `\n## ${ds.name} (${ds.scope})\n${ds.content}\n---\n`;
-      });
-    }
-
-    // Combine with static defaults
-    return `${JOB_KNOWLEDGE_BASE}${dynamicContent}`;
-  } catch (error) {
-    console.error('Error fetching datasets:', error);
-    return JOB_KNOWLEDGE_BASE; // Fallback to static
-  }
-}
+// Dynamic knowledge base is now handled by ConfigService
 
 // Ensure model is initialized (Note: System instruction will be set per-request for dynamic updates)
 const model = genAI.getGenerativeModel({
@@ -61,11 +42,12 @@ function buildExampleHistory() {
  */
 export async function generateResponse(prompt: string): Promise<string> {
   try {
-    const dynamicKB = await getDynamicKnowledgeBase();
+    const dynamicKB = await configService.getDynamicKnowledgeBase();
+    const aiPersonality = await configService.getAIPersonality();
 
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      systemInstruction: `${AI_PERSONALITY}\n\n${dynamicKB}`,
+      systemInstruction: `${aiPersonality}\n\n${dynamicKB}`,
     });
     return result.response.text();
   } catch (error) {
@@ -79,7 +61,7 @@ export async function generateResponse(prompt: string): Promise<string> {
  */
 export async function generateSinhalaResponse(prompt: string): Promise<string> {
   try {
-    const dynamicKB = await getDynamicKnowledgeBase();
+    const dynamicKB = await configService.getDynamicKnowledgeBase();
 
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -295,10 +277,12 @@ export class GeminiService implements AIService {
       if (!lastMessage) return '';
 
       // Get model with dynamic system instruction
+      const aiPersonality = await configService.getAIPersonality();
+      const dynamicKB = await configService.getDynamicKnowledgeBase();
       const modelInstance = this.genAI.getGenerativeModel({
         model: this.modelName,
         systemInstruction:
-          systemInstruction || `${AI_PERSONALITY}\n\n${JOB_KNOWLEDGE_BASE}`,
+          systemInstruction || `${aiPersonality}\n\n${dynamicKB}`,
       });
 
       const chat = modelInstance.startChat({
