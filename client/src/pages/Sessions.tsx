@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../config';
-import { Smartphone, Plus, Trash, Wifi, WifiOff, Loader } from 'lucide-react';
+import { Smartphone, Plus, Trash, Wifi, WifiOff, Loader, Edit } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 interface Session {
@@ -48,6 +48,18 @@ export default function Sessions() {
             alert('Failed to create session');
         } finally {
             setCreating(false);
+        }
+    };
+
+    const handleRenameSession = async (id: string, currentName: string) => {
+        const newName = prompt("Enter new name for this device:", currentName);
+        if (!newName || newName === currentName) return;
+
+        try {
+            await api.put(`/api/sessions/${id}/name`, { sessionName: newName });
+            fetchSessions();
+        } catch {
+            alert('Failed to rename session');
         }
     };
 
@@ -108,6 +120,13 @@ export default function Sessions() {
                                     <h3 className="font-bold text-lg text-gray-800">{session.sessionName || session.sessionId}</h3>
                                     <p className="text-xs text-gray-400 font-mono mt-1">{session.sessionId}</p>
                                 </div>
+                                <button
+                                    onClick={() => handleRenameSession(session.sessionId, session.sessionName)}
+                                    className="p-2 text-gray-400 hover:text-blue-500 transition rounded-full hover:bg-blue-50 mr-1"
+                                    title="Rename Device"
+                                >
+                                    <Edit className="w-4 h-4" />
+                                </button>
                                 <button
                                     onClick={() => handleDeleteSession(session.sessionId, session.sessionName)}
                                     className="p-2 text-gray-400 hover:text-red-500 transition rounded-full hover:bg-red-50"

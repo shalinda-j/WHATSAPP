@@ -64,7 +64,7 @@ export class WhatsAppSessionManager {
         const auth = await useMultiFileAuthState(AUTH_DIR);
         authState = auth.state;
         saveCreds = auth.saveCreds;
-        clearState = async () => {}; // No-op for file system
+        clearState = async () => { }; // No-op for file system
       }
 
       const { version } = await fetchLatestBaileysVersion();
@@ -154,8 +154,7 @@ export class WhatsAppSessionManager {
             // If the message is deemed unsafe, we silently drop it or log it.
             if (text && !SecurityService.isSafe(text)) {
               console.warn(
-                `🛡️ Blocked unsafe message from ${
-                  msg.key.remoteJid
+                `🛡️ Blocked unsafe message from ${msg.key.remoteJid
                 }: ${text.substring(0, 50)}...`,
               );
               return;
@@ -262,7 +261,11 @@ export async function sendMessage(
   sessionId = 'default',
 ): Promise<boolean> {
   const sock = manager.getSocket(sessionId);
-  if (!sock) return false;
+  if (!sock) {
+    console.error(`❌ sendMessage failed: Session '${sessionId}' not found or disconnected.`);
+    return false;
+  }
+  console.log(`📤 sending message to ${jid} using session: ${sessionId}`);
   await sock.sendMessage(jid, { text });
   return true;
 }

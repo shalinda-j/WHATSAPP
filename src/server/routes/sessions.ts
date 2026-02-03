@@ -84,6 +84,32 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// Update session name
+router.put('/:id/name', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { sessionName } = req.body;
+
+    if (!sessionName) {
+      return res.status(400).json({ error: 'Session name is required' });
+    }
+
+    const session = await Session.findOneAndUpdate(
+      { sessionId: id },
+      { sessionName },
+      { new: true },
+    );
+
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    res.json(session);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Logout/Delete session
 router.delete('/:id', async (req, res) => {
   try {
