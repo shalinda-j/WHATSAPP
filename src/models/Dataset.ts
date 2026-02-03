@@ -1,29 +1,28 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema, Document, Model } from 'mongoose';
 
-export interface IDataset extends Document {
+export interface IDataset {
   name: string;
-  content: any; // Changed from string to any (Mixed)
+  content: any; // Mixed
   scope: string;
   category: string;
-  key?: string; // New field
-  description?: string; // New field
+  key?: string;
+  description?: string;
   isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
+
+export interface IDatasetDocument extends IDataset, Document { }
 
 const DatasetSchema = new Schema(
   {
     name: { type: String, required: true },
-    // content can be string or JSON object
     content: { type: Schema.Types.Mixed, required: true },
     scope: { type: String, default: 'ALL' },
     category: {
       type: String,
-      // Extensible categories
       default: 'company',
     },
-    // Optional key for programmatic access (e.g., 'REGISTRATION_LINKS')
     key: { type: String, unique: true, sparse: true },
     isActive: { type: Boolean, default: true },
     description: { type: String },
@@ -33,7 +32,11 @@ const DatasetSchema = new Schema(
   },
 );
 
-// Prevent model overwrite error in dev mode
-const Dataset =
-  mongoose.models.Dataset || mongoose.model<IDataset>('Dataset', DatasetSchema);
+let Dataset: Model<any>;
+if (mongoose.models.Dataset) {
+  Dataset = mongoose.models.Dataset;
+} else {
+  Dataset = (mongoose.model as any)('Dataset', DatasetSchema as any);
+}
+
 export default Dataset;

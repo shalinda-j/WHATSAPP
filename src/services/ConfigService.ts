@@ -161,7 +161,7 @@ ${accountsText}
 
         try {
             // Fetch all active datasets
-            const datasets = await Dataset.findOne({ isActive: true });
+            const datasets = await Dataset.find({ isActive: true });
 
             let dynamicContent = '';
             if (datasets.length > 0) {
