@@ -1,64 +1,70 @@
 import { useState, useEffect } from 'react';
 import { api } from '../config';
-import { Save, Mic, Activity, Key, Server, Volume2 } from 'lucide-react';
+import { Activity } from 'lucide-react';
 
 interface VoiceConfigData {
-    provider: 'google-free' | 'openai' | 'elevenlabs';
+    provider: 'google-free' | 'openai';
     apiKey?: string;
     voiceId?: string;
     isActive: boolean;
-    mode: 'voice-only' | 'text-only' | 'voice-and-text';
+    mode: 'voice-and-text' | 'voice-only' | 'text-only';
+    ttsModel?: 'tts-1' | 'tts-1-hd';
 }
 
 export default function VoiceConfig() {
-    const [config, setConfig] = useState<VoiceConfigData>({
-        provider: 'google-free',
-        isActive: true,
-        mode: 'voice-and-text'
-    });
+    const [config, setConfig] = useState<VoiceConfigData | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
-    useEffect(() => {
-        fetchConfig();
-    }, []);
-
     const fetchConfig = async () => {
         try {
-            const response = await api.get('/api/voice-config');
-            setConfig(response.data);
+            const res = await api.get('/api/voice-config');
+            setConfig(res.data);
         } catch (error) {
-            console.error('Failed to fetch config', error);
-            setMessage({ type: 'error', text: 'Failed to load configuration.' });
+            console.error('Failed to fetch voice config', error);
+            setMessage({ type: 'error', text: 'Failed to load configuration' });
         } finally {
             setLoading(false);
         }
     };
 
-    const handleSave = async (e: React.FormEvent) => {
-        e.preventDefault();
+    useEffect(() => {
+        fetchConfig();
+    }, []);
+
+    const handleToggle = async (checked: boolean) => {
+        if (!config) return;
+
+        const newConfig = { ...config, isActive: checked };
+        setConfig(newConfig);
         setSaving(true);
         setMessage(null);
+
         try {
-            await api.post('/api/voice-config', config);
-            setMessage({ type: 'success', text: 'Voice configuration saved successfully!' });
+            await api.post('/api/voice-config', newConfig);
+            setMessage({ type: 'success', text: `Voice Agent ${checked ? 'Enabled' : 'Disabled'}` });
         } catch (error) {
-            console.error('Failed to save config', error);
-            setMessage({ type: 'error', text: 'Failed to save configuration.' });
+            console.error('Failed to update status', error);
+            setMessage({ type: 'error', text: 'Failed to update status' });
+            // Revert state on error
+            setConfig(config);
         } finally {
             setSaving(false);
         }
     };
 
-    if (loading) return <div className="text-center p-10">Loading settings...</div>;
+    if (loading) {
+        return <div className="p-8 text-center text-gray-500">Loading voice settings...</div>;
+    }
+
+    if (!config) {
+        return <div className="p-8 text-center text-red-500">Error loading configuration.</div>;
+    }
 
     return (
-        <div className="max-w-4xl mx-auto">
-            <h1 className="text-3xl font-bold mb-8 flex items-center text-gray-800">
-                <Mic className="mr-3 h-8 w-8 text-blue-600" />
-                Voice Agent Configuration
-            </h1>
+        <div className="max-w-2xl mx-auto">
+            <h1 className="text-3xl font-bold mb-6">Voice Agent Management</h1>
 
             {message && (
                 <div className={`p-4 rounded mb-6 ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
@@ -66,114 +72,36 @@ export default function VoiceConfig() {
                 </div>
             )}
 
-            <form onSubmit={handleSave} className="bg-white shadow-lg rounded-lg p-6 space-y-6">
-
-                {/* Active Status */}
+            <div className="bg-white shadow-lg rounded-lg p-6">
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                     <div className="flex items-center">
-                        <Activity className={`mr-3 h-6 w-6 ${config.isActive ? 'text-green-500' : 'text-gray-400'}`} />
+                        <Activity className={`mr-3 h-8 w-8 ${config.isActive ? 'text-green-500' : 'text-gray-400'}`} />
                         <div>
-                            <h3 className="font-semibold text-gray-900">Voice Agent Status</h3>
-                            <p className="text-sm text-gray-500">Enable or disable voice replies globally</p>
+                            <h3 className="font-semibold text-gray-900 text-lg">Voice Agent Status</h3>
+                            <p className="text-gray-500">Enable or disable the voice agent globally.</p>
+                            <p className="text-xs text-gray-400 mt-1">
+                                {config.isActive ? 'Agent is active and will reply with voice.' : 'Agent is disabled.'}
+                            </p>
                         </div>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                         <input
                             type="checkbox"
                             checked={config.isActive}
-                            onChange={(e) => setConfig({ ...config, isActive: e.target.checked })}
+                            onChange={(e) => handleToggle(e.target.checked)}
                             className="sr-only peer"
+                            disabled={saving}
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        <div className="w-14 h-7 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-green-600"></div>
                     </label>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Provider Selection */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            <span className="flex items-center"><Server className="w-4 h-4 mr-2" /> TTS Provider</span>
-                        </label>
-                        <select
-                            value={config.provider}
-                            onChange={(e) => setConfig({ ...config, provider: e.target.value as any })}
-                            className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        >
-                            <option value="google-free">Google TTS (Free)</option>
-                            <option value="openai">OpenAI TTS (High Quality - Paid)</option>
-                            {/* <option value="elevenlabs">ElevenLabs (Premium - Coming Soon)</option> */}
-                        </select>
-                        <p className="text-xs text-gray-500 mt-1">
-                            {config.provider === 'google-free' ? 'Standard robotic voice. No API key required.' : 'Generating high-quality lifelike speech. Requires API Key.'}
-                        </p>
-                    </div>
-
-                    {/* Mode Selection */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            <span className="flex items-center"><Volume2 className="w-4 h-4 mr-2" /> Response Mode</span>
-                        </label>
-                        <select
-                            value={config.mode}
-                            onChange={(e) => setConfig({ ...config, mode: e.target.value as any })}
-                            className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        >
-                            <option value="voice-and-text">Voice & Text (Recommended)</option>
-                            <option value="voice-only">Voice Only</option>
-                            <option value="text-only">Text Only (Disable TTS)</option>
-                        </select>
-                    </div>
+                <div className="mt-6 text-center">
+                    <p className="text-sm text-gray-500">
+                        For advanced configuration (Provider, API Keys, Models), please visit the <a href="/config" className="text-blue-600 hover:underline">Configuration</a> page.
+                    </p>
                 </div>
-
-                {/* API Key Section (Conditional) */}
-                {config.provider !== 'google-free' && (
-                    <div className="p-4 border border-blue-100 bg-blue-50 rounded-lg animation-fade-in transition-all">
-                        <label className="block text-sm font-medium text-blue-900 mb-2">
-                            <span className="flex items-center"><Key className="w-4 h-4 mr-2" /> API Key for {config.provider === 'openai' ? 'OpenAI' : 'Provider'}</span>
-                        </label>
-                        <input
-                            type="password"
-                            value={config.apiKey || ''}
-                            onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
-                            placeholder={`sk-...`}
-                            className="w-full p-2 border border-blue-200 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        />
-                        <p className="text-xs text-blue-600 mt-1">
-                            Your key is stored securely. Leave blank to use system environment variable if set.
-                        </p>
-
-                        {config.provider === 'openai' && (
-                            <div className="mt-4">
-                                <label className="block text-sm font-medium text-blue-900 mb-2">Voice Model</label>
-                                <select
-                                    value={config.voiceId || 'alloy'}
-                                    onChange={(e) => setConfig({ ...config, voiceId: e.target.value })}
-                                    className="w-full p-2 border border-blue-200 rounded"
-                                >
-                                    <option value="alloy">Alloy (Neutral)</option>
-                                    <option value="echo">Echo (Male)</option>
-                                    <option value="fable">Fable (British)</option>
-                                    <option value="onyx">Onyx (Deep Male)</option>
-                                    <option value="nova">Nova (Female)</option>
-                                    <option value="shimmer">Shimmer (Female)</option>
-                                </select>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* Save Button */}
-                <div className="pt-4 flex justify-end">
-                    <button
-                        type="submit"
-                        disabled={saving}
-                        className="flex items-center bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
-                    >
-                        <Save className="mr-2 h-5 w-5" />
-                        {saving ? 'Saving...' : 'Save Configuration'}
-                    </button>
-                </div>
-            </form>
+            </div>
         </div>
     );
 }

@@ -60,7 +60,7 @@ export async function generateSpeech(text: string): Promise<Buffer> {
       const client = new OpenAI({ apiKey: apiKey, dangerouslyAllowBrowser: true });
 
       const mp3 = await client.audio.speech.create({
-        model: "tts-1",
+        model: (config?.ttsModel as any) || "tts-1",
         voice: (config?.voiceId as any) || "alloy",
         input: text,
       });

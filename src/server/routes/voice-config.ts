@@ -27,7 +27,7 @@ router.get('/', async (req: Request, res: Response) => {
 // UPDATE configuration
 router.post('/', async (req: Request, res: Response) => {
     try {
-        const { provider, apiKey, voiceId, isActive, mode } = req.body;
+        const { provider, apiKey, voiceId, isActive, mode, ttsModel } = req.body;
 
         // Upsert the configuration (we only keep one active config for simplicity)
         const config = await VoiceConfig.findOneAndUpdate(
@@ -38,6 +38,7 @@ router.post('/', async (req: Request, res: Response) => {
                 voiceId,
                 isActive,
                 mode,
+                ttsModel,
                 updatedAt: new Date()
             },
             { new: true, upsert: true, setDefaultsOnInsert: true }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../config';
-import { Plus, Trash, Edit, Save, X, Bot, Settings, Activity, Cpu } from 'lucide-react';
+import { Plus, Trash, Edit, Save, X, Bot, Settings, Activity, Cpu, Mic, Server, Volume2, Key } from 'lucide-react';
 
 interface Config {
     _id: string;
@@ -17,11 +17,45 @@ interface Config {
     isActive?: boolean;
 }
 
+interface VoiceConfigData {
+    provider: 'google-free' | 'openai' | 'elevenlabs';
+    apiKey?: string;
+    voiceId?: string;
+    isActive: boolean;
+    mode: 'voice-only' | 'text-only' | 'voice-and-text';
+    ttsModel?: 'tts-1' | 'tts-1-hd';
+}
+
 export default function Config() {
     const [configs, setConfigs] = useState<Config[]>([]);
     const [isEditing, setIsEditing] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<'general' | 'ai'>('ai');
+    const [activeTab, setActiveTab] = useState<'general' | 'ai' | 'voice'>('ai');
+
+    // Voice Config State
+    const [voiceConfig, setVoiceConfig] = useState<VoiceConfigData>({
+        provider: 'google-free',
+        isActive: true,
+        mode: 'voice-and-text',
+        ttsModel: 'tts-1'
+    });
+    const [voiceGender, setVoiceGender] = useState<'male' | 'female' | 'neutral'>('neutral');
+    const [voiceLoading, setVoiceLoading] = useState(true);
+    const [voiceSaving, setVoiceSaving] = useState(false);
+    const [voiceMessage, setVoiceMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+    const OPENAI_VOICES = [
+        { id: 'alloy', name: 'Alloy (Neutral)', gender: 'neutral' },
+        { id: 'echo', name: 'Echo (Male)', gender: 'male' },
+        { id: 'fable', name: 'Fable (British Male)', gender: 'male' },
+        { id: 'onyx', name: 'Onyx (Deep Male)', gender: 'male' },
+        { id: 'nova', name: 'Nova (Female)', gender: 'female' },
+        { id: 'shimmer', name: 'Shimmer (Female)', gender: 'female' },
+    ];
+
+    const filteredVoices = OPENAI_VOICES.filter(v =>
+        voiceGender === 'neutral' ? true : v.gender === voiceGender || v.gender === 'neutral'
+    );
 
     // Default form data
     const [formData, setFormData] = useState<Partial<Config>>({
@@ -44,9 +78,22 @@ export default function Config() {
         }
     };
 
+    const fetchVoiceConfig = async () => {
+        try {
+            const response = await api.get('/api/voice-config');
+            setVoiceConfig(response.data);
+        } catch (error) {
+            console.error('Failed to fetch voice config', error);
+        } finally {
+            setVoiceLoading(false);
+        }
+    };
+
     useEffect(() => {
         // eslint-disable-next-line react-hooks/set-state-in-effect
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchConfigs();
+        fetchVoiceConfig();
     }, []);
 
     const handleDelete = async (id: string) => {
@@ -94,6 +141,21 @@ export default function Config() {
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
             alert('Error saving: ' + message);
+        }
+    };
+
+    const handleSaveVoice = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setVoiceSaving(true);
+        setVoiceMessage(null);
+        try {
+            await api.post('/api/voice-config', voiceConfig);
+            setVoiceMessage({ type: 'success', text: 'Voice configuration saved successfully!' });
+        } catch (error) {
+            console.error('Failed to save config', error);
+            setVoiceMessage({ type: 'error', text: 'Failed to save configuration.' });
+        } finally {
+            setVoiceSaving(false);
         }
     };
 
@@ -279,6 +341,14 @@ export default function Config() {
                         <Settings className="w-4 h-4 mr-2" /> General Settings
                     </div>
                 </button>
+                <button
+                    className={`py-2 px-4 font-medium text-sm ${activeTab === 'voice' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                    onClick={() => setActiveTab('voice')}
+                >
+                    <div className="flex items-center">
+                        <Mic className="w-4 h-4 mr-2" /> Voice Provider
+                    </div>
+                </button>
             </div>
 
             {activeTab === 'ai' && (
@@ -364,6 +434,147 @@ export default function Config() {
                     </div>
                     {generalConfigs.length === 0 && (
                         <div className="p-8 text-center text-gray-500">No general configs found.</div>
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'voice' && (
+                <div className="max-w-4xl mx-auto">
+                    {voiceLoading ? (
+                        <div className="p-12 text-center text-gray-500">
+                            Loading voice configuration...
+                        </div>
+                    ) : (
+                        <>
+                            {voiceMessage && (
+                                <div className={`p-4 rounded mb-6 ${voiceMessage.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                    {voiceMessage.text}
+                                </div>
+                            )}
+
+                            <form onSubmit={handleSaveVoice} className="bg-white shadow-lg rounded-lg p-6 space-y-6">
+
+
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {/* Provider Selection */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            <span className="flex items-center"><Server className="w-4 h-4 mr-2" /> TTS Provider</span>
+                                        </label>
+                                        <select
+                                            value={voiceConfig.provider}
+                                            onChange={(e) => setVoiceConfig({ ...voiceConfig, provider: e.target.value as any })}
+                                            className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                        >
+                                            <option value="google-free">Google TTS (Free)</option>
+                                            <option value="openai">OpenAI TTS (High Quality - Paid)</option>
+                                        </select>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            {voiceConfig.provider === 'google-free' ? 'Standard robotic voice. No API key required.' : 'Generating high-quality lifelike speech. Requires API Key.'}
+                                        </p>
+                                    </div>
+
+                                    {/* Mode Selection */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            <span className="flex items-center"><Volume2 className="w-4 h-4 mr-2" /> Response Mode</span>
+                                        </label>
+                                        <select
+                                            value={voiceConfig.mode}
+                                            onChange={(e) => setVoiceConfig({ ...voiceConfig, mode: e.target.value as any })}
+                                            className="w-full p-2 border border-blue-200 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                        >
+                                            <option value="voice-and-text">Voice & Text (Recommended)</option>
+                                            <option value="voice-only">Voice Only</option>
+                                            <option value="text-only">Text Only (Disable TTS)</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {/* API Key Section (Conditional) */}
+                                {voiceConfig.provider !== 'google-free' && (
+                                    <div className="p-4 border border-blue-100 bg-blue-50 rounded-lg animation-fade-in transition-all">
+                                        <label className="block text-sm font-medium text-blue-900 mb-2">
+                                            <span className="flex items-center"><Key className="w-4 h-4 mr-2" /> API Key for {voiceConfig.provider === 'openai' ? 'OpenAI' : 'Provider'}</span>
+                                        </label>
+                                        <input
+                                            type="password"
+                                            value={voiceConfig.apiKey || ''}
+                                            onChange={(e) => setVoiceConfig({ ...voiceConfig, apiKey: e.target.value })}
+                                            placeholder={`sk-...`}
+                                            className="w-full p-2 border border-blue-200 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                        />
+                                        <p className="text-xs text-blue-600 mt-1">
+                                            Your key is stored securely. Leave blank to use system environment variable if set.
+                                        </p>
+
+
+                                        {voiceConfig.provider === 'openai' && (
+                                            <div className="mt-4 space-y-4">
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-blue-900 mb-2">Quality Model</label>
+                                                        <select
+                                                            value={voiceConfig.ttsModel || 'tts-1'}
+                                                            onChange={(e) => setVoiceConfig({ ...voiceConfig, ttsModel: e.target.value as any })}
+                                                            className="w-full p-2 border border-blue-200 rounded"
+                                                        >
+                                                            <option value="tts-1">Standard (tts-1) - Faster</option>
+                                                            <option value="tts-1-hd">HD (tts-1-hd) - Higher Quality</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-blue-900 mb-2">Voice Gender Filter</label>
+                                                        <div className="flex space-x-2 mt-2">
+                                                            {(['male', 'female', 'neutral'] as const).map((g) => (
+                                                                <label key={g} className="inline-flex items-center cursor-pointer">
+                                                                    <input
+                                                                        type="radio"
+                                                                        className="form-radio text-blue-600"
+                                                                        name="gender"
+                                                                        checked={voiceGender === g}
+                                                                        onChange={() => setVoiceGender(g)}
+                                                                    />
+                                                                    <span className="ml-2 capitalize text-sm text-blue-800">{g}</span>
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-sm font-medium text-blue-900 mb-2">Voice Persona</label>
+                                                    <select
+                                                        value={voiceConfig.voiceId || 'alloy'}
+                                                        onChange={(e) => setVoiceConfig({ ...voiceConfig, voiceId: e.target.value })}
+                                                        className="w-full p-2 border border-blue-200 rounded"
+                                                    >
+                                                        {filteredVoices.map(voice => (
+                                                            <option key={voice.id} value={voice.id}>
+                                                                {voice.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Save Button */}
+                                <div className="pt-4 flex justify-end">
+                                    <button
+                                        type="submit"
+                                        disabled={voiceSaving}
+                                        className="flex items-center bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                    >
+                                        <Save className="mr-2 h-5 w-5" />
+                                        {voiceSaving ? 'Saving...' : 'Save Configuration'}
+                                    </button>
+                                </div>
+                            </form>
+                        </>
                     )}
                 </div>
             )}

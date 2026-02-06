@@ -114,20 +114,6 @@ onMessage(async (message, sock, sessionId) => {
       return;
     }
 
-    // Ignore empty messages
-    if (!text || text.trim() === '') {
-      console.log('   (Ignoring empty message)');
-      return;
-    }
-
-    // Ignore status broadcasts - only skip @broadcast addresses
-    if (jid.includes('@broadcast')) {
-      console.log('   (Ignoring broadcast message)');
-      return;
-    }
-
-    let messageType: 'text' | 'voice' = 'text';
-
     // Helper to extract audio message from various wrappers
     const getAudioMessage = (msg: any) => {
       if (!msg) return null;
@@ -141,6 +127,23 @@ onMessage(async (message, sock, sessionId) => {
     };
 
     const audioMsg = getAudioMessage(message.message);
+
+    // Ignore empty messages (unless it's a voice message)
+    if ((!text || text.trim() === '') && !audioMsg) {
+      console.log('   (Ignoring empty message)');
+      return;
+    }
+
+    // Ignore status broadcasts - only skip @broadcast addresses
+    if (jid.includes('@broadcast')) {
+      console.log('   (Ignoring broadcast message)');
+      return;
+    }
+
+    let messageType: 'text' | 'voice' = 'text';
+
+    // Helper to extract audio message from various wrappers
+
 
     // Check for Audio Message
     let isVoiceMessage = false;

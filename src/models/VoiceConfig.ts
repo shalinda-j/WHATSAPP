@@ -7,6 +7,7 @@ export interface IVoiceConfig extends Document {
     isActive: boolean;
     mode: 'voice-only' | 'text-only' | 'voice-and-text';
     updatedAt: Date;
+    ttsModel?: string;
 }
 
 const VoiceConfigSchema = new Schema({
@@ -36,6 +37,10 @@ const VoiceConfigSchema = new Schema({
     updatedAt: {
         type: Date,
         default: Date.now,
+    },
+    ttsModel: {
+        type: String,
+        default: 'tts-1'
     },
 } as any);
 
