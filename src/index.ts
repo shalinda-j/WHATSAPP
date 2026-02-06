@@ -128,9 +128,23 @@ onMessage(async (message, sock, sessionId) => {
 
     let messageType: 'text' | 'voice' = 'text';
 
+    // Helper to extract audio message from various wrappers
+    const getAudioMessage = (msg: any) => {
+      if (!msg) return null;
+      return (
+        msg.audioMessage ||
+        msg.ephemeralMessage?.message?.audioMessage ||
+        msg.viewOnceMessage?.message?.audioMessage ||
+        msg.viewOnceMessageV2?.message?.audioMessage ||
+        msg.documentWithCaptionMessage?.message?.audioMessage
+      );
+    };
+
+    const audioMsg = getAudioMessage(message.message);
+
     // Check for Audio Message
     let isVoiceMessage = false;
-    if (message.message?.audioMessage) {
+    if (audioMsg) {
       messageType = 'voice';
       console.log('   🎤 Voice message detected! Downloading...');
       const audioBuffer = await downloadWhatsAppAudio(message);
@@ -264,7 +278,13 @@ onMessage(async (message, sock, sessionId) => {
         // Analyze Intent first for metadata
         intentAnalysis = await analyzeLeadIntent(text);
 
-        response = await aiLoadBalancer.sendMessage(jid, text);
+        // VOICE OPTIMIZATION: If this is a voice key, ask for a short spoken response
+        let finalPrompt = text;
+        if (isVoiceMessage) {
+          finalPrompt += `\n\n(IMPORTANT: This is a VOICE message. Reply in a very short, spoken style. Keep it under 2 sentences so it can be spoken out loud easily.)`;
+        }
+
+        response = await aiLoadBalancer.sendMessage(jid, finalPrompt);
       } catch (aiError: any) {
         console.error('   ❌ AI Load Balancer failed:', aiError);
         throw aiError;

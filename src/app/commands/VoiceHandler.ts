@@ -95,9 +95,23 @@ export class VoiceHandler {
         await sendMessage(
           jid,
           `🎤 *Voice Transcription:*\n"${transcription}"\n\n` +
-            `🤖 *AI Response:*\n${aiResponse}`,
+          `🤖 *AI Response:*\n${aiResponse}`,
           sessionId,
         );
+
+        // Generate and send voice reply
+        try {
+          const { generateSpeech } = await import('../../services/voice');
+          const { sendVoiceMessage } = await import('../../services/whatsapp');
+
+          const audioBuffer = await generateSpeech(aiResponse);
+          await sendVoiceMessage(jid, audioBuffer, sessionId);
+
+        } catch (ttsError) {
+          console.error('TTS Error:', ttsError);
+          // Fallback is already handled (text message sent above)
+        }
+
       } else {
         // Just return the transcription
         await sendMessage(

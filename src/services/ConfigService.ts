@@ -68,6 +68,27 @@ export class ConfigService {
     public async getAIPersonality() {
         return this.get('AI_PERSONALITY', AI_PERSONALITY);
     }
+
+    /**
+     * Get Google API Key from Config
+     */
+    public async getGoogleProviderKey(): Promise<string | undefined> {
+        try {
+            // Avoid circular dependency if Config is imported? No, ConfigService imports Dataset.
+            // We need to import Config model. But ConfigService.ts imports Dataset.
+            // Let's import Config at top of file.
+            const config = await import('../models/Config').then(m => m.default.findOne({
+                isProvider: true,
+                providerType: 'google',
+                isActive: true
+            }));
+            return config?.apiKey;
+        } catch (error) {
+            console.error('Error fetching Google Provider Key:', error);
+            return undefined;
+        }
+    }
+
     public async getRegistrationMessage(): Promise<string> {
         const config = await this.get('REGISTRATION_CONFIG', REGISTRATION_CONFIG);
         return config.message;

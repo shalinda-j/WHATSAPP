@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import Datasets from './pages/Datasets';
 import Webhooks from './pages/Webhooks';
 import Config from './pages/Config';
+import VoiceConfig from './pages/VoiceConfig';
 import Sessions from './pages/Sessions';
 import Layout from './components/Layout';
 
@@ -28,6 +29,7 @@ function AppRoutes() {
         <Route path="datasets" element={<Datasets />} />
         <Route path="webhooks" element={<Webhooks />} />
         <Route path="config" element={<Config />} />
+        <Route path="voice-config" element={<VoiceConfig />} />
         <Route path="sessions" element={<Sessions />} />
       </Route>
     </Routes>

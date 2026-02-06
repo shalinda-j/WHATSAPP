@@ -7,6 +7,7 @@ import authRoutes from './routes/auth';
 import datasetRoutes from './routes/datasets';
 import sessionsRouter from './routes/sessions';
 import configRouter from './routes/config';
+import voiceConfigRouter from './routes/voice-config';
 import webhookRouter from './routes/webhooks';
 import whatsappRouter from './routes/whatsapp';
 
@@ -20,7 +21,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/datasets', datasetRoutes);
 app.use('/api/sessions', sessionsRouter);
 app.use('/api/config', configRouter);
-app.use('/api/datasets', datasetRoutes);
+app.use('/api/voice-config', voiceConfigRouter);
 app.use('/api/webhooks', webhookRouter);
 app.use('/api/whatsapp', whatsappRouter);
 

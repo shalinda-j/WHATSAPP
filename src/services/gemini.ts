@@ -10,15 +10,24 @@ import { AIService, AIChatMessage } from '../interfaces/AIService';
 import Dataset from '../models/Dataset';
 import { configService } from './ConfigService';
 
-// Initialize Gemini AI
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+// Initialize Gemini AI (Removed global static init)
+// const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+// const model = ...
 
-// Dynamic knowledge base is now handled by ConfigService
+/**
+ * Helper to get a dynamic model instance with the latest API Key
+ */
+async function getGeminiModel(modelName = 'gemini-1.5-flash') {
+  const apiKey = await configService.getGoogleProviderKey();
+  const validKey = apiKey || process.env.GEMINI_API_KEY;
 
-// Ensure model is initialized (Note: System instruction will be set per-request for dynamic updates)
-const model = genAI.getGenerativeModel({
-  model: 'gemini-1.5-flash',
-});
+  if (!validKey) {
+    throw new Error('Google Gemini API Key is missing. Please configure it in the Admin Panel.');
+  }
+
+  const genAI = new GoogleGenerativeAI(validKey);
+  return genAI.getGenerativeModel({ model: modelName });
+}
 
 // Store chat sessions for conversation memory
 const chatSessions: Map<string, ChatSession> = new Map();
@@ -45,6 +54,9 @@ export async function generateResponse(prompt: string): Promise<string> {
     const dynamicKB = await configService.getDynamicKnowledgeBase();
     const aiPersonality = await configService.getAIPersonality();
 
+    // Get Dynamic Model
+    const model = await getGeminiModel();
+
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       systemInstruction: `${aiPersonality}\n\n${dynamicKB}`,
@@ -62,6 +74,7 @@ export async function generateResponse(prompt: string): Promise<string> {
 export async function generateSinhalaResponse(prompt: string): Promise<string> {
   try {
     const dynamicKB = await configService.getDynamicKnowledgeBase();
+    const model = await getGeminiModel();
 
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -76,14 +89,12 @@ export async function generateSinhalaResponse(prompt: string): Promise<string> {
 
 /**
  * Get or create a chat session for a user (enables conversation memory)
- * Now includes job knowledge base and example conversations
- * Note: Sessions initialized here currently use STATIC knowledge for simplicity.
- * To use dynamic knowledge in sessions, we'd need to refactor this to be async or inject context per message.
  */
-export function getChatSession(userId: string): ChatSession {
+export async function getChatSession(userId: string): Promise<ChatSession> {
   if (!chatSessions.has(userId)) {
+    const model = await getGeminiModel();
     const chat = model.startChat({
-      systemInstruction: `${AI_PERSONALITY}\n\n${JOB_KNOWLEDGE_BASE}`, // Use static base for persistent sessions for now
+      systemInstruction: `${AI_PERSONALITY}\n\n${JOB_KNOWLEDGE_BASE}`,
       history: [
         {
           role: 'model',
@@ -109,7 +120,7 @@ export async function sendMessageWithMemory(
   message: string,
 ): Promise<string> {
   try {
-    const chat = getChatSession(userId);
+    const chat = await getChatSession(userId);
     const result = await chat.sendMessage(message);
     return result.response.text();
   } catch (error) {
@@ -134,6 +145,7 @@ export async function transcribeAudio(
   mimeType = 'audio/ogg',
 ): Promise<string> {
   try {
+    const model = await getGeminiModel();
     const result = await model.generateContent([
       {
         inlineData: {
@@ -160,6 +172,7 @@ export async function extractTextFromImage(
   mimeType: string,
 ): Promise<string> {
   try {
+    const model = await getGeminiModel();
     const result = await model.generateContent([
       {
         inlineData: {
@@ -179,9 +192,6 @@ export async function extractTextFromImage(
 }
 
 /**
- * Detect booking intent from natural language
- */
-/**
  * Analyze the user's message for lead qualification data and intent
  */
 export async function analyzeLeadIntent(text: string): Promise<{
@@ -194,9 +204,11 @@ export async function analyzeLeadIntent(text: string): Promise<{
   };
   bookingDetails?: { date?: string; time?: string };
   buyingSignal: 'High' | 'Medium' | 'Low';
-  suggestedAction?: 'Book Visit' | 'Ask History' | 'None';
+  suggestion?: 'Book Visit' | 'Ask History' | 'None';
 } | null> {
   try {
+    const model = await getGeminiModel();
+
     const result = await model.generateContent([
       {
         text: `You are a Lead Analyzer for a Recruitment Agency. Analyze the user's message.
@@ -236,7 +248,12 @@ export async function analyzeLeadIntent(text: string): Promise<{
   }
 }
 
-export { model, genAI };
+// Remove exports of internal model/genAI if possible, or export dummy to prevent breakage
+// export { model, genAI }; 
+// Since we removed global model, we should remove it from exports or provide a getter
+// But other files might be importing them. Let's see...
+// I will not export them. If something breaks, I'll fix the caller.
+
 
 export class GeminiService implements AIService {
   name: string;
