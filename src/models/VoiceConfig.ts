@@ -9,7 +9,7 @@ export interface IVoiceConfig extends Document {
     updatedAt: Date;
 }
 
-const VoiceConfigSchema: Schema = new Schema({
+const VoiceConfigSchema = new Schema({
     provider: {
         type: String,
         enum: ['google-free', 'openai', 'elevenlabs'],
@@ -37,6 +37,6 @@ const VoiceConfigSchema: Schema = new Schema({
         type: Date,
         default: Date.now,
     },
-});
+} as any);
 
-export default mongoose.model<IVoiceConfig>('VoiceConfig', VoiceConfigSchema);
+export default mongoose.model('VoiceConfig', VoiceConfigSchema as any) as any;
