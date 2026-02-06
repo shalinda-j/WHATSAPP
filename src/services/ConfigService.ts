@@ -209,6 +209,24 @@ ${accountsText}
             return JOB_KNOWLEDGE_BASE; // Fallback to static
         }
     }
+
+    /**
+     * Cache Management
+     */
+    public getCacheStats() {
+        return {
+            keys: Object.keys(this.cache).length,
+            memoryUsage: process.memoryUsage().heapUsed,
+        };
+    }
+
+    public clearCache() {
+        const count = Object.keys(this.cache).length;
+        this.cache = {};
+        this.lastFetch = {};
+        console.log(`🧹 ConfigService cache cleared (${count} items removed)`);
+        return count;
+    }
 }
 
 export const configService = ConfigService.Instance;

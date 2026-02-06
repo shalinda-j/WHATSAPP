@@ -234,6 +234,23 @@ export class AILoadBalancer {
     this.userAssignments.delete(userId);
     console.log(`🗑️ LoadBalancer: Cleared conversation for ${userId}`);
   }
+
+  getStats() {
+    return {
+      activeConversations: this.conversationHistory.size,
+      activeUsers: this.userAssignments.size,
+      servicesLoaded: this.services.length,
+      totalRequests: this.totalRequests,
+    };
+  }
+
+  clearAllConversations() {
+    const count = this.conversationHistory.size;
+    this.conversationHistory.clear();
+    this.userAssignments.clear();
+    console.log(`🧹 LoadBalancer: Cleared all ${count} conversations.`);
+    return count;
+  }
 }
 
 function conversationHistoryAdd(

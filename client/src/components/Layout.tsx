@@ -59,6 +59,7 @@ export default function Layout() {
                         <NavLink to="/webhooks" icon={Globe}>Webhooks</NavLink>
                         <NavLink to="/sessions" icon={Smartphone}>Linked Devices</NavLink>
                         <NavLink to="/voice-config" icon={AudioLines}>Voice Agent</NavLink>
+                        <NavLink to="/system" icon={Database}>System Maintenance</NavLink>
 
                         <NavLink to="/config" icon={Settings}>Configuration</NavLink>
                     </nav>

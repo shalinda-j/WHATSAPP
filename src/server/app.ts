@@ -10,6 +10,7 @@ import configRouter from './routes/config';
 import voiceConfigRouter from './routes/voice-config';
 import webhookRouter from './routes/webhooks';
 import whatsappRouter from './routes/whatsapp';
+import systemRouter from './routes/system';
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use('/api/config', configRouter);
 app.use('/api/voice-config', voiceConfigRouter);
 app.use('/api/webhooks', webhookRouter);
 app.use('/api/whatsapp', whatsappRouter);
+app.use('/api/system', systemRouter);
 
 // Health check
 app.get('/health', (req, res) => {

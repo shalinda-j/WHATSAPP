@@ -26,43 +26,69 @@ const AuthModel =
 
 // --- MongoDB Connection Helper ---
 export const connectToMongoDB = async (uri: string): Promise<void> => {
-  try {
-    await mongoose.connect(uri, {
-      serverApi: {
-        version: '1',
-        strict: true,
-        deprecationErrors: true,
-      },
-    });
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY = 5000; // 5 seconds
 
-    // Send a ping to confirm a successful connection (Mongoose way)
-    await mongoose.connection.db.admin().command({ ping: 1 });
-    console.log(
-      '✅ Pinged your deployment. You successfully connected to MongoDB!',
-    );
-
-    // --- Migration: Drop stale `key_1` index if it exists ---
+  for (let i = 1; i <= MAX_RETRIES; i++) {
     try {
-      const collection = mongoose.connection.db.collection('authcredentials');
-      const indexes = await collection.indexes();
-      const staleIndex = indexes.find((idx: any) => idx.name === 'key_1');
-      if (staleIndex) {
-        await collection.dropIndex('key_1');
-        console.log(
-          "🔧 Dropped stale 'key_1' index from authcredentials collection.",
-        );
+      console.log(`⏳ Connecting to MongoDB (Attempt ${i}/${MAX_RETRIES})...`);
+
+      await mongoose.connect(uri, {
+        serverApi: {
+          version: '1',
+          strict: true,
+          deprecationErrors: true,
+        },
+        serverSelectionTimeoutMS: 5000,
+      });
+
+      // Send a ping to confirm a successful connection (Mongoose way)
+      await mongoose.connection.db.admin().command({ ping: 1 });
+      console.log(
+        '✅ Pinged your deployment. You successfully connected to MongoDB!',
+      );
+
+      // --- Migration: Drop stale `key_1` index if it exists ---
+      try {
+        const collection = mongoose.connection.db.collection('authcredentials');
+        const indexes = await collection.indexes();
+        const staleIndex = indexes.find((idx: any) => idx.name === 'key_1');
+        if (staleIndex) {
+          await collection.dropIndex('key_1');
+          console.log(
+            "🔧 Dropped stale 'key_1' index from authcredentials collection.",
+          );
+        }
+      } catch (migrationError: any) {
+        // Ignore if index doesn't exist or collection doesn't exist yet
+        if (
+          migrationError.codeName !== 'IndexNotFound' &&
+          migrationError.codeName !== 'NamespaceNotFound'
+        ) {
+          console.warn('⚠️ Migration warning:', migrationError.message);
+        }
       }
-    } catch (migrationError: any) {
-      // Ignore if index doesn't exist or collection doesn't exist yet
-      if (
-        migrationError.codeName !== 'IndexNotFound' &&
-        migrationError.codeName !== 'NamespaceNotFound'
-      ) {
-        console.warn('⚠️ Migration warning:', migrationError.message);
+
+      // If successful, break the loop
+      return;
+
+    } catch (error: any) {
+      console.error(`❌ MongoDB Connection Error (Attempt ${i}):`, error.message);
+
+      if (i < MAX_RETRIES) {
+        console.log(`   Retrying in ${RETRY_DELAY / 1000}s...`);
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      } else {
+        console.error('❌ Failed to connect to MongoDB after multiple attempts. Exiting.');
+        // We should probably let the process crash or handle it upstream, 
+        // but for now, swallowing it caused the timeout issues. 
+        // Let's rethrow or exit. 
+        // If we rethrow, startServer matches it.
+        // But since this is async, let's keep it simple for now and just log final failure.
+        // Ideally we should throw so startServer stops.
+        throw error;
       }
     }
-  } catch (error) {
-    console.error('❌ MongoDB Connection Error:', error);
   }
 };
 
