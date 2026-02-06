@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import OpenAI, { toFile } from 'openai';
 import { AIService, AIChatMessage } from '../interfaces/AIService';
 import { AI_PERSONALITY, JOB_KNOWLEDGE_BASE } from '../config/ai-personality';
 
@@ -46,5 +46,31 @@ export class OpenAIService implements AIService {
       console.error(`OpenAIService (${this.modelName}) error:`, error);
       throw error;
     }
+  }
+}
+
+
+/**
+ * Transcribe audio using OpenAI Whisper
+ */
+export async function transcribeAudio(
+  audioBuffer: Buffer,
+  apiKey: string
+): Promise<string> {
+  try {
+    const openai = new OpenAI({ apiKey });
+    const file = await toFile(audioBuffer, 'voice_message.ogg', {
+      type: 'audio/ogg',
+    });
+
+    const transcription = await openai.audio.transcriptions.create({
+      file: file,
+      model: 'whisper-1',
+    });
+
+    return transcription.text;
+  } catch (error) {
+    console.error('OpenAI Whisper transcription error:', error);
+    throw error;
   }
 }

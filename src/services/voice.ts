@@ -1,22 +1,25 @@
+import { transcribeAudio as openaiTranscribeAudio } from './openai';
 import { transcribeAudio as geminiTranscribeAudio } from './gemini';
 import { getAudioUrl } from 'google-tts-api';
 import OpenAI from 'openai';
 import axios from 'axios';
 import VoiceConfig from '../models/VoiceConfig';
 
-// Initialize OpenAI
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'dummy_key',
-  dangerouslyAllowBrowser: true
-});
-
 /**
- * Transcribe audio using Gemini's multimodal capabilities
+ * Transcribe audio using configured provider (Gemini or OpenAI)
  * @param audioBuffer Buffer containing the audio data
  * @returns Transcribed text
  */
 export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
   try {
+    const config = await VoiceConfig.findOne().sort({ updatedAt: -1 });
+    const provider = config?.provider || 'google-free';
+
+    if (provider === 'openai' && config?.apiKey) {
+      console.log('   🎙️ Transcribing audio with OpenAI Whisper...');
+      return await openaiTranscribeAudio(audioBuffer, config.apiKey);
+    }
+
     console.log('   🎙️ Transcribing audio with Gemini...');
 
     // Convert Buffer to Base64 for Gemini

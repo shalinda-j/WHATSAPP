@@ -17,7 +17,7 @@ import { configService } from './ConfigService';
 /**
  * Helper to get a dynamic model instance with the latest API Key
  */
-async function getGeminiModel(modelName = 'gemini-1.5-flash') {
+async function getGeminiModel(modelName = 'gemini-1.5-flash-latest') {
   const apiKey = await configService.getGoogleProviderKey();
   const validKey = apiKey || process.env.GEMINI_API_KEY;
 
@@ -267,7 +267,7 @@ export class GeminiService implements AIService {
     providerType?: string;
   }) {
     this.apiKey = config.apiKey;
-    this.modelName = config.model || 'gemini-1.5-flash';
+    this.modelName = config.model || 'gemini-1.5-flash-latest';
     this.name = `Gemini (${this.modelName})`;
     this.genAI = new GoogleGenerativeAI(this.apiKey);
   }
