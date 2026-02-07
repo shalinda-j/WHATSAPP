@@ -1,4 +1,4 @@
-import { useState, ChangeEvent } from 'react';
+import { useState, type ChangeEvent } from 'react';
 import { Upload, Send, Trash2, FileText, CheckCircle, AlertCircle, Info, Loader } from 'lucide-react';
 import axios from 'axios';
 

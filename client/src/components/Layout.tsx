@@ -33,7 +33,7 @@ export default function Layout() {
             {/* Mobile Header */}
             <div className="md:hidden fixed top-0 w-full bg-gray-800 text-white z-50 px-4 h-16 flex items-center justify-between shadow-md">
                 <div className="flex items-center font-bold text-xl">
-                    <MessageSquare className="mr-2" /> Jayalath Bot
+                    <MessageSquare className="mr-2" /> Work 360
                 </div>
                 <button onClick={toggleSidebar} className="p-2 rounded hover:bg-gray-700">
                     {isSidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -46,7 +46,7 @@ export default function Layout() {
                 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
             `}>
                 <div className="hidden md:flex h-16 items-center justify-center font-bold text-xl border-b border-gray-700">
-                    <MessageSquare className="mr-2" /> Jayalath Bot
+                    <MessageSquare className="mr-2" /> Work 360
                 </div>
 
                 {/* Space for mobile header */}
@@ -65,10 +65,14 @@ export default function Layout() {
                         <NavLink to="/config" icon={Settings}>Configuration</NavLink>
                     </nav>
                 </div>
-                <div className="p-4 border-t border-gray-700">
-                    <button onClick={handleLogout} className="flex items-center text-gray-400 hover:text-white transition-colors w-full">
+                <div className="p-4 border-t border-gray-700 bg-gray-900">
+                    <button onClick={handleLogout} className="flex items-center text-gray-400 hover:text-white transition-colors w-full mb-4">
                         <LogOut className="mr-3 h-5 w-5" /> Logout
                     </button>
+                    <div className="text-xs text-gray-500 text-center">
+                        <p>&copy; {new Date().getFullYear()} Work 360</p>
+                        <p>v0.8.0</p>
+                    </div>
                 </div>
             </div>
 

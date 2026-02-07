@@ -3,7 +3,8 @@
   "main": "src/index.ts",
   "description": "WhatsApp Bot",
   "version": "0.8.0",
-  "license": "MIT",
+  "license": "UNLICENSED",
+  "private": true,
   "engines": {
     "node": "20.x"
   },
@@ -29,9 +30,9 @@
     "url": "https://github.com/caioagiani"
   },
   "author": {
-    "name": "Caio Agiani",
-    "email": "caio.agiani14@gmail.com",
-    "url": "https://www.linkedin.com/in/caioagiani"
+    "name": "Work 360",
+    "email": "support@work360.com",
+    "url": "https://work360.com"
   },
   "scripts": {
     "lint": "eslint . --fix --ext .js,.ts",
