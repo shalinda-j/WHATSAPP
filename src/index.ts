@@ -35,10 +35,15 @@ let server: any;
 async function startServer() {
   // 1. Connect to Database
   if (process.env.MONGODB_URI) {
-    await connectToMongoDB(process.env.MONGODB_URI);
-    // Seed AI providers from .env into the Config collection
-    await seedAIProviders();
-    await seedDatasets();
+    try {
+      await connectToMongoDB(process.env.MONGODB_URI);
+      // Seed AI providers from .env into the Config collection
+      await seedAIProviders();
+      await seedDatasets();
+    } catch (dbErr) {
+      console.error('❌ MongoDB Connection Failed. Server starting in LIMITED MODE.');
+      console.error(dbErr);
+    }
   } else {
     console.warn(
       '⚠️ No MONGODB_URI found. Some features (Admin Panel) may not work.',

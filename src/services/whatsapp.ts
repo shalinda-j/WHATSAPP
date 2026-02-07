@@ -300,6 +300,39 @@ export async function sendVoiceMessage(
   return true;
 }
 
+export async function sendMediaMessage(
+  jid: string,
+  mediaBuffer: Buffer,
+  type: 'image' | 'video' | 'audio' | 'document',
+  options: { caption?: string; mimetype?: string; fileName?: string } = {},
+  sessionId = 'default'
+): Promise<boolean> {
+  const sock = manager.getSocket(sessionId);
+  if (!sock) return false;
+
+  const messagePayload: any = {};
+
+  if (type === 'image') {
+    messagePayload.image = mediaBuffer;
+    messagePayload.caption = options.caption;
+  } else if (type === 'video') {
+    messagePayload.video = mediaBuffer;
+    messagePayload.caption = options.caption;
+  } else if (type === 'audio') {
+    messagePayload.audio = mediaBuffer;
+    messagePayload.mimetype = options.mimetype || 'audio/mp4';
+    messagePayload.ptt = false; // Send as audio file, not voice note
+  } else if (type === 'document') {
+    messagePayload.document = mediaBuffer;
+    messagePayload.mimetype = options.mimetype || 'application/pdf';
+    messagePayload.fileName = options.fileName || 'file.pdf';
+    messagePayload.caption = options.caption;
+  }
+
+  await sock.sendMessage(jid, messagePayload);
+  return true;
+}
+
 export function getSocket(sessionId = 'default'): WASocket | undefined {
   return manager.getSocket(sessionId);
 }

@@ -9,8 +9,13 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_key_change_in_prod';
 
 // First time setup - Check if any admin exists
 router.get('/setup-check', async (req, res) => {
-  const adminCount = await Admin.countDocuments();
-  res.json({ needsSetup: adminCount === 0 });
+  try {
+    const adminCount = await Admin.countDocuments();
+    res.json({ needsSetup: adminCount === 0 });
+  } catch (err: any) {
+    console.error('Error in /setup-check:', err);
+    res.status(500).json({ error: 'Failed to check setup status', details: err.message });
+  }
 });
 
 // Setup first admin

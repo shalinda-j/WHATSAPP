@@ -11,11 +11,25 @@ import voiceConfigRouter from './routes/voice-config';
 import webhookRouter from './routes/webhooks';
 import whatsappRouter from './routes/whatsapp';
 import systemRouter from './routes/system';
+import bulkRouter from './routes/bulk';
+
+import mongoose from 'mongoose';
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// Middleware: Check DB Connection
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api') && mongoose.connection.readyState !== 1) {
+    return res.status(503).json({
+      error: 'Service Unavailable',
+      message: 'Database not connected. Please check server logs for connection errors (e.g., IP Whitelist).'
+    });
+  }
+  next();
+});
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -26,6 +40,15 @@ app.use('/api/voice-config', voiceConfigRouter);
 app.use('/api/webhooks', webhookRouter);
 app.use('/api/whatsapp', whatsappRouter);
 app.use('/api/system', systemRouter);
+app.use('/api/bulk', bulkRouter);
+
+// Global Error Handler
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('🔥 Global API Error:', err);
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Internal Server Error', message: err.message });
+  }
+});
 
 // Health check
 app.get('/health', (req, res) => {

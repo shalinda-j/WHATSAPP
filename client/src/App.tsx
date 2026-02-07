@@ -9,6 +9,7 @@ import Webhooks from './pages/Webhooks';
 import Config from './pages/Config';
 import VoiceConfig from './pages/VoiceConfig';
 import SystemMaintenance from './pages/SystemMaintenance';
+import BulkSender from './pages/BulkSender';
 
 import Sessions from './pages/Sessions';
 import Layout from './components/Layout';
@@ -33,6 +34,7 @@ function AppRoutes() {
         <Route path="config" element={<Config />} />
         <Route path="config" element={<Config />} />
         <Route path="voice-config" element={<VoiceConfig />} />
+        <Route path="bulk-message" element={<BulkSender />} />
         <Route path="system" element={<SystemMaintenance />} />
 
         <Route path="sessions" element={<Sessions />} />
