@@ -40,6 +40,9 @@ export default function Login() {
     return (
         <div className="flex items-center justify-center min-h-screen bg-gray-100 px-4">
             <div className="px-8 py-6 mt-4 text-left bg-white shadow-lg rounded-xl w-full max-w-md">
+                <div className="flex justify-center mb-6">
+                    <img src="/360ai-b.png" alt="Work 360" className="h-20" />
+                </div>
                 <h3 className="text-2xl font-bold text-center text-gray-700">
                     {needsSetup ? 'Admin Setup' : 'Admin Login'}
                 </h3>

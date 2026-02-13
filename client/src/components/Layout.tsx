@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, Database, Settings, LogOut, MessageSquare, Smartphone, Menu, X, Globe, AudioLines, Megaphone } from 'lucide-react';
+import { LayoutDashboard, Database, Settings, LogOut, Smartphone, Menu, X, Globe, AudioLines, Megaphone } from 'lucide-react';
 
 export default function Layout() {
     const { logout } = useAuth();
@@ -33,7 +33,7 @@ export default function Layout() {
             {/* Mobile Header */}
             <div className="md:hidden fixed top-0 w-full bg-gray-800 text-white z-50 px-4 h-16 flex items-center justify-between shadow-md">
                 <div className="flex items-center font-bold text-xl">
-                    <MessageSquare className="mr-2" /> Work 360
+                    <img src="/360ai.png" alt="Work 360" className="h-10 mr-2" />
                 </div>
                 <button onClick={toggleSidebar} className="p-2 rounded hover:bg-gray-700">
                     {isSidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -45,8 +45,8 @@ export default function Layout() {
                 fixed md:static inset-y-0 left-0 z-40 w-64 bg-gray-800 text-gray-100 flex flex-col transition-transform duration-300 ease-in-out
                 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
             `}>
-                <div className="hidden md:flex h-16 items-center justify-center font-bold text-xl border-b border-gray-700">
-                    <MessageSquare className="mr-2" /> Work 360
+                <div className="hidden md:flex h-20 items-center justify-center font-bold text-xl border-b border-gray-700">
+                    <img src="/360ai.png" alt="Work 360" className="h-14 mr-2" />
                 </div>
 
                 {/* Space for mobile header */}
