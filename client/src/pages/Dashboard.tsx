@@ -30,11 +30,11 @@ export default function Dashboard() {
 
     const fetchSessions = async () => {
         try {
-            const res = await api.get('/sessions');
+            const res = await api.get('/api/sessions');
             setSessions(res.data.sessions || []);
             // Auto add default if none exist (legacy support)
             if (res.data.total === 0) {
-                await api.post('/sessions', { sessionId: 'default', sessionName: 'Primary Device' });
+                await api.post('/api/sessions', { sessionId: 'default', sessionName: 'Primary Device' });
                 fetchSessions();
             }
         } catch (err) {
@@ -46,7 +46,7 @@ export default function Dashboard() {
 
     const fetchAIProviders = async () => {
         try {
-            const res = await api.get('/config');
+            const res = await api.get('/api/config');
             if (Array.isArray(res.data)) {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const providers = res.data.filter((config: any) => config.isProvider === true);
@@ -73,7 +73,7 @@ export default function Dashboard() {
         const name = prompt('Enter a name for this device (e.g. Support Phone):');
         if (!name) return;
         try {
-            await api.post('/sessions', { sessionName: name });
+            await api.post('/api/sessions', { sessionName: name });
             fetchSessions();
         } catch (err) {
             alert('Failed to create session');
@@ -83,7 +83,7 @@ export default function Dashboard() {
     const handleDeleteSession = async (id: string) => {
         if (!confirm('Are you sure you want to remove this device?')) return;
         try {
-            await api.delete(`/sessions/${id}`);
+            await api.delete(`/api/sessions/${id}`);
             fetchSessions();
         } catch (err) {
             alert('Failed to delete session');
