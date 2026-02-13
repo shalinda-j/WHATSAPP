@@ -25,13 +25,13 @@ export default function Datasets() {
     const [newCompanyName, setNewCompanyName] = useState('');
 
     const fetchDatasets = async () => {
-        const res = await api.get('/datasets');
+        const res = await api.get('/api/datasets');
         setDatasets(res.data);
     };
 
     const fetchCompanies = async () => {
         try {
-            const res = await api.get('/companies');
+            const res = await api.get('/api/companies');
             // Assuming res.data is [{ id: '...', name: '...' }]
             // We want to map this to scope names (UPPERCASE usually)
             // But config uses names like TechCorp. 
@@ -63,7 +63,7 @@ export default function Datasets() {
 
     const handleDelete = async (id: string) => {
         if (window.confirm('Are you sure?')) {
-            await api.delete(`/datasets/${id}`);
+            await api.delete(`/api/datasets/${id}`);
             fetchDatasets();
         }
     };
@@ -83,7 +83,7 @@ export default function Datasets() {
     const handleCreateCompany = async () => {
         if (!newCompanyName) return;
         try {
-            const res = await api.post('/companies', { name: newCompanyName });
+            const res = await api.post('/api/companies', { name: newCompanyName });
             await fetchCompanies();
             setFormData({ ...formData, scope: res.data.name }); // Auto-select new company
             setIsCreatingCompany(false);
@@ -101,9 +101,9 @@ export default function Datasets() {
                 ...formData
             };
             if (editingId) {
-                await api.put(`/datasets/${editingId}`, dataToSave);
+                await api.put(`/api/datasets/${editingId}`, dataToSave);
             } else {
-                await api.post('/datasets', dataToSave);
+                await api.post('/api/datasets', dataToSave);
             }
             setIsEditing(false);
             fetchDatasets();
@@ -218,7 +218,7 @@ export default function Datasets() {
                                             if (e.target.parentElement) e.target.parentElement.innerText = "Extracting...";
 
                                             // Using the api utility which handles baseURL and Authorization automatically
-                                            const res = await api.post('/datasets/extract', formData, {
+                                            const res = await api.post('/api/datasets/extract', formData, {
                                                 headers: {
                                                     'Content-Type': 'multipart/form-data',
                                                 },
