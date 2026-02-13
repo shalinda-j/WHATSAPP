@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '../utils/api';
+import { api } from '../config';
 import { Plus, Trash, Edit, Save, X } from 'lucide-react';
 
 // Common preset scopes

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '../utils/api';
+import { api } from '../config';
 import { RefreshCw, CheckCircle, XCircle, AlertTriangle, Bot, Cpu, TrendingUp, Settings } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 
