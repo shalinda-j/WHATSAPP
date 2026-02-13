@@ -40,8 +40,14 @@ export default function Datasets() {
             // Let's use IDs as the scope value for consistency if possible, 
             // but the current system seems to use specific string keys.
             // Let's use the ID/Name from the API.
-            const companies = res.data.map((c: any) => c.name); // Using Name as scope for now to match UI
-            setAvailableScopes(companies);
+            if (Array.isArray(res.data)) {
+                const companies = res.data.map((c: any) => c.name); // Using Name as scope for now to match UI
+                setAvailableScopes(companies);
+            } else {
+                console.error('Unexpected companies response:', res.data);
+                // Fallback to presets if response is invalid
+                setAvailableScopes(['JCETI', 'GLOBAL', 'SG', 'ISRAEL', 'JAPAN']);
+            }
         } catch (e) {
             console.error('Failed to fetch companies', e);
             // Fallback
