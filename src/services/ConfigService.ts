@@ -1,11 +1,13 @@
 import Dataset from '../models/Dataset';
 import {
-    REGISTRATION_CONFIG,
-    PAYMENT_CONFIG,
-    CV_CONFIG,
-    BANK_ACCOUNTS,
+    getRegistrationMessage,
+    getPaymentMessage,
+    getCVMessage,
 } from '../config/links-config';
 import { AI_PERSONALITY, JOB_KNOWLEDGE_BASE } from '../config/ai-personality';
+import { createCompanyConfig } from '../config/companies';
+
+const defaultConfig = createCompanyConfig('default');
 
 export class ConfigService {
     private static instance: ConfigService;
@@ -21,6 +23,10 @@ export class ConfigService {
             this.instance = new ConfigService();
         }
         return this.instance;
+    }
+
+    public getCompanyConfig(companyId: string) {
+        return createCompanyConfig(companyId);
     }
 
     /**
@@ -50,23 +56,26 @@ export class ConfigService {
     }
 
     public async getRegistrationConfig() {
-        return this.get('REGISTRATION_CONFIG', REGISTRATION_CONFIG);
+        return this.get('REGISTRATION_CONFIG', defaultConfig.links.registration);
     }
 
     public async getPaymentConfig() {
-        return this.get('PAYMENT_CONFIG', PAYMENT_CONFIG);
+        return this.get('PAYMENT_CONFIG', defaultConfig.links.payment);
     }
 
     public async getCVConfig() {
-        return this.get('CV_CONFIG', CV_CONFIG);
+        return this.get('CV_CONFIG', defaultConfig.links.cv);
     }
 
     public async getBankAccounts() {
-        return this.get('BANK_ACCOUNTS', BANK_ACCOUNTS);
+        return this.get(
+            'BANK_ACCOUNTS',
+            defaultConfig.links.payment.categories || {},
+        );
     }
 
     public async getAIPersonality() {
-        return this.get('AI_PERSONALITY', AI_PERSONALITY);
+        return this.get('AI_PERSONALITY', AI_PERSONALITY(defaultConfig));
     }
 
     /**
@@ -77,11 +86,13 @@ export class ConfigService {
             // Avoid circular dependency if Config is imported? No, ConfigService imports Dataset.
             // We need to import Config model. But ConfigService.ts imports Dataset.
             // Let's import Config at top of file.
-            const config = await import('../models/Config').then(m => m.default.findOne({
-                isProvider: true,
-                providerType: 'google',
-                isActive: true
-            }));
+            const config = await import('../models/Config').then((m) =>
+                m.default.findOne({
+                    isProvider: true,
+                    providerType: 'google',
+                    isActive: true,
+                }),
+            );
             return config?.apiKey;
         } catch (error) {
             console.error('Error fetching Google Provider Key:', error);
@@ -90,85 +101,23 @@ export class ConfigService {
     }
 
     public async getRegistrationMessage(): Promise<string> {
-        const config = await this.get('REGISTRATION_CONFIG', REGISTRATION_CONFIG);
-        return config.message;
+        const config = await this.getRegistrationConfig();
+        return config.message || getRegistrationMessage(defaultConfig);
     }
 
     public async getCVMessage(): Promise<string> {
-        const config = await this.get('CV_CONFIG', CV_CONFIG);
-        return config.message.replace('{{FORM_URL}}', config.formUrl);
+        const config = await this.getCVConfig();
+        return (
+            config.message?.replace('{{FORM_URL}}', config.formUrl) ||
+            getCVMessage(defaultConfig)
+        );
     }
 
     public async getPaymentMessage(query?: string): Promise<string> {
-        const paymentConfig = await this.get('PAYMENT_CONFIG', PAYMENT_CONFIG);
-        const bankAccounts = await this.get('BANK_ACCOUNTS', BANK_ACCOUNTS);
-
-        if (!query) {
-            return paymentConfig.defaultMessage;
-        }
-
-        const normalizedQuery = query.toLowerCase().trim();
-        let selectedKey: string | undefined;
-
-        // Simple keyword matching
-        if (
-            normalizedQuery.includes('weld') ||
-            normalizedQuery.includes('auto') ||
-            normalizedQuery.includes('israel train')
-        )
-            selectedKey = 'welding';
-        else if (
-            normalizedQuery.includes('heavy') ||
-            normalizedQuery.includes('machine') ||
-            normalizedQuery.includes('construc')
-        )
-            selectedKey = 'heavy';
-        else if (
-            normalizedQuery.includes('lang') ||
-            normalizedQuery.includes('japan') ||
-            normalizedQuery.includes('kore')
-        )
-            selectedKey = 'language';
-        else if (normalizedQuery.includes('singapore')) selectedKey = 'singapore';
-        else if (
-            normalizedQuery.includes('israel job') ||
-            normalizedQuery.includes('placement')
-        )
-            selectedKey = 'israel_job';
-        else if (
-            normalizedQuery.includes('israel test') ||
-            normalizedQuery.includes('trade test')
-        )
-            selectedKey = 'israel_test';
-        // Direct key match
-        else if (bankAccounts[normalizedQuery]) selectedKey = normalizedQuery;
-
-        if (selectedKey && bankAccounts[selectedKey]) {
-            const data = bankAccounts[selectedKey];
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const accountsText = data.accounts
-                .map(
-                    (acc: any) =>
-                        `🏦 *${acc.bankName}* (${acc.branch})\n` +
-                        `• ගිණුම: *${acc.accountNumber}*\n` +
-                        `• නම: ${acc.accountName}` +
-                        (acc.accountType ? `\n• වර්ගය: ${acc.accountType}` : ''),
-                )
-                .join('\n\n');
-
-            return `💳 *ගෙවීම් විස්තර - ${data.title}*
-
-🏢 *ආයතනය:* ${data.companyName}
-ℹ️ *අරමුණ:* ${data.description}
-
-${accountsText}
-
-*වැදගත්:*
-• ගෙවීම් කළ පසු slip එක WhatsApp කරන්න.
-• Slip එකේ ඔබේ නම සහ දුරකථන අංකය ලියන්න.`;
-        }
-
-        return paymentConfig.defaultMessage;
+        // For now, we utilize the default logic for message generation since
+        // completely dynamic logic is complex to port into this service directly
+        // without refactoring everything to use CompanyConfig.
+        return getPaymentMessage(defaultConfig, query);
     }
 
     public async getDynamicKnowledgeBase(): Promise<string> {
@@ -176,7 +125,10 @@ ${accountsText}
         const now = Date.now();
 
         // Check cache
-        if (this.cache[cacheKey] && now - (this.lastFetch[cacheKey] || 0) < this.cacheTTL) {
+        if (
+            this.cache[cacheKey] &&
+            now - (this.lastFetch[cacheKey] || 0) < this.cacheTTL
+        ) {
             return this.cache[cacheKey];
         }
 
@@ -189,15 +141,17 @@ ${accountsText}
                 dynamicContent = '\n\n# 📂 Dynamic Datasets (From Admin Panel)\n';
                 datasets.forEach((ds: any) => {
                     // Handle both string and object content
-                    const content = typeof ds.content === 'string'
-                        ? ds.content
-                        : JSON.stringify(ds.content, null, 2);
-                    dynamicContent += `\n## ${ds.name} (${ds.scope || ds.category})\n${content}\n---\n`;
+                    const content =
+                        typeof ds.content === 'string'
+                            ? ds.content
+                            : JSON.stringify(ds.content, null, 2);
+                    dynamicContent += `\n## ${ds.name} (${ds.scope || ds.category
+                        })\n${content}\n---\n`;
                 });
             }
 
             // Combine with static defaults
-            const result = `${JOB_KNOWLEDGE_BASE}${dynamicContent}`;
+            const result = `${JOB_KNOWLEDGE_BASE(defaultConfig)}${dynamicContent}`;
 
             // Cache the result
             this.cache[cacheKey] = result;
@@ -206,7 +160,7 @@ ${accountsText}
             return result;
         } catch (error) {
             console.error('Error fetching dynamic knowledge base:', error);
-            return JOB_KNOWLEDGE_BASE; // Fallback to static
+            return JOB_KNOWLEDGE_BASE(defaultConfig); // Fallback to static
         }
     }
 

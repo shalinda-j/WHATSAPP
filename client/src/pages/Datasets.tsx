@@ -3,7 +3,7 @@ import api from '../utils/api';
 import { Plus, Trash, Edit, Save, X } from 'lucide-react';
 
 // Common preset scopes
-const PRESET_SCOPES = ['ALL', 'JCETI', 'GLOBAL', 'SG', 'ISRAEL', 'JAPAN'];
+// const PRESET_SCOPES = ['ALL', 'JCETI', 'GLOBAL', 'SG', 'ISRAEL', 'JAPAN'];
 
 interface Dataset {
     _id: string;
@@ -19,17 +19,40 @@ export default function Datasets() {
     const [isEditing, setIsEditing] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [formData, setFormData] = useState<Partial<Dataset>>({ name: '', content: '', scope: 'ALL', category: 'company', isActive: true });
-    const [useCustomScope, setUseCustomScope] = useState(false);
-    const [customScope, setCustomScope] = useState('');
+
+    const [availableScopes, setAvailableScopes] = useState<string[]>([]);
+    const [isCreatingCompany, setIsCreatingCompany] = useState(false);
+    const [newCompanyName, setNewCompanyName] = useState('');
 
     const fetchDatasets = async () => {
         const res = await api.get('/datasets');
         setDatasets(res.data);
     };
 
+    const fetchCompanies = async () => {
+        try {
+            const res = await api.get('/companies');
+            // Assuming res.data is [{ id: '...', name: '...' }]
+            // We want to map this to scope names (UPPERCASE usually)
+            // But config uses names like TechCorp. 
+            // The existing preset scopes are UPPERCASE: 'JCETI', 'GLOBAL'.
+            // The dynamic ones might be mixed case. Let's keep them as IDs or Names.
+            // Let's use IDs as the scope value for consistency if possible, 
+            // but the current system seems to use specific string keys.
+            // Let's use the ID/Name from the API.
+            const companies = res.data.map((c: any) => c.name); // Using Name as scope for now to match UI
+            setAvailableScopes(companies);
+        } catch (e) {
+            console.error('Failed to fetch companies', e);
+            // Fallback
+            setAvailableScopes(['JCETI', 'GLOBAL', 'SG', 'ISRAEL', 'JAPAN']);
+        }
+    };
+
     useEffect(() => {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchDatasets();
+        fetchCompanies();
     }, []);
 
     const handleDelete = async (id: string) => {
@@ -42,26 +65,34 @@ export default function Datasets() {
     const handleEdit = (ds: Dataset) => {
         setFormData(ds);
         setEditingId(ds._id);
-        // Check if scope is a custom one
-        const isCustom = !PRESET_SCOPES.includes(ds.scope);
-        setUseCustomScope(isCustom);
-        setCustomScope(isCustom ? ds.scope : '');
         setIsEditing(true);
     };
 
     const handleCreate = () => {
-        setFormData({ name: '', content: '', scope: 'ALL', category: 'company', isActive: true });
+        setFormData({ name: '', content: '', scope: availableScopes[0] || 'ALL', category: 'company', isActive: true });
         setEditingId(null);
-        setUseCustomScope(false);
-        setCustomScope('');
         setIsEditing(true);
+    };
+
+    const handleCreateCompany = async () => {
+        if (!newCompanyName) return;
+        try {
+            const res = await api.post('/companies', { name: newCompanyName });
+            await fetchCompanies();
+            setFormData({ ...formData, scope: res.data.name }); // Auto-select new company
+            setIsCreatingCompany(false);
+            setNewCompanyName('');
+            alert('Company created successfully!');
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            alert('Error creating company: ' + message);
+        }
     };
 
     const handleSave = async () => {
         try {
             const dataToSave = {
-                ...formData,
-                scope: useCustomScope ? customScope.toUpperCase() : formData.scope
+                ...formData
             };
             if (editingId) {
                 await api.put(`/datasets/${editingId}`, dataToSave);
@@ -97,46 +128,49 @@ export default function Datasets() {
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Scope (Company/Region)</label>
-                        <div className="flex items-center gap-4 mt-1">
-                            <label className="inline-flex items-center">
-                                <input
-                                    type="radio"
-                                    checked={!useCustomScope}
-                                    onChange={() => setUseCustomScope(false)}
-                                    className="form-radio"
-                                />
-                                <span className="ml-2 text-sm">Preset</span>
-                            </label>
-                            <label className="inline-flex items-center">
-                                <input
-                                    type="radio"
-                                    checked={useCustomScope}
-                                    onChange={() => setUseCustomScope(true)}
-                                    className="form-radio"
-                                />
-                                <span className="ml-2 text-sm">New Company</span>
-                            </label>
-                        </div>
-                        {!useCustomScope ? (
+                        <div className="flex gap-2">
                             <select
-                                className="mt-2 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                                 value={formData.scope}
                                 onChange={e => setFormData({ ...formData, scope: e.target.value })}
                             >
                                 <option value="ALL">ALL (Global Knowledge)</option>
-                                <option value="JCETI">JCETI (Training Institute)</option>
-                                <option value="GLOBAL">GLOBAL (Workforce Recruitment)</option>
-                                <option value="SG">SG (Singapore)</option>
-                                <option value="ISRAEL">ISRAEL</option>
-                                <option value="JAPAN">JAPAN</option>
+                                {availableScopes.map(scope => (
+                                    <option key={scope} value={scope}>{scope}</option>
+                                ))}
                             </select>
-                        ) : (
-                            <input
-                                className="mt-2 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                                placeholder="Enter new company name (e.g., KOREA, UAE, QATAR)"
-                                value={customScope}
-                                onChange={e => setCustomScope(e.target.value)}
-                            />
+                            <button
+                                onClick={() => setIsCreatingCompany(true)}
+                                className="mt-1 px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 whitespace-nowrap"
+                            >
+                                + New Company
+                            </button>
+                        </div>
+
+                        {isCreatingCompany && (
+                            <div className="mt-2 p-3 bg-gray-50 border rounded-md">
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">New Company Name</label>
+                                <div className="flex gap-2">
+                                    <input
+                                        className="flex-1 px-3 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        placeholder="e.g. Korea"
+                                        value={newCompanyName}
+                                        onChange={e => setNewCompanyName(e.target.value)}
+                                    />
+                                    <button
+                                        onClick={handleCreateCompany}
+                                        className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                                    >
+                                        Create
+                                    </button>
+                                    <button
+                                        onClick={() => setIsCreatingCompany(false)}
+                                        className="px-3 py-1 text-gray-500 hover:bg-gray-200 rounded"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
                         )}
                     </div>
                     <div>
@@ -177,29 +211,27 @@ export default function Datasets() {
                                             // const originalText = e.target.parentElement?.innerText;
                                             if (e.target.parentElement) e.target.parentElement.innerText = "Extracting...";
 
-                                            const token = localStorage.getItem('token');
-                                            const res = await fetch('http://localhost:3000/api/datasets/extract', {
-                                                method: 'POST',
+                                            // Using the api utility which handles baseURL and Authorization automatically
+                                            const res = await api.post('/datasets/extract', formData, {
                                                 headers: {
-                                                    'Authorization': `Bearer ${token}`
+                                                    'Content-Type': 'multipart/form-data',
                                                 },
-                                                body: formData
                                             });
 
-                                            const data = await res.json();
+                                            const data = res.data;
 
-                                            if (!res.ok) throw new Error(data.message || 'Extraction failed');
+                                            // Axios throws on non-2xx status, so we don't need manual check
+                                            // if (!res.ok) throw new Error(data.message || 'Extraction failed');
 
                                             // Append extracted text
                                             setFormData(prev => ({
                                                 ...prev,
                                                 content: (prev.content ? prev.content + '\n\n' : '') + `[Extracted from ${file.name}]:\n${data.text}`
                                             }));
-                                        } catch (err: unknown) { // Explicitly typed as unknown
+                                        } catch (err: any) {
                                             console.error(err);
-                                            // Safely access error message
-                                            const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-                                            alert('Failed to extract text: ' + errorMessage);
+                                            const backendError = err.response?.data?.error || err.message;
+                                            alert('Failed to extract text: ' + backendError);
                                         } finally {
                                             // Reset UI (Basic implementation, improved state handling recommended)
                                             // Ideally we would use a state variable like isExtracting

@@ -7,10 +7,18 @@ import {
 } from '@whiskeysockets/baileys';
 
 // Use require to bypass top-level type inference issues with Mongoose
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 // --- Mongoose Schema ---
-const AuthSchema = new mongoose.Schema({
+// --- Interface for strict typing ---
+interface IAuthCredentials {
+  sessionId: string;
+  key: string;
+  value: any;
+}
+
+// --- Mongoose Schema ---
+const AuthSchema = new mongoose.Schema<IAuthCredentials>({
   sessionId: { type: String, required: true, default: 'default' }, // Added to partition sessions
   key: { type: String, required: true },
   value: { type: mongoose.Schema.Types.Mixed, required: true },
@@ -21,8 +29,8 @@ AuthSchema.index({ sessionId: 1, key: 1 }, { unique: true });
 
 // Safer model initialization: Check mongoose.models first to prevent OverwriteModelError
 const AuthModel =
-  mongoose.models.AuthCredentials ||
-  mongoose.model('AuthCredentials', AuthSchema);
+  (mongoose.models.AuthCredentials as any) ||
+  ((mongoose as any).model('AuthCredentials', AuthSchema));
 
 // --- MongoDB Connection Helper ---
 export const connectToMongoDB = async (uri: string): Promise<void> => {

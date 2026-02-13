@@ -11,14 +11,17 @@ import voiceConfigRouter from './routes/voice-config';
 import webhookRouter from './routes/webhooks';
 import whatsappRouter from './routes/whatsapp';
 import systemRouter from './routes/system';
+import companiesRouter from './routes/companies';
 import bulkRouter from './routes/bulk';
+import marketingRouter from './routes/marketing';
 
 import mongoose from 'mongoose';
 
 const app = express();
 
+// Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 // Middleware: Check DB Connection
 app.use((req, res, next) => {
@@ -41,6 +44,8 @@ app.use('/api/webhooks', webhookRouter);
 app.use('/api/whatsapp', whatsappRouter);
 app.use('/api/system', systemRouter);
 app.use('/api/bulk', bulkRouter);
+app.use('/api/companies', companiesRouter);
+app.use('/api/marketing', marketingRouter);
 
 // Global Error Handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

@@ -12,6 +12,10 @@ import { GroqService } from './groq';
 import { OpenRouterService } from './openrouter';
 
 import Config from '../models/Config';
+import { createCompanyConfig } from '../config/companies';
+
+// Default company for load balancer if not specified (legacy support)
+const defaultConfig = createCompanyConfig('default');
 
 export class AILoadBalancer {
   private services: AIService[] = [];
@@ -96,10 +100,6 @@ export class AILoadBalancer {
       // Better: LoadBalancer should know the Config ID.
       // For now, let's find the config that corresponds to the service.
       // This is imperfect if multiple configs use same model/key, but good enough.
-
-      // Re-fetch configs to find the matching one
-      // Ideally, Service interface should have an ID.
-      // Because we don't have ID in Service interface yet, we'll do a loose match or fetch all.
       // Optimization: Update based on provider/model.
 
       // Heuristic for token matching
@@ -132,7 +132,7 @@ export class AILoadBalancer {
   }
 
   private async getInitialHistory(): Promise<AIChatMessage[]> {
-    let knowledgeBase = JOB_KNOWLEDGE_BASE;
+    let knowledgeBase = JOB_KNOWLEDGE_BASE(defaultConfig);
     try {
       const datasets = await Dataset.find({ isActive: true });
       if (datasets.length > 0) {
@@ -146,7 +146,10 @@ export class AILoadBalancer {
     }
 
     const history: AIChatMessage[] = [
-      { role: 'system', content: `${AI_PERSONALITY}\n\n${knowledgeBase}` },
+      {
+        role: 'system',
+        content: `${AI_PERSONALITY(defaultConfig)}\n\n${knowledgeBase}`,
+      },
     ];
 
     for (const ex of CONVERSATION_EXAMPLES) {
