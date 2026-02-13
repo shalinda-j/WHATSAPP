@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../config';
-import { RefreshCw, CheckCircle, XCircle, AlertTriangle, Bot, Cpu, TrendingUp, Settings } from 'lucide-react';
+import { RefreshCw, CheckCircle, XCircle, AlertTriangle, Bot, Cpu, TrendingUp, Settings, Plus, Smartphone, Trash2 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 
 interface AIProvider {
@@ -14,22 +14,29 @@ interface AIProvider {
     isActive?: boolean;
 }
 
-interface ConnectionStatus {
+interface Session {
+    sessionId: string;
+    sessionName: string;
     status: 'connected' | 'disconnected' | 'scan_qr' | 'connecting' | 'reconnecting';
     qr?: string | null;
-    activeSessions?: number;
+    phoneNumber?: string;
 }
 
 export default function Dashboard() {
-    const [status, setStatus] = useState<ConnectionStatus>({ status: 'disconnected', qr: null });
+    const [sessions, setSessions] = useState<Session[]>([]);
     const [loading, setLoading] = useState(true);
     const [aiProviders, setAiProviders] = useState<AIProvider[]>([]);
     const [aiLoading, setAiLoading] = useState(true);
 
-    const fetchStatus = async () => {
+    const fetchSessions = async () => {
         try {
-            const res = await api.get('/whatsapp/status');
-            setStatus(res.data);
+            const res = await api.get('/sessions');
+            setSessions(res.data.sessions || []);
+            // Auto add default if none exist (legacy support)
+            if (res.data.total === 0) {
+                await api.post('/sessions', { sessionId: 'default', sessionName: 'Primary Device' });
+                fetchSessions();
+            }
         } catch (err) {
             console.error(err);
         } finally {
@@ -53,42 +60,53 @@ export default function Dashboard() {
     };
 
     useEffect(() => {
-        fetchStatus();
+        fetchSessions();
         fetchAIProviders();
         const interval = setInterval(() => {
-            fetchStatus();
+            fetchSessions();
             fetchAIProviders();
         }, 5000); // Poll every 5s
         return () => clearInterval(interval);
     }, []);
 
-    const handleReconnect = async () => {
+    const handleCreateSession = async () => {
+        const name = prompt('Enter a name for this device (e.g. Support Phone):');
+        if (!name) return;
         try {
-            await api.post('/whatsapp/reconnect');
-            alert('Reconnection initiated');
-            fetchStatus();
-        } catch {
-            alert('Error initiating reconnection');
+            await api.post('/sessions', { sessionName: name });
+            fetchSessions();
+        } catch (err) {
+            alert('Failed to create session');
+        }
+    };
+
+    const handleDeleteSession = async (id: string) => {
+        if (!confirm('Are you sure you want to remove this device?')) return;
+        try {
+            await api.delete(`/sessions/${id}`);
+            fetchSessions();
+        } catch (err) {
+            alert('Failed to delete session');
         }
     };
 
     const getStatusColor = (s: string) => {
         switch (s) {
-            case 'connected': return 'text-green-600';
-            case 'connecting': return 'text-blue-600';
-            case 'reconnecting': return 'text-yellow-600';
-            case 'scan_qr': return 'text-orange-600';
-            default: return 'text-red-600';
+            case 'connected': return 'text-green-600 bg-green-50 border-green-200';
+            case 'connecting': return 'text-blue-600 bg-blue-50 border-blue-200';
+            case 'reconnecting': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+            case 'scan_qr': return 'text-orange-600 bg-orange-50 border-orange-200';
+            default: return 'text-red-600 bg-red-50 border-red-200';
         }
     };
 
     const getStatusIcon = (s: string) => {
         switch (s) {
-            case 'connected': return <CheckCircle className="h-6 w-6 mr-2" />;
-            case 'connecting': return <RefreshCw className="h-6 w-6 mr-2 animate-spin" />;
-            case 'reconnecting': return <RefreshCw className="h-6 w-6 mr-2 animate-spin" />;
-            case 'scan_qr': return <AlertTriangle className="h-6 w-6 mr-2" />;
-            default: return <XCircle className="h-6 w-6 mr-2" />;
+            case 'connected': return <CheckCircle className="h-5 w-5 mr-1" />;
+            case 'connecting': return <RefreshCw className="h-5 w-5 mr-1 animate-spin" />;
+            case 'reconnecting': return <RefreshCw className="h-5 w-5 mr-1 animate-spin" />;
+            case 'scan_qr': return <AlertTriangle className="h-5 w-5 mr-1" />;
+            default: return <XCircle className="h-5 w-5 mr-1" />;
         }
     };
 
@@ -130,52 +148,77 @@ export default function Dashboard() {
         <div>
             <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 {/* Connection Status Card */}
                 <div className="bg-white p-6 rounded-xl shadow-md">
-                    <h2 className="text-xl font-semibold mb-4">WhatsApp Connection</h2>
-
-                    <div className={`flex items-center text-lg font-medium mb-4 ${getStatusColor(status?.status || 'disconnected')}`}>
-                        {getStatusIcon(status?.status || 'disconnected')}
-                        <span className="capitalize">{(status?.status || 'disconnected').replace('_', ' ')}</span>
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-xl font-semibold">Connected Devices</h2>
+                        <button
+                            onClick={handleCreateSession}
+                            className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 flex items-center transition"
+                        >
+                            <Plus size={16} className="mr-1" /> Add Device
+                        </button>
                     </div>
 
-                    {status.status === 'scan_qr' && status.qr && (
-                        <div className="flex flex-col items-center justify-center p-4 bg-gray-50 rounded border">
-                            <QRCodeCanvas value={status.qr} size={256} />
-                            <p className="mt-4 text-sm text-gray-500">Scan with WhatsApp</p>
-                        </div>
-                    )}
+                    <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                        {sessions.map((session) => (
+                            <div key={session.sessionId} className="border rounded-lg p-4 transition hover:shadow-md">
+                                <div className="flex justify-between items-start mb-3">
+                                    <div className="flex items-center">
+                                        <div className="bg-green-100 p-2 rounded-full mr-3 text-green-700">
+                                            <Smartphone size={20} />
+                                        </div>
+                                        <div>
+                                            <h3 className="font-semibold text-gray-800">{session.sessionName || session.sessionId}</h3>
+                                            <p className="text-xs text-gray-500 font-mono">{session.sessionId}</p>
+                                        </div>
+                                    </div>
+                                    <div className={`flex items-center text-sm px-2 py-1 rounded-full border ${getStatusColor(session.status)}`}>
+                                        {getStatusIcon(session.status)}
+                                        <span className="capitalize font-medium">{(session.status || 'disconnected').replace('_', ' ')}</span>
+                                    </div>
+                                </div>
 
-                    {status.status === 'disconnected' && (
-                        <button
-                            onClick={handleReconnect}
-                            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-                        >
-                            Connect Now
-                        </button>
-                    )}
+                                {session.status === 'scan_qr' && session.qr && (
+                                    <div className="flex flex-col items-center justify-center p-4 bg-gray-50 rounded border mb-3">
+                                        <QRCodeCanvas value={session.qr} size={150} />
+                                        <p className="mt-2 text-xs text-gray-500">Scan with WhatsApp</p>
+                                    </div>
+                                )}
+
+                                <div className="flex justify-end pt-2 border-t border-gray-100">
+                                    <button
+                                        onClick={() => handleDeleteSession(session.sessionId)}
+                                        className="text-red-500 hover:text-red-700 text-xs flex items-center"
+                                    >
+                                        <Trash2 size={14} className="mr-1" /> Remove
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
                 {/* System Information */}
                 <div className="bg-white p-6 rounded-xl shadow-md">
                     <h2 className="text-xl font-semibold mb-4">System Information</h2>
-                    <div className="space-y-2">
-                        <div className="flex justify-between">
+                    <div className="space-y-4">
+                        <div className="flex justify-between p-3 bg-gray-50 rounded-lg">
                             <span className="text-gray-600">Bot Version</span>
                             <span className="font-medium">0.8.0</span>
                         </div>
-                        <div className="flex justify-between">
+                        <div className="flex justify-between p-3 bg-gray-50 rounded-lg">
                             <span className="text-gray-600">Mode</span>
                             <span className="font-medium bg-green-100 text-green-800 px-2 py-0.5 rounded text-sm">Active</span>
                         </div>
-                        <div className="flex justify-between">
+                        <div className="flex justify-between p-3 bg-gray-50 rounded-lg">
                             <span className="text-gray-600">AI Providers</span>
                             <span className="font-medium">{activeProviders.length} active</span>
                         </div>
-                        <div className="flex justify-between">
+                        <div className="flex justify-between p-3 bg-gray-50 rounded-lg">
                             <span className="text-gray-600">Connected Devices</span>
-                            <span className="font-medium">{status.activeSessions || 0}</span>
+                            <span className="font-medium">{sessions.filter(s => s.status === 'connected').length}</span>
                         </div>
                     </div>
                 </div>
@@ -210,7 +253,7 @@ export default function Dashboard() {
                 ) : (
                     <>
                         {/* Summary Stats */}
-                        <div className="grid grid-cols-3 gap-4 mb-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                             <div className="bg-blue-50 p-4 rounded-lg">
                                 <p className="text-sm text-blue-600 font-medium">Total Providers</p>
                                 <p className="text-2xl font-bold text-blue-900">{aiProviders.length}</p>
@@ -249,11 +292,11 @@ export default function Dashboard() {
                                         </div>
                                     </div>
                                     <div className="flex items-center space-x-4">
-                                        <div className="text-right">
+                                        <div className="hidden sm:block text-right">
                                             <p className="text-sm text-gray-500">Usage</p>
                                             <p className="font-semibold">{(provider.usageUsed || 0).toLocaleString()}</p>
                                         </div>
-                                        <div className="text-right">
+                                        <div className="hidden sm:block text-right">
                                             <p className="text-sm text-gray-500">Cost</p>
                                             <p className="font-semibold">
                                                 ${((provider.usageUsed || 0) * (provider.costPerToken || 0)).toFixed(4)}
