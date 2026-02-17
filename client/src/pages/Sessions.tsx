@@ -146,7 +146,7 @@ export default function Sessions() {
                                 {session.status === 'scan_qr' && session.qr ? (
                                     <div className="flex flex-col items-center animate-in fade-in duration-500">
                                         <div className="bg-white p-2 rounded-lg border shadow-sm">
-                                            <QRCodeSVG value={session.qr} size={180} />
+                                            <QRCodeSVG value={session.qr} size={264} level="M" includeMargin={true} />
                                         </div>
                                         <p className="text-xs text-gray-500 mt-3 text-center">Open WhatsApp → Settings → Linked Devices → Link a Device</p>
                                     </div>
