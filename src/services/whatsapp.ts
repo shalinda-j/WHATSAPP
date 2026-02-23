@@ -99,36 +99,48 @@ export class WhatsAppSessionManager {
 
         if (connection === 'close') {
           const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
-          const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-
-          console.log(`⚠️ Session ${sessionId} Closed: ${statusCode}`);
+          const reason = lastDisconnect?.error as any;
+          
+          // Handle conflict (440) - another device took over
+          const isConflict = statusCode === 440 || reason?.reason === 'conflict';
+          // Handle logged out
+          const isLoggedOut = statusCode === DisconnectReason.loggedOut || reason?.reason === 'logged_out';
+          
+          console.log(`⚠️ Session ${sessionId} Closed: ${statusCode} (conflict: ${isConflict}, loggedOut: ${isLoggedOut})`);
           await this.updateSessionStatus(sessionId, 'disconnected');
 
-          if (shouldReconnect) {
-            const retries = (this.retryCounters.get(sessionId) || 0) + 1;
-            this.retryCounters.set(sessionId, retries);
-
-            if (retries <= WhatsAppSessionManager.MAX_RETRIES) {
-              const delay = Math.min(retries * 2000, 10000);
-              console.log(
-                `   Reconnecting session ${sessionId} in ${delay}ms...`,
-              );
-              setTimeout(() => this.startSession(sessionId), delay);
-            } else {
-              console.error(`❌ Session ${sessionId}: Max retries reached.`);
-            }
-          } else if (statusCode === DisconnectReason.loggedOut) {
+          // For conflict or logged out, clear session and restart with new QR
+          if (isConflict || isLoggedOut) {
             console.log(
-              `❌ Session ${sessionId} Logged Out. Cleaning up and restarting for new QR...`,
+              `❌ Session ${sessionId}: ${isConflict ? 'Conflict - Another device took over' : 'Logged Out'}. Cleaning up and restarting for new QR...`,
             );
 
-            // CRITICAL: Immediate QR Generation Logic
-            await clearState(); // Delete creds from DB
+            // Clear credentials and restart
+            try {
+              await clearState();
+            } catch (e) {
+              console.error('Error clearing state:', e);
+            }
             this.sessions.delete(sessionId);
             this.retryCounters.delete(sessionId);
 
-            // Restart immediately as a fresh session
-            setTimeout(() => this.startSession(sessionId), 1000);
+            // Restart after a short delay
+            setTimeout(() => this.startSession(sessionId), 2000);
+            return;
+          }
+
+          // For other errors, try to reconnect with retry logic
+          const retries = (this.retryCounters.get(sessionId) || 0) + 1;
+          this.retryCounters.set(sessionId, retries);
+
+          if (retries <= WhatsAppSessionManager.MAX_RETRIES) {
+            const delay = Math.min(retries * 2000, 10000);
+            console.log(
+              `   Reconnecting session ${sessionId} in ${delay}ms... (attempt ${retries})`,
+            );
+            setTimeout(() => this.startSession(sessionId), delay);
+          } else {
+            console.error(`❌ Session ${sessionId}: Max retries reached.`);
           }
         } else if (connection === 'open') {
           console.log(`✅ Session ${sessionId} Connected!`);
