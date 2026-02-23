@@ -23,6 +23,11 @@ import {
   startBookingFlow,
   handleSpecificDateRequest,
 } from './services/BookingService';
+import {
+  handleLeadMessage,
+  startLeadRegistration,
+  isUserInLeadFlow,
+} from './services/LeadService';
 import app from './server/app';
 import mongoose from 'mongoose';
 import { commandDispatcher } from './app/utils/CommandDispatcher';
@@ -209,6 +214,13 @@ onMessage(async (message, sock, sessionId) => {
     const handledByBooking = await handleBookingMessage(jid, text, sessionId);
     if (handledByBooking) {
       console.log('   📅 Handled by BookingService');
+      return;
+    }
+
+    // 2. Check if user is in lead registration flow
+    const handledByLead = await handleLeadMessage(jid, text, sessionId);
+    if (handledByLead) {
+      console.log('   📝 Handled by LeadService');
       return;
     }
 
@@ -428,12 +440,8 @@ async function handleCommand(
     case '!register':
     case '!join':
     case '!apply':
-      console.log('   📝 Sending registration form...');
-      await sendMessage(
-        jid,
-        await configService.getRegistrationMessage(),
-        sessionId,
-      );
+      console.log('   📝 Starting lead registration flow...');
+      await startLeadRegistration(jid, sessionId);
       break;
 
     case '!payment':

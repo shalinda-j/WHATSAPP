@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, Database, Settings, LogOut, Smartphone, Menu, X, Globe, AudioLines, Megaphone } from 'lucide-react';
+import { LayoutDashboard, Database, Settings, LogOut, Smartphone, Menu, X, Globe, AudioLines, Megaphone, Users, BarChart3 } from 'lucide-react';
 
 export default function Layout() {
     const { logout } = useAuth();
@@ -55,6 +55,8 @@ export default function Layout() {
                 <div className="flex-1 overflow-y-auto py-4">
                     <nav className="px-2 space-y-2">
                         <NavLink to="/dashboard" icon={LayoutDashboard}>Dashboard</NavLink>
+                        <NavLink to="/analytics" icon={BarChart3}>Analytics</NavLink>
+                        <NavLink to="/leads" icon={Users}>Leads & Registrations</NavLink>
                         <NavLink to="/datasets" icon={Database}>Datasets</NavLink>
                         <NavLink to="/webhooks" icon={Globe}>Webhooks</NavLink>
                         <NavLink to="/sessions" icon={Smartphone}>Linked Devices</NavLink>

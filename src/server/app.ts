@@ -14,6 +14,8 @@ import systemRouter from './routes/system';
 import companiesRouter from './routes/companies';
 import bulkRouter from './routes/bulk';
 import marketingRouter from './routes/marketing';
+import leadsRouter from './routes/leads';
+import analyticsRouter from './routes/analytics';
 
 import mongoose from 'mongoose';
 
@@ -22,6 +24,7 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Middleware: Check DB Connection
 app.use((req, res, next) => {
@@ -46,6 +49,11 @@ app.use('/api/system', systemRouter);
 app.use('/api/bulk', bulkRouter);
 app.use('/api/companies', companiesRouter);
 app.use('/api/marketing', marketingRouter);
+app.use('/api/leads', leadsRouter);
+app.use('/api/analytics', analyticsRouter);
+
+// Serve uploaded files
+app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
 
 // Global Error Handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

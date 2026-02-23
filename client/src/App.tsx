@@ -11,6 +11,8 @@ import VoiceConfig from './pages/VoiceConfig';
 import SystemMaintenance from './pages/SystemMaintenance';
 import BulkSender from './pages/BulkSender';
 import MarketingManager from './pages/MarketingManager';
+import Leads from './pages/Leads';
+import Analytics from './pages/Analytics';
 
 import Sessions from './pages/Sessions';
 import Layout from './components/Layout';
@@ -38,6 +40,8 @@ function AppRoutes() {
         <Route path="bulk-message" element={<BulkSender />} />
         <Route path="system" element={<SystemMaintenance />} />
         <Route path="marketing" element={<MarketingManager />} />
+        <Route path="leads" element={<Leads />} />
+        <Route path="analytics" element={<Analytics />} />
 
         <Route path="sessions" element={<Sessions />} />
       </Route>

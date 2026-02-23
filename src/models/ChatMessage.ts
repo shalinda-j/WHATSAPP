@@ -7,12 +7,16 @@ export interface IChatMessage {
   content: string;
   mediaUrl?: string;
   timestamp: Date;
+  questionCategory?: string;
+  questionKeywords?: string[];
   metadata?: {
     sessionId?: string;
     intent?: string;
     buyingSignal?: 'High' | 'Medium' | 'Low' | 'None';
     isBooking?: boolean;
     audioDuration?: number;
+    isFirstMessage?: boolean;
+    messageCount?: number;
   };
 }
 
@@ -29,6 +33,8 @@ const ChatMessageSchema = new Schema({
   content: { type: String, required: true },
   mediaUrl: { type: String },
   timestamp: { type: Date, default: Date.now, index: true },
+  questionCategory: { type: String, index: true },
+  questionKeywords: [{ type: String }],
   metadata: {
     sessionId: { type: String },
     intent: { type: String },
@@ -39,6 +45,8 @@ const ChatMessageSchema = new Schema({
     },
     isBooking: { type: Boolean, default: false },
     audioDuration: { type: Number },
+    isFirstMessage: { type: Boolean, default: false },
+    messageCount: { type: Number, default: 1 },
   },
 });
 
