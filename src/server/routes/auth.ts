@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
-// import Admin from '../../models/Admin';
+import Admin from '../../models/Admin';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = Router();
@@ -68,7 +68,7 @@ router.post('/setup', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    
+
     if (!isMongoDBAvailable()) {
       // Use test admin when MongoDB is not available
       if (username === TEST_ADMIN.username && password === 'admin123') {
@@ -82,7 +82,7 @@ router.post('/login', async (req, res) => {
         return res.status(400).json({ message: 'Invalid credentials' });
       }
     }
-    
+
     const admin = await Admin.findOne({ username });
 
     if (!admin) {
