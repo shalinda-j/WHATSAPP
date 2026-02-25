@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useMemo, type DragEvent } from 'react';
+import { useCallback, useRef, useState, type DragEvent } from 'react';
 import ReactFlow, {
     ReactFlowProvider,
     addEdge,
@@ -16,10 +16,10 @@ import Sidebar from './Sidebar';
 import IntegrationNode from './CustomNodes/IntegrationNode';
 import SettingsPanel from './SettingsPanel';
 
-// Memoize nodeTypes to prevent recreation on every render
-const nodeTypes = useMemo(() => ({
+// Define nodeTypes outside the component to prevent recreation on every render
+const nodeTypes = {
     integration: IntegrationNode,
-}), []);
+};
 
 const initialNodes: Node[] = [
     {
