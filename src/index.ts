@@ -33,6 +33,7 @@ import mongoose from 'mongoose';
 import { commandDispatcher } from './app/utils/CommandDispatcher';
 import './app/commands';
 import ChatMessage from './models/ChatMessage';
+import VoiceConfig from './models/VoiceConfig';
 
 const PORT = process.env.PORT || 8080;
 let server: any;
@@ -341,14 +342,31 @@ onMessage(async (message, sock, sessionId) => {
       }
 
       if (isVoiceMessage) {
-        try {
-          console.log('   🗣️ Generating voice response...');
-          const audioResponse = await generateSpeech(response);
-          await sendVoiceMessage(jid, audioResponse, sessionId);
-          console.log('   ✅ AI voice response sent');
-        } catch (ttsError) {
-          console.error('   ❌ TTS failed:', ttsError);
-          await sendMessage(jid, `🤖 ${response}`, sessionId);
+        // Fetch Voice Config to respect the response mode
+        const voiceConfig = await VoiceConfig.findOne().sort({ updatedAt: -1 });
+        const responseMode = voiceConfig?.mode || 'voice-and-text';
+        let sentText = false;
+
+        // If mode requires text, send it first
+        if (responseMode === 'text-only' || responseMode === 'voice-and-text') {
+          sentText = await sendMessage(jid, `🤖 ${response}`, sessionId);
+          console.log('   ✅ AI text response sent (based on mode)');
+        }
+
+        // If mode requires voice, generate and send it
+        if (responseMode === 'voice-only' || responseMode === 'voice-and-text') {
+          try {
+            console.log('   🗣️ Generating voice response...');
+            const audioResponse = await generateSpeech(response);
+            await sendVoiceMessage(jid, audioResponse, sessionId);
+            console.log('   ✅ AI voice response sent (based on mode)');
+          } catch (ttsError) {
+            console.error('   ❌ TTS failed:', ttsError);
+            // Fallback if we didn't already send text
+            if (!sentText) {
+              await sendMessage(jid, `🤖 ${response}`, sessionId);
+            }
+          }
         }
       } else {
         const sent = await sendMessage(jid, `🤖 ${response}`, sessionId);
