@@ -13,6 +13,15 @@ import { mkdirSync, existsSync } from 'fs';
 import { connectToMongoDB, useMongoDBAuthState } from './MongoAuthService';
 import Session from '../models/Session';
 import { SecurityService } from './SecurityService';
+import ffmpeg from 'fluent-ffmpeg';
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { promises as fsPromises } from 'fs';
+import { randomBytes } from 'crypto';
+
+// Set FFmpeg path
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 // Logger
 const logger = pino({ level: process.env.DEBUG === 'true' ? 'debug' : 'warn' });
@@ -352,11 +361,45 @@ export async function sendVoiceMessage(
 ): Promise<boolean> {
   const sock = manager.getSocket(sessionId);
   if (!sock) return false;
-  await sock.sendMessage(jid, {
-    audio: audioBuffer,
-    mimetype: 'audio/mp4',
-    ptt: true,
-  });
+
+  // Create temporary files for conversion
+  const tempId = randomBytes(8).toString('hex');
+  const inputPath = join(tmpdir(), `in_${tempId}.tmp`);
+  const outputPath = join(tmpdir(), `out_${tempId}.ogg`);
+
+  try {
+    // Write raw buffer (MP3 or WAV) to disk
+    await fsPromises.writeFile(inputPath, new Uint8Array(audioBuffer));
+
+    // Convert to proper WhatsApp OGG/Opus using fluent-ffmpeg
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg(inputPath)
+        .toFormat('ogg')
+        .audioCodec('libopus')
+        .on('end', () => resolve())
+        .on('error', (err) => reject(err))
+        .save(outputPath);
+    });
+
+    // Read the newly encoded Opus file
+    const opusBuffer = await fsPromises.readFile(outputPath);
+
+    // Send via Baileys
+    await sock.sendMessage(jid, {
+      audio: opusBuffer,
+      mimetype: 'audio/ogg; codecs=opus',
+      ptt: true,
+    });
+
+  } catch (error) {
+    console.error('❌ Error converting/sending Voice Note:', error);
+    return false;
+  } finally {
+    // Clean up temporary files
+    await fsPromises.unlink(inputPath).catch(() => { });
+    await fsPromises.unlink(outputPath).catch(() => { });
+  }
+
   return true;
 }
 
