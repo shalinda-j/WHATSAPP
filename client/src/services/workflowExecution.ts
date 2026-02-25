@@ -61,10 +61,10 @@ class WorkflowExecutionEngine {
       config: {},
       execute: async (context) => {
         this.log(context, 'info', 'WhatsApp trigger activated', context.nodeId);
-        
+
         // Simulate WhatsApp trigger
         await this.delay(1000);
-        
+
         return {
           success: true,
           output: {
@@ -83,13 +83,13 @@ class WorkflowExecutionEngine {
       config: {},
       execute: async (context) => {
         this.log(context, 'info', 'Processing with AI', context.nodeId);
-        
+
         const input = context.variables.lastMessage || 'Hello';
-        
+
         try {
           // Call AI API
           const response = await this.callAIAPI(input);
-          
+
           return {
             success: true,
             output: {
@@ -114,14 +114,14 @@ class WorkflowExecutionEngine {
       config: {},
       execute: async (context) => {
         this.log(context, 'info', 'Sending WhatsApp message', context.nodeId);
-        
+
         const message = context.variables.aiResponse || 'Hello from workflow!';
         const recipient = context.variables.recipient || '+1234567890';
-        
+
         try {
           // Call WhatsApp API
           await this.sendWhatsAppMessage(recipient, message);
-          
+
           return {
             success: true,
             output: {
@@ -146,10 +146,10 @@ class WorkflowExecutionEngine {
       config: {},
       execute: async (context) => {
         this.log(context, 'info', 'Evaluating decision logic', context.nodeId);
-        
+
         const condition = context.variables.condition || 'true';
         const result = this.evaluateCondition(condition, context.variables);
-        
+
         return {
           success: true,
           output: {
@@ -164,7 +164,7 @@ class WorkflowExecutionEngine {
     // Integration Handlers
     Object.keys(INTEGRATIONS).forEach(integrationId => {
       const integration = INTEGRATIONS[integrationId];
-      
+
       this.stepHandlers.set(integrationId, {
         nodeId: '',
         nodeType: 'integration',
@@ -172,7 +172,7 @@ class WorkflowExecutionEngine {
         config: {},
         execute: async (context) => {
           this.log(context, 'info', `Executing ${integration.label} integration`, context.nodeId);
-          
+
           try {
             const result = await this.executeIntegration(integrationId, context);
             return {
@@ -199,7 +199,7 @@ class WorkflowExecutionEngine {
   ): Promise<ExecutionResult> {
     const executionId = this.generateExecutionId();
     const startTime = new Date();
-    
+
     const context: ExecutionContext = {
       workflowId: 'current_workflow',
       executionId,
@@ -213,7 +213,7 @@ class WorkflowExecutionEngine {
 
     try {
       // Find starting node
-      const startNode = startNodeId 
+      const startNode = startNodeId
         ? nodes.find(n => n.id === startNodeId)
         : nodes.find(n => n.type === 'input');
 
@@ -223,12 +223,12 @@ class WorkflowExecutionEngine {
 
       // Execute workflow
       const result = await this.executeNode(startNode, nodes, edges, context);
-      
+
       // Update context
       context.status = result.success ? 'completed' : 'failed';
-      
+
       const duration = Date.now() - startTime.getTime();
-      
+
       return {
         success: result.success,
         executionId,
@@ -241,9 +241,9 @@ class WorkflowExecutionEngine {
     } catch (error) {
       context.status = 'failed';
       this.log(context, 'error', `Workflow execution failed: ${error}`, 'workflow');
-      
+
       const duration = Date.now() - startTime.getTime();
-      
+
       return {
         success: false,
         executionId,
@@ -283,7 +283,7 @@ class WorkflowExecutionEngine {
 
       if (result.success) {
         this.log(nodeContext, 'info', `Node execution completed successfully`, node.id);
-        
+
         // Store output in context variables
         if (result.output) {
           context.variables[`node_${node.id}_output`] = result.output;
@@ -346,10 +346,10 @@ class WorkflowExecutionEngine {
   }
 
   // API simulation methods
-  private async callAIAPI(input: string): Promise<string> {
+  private async callAIAPI(_input: string): Promise<string> {
     // Simulate AI API call
     await this.delay(2000);
-    
+
     // Mock AI response
     const responses = [
       "Hello! How can I help you today?",
@@ -357,18 +357,18 @@ class WorkflowExecutionEngine {
       "I understand your request. Let me help you with that.",
       "Great question! Here's what I can tell you..."
     ];
-    
+
     return responses[Math.floor(Math.random() * responses.length)];
   }
 
   private async sendWhatsAppMessage(recipient: string, message: string): Promise<void> {
     // Simulate WhatsApp API call
     await this.delay(1500);
-    
+
     console.log(`WhatsApp message sent to ${recipient}: ${message}`);
   }
 
-  private async executeIntegration(integrationId: string, context: ExecutionContext): Promise<any> {
+  private async executeIntegration(integrationId: string, _context: ExecutionContext): Promise<any> {
     const integration = INTEGRATIONS[integrationId];
     if (!integration) {
       throw new Error(`Unknown integration: ${integrationId}`);
@@ -390,13 +390,13 @@ class WorkflowExecutionEngine {
       // Simple condition evaluation (in production, use a proper expression parser)
       if (condition === 'true') return true;
       if (condition === 'false') return false;
-      
+
       // Replace variables in condition
       let evalCondition = condition;
       Object.keys(variables).forEach(key => {
         evalCondition = evalCondition.replace(new RegExp(`\\b${key}\\b`, 'g'), JSON.stringify(variables[key]));
       });
-      
+
       return Boolean(eval(evalCondition));
     } catch {
       return true; // Default to true if evaluation fails
@@ -411,7 +411,7 @@ class WorkflowExecutionEngine {
       level,
       message
     };
-    
+
     context.logs.push(log);
     console.log(`[${level.toUpperCase()}] ${message}`);
   }

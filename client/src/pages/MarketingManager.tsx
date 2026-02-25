@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import WorkflowBuilder from '../components/workflow/WorkflowBuilder';
-import { Save, Play, Download, Upload, RotateCcw, History } from 'lucide-react';
+import { Save, Play, Download, Upload, RotateCcw } from 'lucide-react';
 import { WorkflowProvider, useWorkflow } from '../components/workflow/WorkflowContext';
 import { workflowPersistence } from '../services/workflowPersistence';
 import { workflowExecution } from '../services/workflowExecution';
@@ -67,7 +67,7 @@ export default function MarketingManager() {
     const handleSave = useCallback(async () => {
         try {
             actions.setLoading(true);
-            
+
             // Validate before saving
             const validation = workflowValidation.validateWorkflow(state.nodes, state.edges);
             if (!validation.isValid) {
@@ -78,16 +78,17 @@ export default function MarketingManager() {
                 return;
             }
 
-            const workflowData = await workflowPersistence.saveToLocalStorage({
+            await workflowPersistence.saveToLocalStorage({
                 name: `Marketing Workflow ${new Date().toLocaleDateString()}`,
                 description: 'Automated marketing workflow',
+                version: '1.0.0',
                 nodes: state.nodes,
                 edges: state.edges
             });
 
             actions.setLastSaved(new Date());
             addToast('Workflow saved successfully!', 'success');
-            
+
         } catch (error) {
             console.error('Save failed:', error);
             addToast('Failed to save workflow', 'error');
@@ -120,7 +121,7 @@ export default function MarketingManager() {
 
             // Execute workflow
             const result = await workflowExecution.executeWorkflow(state.nodes, state.edges);
-            
+
             if (result.success) {
                 addToast(`Workflow executed successfully in ${result.duration}ms!`, 'success');
                 console.log('Execution result:', result);
@@ -143,6 +144,10 @@ export default function MarketingManager() {
             const workflowData = {
                 name: `Marketing Workflow ${new Date().toLocaleDateString()}`,
                 description: 'Exported marketing workflow',
+                version: '1.0.0',
+                id: `export-${Date.now()}`,
+                createdAt: new Date(),
+                updatedAt: new Date(),
                 nodes: state.nodes,
                 edges: state.edges
             };
@@ -150,7 +155,7 @@ export default function MarketingManager() {
             const jsonString = await workflowPersistence.exportWorkflow(workflowData);
             const blob = new Blob([jsonString], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
-            
+
             const a = document.createElement('a');
             a.href = url;
             a.download = `workflow-${Date.now()}.json`;
@@ -158,7 +163,7 @@ export default function MarketingManager() {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            
+
             addToast('Workflow exported successfully', 'success');
         } catch (error) {
             console.error('Export failed:', error);
@@ -175,7 +180,7 @@ export default function MarketingManager() {
             try {
                 const jsonString = e.target?.result as string;
                 const workflowData = await workflowPersistence.importWorkflow(jsonString);
-                
+
                 actions.setNodes(workflowData.nodes);
                 actions.setEdges(workflowData.edges);
                 addToast('Workflow imported successfully', 'success');
@@ -201,10 +206,7 @@ export default function MarketingManager() {
         }
     }, [actions, addToast]);
 
-    const clearAutoSave = useCallback(() => {
-        workflowPersistence.clearAutoSave();
-        addToast('Auto-save cleared', 'info');
-    }, [addToast]);
+
 
     return (
         <ErrorBoundary>
@@ -217,13 +219,12 @@ export default function MarketingManager() {
                                 <h1 className="text-2xl font-bold text-gray-800">Marketing Workflow Builder</h1>
                                 <p className="text-gray-500 text-sm">Design your automated marketing strategies</p>
                             </div>
-                            
+
                             {/* Validation Status */}
                             {validationResult && (
                                 <div className="flex items-center gap-2">
-                                    <span className={`text-sm font-medium ${
-                                        validationResult.isValid ? 'text-green-600' : 'text-red-600'
-                                    }`}>
+                                    <span className={`text-sm font-medium ${validationResult.isValid ? 'text-green-600' : 'text-red-600'
+                                        }`}>
                                         {validationResult.isValid ? '✓ Valid' : `✗ ${validationResult.errors.length} Errors`}
                                     </span>
                                     {validationResult.warnings.length > 0 && (
@@ -323,7 +324,7 @@ export default function MarketingManager() {
                                 <LoadingState message="Processing workflow..." />
                             </div>
                         )}
-                        
+
                         <ErrorBoundary>
                             <WorkflowBuilder />
                         </ErrorBoundary>

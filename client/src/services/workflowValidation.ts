@@ -44,7 +44,7 @@ class WorkflowValidationService {
       validate: (node) => this.validateDefaultNode(node)
     },
     {
-      isApplicable: (node) => true,
+      isApplicable: (_node) => true,
       validate: (node) => this.validateBasicNode(node)
     }
   ];
@@ -65,7 +65,7 @@ class WorkflowValidationService {
     nodes.forEach(node => {
       const nodeErrors = this.validateNode(node);
       const nodeWarnings = this.validateNodeWarnings(node);
-      
+
       errors.push(...nodeErrors);
       warnings.push(...nodeWarnings);
     });
@@ -79,7 +79,7 @@ class WorkflowValidationService {
     // Workflow-level validation
     const workflowErrors = this.validateWorkflowStructure(nodes, edges);
     const workflowWarnings = this.validateWorkflowWarnings(nodes, edges);
-    
+
     errors.push(...workflowErrors);
     warnings.push(...workflowWarnings);
 
@@ -187,7 +187,7 @@ class WorkflowValidationService {
     // Validate required fields
     integration.fields.forEach(field => {
       const value = node.data[field.key];
-      
+
       if (!value || (typeof value === 'string' && value.trim() === '')) {
         errors.push({
           type: 'error',
@@ -396,9 +396,9 @@ class WorkflowValidationService {
   }
 
   private isEmailField(field: any): boolean {
-    return field.key.toLowerCase().includes('email') || 
-           field.label.toLowerCase().includes('email') ||
-           field.type === 'email';
+    return field.key.toLowerCase().includes('email') ||
+      field.label.toLowerCase().includes('email') ||
+      field.type === 'email';
   }
 
   private detectCycles(nodes: Node[], edges: Edge[]): string[] {
@@ -479,12 +479,12 @@ class WorkflowValidationService {
 
   private sanitizeUrl(url: string): string {
     const sanitized = this.sanitizeString(url);
-    
+
     // Ensure URL has a protocol
     if (sanitized && !sanitized.match(/^https?:\/\//)) {
       return `https://${sanitized}`;
     }
-    
+
     return sanitized;
   }
 

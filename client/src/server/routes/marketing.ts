@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { authenticateToken, AuthRequest } from '../middleware/auth.ts';
+import { authenticateToken, type AuthRequest } from '../middleware/auth.ts';
 
 const router = Router();
 
 // Get all workflows
-router.get('/', authenticateToken, async (req: AuthRequest, res) => {
+router.get('/', authenticateToken, async (_req: AuthRequest, res) => {
   try {
     // In a real implementation, fetch from database
     // For now, return mock data
@@ -47,7 +47,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
 router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
-    
+
     // Mock workflow data
     const workflow = {
       id,
