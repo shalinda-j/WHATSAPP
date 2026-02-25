@@ -60,7 +60,8 @@ export default function Layout() {
                         <NavLink to="/datasets" icon={Database}>Datasets</NavLink>
                         <NavLink to="/webhooks" icon={Globe}>Webhooks</NavLink>
                         <NavLink to="/sessions" icon={Smartphone}>Linked Devices</NavLink>
-                        <NavLink to="/voice-config" icon={AudioLines}>Voice Agent</NavLink>
+                        <NavLink to="/voice-config" icon={AudioLines}>Voice Config</NavLink>
+                        <NavLink to="/voice-agent-hub" icon={AudioLines}>Voice Agent Hub</NavLink>
                         <NavLink to="/bulk-message" icon={Megaphone}>Bulk Messaging</NavLink>
                         <NavLink to="/marketing" icon={Megaphone}>Marketing Manager</NavLink>
                         <NavLink to="/n8n" icon={Share2}>n8n Automations</NavLink>
