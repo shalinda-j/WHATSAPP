@@ -3,22 +3,23 @@ import VoiceConfig from '../../models/VoiceConfig';
 
 const router = Router();
 
-// GET current configuration
+// GET all configurations
 router.get('/', async (req: Request, res: Response) => {
     try {
-        // Only one config document should exist, or we get the latest
-        let config = await VoiceConfig.findOne().sort({ updatedAt: -1 });
+        // Return all stored voice configs, sorted by latest updated
+        const configs = await VoiceConfig.find().sort({ updatedAt: -1 });
 
-        if (!config) {
-            // Create default if not exists
-            config = await VoiceConfig.create({
+        // If DB is completely empty, provide a default array structure
+        if (!configs || configs.length === 0) {
+            const defaultConfig = await VoiceConfig.create({
                 provider: 'google-free',
                 isActive: true,
                 mode: 'voice-and-text'
             });
+            return res.json([defaultConfig]);
         }
 
-        res.json(config);
+        res.json(configs);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch voice config' });
     }
@@ -29,9 +30,9 @@ router.post('/', async (req: Request, res: Response) => {
     try {
         const { provider, apiKey, voiceId, isActive, mode, ttsModel } = req.body;
 
-        // Upsert the configuration (we only keep one active config for simplicity)
+        // Upsert the configuration per provider type
         const config = await VoiceConfig.findOneAndUpdate(
-            {},
+            { provider },
             {
                 provider,
                 apiKey,
