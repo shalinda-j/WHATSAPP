@@ -18,15 +18,30 @@ import { configService } from './ConfigService';
  * Helper to get a dynamic model instance with the latest API Key
  */
 async function getGeminiModel(modelName = 'gemini-1.5-flash-latest') {
+  // First, check the database for an active Google provider config
   const apiKey = await configService.getGoogleProviderKey();
+
+  // Fallback to environment variables if DB config is missing
   const validKey = apiKey || process.env.GEMINI_API_KEY;
 
   if (!validKey) {
-    throw new Error('Google Gemini API Key is missing. Please configure it in the Admin Panel.');
+    throw new Error('Google Gemini API Key is missing. Please configure it in the Admin Panel (AI Providers -> Google).');
   }
 
   const genAI = new GoogleGenerativeAI(validKey);
-  return genAI.getGenerativeModel({ model: modelName });
+
+  // Try to get the specific model assigned to the provider, or fallback to the requested model Name
+  let activeModel = modelName;
+  try {
+    const configModel = await import('../models/Config').then(m => m.default.findOne({ isProvider: true, providerType: 'google', isActive: true }));
+    if (configModel && configModel.aiModel) {
+      activeModel = configModel.aiModel;
+    }
+  } catch (e) {
+    console.error('Error fetching preferred model, falling back to default.');
+  }
+
+  return genAI.getGenerativeModel({ model: activeModel });
 }
 
 // Store chat sessions for conversation memory

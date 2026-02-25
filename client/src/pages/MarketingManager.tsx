@@ -9,7 +9,7 @@ import ErrorBoundary from '../components/workflow/ErrorBoundary';
 import LoadingState from '../components/workflow/LoadingState';
 import { ToastContainer } from '../components/workflow/Toast';
 
-export default function MarketingManager() {
+function MarketingManagerInner() {
     const { state, actions } = useWorkflow();
     const [isExecuting, setIsExecuting] = useState(false);
     const [toasts, setToasts] = useState<Array<{ id: string; message: string; type?: 'success' | 'error' | 'warning' | 'info' }>>([]);
@@ -206,133 +206,137 @@ export default function MarketingManager() {
         }
     }, [actions, addToast]);
 
+    return (
+        <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden">
+            {/* Header */}
+            <div className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm z-10">
+                <div className="flex items-center gap-4">
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-800">Marketing Workflow Builder</h1>
+                        <p className="text-gray-500 text-sm">Design your automated marketing strategies</p>
+                    </div>
 
+                    {/* Validation Status */}
+                    {validationResult && (
+                        <div className="flex items-center gap-2">
+                            <span className={`text-sm font-medium ${validationResult.isValid ? 'text-green-600' : 'text-red-600'
+                                }`}>
+                                {validationResult.isValid ? '✓ Valid' : `✗ ${validationResult.errors.length} Errors`}
+                            </span>
+                            {validationResult.warnings.length > 0 && (
+                                <span className="text-sm text-yellow-600">
+                                    ⚠ {validationResult.warnings.length} Warnings
+                                </span>
+                            )}
+                        </div>
+                    )}
+                </div>
 
+                <div className="flex gap-3">
+                    {/* Undo/Redo */}
+                    <div className="flex gap-1">
+                        <button
+                            onClick={handleUndo}
+                            disabled={!actions.canUndo}
+                            className="flex items-center gap-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Undo"
+                        >
+                            <RotateCcw size={16} />
+                        </button>
+                        <button
+                            onClick={handleRedo}
+                            disabled={!actions.canRedo}
+                            className="flex items-center gap-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Redo"
+                        >
+                            <RotateCcw size={16} className="rotate-180" />
+                        </button>
+                    </div>
+
+                    {/* Import/Export */}
+                    <div className="flex gap-1">
+                        <label className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium border border-gray-300 cursor-pointer">
+                            <Upload size={16} />
+                            Import
+                            <input
+                                type="file"
+                                accept=".json"
+                                onChange={handleImport}
+                                className="hidden"
+                            />
+                        </label>
+                        <button
+                            onClick={handleExport}
+                            className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium border border-gray-300"
+                        >
+                            <Download size={16} />
+                            Export
+                        </button>
+                    </div>
+
+                    {/* Save */}
+                    <button
+                        onClick={handleSave}
+                        disabled={state.isLoading || !validationResult?.isValid}
+                        className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <Save size={18} />
+                        {state.isLoading ? 'Saving...' : 'Save'}
+                    </button>
+
+                    {/* Run */}
+                    <button
+                        onClick={handleRun}
+                        disabled={state.isLoading || isExecuting || !validationResult?.isValid}
+                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-all transform hover:scale-105 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <Play size={18} />
+                        {isExecuting ? 'Running...' : 'Run Workflow'}
+                    </button>
+                </div>
+            </div>
+
+            {/* Status Bar */}
+            <div className="bg-gray-50 border-b border-gray-200 px-6 py-2 flex justify-between items-center text-xs text-gray-600">
+                <div className="flex items-center gap-4">
+                    <span>Nodes: {state.nodes.length}</span>
+                    <span>Edges: {state.edges.length}</span>
+                    <span>Selected: {state.selectedNode?.id || 'None'}</span>
+                </div>
+                <div className="flex items-center gap-4">
+                    {state.lastSaved && (
+                        <span>Last saved: {state.lastSaved.toLocaleTimeString()}</span>
+                    )}
+                    {state.isDirty && (
+                        <span className="text-orange-600 font-medium">● Unsaved changes</span>
+                    )}
+                </div>
+            </div>
+
+            {/* Canvas Area */}
+            <div className="flex-1 bg-gray-50 overflow-hidden relative">
+                {state.isLoading && (
+                    <div className="absolute inset-0 bg-white bg-opacity-75 z-20 flex items-center justify-center">
+                        <LoadingState message="Processing workflow..." />
+                    </div>
+                )}
+
+                <ErrorBoundary>
+                    <WorkflowBuilder />
+                </ErrorBoundary>
+            </div>
+
+            {/* Toast Container */}
+            <ToastContainer toasts={toasts} onRemove={removeToast} />
+        </div>
+    );
+}
+
+export default function MarketingManager() {
     return (
         <ErrorBoundary>
             <WorkflowProvider>
-                <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden">
-                    {/* Header */}
-                    <div className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm z-10">
-                        <div className="flex items-center gap-4">
-                            <div>
-                                <h1 className="text-2xl font-bold text-gray-800">Marketing Workflow Builder</h1>
-                                <p className="text-gray-500 text-sm">Design your automated marketing strategies</p>
-                            </div>
-
-                            {/* Validation Status */}
-                            {validationResult && (
-                                <div className="flex items-center gap-2">
-                                    <span className={`text-sm font-medium ${validationResult.isValid ? 'text-green-600' : 'text-red-600'
-                                        }`}>
-                                        {validationResult.isValid ? '✓ Valid' : `✗ ${validationResult.errors.length} Errors`}
-                                    </span>
-                                    {validationResult.warnings.length > 0 && (
-                                        <span className="text-sm text-yellow-600">
-                                            ⚠ {validationResult.warnings.length} Warnings
-                                        </span>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="flex gap-3">
-                            {/* Undo/Redo */}
-                            <div className="flex gap-1">
-                                <button
-                                    onClick={handleUndo}
-                                    disabled={!actions.canUndo}
-                                    className="flex items-center gap-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title="Undo"
-                                >
-                                    <RotateCcw size={16} />
-                                </button>
-                                <button
-                                    onClick={handleRedo}
-                                    disabled={!actions.canRedo}
-                                    className="flex items-center gap-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title="Redo"
-                                >
-                                    <RotateCcw size={16} className="rotate-180" />
-                                </button>
-                            </div>
-
-                            {/* Import/Export */}
-                            <div className="flex gap-1">
-                                <label className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium border border-gray-300 cursor-pointer">
-                                    <Upload size={16} />
-                                    Import
-                                    <input
-                                        type="file"
-                                        accept=".json"
-                                        onChange={handleImport}
-                                        className="hidden"
-                                    />
-                                </label>
-                                <button
-                                    onClick={handleExport}
-                                    className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium border border-gray-300"
-                                >
-                                    <Download size={16} />
-                                    Export
-                                </button>
-                            </div>
-
-                            {/* Save */}
-                            <button
-                                onClick={handleSave}
-                                disabled={state.isLoading || !validationResult?.isValid}
-                                className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                <Save size={18} />
-                                {state.isLoading ? 'Saving...' : 'Save'}
-                            </button>
-
-                            {/* Run */}
-                            <button
-                                onClick={handleRun}
-                                disabled={state.isLoading || isExecuting || !validationResult?.isValid}
-                                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-all transform hover:scale-105 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                <Play size={18} />
-                                {isExecuting ? 'Running...' : 'Run Workflow'}
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Status Bar */}
-                    <div className="bg-gray-50 border-b border-gray-200 px-6 py-2 flex justify-between items-center text-xs text-gray-600">
-                        <div className="flex items-center gap-4">
-                            <span>Nodes: {state.nodes.length}</span>
-                            <span>Edges: {state.edges.length}</span>
-                            <span>Selected: {state.selectedNode?.id || 'None'}</span>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            {state.lastSaved && (
-                                <span>Last saved: {state.lastSaved.toLocaleTimeString()}</span>
-                            )}
-                            {state.isDirty && (
-                                <span className="text-orange-600 font-medium">● Unsaved changes</span>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Canvas Area */}
-                    <div className="flex-1 bg-gray-50 overflow-hidden relative">
-                        {state.isLoading && (
-                            <div className="absolute inset-0 bg-white bg-opacity-75 z-20 flex items-center justify-center">
-                                <LoadingState message="Processing workflow..." />
-                            </div>
-                        )}
-
-                        <ErrorBoundary>
-                            <WorkflowBuilder />
-                        </ErrorBoundary>
-                    </div>
-
-                    {/* Toast Container */}
-                    <ToastContainer toasts={toasts} onRemove={removeToast} />
-                </div>
+                <MarketingManagerInner />
             </WorkflowProvider>
         </ErrorBoundary>
     );

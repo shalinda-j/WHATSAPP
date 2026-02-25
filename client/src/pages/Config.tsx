@@ -96,9 +96,15 @@ export default function Config() {
     }, []);
 
     const handleDelete = async (id: string) => {
-        if (window.confirm('Are you sure?')) {
-            await api.delete(`/api/config/${id}`);
-            fetchConfigs();
+        if (window.confirm('Are you sure you want to delete this configuration?')) {
+            try {
+                await api.delete(`/api/config/${id}`);
+                fetchConfigs();
+                alert('Configuration deleted successfully.');
+            } catch (err: any) {
+                console.error('Failed to delete config:', err);
+                alert(`Failed to delete configuration: ${err.response?.data?.error || err.message}`);
+            }
         }
     };
 

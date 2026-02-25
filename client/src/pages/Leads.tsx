@@ -50,11 +50,49 @@ export default function Leads() {
   const [totalPages, setTotalPages] = useState(1);
   const [uploading, setUploading] = useState(false);
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
 
   const showNotify = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
   };
+
+  const handleExportCSV = async () => {
+    try {
+      const res = await api.get('/api/leads/export', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `leads-export-${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      showNotify('Export downloaded successfully', 'success');
+    } catch (err) {
+      showNotify('Failed to export CSV', 'error');
+    }
+  };
+
+  const fetchMessages = async (leadId: string) => {
+    setLoadingMessages(true);
+    try {
+      const res = await api.get(`/api/leads/${leadId}/messages`);
+      setMessages(res.data);
+    } catch (err) {
+      console.error('Failed to fetch messages', err);
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showModal && selectedLead) {
+      fetchMessages(selectedLead._id);
+    } else {
+      setMessages([]);
+    }
+  }, [showModal, selectedLead?._id]);
 
   const fetchLeads = async () => {
     try {
@@ -155,6 +193,12 @@ export default function Leads() {
           <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Leads & Registrations</h1>
           <p className="text-gray-500 font-medium mt-1">Manage and track your incoming job applications</p>
         </div>
+        <button
+          onClick={handleExportCSV}
+          className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:-translate-y-0.5 transition active:translate-y-0"
+        >
+          <Download className="h-5 w-5" /> Export to CSV
+        </button>
       </div>
 
       {/* Stats Cards */}
@@ -550,6 +594,37 @@ export default function Leads() {
                           </span>
                         </label>
                       </div>
+                    </div>
+                  </section>
+
+                  <section className="mt-8 border-t border-gray-100 pt-8">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">WhatsApp Conversation</h3>
+                      <span className="text-[10px] font-bold bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full uppercase">
+                        {messages.length} Messages
+                      </span>
+                    </div>
+
+                    <div className="space-y-4 bg-gray-50 p-5 rounded-3xl max-h-[400px] overflow-y-auto border border-gray-100">
+                      {loadingMessages ? (
+                        <p className="text-center text-sm font-bold text-gray-400 py-8 animate-pulse">Loading conversation...</p>
+                      ) : messages.length === 0 ? (
+                        <div className="text-center py-10">
+                          <MessageSquare className="h-10 w-10 text-gray-200 mx-auto mb-3" />
+                          <p className="text-gray-400 text-xs font-bold uppercase tracking-tight">No message history found</p>
+                        </div>
+                      ) : (
+                        messages.map((msg, idx) => (
+                          <div key={idx} className={`flex ${msg.role === 'assistant' || msg.role === 'system' ? 'justify-start' : 'justify-end'}`}>
+                            <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm ${msg.role === 'assistant' || msg.role === 'system' ? 'bg-white border border-gray-200 text-gray-800 rounded-tl-sm' : 'bg-indigo-600 text-white rounded-tr-sm'}`}>
+                              <p className="whitespace-pre-wrap font-medium">{msg.content}</p>
+                              <p className={`text-[9px] mt-1.5 font-bold tracking-wider uppercase ${msg.role === 'assistant' || msg.role === 'system' ? 'text-gray-400' : 'text-indigo-200'}`}>
+                                {new Date(msg.timestamp).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </section>
                 </div>

@@ -69,14 +69,25 @@ export async function seedAIProviders(): Promise<void> {
         }
       }
     } else {
-      // Provider not configured, mark as inactive if it exists
+      // Provider not configured in .env, but DO NOT deactivate it if it already exists.
+      // Users might have configured their keys securely through the Admin Panel UI.
       const existing = await Config.findOne({ key: p.key });
-      if (existing && existing.isActive) {
-        existing.isActive = false;
-        await existing.save();
-        console.log(
-          `   ⚠️ Deactivated AI Provider (no API key): ${p.providerType}`,
-        );
+      if (!existing) {
+        // Only create a placeholder if it doesn't exist at all, so they can edit it in UI
+        await Config.create({
+          key: p.key,
+          value: '',
+          description: p.description,
+          isProvider: true,
+          providerType: p.providerType,
+          apiKey: '',
+          aiModel: p.aiModel,
+          usageLimit: 0,
+          usageUsed: 0,
+          costPerToken: 0,
+          isActive: false, // Default to false until configured
+        });
+        console.log(`   📝 Created placeholder for AI Provider: ${p.providerType}`);
       }
     }
   }

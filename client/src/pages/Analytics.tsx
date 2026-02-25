@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../config';
 import {
   MessageCircle, Users, TrendingUp, BarChart3,
-  FileText, Mic
+  FileText, Mic, Download
 } from 'lucide-react';
 
 interface OverviewStats {
@@ -77,6 +77,22 @@ export default function Analytics() {
     }
   };
 
+  const handleExportCSV = async () => {
+    try {
+      const res = await api.get('/api/leads/export', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `leads-export-${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      console.error('Failed to export CSV', err);
+      alert('Failed to export CSV. Please try again later.');
+    }
+  };
+
   const getCategoryLabel = (cat: string) => {
     const labels: Record<string, string> = {
       jobs: 'Jobs & Work',
@@ -113,15 +129,23 @@ export default function Analytics() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Analytics Dashboard</h1>
-        <select
-          value={selectedPeriod}
-          onChange={(e) => setSelectedPeriod(e.target.value)}
-          className="px-4 py-2 border rounded-lg"
-        >
-          <option value="7">Last 7 Days</option>
-          <option value="14">Last 14 Days</option>
-          <option value="30">Last 30 Days</option>
-        </select>
+        <div className="flex items-center gap-4">
+          <select
+            value={selectedPeriod}
+            onChange={(e) => setSelectedPeriod(e.target.value)}
+            className="px-4 py-2 border rounded-lg"
+          >
+            <option value="7">Last 7 Days</option>
+            <option value="14">Last 14 Days</option>
+            <option value="30">Last 30 Days</option>
+          </select>
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium shadow-sm hover:bg-indigo-700 transition"
+          >
+            <Download className="h-4 w-4" /> Export Leads CSV
+          </button>
+        </div>
       </div>
 
       {/* Overview Stats */}

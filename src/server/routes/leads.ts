@@ -5,6 +5,7 @@ import fs from 'fs';
 import Lead from '../../models/Lead';
 import { authenticateToken } from '../middleware/auth';
 import pdf from 'pdf-parse';
+import ChatMessage from '../../models/ChatMessage';
 
 const router = Router();
 
@@ -23,7 +24,7 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
@@ -41,7 +42,7 @@ const upload = multer({
 router.post('/register', async (req, res) => {
   try {
     const { fullName, phoneNumber, address, email, jobVacancyType } = req.body;
-    
+
     if (!fullName || !phoneNumber || !address || !jobVacancyType) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
@@ -55,7 +56,7 @@ router.post('/register', async (req, res) => {
       status: 'new',
       registeredAt: new Date()
     });
-    
+
     await lead.save();
     res.status(201).json({ success: true, leadId: lead._id });
   } catch (err: any) {
@@ -69,9 +70,9 @@ router.use(authenticateToken);
 router.get('/', async (req, res) => {
   try {
     const { status, jobVacancyType, search, page = 1, limit = 20 } = req.query;
-    
+
     const query: any = {};
-    
+
     if (status) query.status = status;
     if (jobVacancyType) query.jobVacancyType = jobVacancyType;
     if (search) {
@@ -146,6 +147,37 @@ router.get('/job-types', (req, res) => {
   res.json(jobTypes);
 });
 
+router.get('/export', async (req, res) => {
+  try {
+    const leads = await Lead.find().sort({ registeredAt: -1 });
+
+    const headers = ['ID', 'Full Name', 'Phone Number', 'Email', 'Address', 'Job Vacancy', 'Status', 'Registration Date', 'Notes'];
+
+    const csvRows = leads.map((lead: any) => {
+      const escapeCsv = (str: string) => `"${(str || '').toString().replace(/"/g, '""')}"`;
+      return [
+        lead._id,
+        escapeCsv(lead.fullName),
+        escapeCsv(lead.phoneNumber),
+        escapeCsv(lead.email),
+        escapeCsv(lead.address),
+        escapeCsv(lead.jobVacancyType),
+        escapeCsv(lead.status),
+        new Date(lead.registeredAt).toISOString(),
+        escapeCsv(lead.notes)
+      ].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...csvRows].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="leads-export-${new Date().toISOString().split('T')[0]}.csv"`);
+    res.send(csvContent);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const lead = await Lead.findById(req.params.id);
@@ -153,6 +185,30 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Lead not found' });
     }
     res.json(lead);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/:id/messages', async (req, res) => {
+  try {
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    // Match messages by formatting the phone number to the WhatsApp JID format
+    // E.g., strip non-digits and append @c.us OR use regex
+    const phoneDigits = lead.phoneNumber.replace(/\D/g, '');
+    if (!phoneDigits) {
+      return res.json([]);
+    }
+
+    const messages = await ChatMessage.find({
+      userId: { $regex: new RegExp(`^${phoneDigits}.*`) }
+    }).sort({ timestamp: -1 }).limit(100);
+
+    res.json(messages.reverse() || []);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -190,14 +246,14 @@ router.delete('/:id', async (req, res) => {
     if (!lead) {
       return res.status(404).json({ error: 'Lead not found' });
     }
-    
+
     for (const qual of lead.qualifications) {
       const filePath = path.join(UPLOAD_DIR, path.basename(qual.filePath));
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
     }
-    
+
     res.json({ message: 'Lead deleted successfully' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
