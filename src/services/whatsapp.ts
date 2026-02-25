@@ -135,29 +135,23 @@ export class WhatsAppSessionManager {
             return;
           }
 
-          // For conflict, try to reconnect a few times without wiping state
+          // For conflict, try to reconnect with exponential backoff without wiping state
+          // A 440 conflict means another instance is running with the same credentials.
+          // In deployment environments (like Digital Ocean), rolling deployments cause two instances
+          // to run concurrently for a short period, leading to this error. Wiping state here causes forced logouts.
           if (isConflict) {
             const retries = (this.retryCounters.get(sessionId) || 0) + 1;
             this.retryCounters.set(sessionId, retries);
 
-            if (retries <= 3) { // Allow up to 3 conflict retries before giving up/requiring re-scan
-              console.log(`🔄 Session ${sessionId}: Conflict detected (Attempt ${retries}/3). Reconnecting without wiping state...`);
-              this.sessions.delete(sessionId);
-              setTimeout(() => this.startSession(sessionId), 5000);
-              return;
-            } else {
-              console.log(`❌ Session ${sessionId}: Persistent Conflict. Wiping state and requesting new QR...`);
-              try {
-                await clearState();
-              } catch (e) {
-                console.error('Error clearing state:', e);
-              }
-              this.sessions.delete(sessionId);
-              this.retryCounters.delete(sessionId);
-              this.connectionStates.delete(sessionId);
-              setTimeout(() => this.startSession(sessionId), 2000);
-              return;
-            }
+            // Wait longer for each retry (5s, 10s, 20s, up to 1 minute) to allow the old instance to shut down
+            const delay = Math.min(5000 * Math.pow(2, retries - 1), 60000);
+
+            console.log(`🔄 Session ${sessionId}: Conflict detected. Another instance is likely running. Retrying in ${delay / 1000}s... (Attempt ${retries})`);
+
+            this.sessions.delete(sessionId);
+            this.connectionStates.delete(sessionId);
+            setTimeout(() => this.startSession(sessionId), delay);
+            return;
           }
 
           // For other errors, try to reconnect with retry logic
