@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { RefreshCw, Trash2, Database, Server, Smartphone, HardDrive, Download, AlertTriangle } from 'lucide-react';
-import axios from 'axios';
+import { api } from '../config';
 import { useAuth } from '../context/AuthContext';
 
 interface CacheStats {
@@ -23,7 +23,7 @@ interface CacheStats {
 }
 
 export default function SystemMaintenance() {
-    const { token, logout } = useAuth();
+    const { logout } = useAuth();
     const [stats, setStats] = useState<CacheStats | null>(null);
     const [loading, setLoading] = useState(false);
     const [clearing, setClearing] = useState(false);
@@ -40,9 +40,7 @@ export default function SystemMaintenance() {
     const fetchStats = async () => {
         setLoading(true);
         try {
-            const response = await axios.get('/api/system/stats', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const response = await api.get('/api/system/stats');
             setStats(response.data);
             setMessage(null);
         } catch (error) {
@@ -58,9 +56,7 @@ export default function SystemMaintenance() {
 
         setClearing(true);
         try {
-            const response = await axios.post('/api/system/cache/clear', {}, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const response = await api.post('/api/system/cache/clear', {});
             setMessage({ type: 'success', text: response.data.message });
             fetchStats();
         } catch (error) {
@@ -74,8 +70,7 @@ export default function SystemMaintenance() {
     const handleExportData = async () => {
         setExporting(true);
         try {
-            const response = await axios.get('/api/system/export', {
-                headers: { Authorization: `Bearer ${token}` },
+            const response = await api.get('/api/system/export', {
                 responseType: 'blob', // Important for file download
             });
 
@@ -101,9 +96,7 @@ export default function SystemMaintenance() {
     const handleFactoryReset = async () => {
         setIsResetting(true);
         try {
-            await axios.post('/api/system/reset', { confirmation: 'reset-my-system' }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            await api.post('/api/system/reset', { confirmation: 'reset-my-system' });
             alert('System has been reset. You will be logged out.');
             logout();
             window.location.href = '/login';

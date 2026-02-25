@@ -28,6 +28,10 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Middleware: Check DB Connection
 app.use((req, res, next) => {
+  // Allow auth and marketing endpoints even without DB for testing
+  if (req.path.startsWith('/api/auth') || req.path.startsWith('/api/marketing')) {
+    return next();
+  }
   if (req.path.startsWith('/api') && mongoose.connection.readyState !== 1) {
     return res.status(503).json({
       error: 'Service Unavailable',

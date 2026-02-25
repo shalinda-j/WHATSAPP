@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type DragEvent } from 'react';
+import { useCallback, useRef, useState, useMemo, type DragEvent } from 'react';
 import ReactFlow, {
     ReactFlowProvider,
     addEdge,
@@ -16,9 +16,10 @@ import Sidebar from './Sidebar';
 import IntegrationNode from './CustomNodes/IntegrationNode';
 import SettingsPanel from './SettingsPanel';
 
-const nodeTypes = {
+// Memoize nodeTypes to prevent recreation on every render
+const nodeTypes = useMemo(() => ({
     integration: IntegrationNode,
-};
+}), []);
 
 const initialNodes: Node[] = [
     {
@@ -62,8 +63,6 @@ const WorkflowBuilder = () => {
                 return;
             }
 
-            // Allow calling screenToFlowPosition if available, otherwise fallback might be needed
-            // (React Flow 11 uses project, 12 might use screenToFlowPosition, keeping usage assuming React Flow 11+ recent)
             // Check if instance is ready
             if (!reactFlowInstance) return;
 

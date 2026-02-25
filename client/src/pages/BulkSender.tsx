@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent } from 'react';
 import { Upload, Send, Trash2, FileText, CheckCircle, AlertCircle, Info, Loader } from 'lucide-react';
-import axios from 'axios';
+import { api } from '../config';
 
 interface StatusMessage {
     type: 'success' | 'error' | 'info';
@@ -25,7 +25,7 @@ const BulkSender = () => {
             try {
                 setLoading(true);
                 setStatus({ type: 'info', msg: 'Parsing CSV...' });
-                const res = await axios.post('/api/bulk/upload-csv', formData);
+                const res = await api.post('/api/bulk/upload-csv', formData);
                 setRecipients((prev) => [...new Set([...prev, ...res.data.numbers])]);
                 setStatus({ type: 'success', msg: `Imported ${res.data.count} numbers` });
             } catch (err) {
@@ -69,7 +69,7 @@ const BulkSender = () => {
         }
 
         try {
-            const res = await axios.post('/api/bulk/send', formData);
+            const res = await api.post('/api/bulk/send', formData);
             const { success, failed, errors } = res.data;
 
             const successMsg = `Completed! ✅ ${success} sent, ❌ ${failed} failed.`;
@@ -91,7 +91,7 @@ const BulkSender = () => {
     const clearRecipients = () => setRecipients([]);
 
     return (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div>
             <div className="mb-8">
                 <h1 className="text-3xl font-bold text-gray-900">Bulk Message Sender</h1>
                 <p className="mt-2 text-gray-600">Send broadcast messages to multiple recipients with built-in delay controls.</p>

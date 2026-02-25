@@ -23,6 +23,7 @@ export default function Datasets() {
     const [availableScopes, setAvailableScopes] = useState<string[]>([]);
     const [isCreatingCompany, setIsCreatingCompany] = useState(false);
     const [newCompanyName, setNewCompanyName] = useState('');
+    const [isExtracting, setIsExtracting] = useState(false);
 
     const fetchDatasets = async () => {
         const res = await api.get('/api/datasets');
@@ -198,53 +199,50 @@ export default function Datasets() {
 
                         {/* File Upload Section */}
                         <div className="mt-1 mb-3 p-4 border-2 border-dashed border-gray-300 rounded-md bg-gray-50 flex flex-col items-center justify-center text-center">
-                            <label className="cursor-pointer">
-                                <span className="text-blue-600 hover:text-blue-500 font-medium">Upload a file</span>
-                                <span className="text-gray-500"> to auto-extract text</span>
-                                <input
-                                    type="file"
-                                    className="hidden"
-                                    accept=".pdf,.csv,.xlsx,.xls,image/*,text/plain"
-                                    onChange={async (e) => {
-                                        const file = e.target.files?.[0];
-                                        if (!file) return;
+                            {isExtracting ? (
+                                <p className="text-blue-600 font-medium animate-pulse">Extracting text...</p>
+                            ) : (
+                                <label className="cursor-pointer">
+                                    <span className="text-blue-600 hover:text-blue-500 font-medium">Upload a file</span>
+                                    <span className="text-gray-500"> to auto-extract text</span>
+                                    <input
+                                        type="file"
+                                        className="hidden"
+                                        accept=".pdf,.csv,.xlsx,.xls,image/*,text/plain"
+                                        onChange={async (e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
 
-                                        const formData = new FormData();
-                                        formData.append('file', file);
+                                            const uploadForm = new FormData();
+                                            uploadForm.append('file', file);
 
-                                        try {
-                                            // Show loading indicator (you might want to add a proper state for this)
-                                            // const originalText = e.target.parentElement?.innerText;
-                                            if (e.target.parentElement) e.target.parentElement.innerText = "Extracting...";
+                                            try {
+                                                setIsExtracting(true);
 
-                                            // Using the api utility which handles baseURL and Authorization automatically
-                                            const res = await api.post('/api/datasets/extract', formData, {
-                                                headers: {
-                                                    'Content-Type': 'multipart/form-data',
-                                                },
-                                            });
+                                                const res = await api.post('/api/datasets/extract', uploadForm, {
+                                                    headers: {
+                                                        'Content-Type': 'multipart/form-data',
+                                                    },
+                                                });
 
-                                            const data = res.data;
+                                                const data = res.data;
 
-                                            // Axios throws on non-2xx status, so we don't need manual check
-                                            // if (!res.ok) throw new Error(data.message || 'Extraction failed');
-
-                                            // Append extracted text
-                                            setFormData(prev => ({
-                                                ...prev,
-                                                content: (prev.content ? prev.content + '\n\n' : '') + `[Extracted from ${file.name}]:\n${data.text}`
-                                            }));
-                                        } catch (err: any) {
-                                            console.error(err);
-                                            const backendError = err.response?.data?.error || err.message;
-                                            alert('Failed to extract text: ' + backendError);
-                                        } finally {
-                                            // Reset UI (Basic implementation, improved state handling recommended)
-                                            // Ideally we would use a state variable like isExtracting
-                                        }
-                                    }}
-                                />
-                            </label>
+                                                // Append extracted text
+                                                setFormData(prev => ({
+                                                    ...prev,
+                                                    content: (prev.content ? prev.content + '\n\n' : '') + `[Extracted from ${file.name}]:\n${data.text}`
+                                                }));
+                                            } catch (err: any) {
+                                                console.error(err);
+                                                const backendError = err.response?.data?.error || err.message;
+                                                alert('Failed to extract text: ' + backendError);
+                                            } finally {
+                                                setIsExtracting(false);
+                                            }
+                                        }}
+                                    />
+                                </label>
+                            )}
                             <p className="text-xs text-gray-400 mt-1">Supports PDF, Excel, CSV, Images, Text</p>
                         </div>
 

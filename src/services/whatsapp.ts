@@ -29,6 +29,7 @@ const messageHandlers: Array<
 export class WhatsAppSessionManager {
   private sessions: Map<string, WASocket> = new Map();
   private retryCounters: Map<string, number> = new Map();
+  private connectionStates: Map<string, 'connecting' | 'connected' | 'disconnected'> = new Map();
   private static MAX_RETRIES = 5;
 
   constructor() {
@@ -41,8 +42,15 @@ export class WhatsAppSessionManager {
    * Start a specific session
    */
   async startSession(sessionId: string) {
+    // Prevent duplicate initializations
+    if (this.connectionStates.get(sessionId) === 'connecting' || this.connectionStates.get(sessionId) === 'connected') {
+      console.log(`ℹ️ Session ${sessionId} is already ${this.connectionStates.get(sessionId)}. Skipping start.`);
+      return;
+    }
+
     try {
       console.log(`🔄 Starting session: ${sessionId}`);
+      this.connectionStates.set(sessionId, 'connecting');
 
       let authState;
       let saveCreds;
@@ -74,7 +82,7 @@ export class WhatsAppSessionManager {
         auth: authState,
         logger,
         printQRInTerminal: false, // We update DB instead
-        browser: ['WhatsApp AI Bot', 'Chrome', '120.0.0'],
+        browser: ['Jayalath Global AI', 'Chrome', '120.0.0'],
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 60000,
         syncFullHistory: false,
@@ -100,22 +108,20 @@ export class WhatsAppSessionManager {
         if (connection === 'close') {
           const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
           const reason = lastDisconnect?.error as any;
-          
+
           // Handle conflict (440) - another device took over
           const isConflict = statusCode === 440 || reason?.reason === 'conflict';
-          // Handle logged out
-          const isLoggedOut = statusCode === DisconnectReason.loggedOut || reason?.reason === 'logged_out';
-          
+          // Handle logged out (401)
+          const isLoggedOut = statusCode === DisconnectReason.loggedOut || reason?.reason === 'logged_out' || statusCode === 401;
+
           console.log(`⚠️ Session ${sessionId} Closed: ${statusCode} (conflict: ${isConflict}, loggedOut: ${isLoggedOut})`);
+          this.connectionStates.set(sessionId, 'disconnected');
           await this.updateSessionStatus(sessionId, 'disconnected');
 
-          // For conflict or logged out, clear session and restart with new QR
-          if (isConflict || isLoggedOut) {
-            console.log(
-              `❌ Session ${sessionId}: ${isConflict ? 'Conflict - Another device took over' : 'Logged Out'}. Cleaning up and restarting for new QR...`,
-            );
+          // For logged out, clear session and restart for new QR
+          if (isLoggedOut) {
+            console.log(`❌ Session ${sessionId}: Logged Out. Cleaning up and restarting for new QR...`);
 
-            // Clear credentials and restart
             try {
               await clearState();
             } catch (e) {
@@ -123,10 +129,35 @@ export class WhatsAppSessionManager {
             }
             this.sessions.delete(sessionId);
             this.retryCounters.delete(sessionId);
+            this.connectionStates.delete(sessionId);
 
-            // Restart after a short delay
             setTimeout(() => this.startSession(sessionId), 2000);
             return;
+          }
+
+          // For conflict, try to reconnect a few times without wiping state
+          if (isConflict) {
+            const retries = (this.retryCounters.get(sessionId) || 0) + 1;
+            this.retryCounters.set(sessionId, retries);
+
+            if (retries <= 3) { // Allow up to 3 conflict retries before giving up/requiring re-scan
+              console.log(`🔄 Session ${sessionId}: Conflict detected (Attempt ${retries}/3). Reconnecting without wiping state...`);
+              this.sessions.delete(sessionId);
+              setTimeout(() => this.startSession(sessionId), 5000);
+              return;
+            } else {
+              console.log(`❌ Session ${sessionId}: Persistent Conflict. Wiping state and requesting new QR...`);
+              try {
+                await clearState();
+              } catch (e) {
+                console.error('Error clearing state:', e);
+              }
+              this.sessions.delete(sessionId);
+              this.retryCounters.delete(sessionId);
+              this.connectionStates.delete(sessionId);
+              setTimeout(() => this.startSession(sessionId), 2000);
+              return;
+            }
           }
 
           // For other errors, try to reconnect with retry logic
@@ -138,13 +169,16 @@ export class WhatsAppSessionManager {
             console.log(
               `   Reconnecting session ${sessionId} in ${delay}ms... (attempt ${retries})`,
             );
+            this.sessions.delete(sessionId); // Clean up old socket ref
             setTimeout(() => this.startSession(sessionId), delay);
           } else {
             console.error(`❌ Session ${sessionId}: Max retries reached.`);
+            this.connectionStates.set(sessionId, 'disconnected');
           }
         } else if (connection === 'open') {
           console.log(`✅ Session ${sessionId} Connected!`);
           this.retryCounters.set(sessionId, 0); // Reset retries
+          this.connectionStates.set(sessionId, 'connected');
           await this.updateSessionStatus(
             sessionId,
             'connected',
@@ -152,6 +186,7 @@ export class WhatsAppSessionManager {
             sock.user?.id,
           );
         } else if (connection === 'connecting') {
+          this.connectionStates.set(sessionId, 'connecting');
           await this.updateSessionStatus(sessionId, 'connecting');
         }
       });

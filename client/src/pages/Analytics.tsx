@@ -170,18 +170,21 @@ export default function Analytics() {
             {trends.length === 0 ? (
               <p className="text-gray-500 text-center py-8">No data available</p>
             ) : (
-              trends.map((day) => (
-                <div key={day.date} className="flex items-center gap-4">
-                  <span className="text-sm text-gray-500 w-20">{day.date.slice(5)}</span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
-                    <div 
-                      className="bg-blue-500 h-full rounded-full"
-                      style={{ width: `${Math.min(100, (day.messages / Math.max(...trends.map(t => t.messages))) * 100)}%` }}
-                    />
+              (() => {
+                const maxMessages = Math.max(...trends.map(t => t.messages), 1);
+                return trends.map((day) => (
+                  <div key={day.date} className="flex items-center gap-4">
+                    <span className="text-sm text-gray-500 w-20">{day.date.slice(5)}</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+                      <div 
+                        className="bg-blue-500 h-full rounded-full transition-all duration-300"
+                        style={{ width: `${Math.min(100, (day.messages / maxMessages) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-medium w-12 text-right">{day.messages}</span>
                   </div>
-                  <span className="text-sm font-medium w-12 text-right">{day.messages}</span>
-                </div>
-              ))
+                ));
+              })()
             )}
           </div>
         </div>

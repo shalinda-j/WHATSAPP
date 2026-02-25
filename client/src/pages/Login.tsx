@@ -17,6 +17,8 @@ export default function Login() {
         // Check if setup is needed
         api.get('/api/auth/setup-check').then(res => {
             if (res.data.needsSetup) setNeedsSetup(true);
+        }).catch(() => {
+            // Setup check failed, proceed with login mode
         });
     }, [token, navigate]);
 

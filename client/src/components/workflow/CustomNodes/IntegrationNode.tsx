@@ -30,10 +30,12 @@ const IntegrationNode = ({ data, isConnectable }: NodeProps) => {
             <div className="space-y-3">
                 {fields.map((field) => (
                     <div key={field.key}>
-                        <label className="block text-[10px] uppercase font-semibold text-slate-500 mb-1">
+                        <label htmlFor={`field-${field.key}`} className="block text-[10px] uppercase font-semibold text-slate-500 mb-1">
                             {field.label}
                         </label>
                         <input
+                            id={`field-${field.key}`}
+                            name={field.key}
                             className="nodrag w-full text-xs p-2 rounded border border-gray-300 focus:outline-none focus:border-indigo-500 bg-gray-50 focus:bg-white transition-all"
                             placeholder={field.placeholder || `Enter ${field.label}`}
                             type={field.type || 'text'}

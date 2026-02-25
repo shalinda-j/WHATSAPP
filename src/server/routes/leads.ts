@@ -125,6 +125,27 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+router.get('/job-types', (req, res) => {
+  const jobTypes = [
+    'Electrician',
+    'Plumber',
+    'Asphalt Worker',
+    'Concrete Pump Driver',
+    'Excavator Operator',
+    'JCB Operator',
+    'Heavy Duty Cleaner',
+    'Gypsum Fixer',
+    'Tile Fixer',
+    'General Worker',
+    'Welder',
+    'Carpenter',
+    'Mason',
+    'Painter',
+    'AC Technician'
+  ];
+  res.json(jobTypes);
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const lead = await Lead.findById(req.params.id);
@@ -251,27 +272,6 @@ router.get('/:id/qualifications/:qualIndex/download', async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
-});
-
-router.get('/job-types', (req, res) => {
-  const jobTypes = [
-    'Electrician',
-    'Plumber',
-    'Asphalt Worker',
-    'Concrete Pump Driver',
-    'Excavator Operator',
-    'JCB Operator',
-    'Heavy Duty Cleaner',
-    'Gypsum Fixer',
-    'Tile Fixer',
-    'General Worker',
-    'Welder',
-    'Carpenter',
-    'Mason',
-    'Painter',
-    'AC Technician'
-  ];
-  res.json(jobTypes);
 });
 
 export default router;

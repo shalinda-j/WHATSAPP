@@ -35,7 +35,6 @@ function AppRoutes() {
         <Route path="datasets" element={<Datasets />} />
         <Route path="webhooks" element={<Webhooks />} />
         <Route path="config" element={<Config />} />
-        <Route path="config" element={<Config />} />
         <Route path="voice-config" element={<VoiceConfig />} />
         <Route path="bulk-message" element={<BulkSender />} />
         <Route path="system" element={<SystemMaintenance />} />

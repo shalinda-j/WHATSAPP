@@ -45,6 +45,7 @@ router.post('/', async (req, res) => {
     }
 
     // Start the socket (this is async but we don't await it, it runs in background)
+    // The manager already has checks to prevent duplicate starts, but we can log it here too
     manager.startSession(newId).catch((err: any) => {
       console.error(
         `   ❌ Error during startSession for ${newId}:`,
