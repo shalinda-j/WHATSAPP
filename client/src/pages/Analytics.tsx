@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../config';
-import { 
-  MessageCircle, Users, TrendingUp, BarChart3, 
+import {
+  MessageCircle, Users, TrendingUp, BarChart3,
   FileText, Mic
 } from 'lucide-react';
 
@@ -13,6 +13,8 @@ interface OverviewStats {
   totalUsers: number;
   voiceMessages: number;
   textMessages: number;
+  botMessages: number;
+  userMessages: number;
   avgMessagesPerUser: string;
 }
 
@@ -176,7 +178,7 @@ export default function Analytics() {
                   <div key={day.date} className="flex items-center gap-4">
                     <span className="text-sm text-gray-500 w-20">{day.date.slice(5)}</span>
                     <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
-                      <div 
+                      <div
                         className="bg-blue-500 h-full rounded-full transition-all duration-300"
                         style={{ width: `${Math.min(100, (day.messages / maxMessages) * 100)}%` }}
                       />
@@ -243,7 +245,7 @@ export default function Analytics() {
             <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg">
               <div className="flex items-center gap-3">
                 <Mic className="h-6 w-6 text-purple-600" />
-                <span className="font-medium">Voice Messages</span>
+                <span className="font-medium">Voice Messages Replied</span>
               </div>
               <span className="text-xl font-bold">{overview?.voiceMessages || 0}</span>
             </div>
@@ -252,8 +254,16 @@ export default function Analytics() {
           <h2 className="text-lg font-semibold mt-6 mb-4">Total Stats</h2>
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Total Messages</span>
+              <span className="text-gray-500">Total Interactions</span>
               <span className="font-medium">{overview?.totalMessages || 0}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Chatbot Messages Sent</span>
+              <span className="font-medium text-blue-600">{overview?.botMessages || 0}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Questions Asked</span>
+              <span className="font-medium text-purple-600">{overview?.userMessages || 0}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">This Month</span>

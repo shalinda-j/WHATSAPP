@@ -11,7 +11,7 @@ router.get('/overview', async (req, res) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     const weekAgo = new Date(today);
     weekAgo.setDate(weekAgo.getDate() - 7);
 
@@ -25,7 +25,9 @@ router.get('/overview', async (req, res) => {
       monthMessages,
       uniqueUsers,
       voiceMessages,
-      textMessages
+      textMessages,
+      botMessages,
+      userMessages
     ] = await Promise.all([
       ChatMessage.countDocuments(),
       ChatMessage.countDocuments({ timestamp: { $gte: today } }),
@@ -33,7 +35,9 @@ router.get('/overview', async (req, res) => {
       ChatMessage.countDocuments({ timestamp: { $gte: monthAgo } }),
       ChatMessage.distinct('userId'),
       ChatMessage.countDocuments({ type: 'voice' }),
-      ChatMessage.countDocuments({ type: 'text' })
+      ChatMessage.countDocuments({ type: 'text' }),
+      ChatMessage.countDocuments({ role: 'assistant' }),
+      ChatMessage.countDocuments({ role: 'user' })
     ]);
 
     const userCount = uniqueUsers.length;
@@ -46,6 +50,8 @@ router.get('/overview', async (req, res) => {
       totalUsers: userCount,
       voiceMessages,
       textMessages,
+      botMessages,
+      userMessages,
       avgMessagesPerUser: userCount > 0 ? (totalMessages / userCount).toFixed(1) : 0
     });
   } catch (err: any) {
@@ -104,11 +110,11 @@ router.get('/trends', async (req, res) => {
     startDate.setHours(0, 0, 0, 0);
 
     const messagesByDay = await ChatMessage.aggregate([
-      { 
-        $match: { 
+      {
+        $match: {
           timestamp: { $gte: startDate },
           role: 'user'
-        } 
+        }
       },
       {
         $group: {
@@ -135,7 +141,7 @@ router.get('/trends', async (req, res) => {
 router.get('/datasets', async (req, res) => {
   try {
     const Dataset = (await import('../../models/Dataset')).default;
-    
+
     const datasets = await Dataset.find({ isActive: true })
       .sort({ updatedAt: -1 })
       .limit(10);
@@ -160,7 +166,7 @@ router.get('/leads', async (req, res) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     const weekAgo = new Date(today);
     weekAgo.setDate(weekAgo.getDate() - 7);
 
@@ -206,7 +212,7 @@ router.get('/top-questions', async (req, res) => {
       .limit(Number(limit) * 2);
 
     const messageCounts: Record<string, number> = {};
-    
+
     for (const msg of userMessages) {
       const content = msg.content.trim().toLowerCase();
       if (content.length > 2 && content.length < 200) {
