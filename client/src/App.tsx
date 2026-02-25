@@ -13,6 +13,7 @@ import BulkSender from './pages/BulkSender';
 import MarketingManager from './pages/MarketingManager';
 import Leads from './pages/Leads';
 import Analytics from './pages/Analytics';
+import N8nWorkflows from './pages/N8nWorkflows';
 
 import Sessions from './pages/Sessions';
 import Layout from './components/Layout';
@@ -39,6 +40,7 @@ function AppRoutes() {
         <Route path="bulk-message" element={<BulkSender />} />
         <Route path="system" element={<SystemMaintenance />} />
         <Route path="marketing" element={<MarketingManager />} />
+        <Route path="n8n" element={<N8nWorkflows />} />
         <Route path="leads" element={<Leads />} />
         <Route path="analytics" element={<Analytics />} />
 

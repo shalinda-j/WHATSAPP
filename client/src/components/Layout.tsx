@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, Database, Settings, LogOut, Smartphone, Menu, X, Globe, AudioLines, Megaphone, Users, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Database, Settings, LogOut, Smartphone, Menu, X, Globe, AudioLines, Megaphone, Users, BarChart3, Share2 } from 'lucide-react';
 
 export default function Layout() {
     const { logout } = useAuth();
@@ -63,6 +63,7 @@ export default function Layout() {
                         <NavLink to="/voice-config" icon={AudioLines}>Voice Agent</NavLink>
                         <NavLink to="/bulk-message" icon={Megaphone}>Bulk Messaging</NavLink>
                         <NavLink to="/marketing" icon={Megaphone}>Marketing Manager</NavLink>
+                        <NavLink to="/n8n" icon={Share2}>n8n Automations</NavLink>
                         <NavLink to="/system" icon={Database}>System Maintenance</NavLink>
 
                         <NavLink to="/config" icon={Settings}>Configuration</NavLink>
