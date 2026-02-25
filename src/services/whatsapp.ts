@@ -211,6 +211,25 @@ export class WhatsAppSessionManager {
           }),
         );
       });
+
+      // Handle Incoming Calls (Auto-Responder)
+      sock.ev.on('call', async (calls) => {
+        for (const call of calls) {
+          if (call.status === 'offer') {
+            try {
+              // Reject the call
+              await sock.rejectCall(call.id, call.from);
+
+              // Send automated message
+              const message = "🤖 *Automated Response*\n\nI am an AI assistant and I cannot answer live voice/video calls. Please send me a *Voice Note* instead, and I will reply to you!";
+              await sock.sendMessage(call.from, { text: message });
+              console.log(`📞 Rejected call from ${call.from} on session ${sessionId} and sent auto-responder message.`);
+            } catch (err) {
+              console.error(`❌ Error handling incoming call from ${call.from}:`, err);
+            }
+          }
+        }
+      });
     } catch (error) {
       console.error(`❌ startSession error (${sessionId}):`, error);
     }
