@@ -474,9 +474,12 @@ export default function Config() {
                                         >
                                             <option value="google-free">Google TTS (Free)</option>
                                             <option value="openai">OpenAI TTS (High Quality - Paid)</option>
+                                            <option value="elevenlabs">ElevenLabs (Voice Cloning - Paid)</option>
                                         </select>
                                         <p className="text-xs text-gray-500 mt-1">
-                                            {voiceConfig.provider === 'google-free' ? 'Standard robotic voice. No API key required.' : 'Generating high-quality lifelike speech. Requires API Key.'}
+                                            {voiceConfig.provider === 'google-free' ? 'Standard robotic voice. No API key required.' :
+                                                voiceConfig.provider === 'elevenlabs' ? 'Ultra-realistic cloned voices.' :
+                                                    'Generating high-quality lifelike speech. Requires API Key.'}
                                         </p>
                                     </div>
 
@@ -501,7 +504,7 @@ export default function Config() {
                                 {voiceConfig.provider !== 'google-free' && (
                                     <div className="p-4 border border-blue-100 bg-blue-50 rounded-lg animation-fade-in transition-all">
                                         <label className="block text-sm font-medium text-blue-900 mb-2">
-                                            <span className="flex items-center"><Key className="w-4 h-4 mr-2" /> API Key for {voiceConfig.provider === 'openai' ? 'OpenAI' : 'Provider'}</span>
+                                            <span className="flex items-center"><Key className="w-4 h-4 mr-2" /> API Key for {voiceConfig.provider === 'openai' ? 'OpenAI' : 'ElevenLabs'}</span>
                                         </label>
                                         <input
                                             type="password"
@@ -564,6 +567,38 @@ export default function Config() {
                                                 </div>
                                             </div>
                                         )}
+
+                                        {voiceConfig.provider === 'elevenlabs' && (
+                                            <div className="mt-4 space-y-4">
+                                                <div className="grid grid-cols-1 gap-4">
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-blue-900 mb-2">Voice Engine Model</label>
+                                                        <select
+                                                            value={voiceConfig.ttsModel || 'eleven_multilingual_v2'}
+                                                            onChange={(e) => setVoiceConfig({ ...voiceConfig, ttsModel: e.target.value as any })}
+                                                            className="w-full p-2 border border-blue-200 rounded"
+                                                        >
+                                                            <option value="eleven_multilingual_v2">Multilingual v2 (Recommended)</option>
+                                                            <option value="eleven_monolingual_v1">Monolingual v1 (English only)</option>
+                                                            <option value="eleven_turbo_v2">Turbo v2 (Fastest)</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-sm font-medium text-blue-900 mb-2">Voice ID / Cloned Voice ID</label>
+                                                    <input
+                                                        value={voiceConfig.voiceId || ''}
+                                                        onChange={(e) => setVoiceConfig({ ...voiceConfig, voiceId: e.target.value })}
+                                                        placeholder="e.g. pNInz6obpgDQGcFmaJcg"
+                                                        className="w-full p-2 border border-blue-200 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                                    />
+                                                    <p className="text-xs text-blue-600 mt-1">
+                                                        Find your Voice ID in the ElevenLabs Dashboard under <strong>Voices &gt; Voice Lab </strong>.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
@@ -582,7 +617,8 @@ export default function Config() {
                         </>
                     )}
                 </div>
-            )}
-        </div>
+            )
+            }
+        </div >
     );
 }

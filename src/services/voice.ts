@@ -53,6 +53,45 @@ export async function generateSpeech(text: string): Promise<Buffer> {
 
   console.log(`   🔊 Generating speech using provider: ${provider}`);
 
+  if (provider === 'elevenlabs') {
+    try {
+      if (!apiKey) {
+        throw new Error('ElevenLabs API Key is missing in config');
+      }
+
+      const voiceId = config?.voiceId || 'pNInz6obpgDQGcFmaJcg'; // Default to a standard voice if none provided
+      const modelId = config?.ttsModel || 'eleven_multilingual_v2';
+
+      console.log(`   🎙️ Calling ElevenLabs TTS API (Voice ID: ${voiceId})...`);
+
+      const response = await axios.post(
+        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+        {
+          text: text,
+          model_id: modelId,
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.75,
+          }
+        },
+        {
+          headers: {
+            'Accept': 'audio/mpeg',
+            'xi-api-key': apiKey,
+            'Content-Type': 'application/json'
+          },
+          responseType: 'arraybuffer'
+        }
+      );
+
+      return Buffer.from(response.data);
+
+    } catch (err: any) {
+      console.error(`   ⚠️ ElevenLabs TTS failed: ${err.message}. Falling back to Google Free.`);
+      // Fallback to Google
+    }
+  }
+
   if (provider === 'openai') {
     try {
       if (!apiKey) {
