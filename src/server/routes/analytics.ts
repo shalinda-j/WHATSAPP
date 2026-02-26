@@ -7,6 +7,26 @@ const router = Router();
 
 router.use(authenticateToken);
 
+router.get('/', async (req, res) => {
+  try {
+    // Determine counts for VoiceAgentHub stats
+    const [totalVoiceNotes, totalCallsRejected] = await Promise.all([
+      ChatMessage.countDocuments({ type: 'voice' }),
+      // Our rejection data is not explicitly stored in ChatMessage differently, but 
+      // let's look for known rejections or just use a default placeholder or query
+      // Alternatively, assuming text messages warning about calls
+      ChatMessage.countDocuments({ role: 'assistant', content: { $regex: /voice message/i } })
+    ]);
+
+    res.json({
+      totalVoiceNotes,
+      totalCallsRejected: totalCallsRejected || 0
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/overview', async (req, res) => {
   try {
     const today = new Date();
@@ -228,6 +248,27 @@ router.get('/top-questions', async (req, res) => {
       .map(([question, count]) => ({ question, count }));
 
     res.json(topQuestions);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/recent-replies', async (req, res) => {
+  try {
+    const { limit = 10 } = req.query;
+
+    // Fetch the absolute newest messages where the bot has replied
+    const recentReplies = await ChatMessage.find({ role: 'assistant' })
+      .sort({ timestamp: -1 })
+      .limit(Number(limit));
+
+    res.json(recentReplies.map((reply) => ({
+      id: reply._id,
+      content: reply.content,
+      type: reply.type,
+      timestamp: reply.timestamp,
+      metadata: reply.metadata
+    })));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

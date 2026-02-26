@@ -305,11 +305,38 @@ export class WhatsAppSessionManager {
 const manager = WhatsAppSessionManager.instance;
 
 export async function connectToWhatsApp() {
-  return manager.startSession('default');
+  if (process.env.MONGODB_URI) {
+    try {
+      // Find all sessions in the database that are not permanently logged out
+      // We start all prior known sessions on boot so multi-device retains connection
+      const knownSessions = await Session.find({ status: { $ne: 'loggedOut' } });
+
+      if (knownSessions.length > 0) {
+        console.log(`📱 Found ${knownSessions.length} existing sessions in DB. Starting them...`);
+        for (const session of knownSessions) {
+          await manager.startSession(session.sessionId);
+        }
+      } else {
+        // If no sessions exist, at least start the default one
+        console.log(`📱 No existing sessions found. Starting default session...`);
+        return manager.startSession('default');
+      }
+    } catch (e) {
+      console.error('Error auto-starting sessions, falling back to default:', e);
+      return manager.startSession('default');
+    }
+  } else {
+    // File-based fallback
+    return manager.startSession('default');
+  }
 }
 
 export async function disconnectWhatsApp() {
-  return manager.deleteSession('default');
+  // Gracefully close all active sockets
+  const activeSessions = await Session.find({ status: { $eq: 'connected' } });
+  for (const session of activeSessions) {
+    await manager.deleteSession(session.sessionId);
+  }
 }
 
 // Forward compatible message registry

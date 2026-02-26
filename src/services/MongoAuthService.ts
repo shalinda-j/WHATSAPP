@@ -108,13 +108,22 @@ export const useMongoDBAuthState = async (
   saveCreds: () => Promise<void>;
   clearState: () => Promise<void>;
 }> => {
+  // Add in-memory cache to prevent 'Bad MAC' decryption errors caused by slow DB reads/writes
+  const cache: { [key: string]: any } = {};
+
   // Helper to read data
   const readData = async (key: string): Promise<any> => {
     try {
+      if (cache[key] !== undefined) {
+        return cache[key];
+      }
       const data = await AuthModel.findOne({ sessionId, key });
       if (data && data.value) {
-        return JSON.parse(JSON.stringify(data.value), BufferJSON.reviver);
+        const parsed = JSON.parse(JSON.stringify(data.value), BufferJSON.reviver);
+        cache[key] = parsed;
+        return parsed;
       }
+      cache[key] = null;
       return null;
     } catch (error) {
       console.error(
@@ -128,6 +137,7 @@ export const useMongoDBAuthState = async (
   // Helper to write data
   const writeData = async (key: string, value: any): Promise<void> => {
     try {
+      cache[key] = value;
       const jsonValue = JSON.parse(JSON.stringify(value, BufferJSON.replacer));
       await AuthModel.findOneAndUpdate(
         { sessionId, key },
@@ -145,6 +155,7 @@ export const useMongoDBAuthState = async (
   // Helper to remove data
   const removeData = async (key: string): Promise<void> => {
     try {
+      delete cache[key];
       await AuthModel.deleteOne({ sessionId, key });
     } catch (error) {
       console.error(
@@ -157,6 +168,7 @@ export const useMongoDBAuthState = async (
   // Explicitly expose method to clear entire session
   const clearState = async (): Promise<void> => {
     try {
+      Object.keys(cache).forEach((k) => delete cache[k]);
       await AuthModel.deleteMany({ sessionId });
       console.log(`🧹 Cleared all auth data for session: ${sessionId}`);
     } catch (error) {

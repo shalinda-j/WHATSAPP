@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../config';
 import {
   MessageCircle, Users, TrendingUp, BarChart3,
-  FileText, Mic, Download
+  FileText, Mic, Download, Bot
 } from 'lucide-react';
 
 interface OverviewStats {
@@ -41,10 +41,19 @@ interface LeadStats {
   byJobType: Record<string, number>;
 }
 
+interface ChatbotReply {
+  id: string;
+  content: string;
+  type: string;
+  timestamp: string;
+  metadata?: any;
+}
+
 export default function Analytics() {
   const [overview, setOverview] = useState<OverviewStats | null>(null);
   const [questions, setQuestions] = useState<QuestionCategory[]>([]);
   const [topQuestions, setTopQuestions] = useState<TopQuestion[]>([]);
+  const [recentReplies, setRecentReplies] = useState<ChatbotReply[]>([]);
   const [trends, setTrends] = useState<TrendData[]>([]);
   const [leadStats, setLeadStats] = useState<LeadStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -57,12 +66,13 @@ export default function Analytics() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [overviewRes, questionsRes, topRes, trendsRes, leadsRes] = await Promise.all([
+      const [overviewRes, questionsRes, topRes, trendsRes, leadsRes, repliesRes] = await Promise.all([
         api.get('/api/analytics/overview'),
         api.get('/api/analytics/questions'),
         api.get('/api/analytics/top-questions?limit=15'),
         api.get(`/api/analytics/trends?days=${selectedPeriod}`),
-        api.get('/api/analytics/leads')
+        api.get('/api/analytics/leads'),
+        api.get('/api/analytics/recent-replies?limit=10')
       ]);
 
       setOverview(overviewRes.data);
@@ -70,6 +80,7 @@ export default function Analytics() {
       setTopQuestions(topRes.data);
       setTrends(trendsRes.data);
       setLeadStats(leadsRes.data);
+      setRecentReplies(repliesRes.data);
     } catch (err) {
       console.error('Failed to fetch analytics:', err);
     } finally {
@@ -294,6 +305,42 @@ export default function Analytics() {
               <span className="font-medium">{overview?.monthMessages || 0}</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Recent Chatbot Replies */}
+      <div className="bg-white p-5 rounded-xl shadow-md mb-6">
+        <h2 className="text-lg font-semibold mb-4">Recent Chatbot Replies</h2>
+        <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+          {recentReplies.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">No recent replies</p>
+          ) : (
+            recentReplies.map((reply) => (
+              <div key={reply.id} className="p-4 bg-gray-50 rounded-lg border border-gray-100 flex gap-4">
+                <div className="flex-shrink-0 mt-1">
+                  <Bot className="h-6 w-6 text-purple-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-gray-900">
+                      AI Assistant
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {new Date(reply.timestamp).toLocaleString()}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{reply.content}</p>
+                  {reply.metadata?.intent && reply.metadata.intent !== 'General' && (
+                    <div className="mt-2 flex gap-2">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                        {reply.metadata.intent}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

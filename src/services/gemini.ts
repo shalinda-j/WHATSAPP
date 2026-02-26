@@ -24,8 +24,8 @@ async function getGeminiModel(modelName = 'gemini-1.5-flash-latest') {
   // Fallback to environment variables if DB config is missing
   const validKey = apiKey || process.env.GEMINI_API_KEY;
 
-  if (!validKey) {
-    throw new Error('Google Gemini API Key is missing. Please configure it in the Admin Panel (AI Providers -> Google).');
+  if (!validKey || validKey === 'your_gemini_api_key_here') {
+    throw new Error('MISSING_API_KEY');
   }
 
   const genAI = new GoogleGenerativeAI(validKey);
@@ -77,7 +77,10 @@ export async function generateResponse(prompt: string): Promise<string> {
       systemInstruction: `${aiPersonality}\n\n${dynamicKB}`,
     });
     return result.response.text();
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === 'MISSING_API_KEY') {
+      return '⚠️ Google Gemini API Key is missing. Please configure it in the Admin Panel.';
+    }
     console.error('Gemini API error:', error);
     throw error;
   }
@@ -96,7 +99,10 @@ export async function generateSinhalaResponse(prompt: string): Promise<string> {
       systemInstruction: `${SINHALA_SYSTEM_PROMPT}\n\n${dynamicKB}`,
     });
     return result.response.text();
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === 'MISSING_API_KEY') {
+      return '⚠️ Google Gemini API Key is missing. Please configure it in the Admin Panel.';
+    }
     console.error('Gemini API error (Sinhala):', error);
     throw error;
   }
@@ -138,9 +144,12 @@ export async function sendMessageWithMemory(
     const chat = await getChatSession(userId);
     const result = await chat.sendMessage(message);
     return result.response.text();
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === 'MISSING_API_KEY') {
+      return '⚠️ Google Gemini API Key is missing. Please configure it in the Admin Panel (AI Providers -> Google) to enable AI responses.';
+    }
     console.error('Gemini chat error:', error);
-    throw error;
+    return '⚠️ Sorry, an error occurred while processing your message.';
   }
 }
 
@@ -173,7 +182,10 @@ export async function transcribeAudio(
       },
     ]);
     return result.response.text();
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === 'MISSING_API_KEY') {
+      return ''; // Missing API key, skip transcription
+    }
     console.error('Audio transcription error:', error);
     throw error;
   }
@@ -200,7 +212,10 @@ export async function extractTextFromImage(
       },
     ]);
     return result.response.text();
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === 'MISSING_API_KEY') {
+      return ''; // Missing API key, skip OCR
+    }
     console.error('Image OCR error:', error);
     throw error;
   }
@@ -257,8 +272,10 @@ export async function analyzeLeadIntent(text: string): Promise<{
       .replace(/```/g, '')
       .trim();
     return JSON.parse(responseText);
-  } catch (error) {
-    console.error('Lead analysis error:', error);
+  } catch (error: any) {
+    if (error.message !== 'MISSING_API_KEY') {
+      console.error('Lead analysis error:', error);
+    }
     return null;
   }
 }
@@ -311,6 +328,11 @@ export class GeminiService implements AIService {
       // Get model with dynamic system instruction
       const aiPersonality = await configService.getAIPersonality();
       const dynamicKB = await configService.getDynamicKnowledgeBase();
+
+      if (!this.apiKey || this.apiKey === 'your_gemini_api_key_here') {
+        return '⚠️ Google Gemini API Key is missing. Please configure it in the Admin Panel to enable AI Features.';
+      }
+
       const modelInstance = this.genAI.getGenerativeModel({
         model: this.modelName,
         systemInstruction:

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../config';
 import { Link } from 'react-router-dom';
 import {
@@ -7,7 +7,6 @@ import {
     Database,
     Globe,
     Users,
-    BarChart3,
     Activity,
     CheckCircle2,
     XCircle,
