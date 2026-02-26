@@ -59,6 +59,9 @@ export async function transcribeAudio(
 ): Promise<string> {
   try {
     const openai = new OpenAI({ apiKey });
+
+    // We need to convert the Buffer into a File object that OpenAI API accepts
+    // The toFile utility from openai package helps with this
     const file = await toFile(audioBuffer, 'voice_message.ogg', {
       type: 'audio/ogg',
     });

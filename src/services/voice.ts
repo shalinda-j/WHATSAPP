@@ -17,7 +17,12 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
 
     if (provider === 'openai' && config?.apiKey) {
       console.log('   🎙️ Transcribing audio with OpenAI Whisper...');
-      return await openaiTranscribeAudio(audioBuffer, config.apiKey);
+      try {
+        return await openaiTranscribeAudio(audioBuffer, config.apiKey);
+      } catch (openaiErr: any) {
+        console.warn(`   ⚠️ OpenAI STT failed: ${openaiErr.message}. Falling back to Gemini...`);
+        // Fallthrough to Gemini
+      }
     }
 
     console.log('   🎙️ Transcribing audio with Gemini...');
@@ -99,7 +104,9 @@ export async function generateSpeech(text: string): Promise<Buffer> {
       }
 
       // Re-init OpenAI with new key if needed
-      const client = new OpenAI({ apiKey: apiKey, dangerouslyAllowBrowser: true });
+      const client = new OpenAI({ apiKey: apiKey });
+
+      console.log(`   🎙️ Calling OpenAI TTS API (Voice ID: ${config?.voiceId || 'alloy'})...`);
 
       const mp3 = await client.audio.speech.create({
         model: (config?.ttsModel as any) || "tts-1",

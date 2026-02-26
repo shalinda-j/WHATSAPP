@@ -20,7 +20,13 @@ export default function VoiceConfig() {
     const fetchConfig = async () => {
         try {
             const res = await api.get('/api/voice-config');
-            setConfig(res.data);
+            // The backend returns an array of configs. We should use the most recently updated one as the active config for this global toggle.
+            if (Array.isArray(res.data) && res.data.length > 0) {
+                // The backend sorts by updatedAt: -1, so the first one is the active/latest
+                setConfig(res.data[0]);
+            } else if (!Array.isArray(res.data) && res.data) {
+                setConfig(res.data);
+            }
         } catch (error) {
             console.error('Failed to fetch voice config', error);
             setMessage({ type: 'error', text: 'Failed to load configuration' });
