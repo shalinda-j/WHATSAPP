@@ -303,14 +303,20 @@ onMessage(async (message, sock, sessionId) => {
         // Default language is SINHALA. If user writes in English only, reply in English.
         let finalPrompt = text;
         if (isVoiceMessage) {
-          // Simple heuristic: detect Sinhala Unicode characters (U+0D80–U+0DFF)
-          const hasSinhala = /[\u0D80-\u0DFF]/.test(text);
-          if (hasSinhala) {
-            // Sinhala voice note → reply in Sinhala
-            finalPrompt += `\n\n(SYSTEM: සිංහල භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න. ජැන කතාවක් Voice Note ුනී - ඉතා කෙටිව දෙ සැකූ 2ක්.)`;
+          // For voice notes, Whisper transcribes Sinhala speech as romanized Latin text,
+          // so Unicode detection won't work. Instead we check if the transcription looks
+          // like English words. If not (e.g., romanized Sinhala like 'mage nama manda'),
+          // we default to Sinhala - the system's primary language.
+          const looksLikeEnglish = /^([a-zA-Z]+\s*){3,}$/.test(text.trim()) &&
+            /\b(the|is|are|I|you|he|she|we|they|my|your|it|and|or|but|what|how|can|could|please|hello|hi|thank|yes|no|okay|ok)\b/i.test(text);
+
+          if (looksLikeEnglish) {
+            // Transcription looks like real English speech
+            finalPrompt += `\n\n(SYSTEM: This is a VOICE message spoken in English. Reply ONLY in English, very short, max 2 sentences, natural spoken style.)`;
           } else {
-            // English (or other language) voice note → reply in same language
-            finalPrompt += `\n\n(SYSTEM: This is a VOICE message in English. Reply ONLY in English, very short, max 2 sentences.)`;
+            // Default: treat as Sinhala (the primary system language)
+            // Even if romanized, reply in proper Sinhala script
+            finalPrompt += `\n\n(SYSTEM: මෙය VOICE (හඬ) පණිවිඩයකි. **සිංහල** භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න. ඉතා කෙටිව, ස්වාභාවිකව කතා කරන ශෛලියෙන් යෙදුම් 2කින් හෝ 1කින් ලිවිය යුතුය.)`;
           }
         } else {
           // Text message: detect language
@@ -367,8 +373,9 @@ onMessage(async (message, sock, sessionId) => {
 
       if (isVoiceMessage) {
         // Fetch Voice Config to respect the response mode
+        // Default is 'voice-only' - when someone sends a voice note, reply with a voice note ONLY
         const voiceConfig = await VoiceConfig.findOne().sort({ updatedAt: -1 });
-        const responseMode = voiceConfig?.mode || 'voice-and-text';
+        const responseMode = voiceConfig?.mode || 'voice-only';
         let sentText = false;
 
         // If mode requires text, send it first
