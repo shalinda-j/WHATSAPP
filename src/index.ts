@@ -299,10 +299,34 @@ onMessage(async (message, sock, sessionId) => {
         // Analyze Intent first for metadata
         intentAnalysis = await analyzeLeadIntent(text);
 
-        // VOICE OPTIMIZATION: If this is a voice key, ask for a short spoken response
+        // LANGUAGE DETECTION: Detect language and set response language accordingly
+        // Default language is SINHALA. If user writes in English only, reply in English.
         let finalPrompt = text;
         if (isVoiceMessage) {
-          finalPrompt += `\n\n(IMPORTANT: This is a VOICE message. Reply in a very short, spoken style. Keep it under 2 sentences so it can be spoken out loud easily.)`;
+          // Simple heuristic: detect Sinhala Unicode characters (U+0D80–U+0DFF)
+          const hasSinhala = /[\u0D80-\u0DFF]/.test(text);
+          if (hasSinhala) {
+            // Sinhala voice note → reply in Sinhala
+            finalPrompt += `\n\n(SYSTEM: සිංහල භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න. ජැන කතාවක් Voice Note ුනී - ඉතා කෙටිව දෙ සැකූ 2ක්.)`;
+          } else {
+            // English (or other language) voice note → reply in same language
+            finalPrompt += `\n\n(SYSTEM: This is a VOICE message in English. Reply ONLY in English, very short, max 2 sentences.)`;
+          }
+        } else {
+          // Text message: detect language
+          const hasSinhala = /[\u0D80-\u0DFF]/.test(text);
+          const isLikelyEnglish = /^[a-zA-Z0-9\s\p{P}!?.,;&'"()+\-*#@%$^\[\]{}|\\/<>=`~]+$/u.test(text.trim());
+
+          if (hasSinhala) {
+            // Message contains Sinhala → reply in Sinhala
+            finalPrompt += `\n\n(SYSTEM: සිංහල භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න.)`;
+          } else if (isLikelyEnglish) {
+            // Pure English message → reply in English
+            finalPrompt += `\n\n(SYSTEM: The user is writing in English. Reply ONLY in English.)`;
+          } else {
+            // Unknown/other language → default to Sinhala (the system's default language)
+            finalPrompt += `\n\n(SYSTEM: Default language is Sinhala. සිංහල භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න.)`;
+          }
         }
 
         response = await aiLoadBalancer.sendMessage(jid, finalPrompt);
@@ -349,7 +373,7 @@ onMessage(async (message, sock, sessionId) => {
 
         // If mode requires text, send it first
         if (responseMode === 'text-only' || responseMode === 'voice-and-text') {
-          sentText = await sendMessage(jid, `🤖 ${response}`, sessionId);
+          sentText = await sendMessage(jid, response, sessionId);
           console.log('   ✅ AI text response sent (based on mode)');
         }
 
@@ -364,12 +388,12 @@ onMessage(async (message, sock, sessionId) => {
             console.error('   ❌ TTS failed:', ttsError);
             // Fallback if we didn't already send text
             if (!sentText) {
-              await sendMessage(jid, `🤖 ${response}`, sessionId);
+              await sendMessage(jid, response, sessionId);
             }
           }
         }
       } else {
-        const sent = await sendMessage(jid, `🤖 ${response}`, sessionId);
+        const sent = await sendMessage(jid, response, sessionId);
         if (sent) {
           console.log('   ✅ AI response sent');
         } else {

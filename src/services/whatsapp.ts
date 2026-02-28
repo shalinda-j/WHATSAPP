@@ -229,8 +229,15 @@ export class WhatsAppSessionManager {
               // Reject the call
               await sock.rejectCall(call.id, call.from);
 
-              // Send automated message
-              const message = "🤖 *Automated Response*\n\nI am an AI assistant and I cannot answer live voice/video calls. Please send me a *Voice Note* instead, and I will reply to you!";
+              // Send automated bilingual message (Sinhala first - default language)
+              const message = [
+                "⚠️ *ස්වයංක්‍රීය පිළිතුර*",
+                "",
+                "මම AI සහකාරයෙකු. ජීවම ඇමතුම් ලබා ගැනීමට මට හැකියාවක් නොමැත.",
+                "කරුණාකර *Voice Note* (හඬ පණිවිඩය) ලෙස ඔබේ ප්‍රශ්නය ලෑවිල්ලා යෑවෙොතොත්, මම ඔබට ත්‍රිත්ව ලෙස ප්‍රතිඋත්තර දෙන්නෙමු.",
+                "",
+                "_I am an AI assistant. Please send me a *Voice Note* instead, and I will reply to you!_"
+              ].join("\n");
               await sock.sendMessage(call.from, { text: message });
               console.log(`📞 Rejected call from ${call.from} on session ${sessionId} and sent auto-responder message.`);
             } catch (err) {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Share2, ExternalLink } from 'lucide-react';
+import { Share2 } from 'lucide-react';
 
 export default function N8nWorkflows() {
     const [iframeError, setIframeError] = useState(false);
@@ -17,15 +17,6 @@ export default function N8nWorkflows() {
                         Manage your social media pipelines, CRM integrations, and custom logic workflows.
                     </p>
                 </div>
-
-                <a
-                    href={n8nUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 hover:text-indigo-600 transition shadow-sm font-medium"
-                >
-                    Open in New Tab <ExternalLink className="w-4 h-4" />
-                </a>
             </header>
 
             <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden relative">
