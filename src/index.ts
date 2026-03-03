@@ -15,6 +15,7 @@ import { seedAIProviders } from './services/AIProviderSeeder';
 import { seedDatasets } from './services/DatasetSeeder';
 import { transcribeAudio, generateSpeech } from './services/voice';
 import { aiLoadBalancer } from './services/AILoadBalancer';
+import { nlpService } from './services/NLPService';
 import { analyzeLeadIntent } from './services/gemini';
 import { WebhookService } from './services/WebhookService';
 import { configService } from './services/ConfigService';
@@ -46,6 +47,7 @@ async function startServer() {
       // Seed AI providers from .env into the Config collection
       await seedAIProviders();
       await seedDatasets();
+      await nlpService.initializeNLP();
     } catch (dbErr) {
       console.error('❌ MongoDB Connection Failed. Server starting in LIMITED MODE.');
       console.error(dbErr);
@@ -292,8 +294,9 @@ onMessage(async (message, sock, sessionId) => {
       }
 
       // Get AI response (Using Load Balancer)
-      let response: string;
+      let response: string | undefined;
       let intentAnalysis: any = null;
+      let answeredViaNLP = false;
 
       try {
         // Analyze Intent first for metadata
@@ -335,9 +338,30 @@ onMessage(async (message, sock, sessionId) => {
           }
         }
 
-        response = await aiLoadBalancer.sendMessage(jid, finalPrompt);
+        // 4. Local NLP Interception
+        const isLocalNLPEnabled = await configService.getLocalNLPEnabled();
+        if (isLocalNLPEnabled) {
+          const nlpCacheResponse = await nlpService.processMessage(text);
+          if (nlpCacheResponse) {
+            response = nlpCacheResponse;
+            answeredViaNLP = true;
+            console.log('   ✅ Answered via Local NLP Cache');
+          }
+        }
+
+        // 5. Fallback to AI Load Balancer if NLP doesn't know the answer
+        if (!response) {
+          response = await aiLoadBalancer.sendMessage(jid, finalPrompt);
+
+          // Learn from AI response dynamically (Fire & Forget)
+          if (isLocalNLPEnabled && response && response.trim() !== '') {
+            nlpService.learnFromAI(text, response).catch(err => {
+              console.error('Failed to learn from AI:', err);
+            });
+          }
+        }
       } catch (aiError: any) {
-        console.error('   ❌ AI Load Balancer failed:', aiError);
+        console.error('   ❌ Error in AI/NLP processing:', aiError);
         throw aiError;
       }
 

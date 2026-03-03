@@ -100,6 +100,19 @@ export class ConfigService {
         }
     }
 
+    public async getLocalNLPEnabled(): Promise<boolean> {
+        try {
+            const config = await import('../models/Config').then((m) =>
+                m.default.findOne({ key: 'LOCAL_NLP_ENABLED' })
+            );
+            // Default to false if not set
+            return config?.value === 'true';
+        } catch (error) {
+            console.error('Error fetching Local NLP flag:', error);
+            return false;
+        }
+    }
+
     public async getRegistrationMessage(): Promise<string> {
         const config = await this.getRegistrationConfig();
         return config.message || getRegistrationMessage(defaultConfig);

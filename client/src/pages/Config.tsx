@@ -51,6 +51,20 @@ export default function Config() {
             const res = await api.get('/api/config');
             if (Array.isArray(res.data)) {
                 setConfigs(res.data);
+
+                // Ensure LOCAL_NLP_ENABLED exists in DB
+                const hasLocalNLP = res.data.find(c => c.key === 'LOCAL_NLP_ENABLED');
+                if (!hasLocalNLP) {
+                    await api.post('/api/config', {
+                        key: 'LOCAL_NLP_ENABLED',
+                        value: 'false',
+                        description: 'Enables Auto-Learning Local NLP Caching to save API Tokens.',
+                        isProvider: false
+                    });
+                    // Re-fetch after creating
+                    const refetch = await api.get('/api/config');
+                    setConfigs(refetch.data);
+                }
             } else {
                 console.error("Expected array but got:", res.data);
                 setConfigs([]);
@@ -136,6 +150,19 @@ export default function Config() {
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
             alert('Error saving: ' + message);
+        }
+    };
+
+    const toggleLocalNLP = async () => {
+        const nlpConfig = configs.find(c => c.key === 'LOCAL_NLP_ENABLED');
+        if (nlpConfig) {
+            const newValue = nlpConfig.value === 'true' ? 'false' : 'true';
+            try {
+                await api.put(`/api/config/${nlpConfig._id}`, { ...nlpConfig, value: newValue });
+                fetchConfigs();
+            } catch (err) {
+                alert('Error updating Local NLP config');
+            }
         }
     };
 
@@ -415,6 +442,43 @@ export default function Config() {
                             )}
                         </div>
                     ))}
+
+                    {/* Local NLP Cache Card */}
+                    {(() => {
+                        const nlpConfig = configs.find(c => c.key === 'LOCAL_NLP_ENABLED');
+                        const isNLPActive = nlpConfig?.value === 'true';
+                        return (
+                            <div className={`bg-gray-50 p-6 rounded-xl shadow border border-gray-200`}>
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="flex items-center">
+                                        <div className={`p-2 rounded-lg ${isNLPActive ? 'bg-purple-100 text-purple-600' : 'bg-gray-200 text-gray-500'}`}>
+                                            <Bot className="h-6 w-6" />
+                                        </div>
+                                        <div className="ml-3">
+                                            <h3 className="text-lg font-bold">Local NLP Cache</h3>
+                                            <p className="text-xs text-gray-500 max-w-xs">Learns from AI responses and automatically handles repetitive queries without calling the API, saving tokens.</p>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input type="checkbox" className="sr-only peer" checked={isNLPActive} onChange={toggleLocalNLP} />
+                                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                                        </label>
+                                    </div>
+                                </div>
+                                {isNLPActive ? (
+                                    <div className="mt-2 flex items-center text-purple-600 text-sm font-medium">
+                                        <Activity className="h-4 w-4 mr-1" /> Active & Learning
+                                    </div>
+                                ) : (
+                                    <div className="mt-2 flex items-center text-gray-500 text-sm font-medium">
+                                        Disabled
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
+
                     {aiConfigs.length === 0 && (
                         <div className="col-span-2 text-center py-12 bg-white rounded-xl border border-dashed border-gray-300 text-gray-500">
                             No AI providers configured. Click "Add New" to set up OpenAI, Gemini, etc.
