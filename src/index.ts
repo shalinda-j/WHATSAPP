@@ -15,6 +15,7 @@ import { seedAIProviders } from './services/AIProviderSeeder';
 import { seedDatasets } from './services/DatasetSeeder';
 import { transcribeAudio, generateSpeech } from './services/voice';
 import { aiLoadBalancer } from './services/AILoadBalancer';
+import { chatPersonality } from './services/ChatPersonality';
 import { nlpService } from './services/NLPService';
 import { analyzeLeadIntent } from './services/gemini';
 import { WebhookService } from './services/WebhookService';
@@ -306,20 +307,19 @@ onMessage(async (message, sock, sessionId) => {
         // Default language is SINHALA. If user writes in English only, reply in English.
         let finalPrompt = text;
         if (isVoiceMessage) {
-          // For voice notes, Whisper transcribes Sinhala speech as romanized Latin text,
-          // so Unicode detection won't work. Instead we check if the transcription looks
-          // like English words. If not (e.g., romanized Sinhala like 'mage nama manda'),
-          // we default to Sinhala - the system's primary language.
           const looksLikeEnglish = /^([a-zA-Z]+\s*){3,}$/.test(text.trim()) &&
             /\b(the|is|are|I|you|he|she|we|they|my|your|it|and|or|but|what|how|can|could|please|hello|hi|thank|yes|no|okay|ok)\b/i.test(text);
+          const hasSinhalaChars = /[\u0D80-\u0DFF]/.test(text);
+          const hasTamilChars = /[\u0B80-\u0BFF]/.test(text);
 
-          if (looksLikeEnglish) {
-            // Transcription looks like real English speech
-            finalPrompt += `\n\n(SYSTEM: This is a VOICE message spoken in English. Reply ONLY in English, very short, max 2 sentences, natural spoken style.)`;
+          if (hasSinhalaChars) {
+            finalPrompt += `\n\n(SYSTEM: මෙය VOICE පණිවිඩයකි. සිංහල භාෂාවෙන් කෙටිව, ස්වාභාවිකව ප්‍රතිඋත්තර දෙන්න.)`;
+          } else if (hasTamilChars) {
+            finalPrompt += `\n\n(SYSTEM: இது குரல் செய்தி. தமிழில் சுருக்கமாக, இயல்பாக பதிலளிக்கவும்.)`;
+          } else if (looksLikeEnglish) {
+            finalPrompt += `\n\n(SYSTEM: This is a VOICE message in English. Reply ONLY in English, short and natural.)`;
           } else {
-            // Default: treat as Sinhala (the primary system language)
-            // Even if romanized, reply in proper Sinhala script
-            finalPrompt += `\n\n(SYSTEM: මෙය VOICE (හඬ) පණිවිඩයකි. **සිංහල** භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න. ඉතා කෙටිව, ස්වාභාවිකව කතා කරන ශෛලියෙන් යෙදුම් 2කින් හෝ 1කින් ලිවිය යුතුය.)`;
+            finalPrompt += `\n\n(SYSTEM: මෙය VOICE පණිවිඩයකි. සිංහල භාෂාවෙන් කෙටිව ප්‍රතිඋත්තර දෙන්න.)`;
           }
         } else {
           // Text message: detect language
@@ -360,6 +360,10 @@ onMessage(async (message, sock, sessionId) => {
             });
           }
         }
+
+        // Simulate realistic typing delay
+        const typingDelay = chatPersonality.getTypingDelay(response ? response.length : 0);
+        await new Promise(resolve => setTimeout(resolve, typingDelay));
       } catch (aiError: any) {
         console.error('   ❌ Error in AI/NLP processing:', aiError);
         throw aiError;

@@ -6,6 +6,7 @@ import {
   CONVERSATION_EXAMPLES,
 } from '../config/ai-personality';
 import Dataset from '../models/Dataset';
+import { chatPersonality } from './ChatPersonality';
 
 import { OpenAIService } from './openai';
 import { GroqService } from './groq';
@@ -139,16 +140,18 @@ export class AILoadBalancer {
         const combinedData = datasets
           .map((ds) => ds.content)
           .join('\n\n---\n\n');
-        knowledgeBase = `\n# 🌍 Knowledge Base (Dynamic)\n${combinedData}\n`;
+        knowledgeBase = `\n# Knowledge Base\n${combinedData}\n`;
       }
     } catch (err) {
       console.error('Dataset load error:', err);
     }
 
+    const humanPrompt = chatPersonality.getHumanLikePrompt();
+
     const history: AIChatMessage[] = [
       {
         role: 'system',
-        content: `${AI_PERSONALITY(defaultConfig)}\n\n${knowledgeBase}`,
+        content: `${humanPrompt}\n\n${AI_PERSONALITY(defaultConfig)}\n\n${knowledgeBase}`,
       },
     ];
 
