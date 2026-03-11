@@ -86,7 +86,14 @@ export class VoiceHandler {
         lowerText.startsWith('who') ||
         lowerText.startsWith('can') ||
         lowerText.startsWith('please') ||
-        lowerText.startsWith('tell me');
+        lowerText.startsWith('tell me') ||
+        // Sinhala question indicators
+        transcription.includes('මොකද') ||
+        transcription.includes('කොහොමද') ||
+        transcription.includes('ඇයි') ||
+        transcription.includes('කවුද') ||
+        transcription.includes('කොතනද') ||
+        transcription.includes('කීයද');
 
       if (isQuestion && transcription.length > 10) {
         // If it's a question, get an AI response via Load Balancer

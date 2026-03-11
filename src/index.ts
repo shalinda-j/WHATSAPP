@@ -324,16 +324,16 @@ onMessage(async (message, sock, sessionId) => {
         } else {
           // Text message: detect language
           const hasSinhala = /[\u0D80-\u0DFF]/.test(text);
+          const hasTamil = /[\u0B80-\u0BFF]/.test(text);
           const isLikelyEnglish = /^[a-zA-Z0-9\s\p{P}!?.,;&'"()+\-*#@%$^\[\]{}|\\/<>=`~]+$/u.test(text.trim());
 
           if (hasSinhala) {
-            // Message contains Sinhala → reply in Sinhala
             finalPrompt += `\n\n(SYSTEM: සිංහල භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න.)`;
+          } else if (hasTamil) {
+            finalPrompt += `\n\n(SYSTEM: தமிழ் மொழியில் பதிலளிக்கவும்.)`;
           } else if (isLikelyEnglish) {
-            // Pure English message → reply in English
             finalPrompt += `\n\n(SYSTEM: The user is writing in English. Reply ONLY in English.)`;
           } else {
-            // Unknown/other language → default to Sinhala (the system's default language)
             finalPrompt += `\n\n(SYSTEM: Default language is Sinhala. සිංහල භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න.)`;
           }
         }

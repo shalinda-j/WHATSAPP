@@ -23,6 +23,8 @@ export class AILoadBalancer {
   private userAssignments: Map<string, number>;
   private conversationHistory: Map<string, AIChatMessage[]>;
   private totalRequests = 0;
+  private servicesCacheTime: number = 0;
+  private static SERVICES_CACHE_TTL = 60000; // 60 seconds
 
   constructor() {
     this.userAssignments = new Map();
@@ -30,6 +32,10 @@ export class AILoadBalancer {
   }
 
   private async loadServices(): Promise<void> {
+    const now = Date.now();
+    if (this.services.length > 0 && (now - this.servicesCacheTime) < AILoadBalancer.SERVICES_CACHE_TTL) {
+        return; // Use cached services
+    }
     this.services = []; // Clear existing
     try {
       const configs = await Config.find({ isProvider: true, isActive: true });
@@ -85,6 +91,7 @@ export class AILoadBalancer {
       }
 
       console.log(`🤖 Loaded ${this.services.length} AI services from DB.`);
+      this.servicesCacheTime = Date.now();
     } catch (err) {
       console.error('Failed to load AI services:', err);
     }

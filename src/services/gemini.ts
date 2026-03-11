@@ -178,7 +178,7 @@ export async function transcribeAudio(
         },
       },
       {
-        text: 'Transcribe this audio message. Return only the transcription text. If the audio is in Sinhala or any other language, transcribe it in its original language using appropriate Unicode characters. If the audio is about jobs or recruitment, also provide helpful information.',
+        text: 'Transcribe this audio message accurately. The audio may be in Sinhala (සිංහල), English, or Tamil (தமிழ்). Return ONLY the transcription text in the original language using appropriate Unicode characters.',
       },
     ]);
     return result.response.text();

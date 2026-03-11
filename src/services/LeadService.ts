@@ -1,5 +1,5 @@
-import axios from 'axios';
 import { sendMessage, sendTyping, getSocket } from './whatsapp';
+import Lead from '../models/Lead';
 
 interface LeadData {
   fullName?: string;
@@ -138,29 +138,25 @@ export async function handleLeadMessage(
       await sendTyping(jid, sessionId);
       
       try {
-        const response = await axios.post(
-          `${process.env.API_BASE_URL || 'http://localhost:8080'}/api/leads/register`,
-          {
-            fullName: session.data.fullName,
-            phoneNumber: session.data.phoneNumber,
-            address: session.data.address,
-            jobVacancyType: session.data.jobVacancyType
-          }
-        );
+        const lead = await Lead.create({
+          fullName: session.data.fullName,
+          phoneNumber: session.data.phoneNumber,
+          address: session.data.address,
+          jobVacancyType: session.data.jobVacancyType,
+          status: 'new',
+        });
 
-        if (response.data.success) {
-          await sendMessage(
-            jid,
-            `🎉 *Registration Complete!*\n\n` +
-            `✅ Name: ${session.data.fullName}\n` +
-            `✅ Phone: ${session.data.phoneNumber}\n` +
-            `✅ Job: ${session.data.jobVacancyType}\n\n` +
-            `📋 Your registration ID: ${response.data.leadId}\n\n` +
-            `We will contact you soon!\n\n` +
-            `Type \`!help\` for other commands.`,
-            sessionId
-          );
-        }
+        await sendMessage(
+          jid,
+          `🎉 *Registration Complete!*\n\n` +
+          `✅ Name: ${session.data.fullName}\n` +
+          `✅ Phone: ${session.data.phoneNumber}\n` +
+          `✅ Job: ${session.data.jobVacancyType}\n\n` +
+          `📋 Your registration ID: ${lead._id}\n\n` +
+          `We will contact you soon!\n\n` +
+          `Type \`!help\` for other commands.`,
+          sessionId
+        );
       } catch (error) {
         console.error('Lead registration error:', error);
         await sendMessage(

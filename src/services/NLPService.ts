@@ -10,7 +10,7 @@ class NLPService {
     constructor() {
         // Initialize standard NlpManager using default settings. 
         // We use generic tokenization since Sinhala isn't natively supported, space separation works out of the box.
-        this.manager = new (NlpManager as any)({ languages: ['en'], forceNER: true, nlu: { log: false } });
+        this.manager = new (NlpManager as any)({ languages: ['en', 'si'], forceNER: true, nlu: { log: false } });
     }
 
     /**
@@ -30,7 +30,9 @@ class NLPService {
             // Add all cached utterances and answers
             for (const cache of caches) {
                 for (const utterance of cache.userUtterances) {
-                    this.manager.addDocument('en', utterance, cache.intentName);
+                    const hasSinhala = /[\u0D80-\u0DFF]/.test(utterance);
+                    const lang = hasSinhala ? 'si' : 'en';
+                    this.manager.addDocument(lang, utterance, cache.intentName);
                 }
                 this.manager.addAnswer('en', cache.intentName, cache.aiResponse);
             }
@@ -66,17 +68,14 @@ class NLPService {
      */
     async processMessage(userMessage: string): Promise<string | null> {
         if (!this.isTrained) return null;
-
         try {
-            const result = await this.manager.process('en', userMessage);
-
-            // If confidence is high enough (e.g., above 0.8), we trust the NLP layer
+            const hasSinhala = /[\u0D80-\u0DFF]/.test(userMessage);
+            const lang = hasSinhala ? 'si' : 'en';
+            const result = await this.manager.process(lang, userMessage);
             if (result.intent && result.intent !== 'None' && result.score > 0.8 && result.answer) {
                 console.log(`🧠 [NLP CACHE HIT] Confidence: ${result.score.toFixed(2)}, Intent: ${result.intent}`);
                 return result.answer;
             }
-
-            // No match or low confidence
             return null;
         } catch (error) {
             console.error('❌ Error processing message in Local NLP:', error);
@@ -96,13 +95,16 @@ class NLPService {
             // Check if this Ai Response already exists as an intent
             let cache = await NLPCache.findOne({ intentName });
 
+            const hasSinhala = /[\u0D80-\u0DFF]/.test(userMessage);
+            const lang = hasSinhala ? 'si' : 'en';
+
             if (cache) {
                 // Only update if the utterance doesn't already exist
                 if (!cache.userUtterances.includes(userMessage)) {
                     cache.userUtterances.push(userMessage);
                     await cache.save();
 
-                    this.manager.addDocument('en', userMessage, intentName);
+                    this.manager.addDocument(lang, userMessage, intentName);
                     await this._trainModel();
                 }
             } else {
@@ -114,8 +116,8 @@ class NLPService {
                 });
                 await cache.save();
 
-                this.manager.addDocument('en', userMessage, intentName);
-                this.manager.addAnswer('en', intentName, aiResponse);
+                this.manager.addDocument(lang, userMessage, intentName);
+                this.manager.addAnswer(lang, intentName, aiResponse);
                 await this._trainModel();
             }
         } catch (error) {

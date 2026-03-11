@@ -6,6 +6,19 @@ import axios from 'axios';
 import VoiceConfig from '../models/VoiceConfig';
 
 /**
+ * Detect language from text content
+ * Supports Sinhala (si-LK), English (en-US), and Tamil (ta-LK)
+ */
+export function detectLanguage(text: string): { code: string; name: string; ttsCode: string } {
+  const hasSinhala = /[\u0D80-\u0DFF]/.test(text);
+  const hasTamil = /[\u0B80-\u0BFF]/.test(text);
+
+  if (hasSinhala) return { code: 'si-LK', name: 'sinhala', ttsCode: 'si' };
+  if (hasTamil) return { code: 'ta-LK', name: 'tamil', ttsCode: 'ta' };
+  return { code: 'en-US', name: 'english', ttsCode: 'en' };
+}
+
+/**
  * Transcribe audio using configured provider (Gemini or OpenAI)
  * @param audioBuffer Buffer containing the audio data
  * @returns Transcribed text
@@ -133,29 +146,46 @@ export async function generateSpeech(text: string): Promise<Buffer> {
 async function generateSpeechGoogle(text: string): Promise<Buffer> {
   try {
     const hasSinhala = /[\u0D80-\u0DFF]/.test(text);
-    const lang = hasSinhala ? 'si' : 'en';
-
+    const hasTamil = /[\u0B80-\u0BFF]/.test(text);
+    const lang = hasSinhala ? 'si' : hasTamil ? 'ta' : 'en';
     console.log(`   🗣️ Google TTS - Language detected: ${lang}`);
 
-    // TRUNCATE TEXT: Google TTS API (Free) fails on long text > 200 chars
-    // We strictly truncate it to ensure reliability for voice replies.
-    let processText = text;
-    if (processText.length > 195) {
-      console.warn('   ⚠️ Text too long for Google TTS, truncating to 195 chars...');
-      processText = processText.substring(0, 195) + '...';
+    // Split long text into chunks for Google TTS (limit ~195 chars)
+    const chunks = splitTextForTTS(text, 190);
+    const audioBuffers: Buffer[] = [];
+
+    for (const chunk of chunks) {
+      const url = getAudioUrl(chunk, {
+        lang: lang,
+        slow: false,
+        host: 'https://translate.google.com'
+      });
+      const response = await axios.get(url, { responseType: 'arraybuffer' });
+      audioBuffers.push(Buffer.from(response.data));
     }
 
-    const url = getAudioUrl(processText, {
-      lang: lang,
-      slow: false,
-      host: 'https://translate.google.com'
-    });
-
-    const response = await axios.get(url, { responseType: 'arraybuffer' });
-    return Buffer.from(response.data);
+    return Buffer.concat(audioBuffers);
   } catch (error: any) {
     console.error('❌ Google Speech generation error:', error.message || error);
-    // Return a silent buffer or throw? prefer throw so we fallback to text
     throw new Error('Failed to generate speech');
   }
+}
+
+function splitTextForTTS(text: string, maxLen: number): string[] {
+  if (text.length <= maxLen) return [text];
+  const chunks: string[] = [];
+  let remaining = text;
+  while (remaining.length > 0) {
+    if (remaining.length <= maxLen) {
+      chunks.push(remaining);
+      break;
+    }
+    // Find best split point (sentence boundary)
+    let splitAt = remaining.lastIndexOf('. ', maxLen);
+    if (splitAt < maxLen / 2) splitAt = remaining.lastIndexOf(' ', maxLen);
+    if (splitAt < maxLen / 2) splitAt = maxLen;
+    chunks.push(remaining.substring(0, splitAt + 1).trim());
+    remaining = remaining.substring(splitAt + 1).trim();
+  }
+  return chunks.filter(c => c.length > 0);
 }
