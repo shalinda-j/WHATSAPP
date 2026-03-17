@@ -28,7 +28,7 @@ const BulkSender = () => {
                 const res = await api.post('/api/bulk/upload-csv', formData);
                 setRecipients((prev) => [...new Set([...prev, ...res.data.numbers])]);
                 setStatus({ type: 'success', msg: `Imported ${res.data.count} numbers` });
-            } catch (err) {
+            } catch {
                 setStatus({ type: 'error', msg: 'Failed to upload CSV' });
             } finally {
                 setLoading(false);
@@ -81,8 +81,9 @@ const BulkSender = () => {
             if (failed > 0) {
                 console.error('Failed numbers:', errors);
             }
-        } catch (err: any) {
-            setStatus({ type: 'error', msg: err.response?.data?.error || 'Failed to send messages' });
+        } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : 'Failed to send messages';
+            setStatus({ type: 'error', msg: errorMessage });
         } finally {
             setLoading(false);
         }

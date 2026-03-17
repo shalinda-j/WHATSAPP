@@ -13,7 +13,7 @@ const TEST_ADMIN = {
   username: 'admin',
   passwordHash: '$2b$10$rQZ8kHWKQGYXkYQjQZz7/.yJ9rJjGKjQJ9rJjGKjQJ9rJjGKjQJ9', // 'admin123'
   role: 'superadmin',
-  _id: 'test_admin_id'
+  _id: 'test_admin_id',
 };
 
 // Check if MongoDB is available
@@ -73,7 +73,11 @@ router.post('/login', async (req, res) => {
       // Use test admin when MongoDB is not available
       if (username === TEST_ADMIN.username && password === 'admin123') {
         const token = jwt.sign(
-          { id: TEST_ADMIN._id, username: TEST_ADMIN.username, role: TEST_ADMIN.role },
+          {
+            id: TEST_ADMIN._id,
+            username: TEST_ADMIN.username,
+            role: TEST_ADMIN.role,
+          },
           JWT_SECRET,
           { expiresIn: '24h' },
         );

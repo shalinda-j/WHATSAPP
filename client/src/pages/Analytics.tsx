@@ -4,6 +4,12 @@ import {
   MessageCircle, Users, TrendingUp, BarChart3,
   FileText, Mic, Download, Bot
 } from 'lucide-react';
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend
+} from 'recharts';
+
+const COLORS = ['#3b82f6', '#22c55e', '#eab308', '#a855f7', '#ef4444', '#6366f1', '#ec4899', '#06b6d4'];
 
 interface OverviewStats {
   totalMessages: number;
@@ -46,7 +52,7 @@ interface ChatbotReply {
   content: string;
   type: string;
   timestamp: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 }
 
 export default function Analytics() {
@@ -61,6 +67,7 @@ export default function Analytics() {
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPeriod]);
 
   const fetchData = async () => {
@@ -116,20 +123,6 @@ export default function Analytics() {
       language: 'Language'
     };
     return labels[cat] || cat;
-  };
-
-  const getCategoryColor = (cat: string) => {
-    const colors: Record<string, string> = {
-      jobs: 'bg-blue-500',
-      register: 'bg-green-500',
-      payment: 'bg-yellow-500',
-      booking: 'bg-purple-500',
-      location: 'bg-red-500',
-      services: 'bg-indigo-500',
-      hello: 'bg-pink-500',
-      language: 'bg-cyan-500'
-    };
-    return colors[cat] || 'bg-gray-500';
   };
 
   if (loading) {
@@ -201,47 +194,57 @@ export default function Analytics() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Message Trends Chart */}
-        <div className="bg-white p-5 rounded-xl shadow-md">
+        <div className="bg-white p-5 rounded-xl shadow-md h-96">
           <h2 className="text-lg font-semibold mb-4">Message Trends</h2>
-          <div className="space-y-3">
-            {trends.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">No data available</p>
-            ) : (
-              (() => {
-                const maxMessages = Math.max(...trends.map(t => t.messages), 1);
-                return trends.map((day) => (
-                  <div key={day.date} className="flex items-center gap-4">
-                    <span className="text-sm text-gray-500 w-20">{day.date.slice(5)}</span>
-                    <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
-                      <div
-                        className="bg-blue-500 h-full rounded-full transition-all duration-300"
-                        style={{ width: `${Math.min(100, (day.messages / maxMessages) * 100)}%` }}
-                      />
-                    </div>
-                    <span className="text-sm font-medium w-12 text-right">{day.messages}</span>
-                  </div>
-                ));
-              })()
-            )}
-          </div>
+          {trends.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">No data available</p>
+          ) : (
+            <ResponsiveContainer width="100%" height="80%">
+              <AreaChart data={trends} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorMessages" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="date" tickFormatter={(str) => str.slice(5)} />
+                <YAxis />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <RechartsTooltip />
+                <Area type="monotone" dataKey="messages" stroke="#3b82f6" fillOpacity={1} fill="url(#colorMessages)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         {/* Question Categories */}
-        <div className="bg-white p-5 rounded-xl shadow-md">
+        <div className="bg-white p-5 rounded-xl shadow-md h-96">
           <h2 className="text-lg font-semibold mb-4">Question Categories</h2>
-          <div className="space-y-3">
-            {questions.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">No data available</p>
-            ) : (
-              questions.map((q) => (
-                <div key={q.category} className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${getCategoryColor(q.category)}`} />
-                  <span className="flex-1 text-sm">{getCategoryLabel(q.category)}</span>
-                  <span className="text-sm font-medium">{q.count}</span>
-                </div>
-              ))
-            )}
-          </div>
+          {questions.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">No data available</p>
+          ) : (
+            <ResponsiveContainer width="100%" height="80%">
+              <PieChart>
+                <Pie
+                  data={questions}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={5}
+                  dataKey="count"
+                  nameKey="category"
+                  label
+                >
+                  {questions.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <RechartsTooltip formatter={(value, name) => [value, getCategoryLabel(name as string)]} />
+                <Legend formatter={(value) => getCategoryLabel(value)} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
@@ -330,10 +333,10 @@ export default function Analytics() {
                     </span>
                   </div>
                   <p className="text-sm text-gray-700 whitespace-pre-wrap">{reply.content}</p>
-                  {reply.metadata?.intent && reply.metadata.intent !== 'General' && (
+                  {typeof reply.metadata?.intent === 'string' && reply.metadata.intent !== 'General' && (
                     <div className="mt-2 flex gap-2">
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                        {reply.metadata.intent}
+                        {reply.metadata.intent as string}
                       </span>
                     </div>
                   )}

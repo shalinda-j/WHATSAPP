@@ -45,13 +45,15 @@ export function getPaymentMessage(
       )
       .join('\n\n');
 
-    return `💳 *Payment Details - ${selectedCategory.title}*\n\n` +
+    return (
+      `💳 *Payment Details - ${selectedCategory.title}*\n\n` +
       `🏢 *Company:* ${selectedCategory.companyName}\n` +
       `ℹ️ *Purpose:* ${selectedCategory.description}\n\n` +
       `${accountsText}\n\n` +
       `*Important:*\n` +
       `• Send slip after payment.\n` +
-      `• Write your name and number on the slip.`;
+      `• Write your name and number on the slip.`
+    );
   }
 
   return config.links.payment.defaultMessage;

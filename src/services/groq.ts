@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { AIService, AIChatMessage } from '../interfaces/AIService';
-import { AI_PERSONALITY, JOB_KNOWLEDGE_BASE } from '../config/ai-personality';
+import { configService } from './ConfigService';
 
 /**
  * Groq AI Service
@@ -38,9 +38,11 @@ export class GroqService implements AIService {
       // Ensure system message is present
       const hasSystem = formattedMessages.some((m) => m.role === 'system');
       if (!hasSystem) {
+        const personality = await configService.getAIPersonality();
+        const knowledgeBase = await configService.getDynamicKnowledgeBase();
         formattedMessages.unshift({
           role: 'system',
-          content: `${AI_PERSONALITY}\n\n${JOB_KNOWLEDGE_BASE}`,
+          content: `${personality}\n\n${knowledgeBase}`,
         });
       }
 

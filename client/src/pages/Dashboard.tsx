@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../config';
+import { io } from 'socket.io-client';
 import { RefreshCw, CheckCircle, XCircle, AlertTriangle, Bot, Cpu, TrendingUp, Settings, Plus, Smartphone, Trash2 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 
@@ -22,11 +23,20 @@ interface Session {
     phoneNumber?: string;
 }
 
+interface RecentEvent {
+    type: string;
+    userId: string;
+    content: string;
+    timestamp: Date;
+    role?: string;
+}
+
 export default function Dashboard() {
     const [sessions, setSessions] = useState<Session[]>([]);
     const [loading, setLoading] = useState(true);
     const [aiProviders, setAiProviders] = useState<AIProvider[]>([]);
     const [aiLoading, setAiLoading] = useState(true);
+    const [recentEvents, setRecentEvents] = useState<RecentEvent[]>([]);
 
     const fetchSessions = async () => {
         try {
@@ -62,11 +72,26 @@ export default function Dashboard() {
     useEffect(() => {
         fetchSessions();
         fetchAIProviders();
+
+        const API_URL = import.meta.env.VITE_API_URL || window.location.origin;
+        const socket = io(API_URL);
+
+        socket.on('new-message', (data) => {
+            setRecentEvents(prev => [data, ...prev].slice(0, 5));
+            // Trigger background refresh of usage stats occasionally
+            if (Math.random() > 0.5) fetchAIProviders();
+        });
+
         const interval = setInterval(() => {
             fetchSessions();
             fetchAIProviders();
-        }, 5000); // Poll every 5s
-        return () => clearInterval(interval);
+        }, 30000); // Polling reduced since WebSockets handle real-time
+
+        return () => {
+            clearInterval(interval);
+            socket.disconnect();
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleCreateSession = async () => {
@@ -75,7 +100,7 @@ export default function Dashboard() {
         try {
             await api.post('/api/sessions', { sessionName: name });
             fetchSessions();
-        } catch (err) {
+        } catch {
             alert('Failed to create session');
         }
     };
@@ -85,7 +110,7 @@ export default function Dashboard() {
         try {
             await api.delete(`/api/sessions/${id}`);
             fetchSessions();
-        } catch (err) {
+        } catch {
             alert('Failed to delete session');
         }
     };
@@ -219,6 +244,30 @@ export default function Dashboard() {
                         <div className="flex justify-between p-3 bg-gray-50 rounded-lg">
                             <span className="text-gray-600">Connected Devices</span>
                             <span className="font-medium">{sessions.filter(s => s.status === 'connected').length}</span>
+                        </div>
+                    </div>
+
+                    {/* Live Event Ticker */}
+                    <div className="mt-6">
+                        <h3 className="text-sm font-semibold text-gray-500 mb-3 flex items-center">
+                            <span className="w-2 h-2 rounded-full bg-green-500 mr-2 animate-pulse"></span>
+                            Live Activity Stream
+                        </h3>
+                        <div className="space-y-2 max-h-[150px] overflow-y-auto">
+                            {recentEvents.length === 0 ? (
+                                <p className="text-xs text-gray-400 italic">Waiting for new messages...</p>
+                            ) : (
+                                recentEvents.map((evt, idx) => (
+                                    <div key={idx} className="text-xs p-2 bg-gray-50 rounded border flex justify-between">
+                                        <span className="truncate flex-1 font-medium text-gray-700">
+                                            {evt.role === 'user' ? '👤 User:' : '🤖 Bot:'} {evt.content}
+                                        </span>
+                                        <span className="text-gray-400 ml-2 whitespace-nowrap">
+                                            {new Date(evt.timestamp || Date.now()).toLocaleTimeString()}
+                                        </span>
+                                    </div>
+                                ))
+                            )}
                         </div>
                     </div>
                 </div>

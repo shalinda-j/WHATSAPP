@@ -1,18 +1,4 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
-
-export interface IDataset {
-  name: string;
-  content: any; // Mixed
-  scope: string;
-  category: string;
-  key?: string;
-  description?: string;
-  isActive: boolean;
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
-export interface IDatasetDocument extends IDataset, Document { }
+import mongoose, { Schema, Model } from 'mongoose';
 
 const DatasetSchema = new Schema(
   {

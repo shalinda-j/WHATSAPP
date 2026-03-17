@@ -39,7 +39,7 @@ export interface BusinessUnit {
 
 export interface AIConfig {
   systemPrompt: string; // The base prompt template
-  personality: string;  // The personality description
+  personality: string; // The personality description
   marketingStrategy: string; // The AIDA model description
   securityInstructions: string;
   knowledgeBase: string; // The specific data for this company

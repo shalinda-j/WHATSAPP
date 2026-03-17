@@ -1,7 +1,29 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, Database, Settings, LogOut, Smartphone, Menu, X, Globe, AudioLines, Megaphone, Users, BarChart3, Share2 } from 'lucide-react';
+import { LayoutDashboard, Database, Settings, LogOut, Smartphone, Menu, X, Globe, AudioLines, Megaphone, Briefcase, MessageSquare } from 'lucide-react';
+
+// Define proper types for the NavLink component
+interface NavLinkProps {
+    to: string;
+    icon: React.ComponentType<{ className?: string }>;
+    children: React.ReactNode;
+    isActive: (path: string) => string;
+    onClick: () => void;
+}
+
+// Move NavLink outside the component to prevent recreation on every render
+const NavLink = memo(function NavLink({ to, icon: Icon, children, isActive, onClick }: NavLinkProps) {
+    return (
+        <Link
+            to={to}
+            onClick={onClick}
+            className={`flex items-center px-4 py-2 rounded transition-colors hover:bg-gray-700 ${isActive(to)}`}
+        >
+            <Icon className="mr-3 h-5 w-5" /> {children}
+        </Link>
+    );
+});
 
 export default function Layout() {
     const { logout } = useAuth();
@@ -18,15 +40,7 @@ export default function Layout() {
 
     const isActive = (path: string) => location.pathname === path ? 'bg-gray-700' : '';
 
-    const NavLink = ({ to, icon: Icon, children }: { to: string, icon: any, children: React.ReactNode }) => (
-        <Link
-            to={to}
-            onClick={() => setIsSidebarOpen(false)}
-            className={`flex items-center px-4 py-2 rounded transition-colors hover:bg-gray-700 ${isActive(to)}`}
-        >
-            <Icon className="mr-3 h-5 w-5" /> {children}
-        </Link>
-    );
+    const closeSidebar = () => setIsSidebarOpen(false);
 
     return (
         <div className="flex h-screen bg-gray-100">
@@ -54,20 +68,18 @@ export default function Layout() {
 
                 <div className="flex-1 overflow-y-auto py-4">
                     <nav className="px-2 space-y-2">
-                        <NavLink to="/dashboard" icon={LayoutDashboard}>Dashboard</NavLink>
-                        <NavLink to="/analytics" icon={BarChart3}>Analytics</NavLink>
-                        <NavLink to="/leads" icon={Users}>Leads & Registrations</NavLink>
-                        <NavLink to="/datasets" icon={Database}>Datasets</NavLink>
-                        <NavLink to="/webhooks" icon={Globe}>Webhooks</NavLink>
-                        <NavLink to="/sessions" icon={Smartphone}>Linked Devices</NavLink>
-                        <NavLink to="/voice-config" icon={AudioLines}>Voice Config</NavLink>
-                        <NavLink to="/voice-agent-hub" icon={AudioLines}>Voice Agent Hub</NavLink>
-                        <NavLink to="/bulk-message" icon={Megaphone}>Bulk Messaging</NavLink>
-                        <NavLink to="/marketing" icon={Megaphone}>Marketing Manager</NavLink>
-                        <NavLink to="/n8n" icon={Share2}>n8n Automations</NavLink>
-                        <NavLink to="/system" icon={Database}>System Maintenance</NavLink>
+                        <NavLink to="/dashboard" icon={LayoutDashboard} isActive={isActive} onClick={closeSidebar}>Dashboard</NavLink>
+                        <NavLink to="/crm" icon={Briefcase} isActive={isActive} onClick={closeSidebar}>CRM</NavLink>
+                        <NavLink to="/chat" icon={MessageSquare} isActive={isActive} onClick={closeSidebar}>Live Chat</NavLink>
+                        <NavLink to="/datasets" icon={Database} isActive={isActive} onClick={closeSidebar}>Datasets</NavLink>
+                        <NavLink to="/webhooks" icon={Globe} isActive={isActive} onClick={closeSidebar}>Webhooks</NavLink>
+                        <NavLink to="/sessions" icon={Smartphone} isActive={isActive} onClick={closeSidebar}>Linked Devices</NavLink>
+                        <NavLink to="/voice-agent-hub" icon={AudioLines} isActive={isActive} onClick={closeSidebar}>Voice Agent Hub</NavLink>
+                        <NavLink to="/bulk-message" icon={Megaphone} isActive={isActive} onClick={closeSidebar}>Bulk Messaging</NavLink>
+                        <NavLink to="/marketing" icon={Megaphone} isActive={isActive} onClick={closeSidebar}>Marketing Manager</NavLink>
+                        <NavLink to="/system" icon={Database} isActive={isActive} onClick={closeSidebar}>System Maintenance</NavLink>
 
-                        <NavLink to="/config" icon={Settings}>Configuration</NavLink>
+                        <NavLink to="/config" icon={Settings} isActive={isActive} onClick={closeSidebar}>Configuration</NavLink>
                     </nav>
                 </div>
                 <div className="p-4 border-t border-gray-700 bg-gray-900">
@@ -85,7 +97,7 @@ export default function Layout() {
             {isSidebarOpen && (
                 <div
                     className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden"
-                    onClick={() => setIsSidebarOpen(false)}
+                    onClick={closeSidebar}
                 ></div>
             )}
 

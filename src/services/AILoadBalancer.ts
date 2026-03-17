@@ -83,7 +83,22 @@ export class AILoadBalancer {
         }
       }
 
-      console.log(`🤖 Loaded ${this.services.length} AI services from DB.`);
+      // Sort by Priority (Cost/Speed) - Groq > Google > OpenRouter > OpenAI
+      const priorityMap: Record<string, number> = {
+        GroqService: 1,
+        GeminiService: 2,
+        OpenRouterService: 3,
+        OpenAIService: 4,
+      };
+      this.services.sort(
+        (a, b) =>
+          (priorityMap[a.constructor.name] || 99) -
+          (priorityMap[b.constructor.name] || 99),
+      );
+
+      console.log(
+        `🤖 Loaded ${this.services.length} AI services from DB. Primary: ${this.services[0]?.constructor.name}`,
+      );
     } catch (err) {
       console.error('Failed to load AI services:', err);
     }
@@ -175,23 +190,17 @@ export class AILoadBalancer {
 
     conversationHistoryAdd(history, 'user', message);
 
-    let currentServiceIndex = this.userAssignments.get(userId);
-    if (
-      currentServiceIndex === undefined ||
-      currentServiceIndex >= this.services.length
-    ) {
-      currentServiceIndex = this.totalRequests % this.services.length;
-      this.userAssignments.set(userId, currentServiceIndex);
-      this.totalRequests++;
-    }
+    this.totalRequests++;
 
-    // Try services
+    // Try services in priority order
     for (let i = 0; i < this.services.length; i++) {
-      const serviceIndex = (currentServiceIndex + i) % this.services.length;
-      const service = this.services[serviceIndex];
+      const service = this.services[i];
 
       try {
-        if (i > 0) console.log(`   ⚠️ Retrying with ${service.name}...`);
+        if (i > 0)
+          console.log(
+            `   ⚠️ Retrying with fallback: ${service.constructor.name}...`,
+          );
 
         const start = Date.now();
         const response = await service.generateResponse(history);
@@ -204,10 +213,6 @@ export class AILoadBalancer {
           const system = history[0];
           const recent = history.slice(-19);
           this.conversationHistory.set(userId, [system, ...recent]);
-        }
-
-        if (i > 0) {
-          this.userAssignments.set(userId, serviceIndex);
         }
 
         // TRACK USAGE

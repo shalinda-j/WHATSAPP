@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type DragEvent } from 'react';
+import { useCallback, useRef, useState, useEffect, type DragEvent } from 'react';
 import ReactFlow, {
     ReactFlowProvider,
     addEdge,
@@ -7,14 +7,16 @@ import ReactFlow, {
     Controls,
     Background,
     BackgroundVariant,
-    MiniMap
+    MiniMap,
+    type ReactFlowInstance
 } from 'reactflow';
-import type { Connection, Edge, Node } from 'reactflow';
+import type { Connection, Edge, Node, NodeChange, EdgeChange } from 'reactflow';
 import 'reactflow/dist/style.css';
 
 import Sidebar from './Sidebar';
 import IntegrationNode from './CustomNodes/IntegrationNode';
 import SettingsPanel from './SettingsPanel';
+import { useWorkflow } from './WorkflowContext';
 
 // Define nodeTypes outside the component to prevent recreation on every render
 const nodeTypes = {
@@ -37,12 +39,39 @@ const WorkflowBuilder = () => {
     const reactFlowWrapper = useRef<HTMLDivElement>(null);
     const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-    const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
+    const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
     const [selectedNode, setSelectedNode] = useState<Node | null>(null);
 
+    // Get workflow context for syncing state
+    const { actions: workflowActions, state: workflowState } = useWorkflow();
+
+    // Sync local nodes state to context when nodes change
+    useEffect(() => {
+        workflowActions.setNodes(nodes);
+    }, [nodes, workflowActions]);
+
+    // Sync local edges state to context when edges change
+    useEffect(() => {
+        workflowActions.setEdges(edges);
+    }, [edges, workflowActions]);
+
+    // Load initial state from context if available (only on mount)
+    useEffect(() => {
+        if (workflowState.nodes.length > 0) {
+            setNodes(workflowState.nodes);
+        }
+        if (workflowState.edges.length > 0) {
+            setEdges(workflowState.edges);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const onConnect = useCallback(
-        (params: Connection | Edge) => setEdges((eds) => addEdge(params, eds)),
-        [setEdges],
+        (params: Connection | Edge) => {
+            setEdges((eds) => addEdge(params, eds));
+            workflowActions.saveToHistory();
+        },
+        [setEdges, workflowActions],
     );
 
     const onDragOver = useCallback((event: DragEvent) => {
@@ -82,17 +111,36 @@ const WorkflowBuilder = () => {
             };
 
             setNodes((nds) => nds.concat(newNode));
+            workflowActions.saveToHistory();
         },
-        [reactFlowInstance, setNodes],
+        [reactFlowInstance, setNodes, workflowActions],
     );
 
     const onNodeDoubleClick = useCallback((_: React.MouseEvent, node: Node) => {
         setSelectedNode(node);
-    }, []);
+        workflowActions.setSelectedNode(node);
+    }, [workflowActions]);
 
     const onPaneClick = useCallback(() => {
         setSelectedNode(null);
-    }, []);
+        workflowActions.setSelectedNode(null);
+    }, [workflowActions]);
+
+    const handleNodesChange = useCallback((changes: NodeChange[]) => {
+        onNodesChange(changes);
+        // Save to history on significant changes
+        if (changes.some((c) => c.type === 'remove' || c.type === 'add')) {
+            workflowActions.saveToHistory();
+        }
+    }, [onNodesChange, workflowActions]);
+
+    const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
+        onEdgesChange(changes);
+        // Save to history on significant changes
+        if (changes.some((c) => c.type === 'remove' || c.type === 'add')) {
+            workflowActions.saveToHistory();
+        }
+    }, [onEdgesChange, workflowActions]);
 
     return (
         <div className="flex flex-row h-full w-full bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200 relative">
@@ -102,8 +150,8 @@ const WorkflowBuilder = () => {
                     <ReactFlow
                         nodes={nodes}
                         edges={edges}
-                        onNodesChange={onNodesChange}
-                        onEdgesChange={onEdgesChange}
+                        onNodesChange={handleNodesChange}
+                        onEdgesChange={handleEdgesChange}
                         onConnect={onConnect}
                         onInit={setReactFlowInstance}
                         onDrop={onDrop}
@@ -117,7 +165,7 @@ const WorkflowBuilder = () => {
                     >
                         <Controls className="bg-white shadow-md border border-gray-200 rounded-lg" />
                         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#e5e7eb" />
-                        <MiniMap className="bg-white shadow-md border border-gray-200 rounded-lg" zoomable pannable />
+                        <MiniMap className="bg-white shadow-md border border-gray-200 rounded-lg zoomable pannable" />
                     </ReactFlow>
                 </div>
                 {selectedNode && (

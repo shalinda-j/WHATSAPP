@@ -1,6 +1,6 @@
 import OpenAI, { toFile } from 'openai';
 import { AIService, AIChatMessage } from '../interfaces/AIService';
-import { AI_PERSONALITY, JOB_KNOWLEDGE_BASE } from '../config/ai-personality';
+import { configService } from './ConfigService';
 
 export class OpenAIService implements AIService {
   name: string;
@@ -30,9 +30,11 @@ export class OpenAIService implements AIService {
       // Ensure system message is present (if not in history, though it usually is)
       const hasSystem = formattedMessages.some((m) => m.role === 'system');
       if (!hasSystem) {
+        const personality = await configService.getAIPersonality();
+        const knowledgeBase = await configService.getDynamicKnowledgeBase();
         formattedMessages.unshift({
           role: 'system',
-          content: `${AI_PERSONALITY}\n\n${JOB_KNOWLEDGE_BASE}`,
+          content: `${personality}\n\n${knowledgeBase}`,
         });
       }
 
@@ -49,13 +51,12 @@ export class OpenAIService implements AIService {
   }
 }
 
-
 /**
  * Transcribe audio using OpenAI Whisper
  */
 export async function transcribeAudio(
   audioBuffer: Buffer,
-  apiKey: string
+  apiKey: string,
 ): Promise<string> {
   try {
     const openai = new OpenAI({ apiKey });

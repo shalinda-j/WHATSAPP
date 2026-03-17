@@ -33,7 +33,13 @@ async function getGeminiModel(modelName = 'gemini-1.5-flash-latest') {
   // Try to get the specific model assigned to the provider, or fallback to the requested model Name
   let activeModel = modelName;
   try {
-    const configModel = await import('../models/Config').then(m => m.default.findOne({ isProvider: true, providerType: 'google', isActive: true }));
+    const configModel = await import('../models/Config').then((m) =>
+      m.default.findOne({
+        isProvider: true,
+        providerType: 'google',
+        isActive: true,
+      }),
+    );
     if (configModel && configModel.aiModel) {
       activeModel = configModel.aiModel;
     }
@@ -163,6 +169,7 @@ export function clearConversation(userId: string): void {
 
 /**
  * Transcribe audio using Gemini's multimodal capabilities
+ * Returns transcription with automatic language detection
  */
 export async function transcribeAudio(
   audioBase64: string,
@@ -178,7 +185,16 @@ export async function transcribeAudio(
         },
       },
       {
-        text: 'Transcribe this audio message. Return only the transcription text. If the audio is in Sinhala or any other language, transcribe it in its original language using appropriate Unicode characters. If the audio is about jobs or recruitment, also provide helpful information.',
+        text: `Transcribe this audio message accurately.
+
+IMPORTANT LANGUAGE RULES:
+1. If the audio is in Sinhala, transcribe using Sinhala Unicode characters (සිංහල අකුරු)
+2. If the audio is in English, transcribe in English
+3. If the audio is in Tamil, transcribe using Tamil Unicode characters
+4. If the audio is in Hindi, transcribe using Hindi (Devanagari) Unicode characters
+5. Detect the language automatically and transcribe in the SAME language
+
+Return ONLY the transcription text, nothing else. No language labels or explanations.`,
       },
     ]);
     return result.response.text();
@@ -281,11 +297,10 @@ export async function analyzeLeadIntent(text: string): Promise<{
 }
 
 // Remove exports of internal model/genAI if possible, or export dummy to prevent breakage
-// export { model, genAI }; 
+// export { model, genAI };
 // Since we removed global model, we should remove it from exports or provide a getter
 // But other files might be importing them. Let's see...
 // I will not export them. If something breaks, I'll fix the caller.
-
 
 export class GeminiService implements AIService {
   name: string;

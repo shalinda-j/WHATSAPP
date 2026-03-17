@@ -1,5 +1,8 @@
 import type { Node, Edge } from 'reactflow';
-import { INTEGRATIONS } from '../config/integrationPresets';
+import {
+  INTEGRATIONS,
+  type IntegrationField,
+} from '../config/integrationPresets';
 
 export interface ValidationResult {
   isValid: boolean;
@@ -37,23 +40,23 @@ class WorkflowValidationService {
   private readonly nodeValidationRules: NodeValidationRule[] = [
     {
       isApplicable: (node) => node.type === 'integration',
-      validate: (node) => this.validateIntegrationNode(node)
+      validate: (node) => this.validateIntegrationNode(node),
     },
     {
       isApplicable: (node) => node.type === 'default',
-      validate: (node) => this.validateDefaultNode(node)
+      validate: (node) => this.validateDefaultNode(node),
     },
     {
       isApplicable: (_node) => true,
-      validate: (node) => this.validateBasicNode(node)
-    }
+      validate: (node) => this.validateBasicNode(node),
+    },
   ];
 
   private readonly edgeValidationRules: EdgeValidationRule[] = [
     {
       isApplicable: () => true,
-      validate: (edge, nodes) => this.validateEdgeConnection(edge, nodes)
-    }
+      validate: (edge, nodes) => this.validateEdgeConnection(edge, nodes),
+    },
   ];
 
   // Main validation method
@@ -62,7 +65,7 @@ class WorkflowValidationService {
     const warnings: ValidationWarning[] = [];
 
     // Validate nodes
-    nodes.forEach(node => {
+    nodes.forEach((node) => {
       const nodeErrors = this.validateNode(node);
       const nodeWarnings = this.validateNodeWarnings(node);
 
@@ -71,7 +74,7 @@ class WorkflowValidationService {
     });
 
     // Validate edges
-    edges.forEach(edge => {
+    edges.forEach((edge) => {
       const edgeErrors = this.validateEdge(edge, nodes);
       errors.push(...edgeErrors);
     });
@@ -86,7 +89,7 @@ class WorkflowValidationService {
     return {
       isValid: errors.length === 0,
       errors,
-      warnings
+      warnings,
     };
   }
 
@@ -112,7 +115,7 @@ class WorkflowValidationService {
         type: 'warning',
         nodeId: node.id,
         message: `Unknown integration type: ${node.data.integrationType}`,
-        code: 'UNKNOWN_INTEGRATION'
+        code: 'UNKNOWN_INTEGRATION',
       });
     }
 
@@ -123,7 +126,7 @@ class WorkflowValidationService {
         nodeId: node.id,
         field: 'label',
         message: 'Node should have a descriptive label',
-        code: 'EMPTY_LABEL'
+        code: 'EMPTY_LABEL',
       });
     }
 
@@ -140,18 +143,22 @@ class WorkflowValidationService {
         nodeId: node.id,
         field: 'id',
         message: 'Node must have a valid ID',
-        code: 'INVALID_NODE_ID'
+        code: 'INVALID_NODE_ID',
       });
     }
 
     // Validate position
-    if (!node.position || typeof node.position.x !== 'number' || typeof node.position.y !== 'number') {
+    if (
+      !node.position ||
+      typeof node.position.x !== 'number' ||
+      typeof node.position.y !== 'number'
+    ) {
       errors.push({
         type: 'error',
         nodeId: node.id,
         field: 'position',
         message: 'Node must have valid x, y coordinates',
-        code: 'INVALID_POSITION'
+        code: 'INVALID_POSITION',
       });
     }
 
@@ -167,7 +174,7 @@ class WorkflowValidationService {
         nodeId: node.id,
         field: 'integrationType',
         message: 'Integration node must specify an integration type',
-        code: 'MISSING_INTEGRATION_TYPE'
+        code: 'MISSING_INTEGRATION_TYPE',
       });
       return errors;
     }
@@ -179,13 +186,13 @@ class WorkflowValidationService {
         nodeId: node.id,
         field: 'integrationType',
         message: `Unknown integration: ${node.data.integrationType}`,
-        code: 'UNKNOWN_INTEGRATION'
+        code: 'UNKNOWN_INTEGRATION',
       });
       return errors;
     }
 
     // Validate required fields
-    integration.fields.forEach(field => {
+    integration.fields.forEach((field) => {
       const value = node.data[field.key];
 
       if (!value || (typeof value === 'string' && value.trim() === '')) {
@@ -194,7 +201,7 @@ class WorkflowValidationService {
           nodeId: node.id,
           field: field.key,
           message: `${field.label} is required`,
-          code: 'REQUIRED_FIELD'
+          code: 'REQUIRED_FIELD',
         });
       } else if (field.type === 'url' && !this.isValidUrl(value)) {
         errors.push({
@@ -202,7 +209,7 @@ class WorkflowValidationService {
           nodeId: node.id,
           field: field.key,
           message: `${field.label} must be a valid URL`,
-          code: 'INVALID_URL'
+          code: 'INVALID_URL',
         });
       } else if (this.isEmailField(field) && !this.isValidEmail(value)) {
         errors.push({
@@ -210,7 +217,7 @@ class WorkflowValidationService {
           nodeId: node.id,
           field: field.key,
           message: `${field.label} must be a valid email address`,
-          code: 'INVALID_EMAIL'
+          code: 'INVALID_EMAIL',
         });
       }
     });
@@ -247,14 +254,14 @@ class WorkflowValidationService {
     const errors: ValidationError[] = [];
 
     // Check if source and target nodes exist
-    const sourceNode = nodes.find(n => n.id === edge.source);
-    const targetNode = nodes.find(n => n.id === edge.target);
+    const sourceNode = nodes.find((n) => n.id === edge.source);
+    const targetNode = nodes.find((n) => n.id === edge.target);
 
     if (!sourceNode) {
       errors.push({
         type: 'error',
         message: `Source node not found: ${edge.source}`,
-        code: 'MISSING_SOURCE_NODE'
+        code: 'MISSING_SOURCE_NODE',
       });
     }
 
@@ -262,18 +269,21 @@ class WorkflowValidationService {
       errors.push({
         type: 'error',
         message: `Target node not found: ${edge.target}`,
-        code: 'MISSING_TARGET_NODE'
+        code: 'MISSING_TARGET_NODE',
       });
     }
 
     // Validate connection types
     if (sourceNode && targetNode) {
-      const connectionError = this.validateConnectionType(sourceNode, targetNode);
+      const connectionError = this.validateConnectionType(
+        sourceNode,
+        targetNode,
+      );
       if (connectionError) {
         errors.push({
           type: 'error',
           message: connectionError,
-          code: 'INVALID_CONNECTION'
+          code: 'INVALID_CONNECTION',
         });
       }
     }
@@ -296,43 +306,46 @@ class WorkflowValidationService {
   }
 
   // Workflow-level validation
-  private validateWorkflowStructure(nodes: Node[], edges: Edge[]): ValidationError[] {
+  private validateWorkflowStructure(
+    nodes: Node[],
+    edges: Edge[],
+  ): ValidationError[] {
     const errors: ValidationError[] = [];
 
     // Check for at least one input node
-    const inputNodes = nodes.filter(n => n.type === 'input');
+    const inputNodes = nodes.filter((n) => n.type === 'input');
     if (inputNodes.length === 0) {
       errors.push({
         type: 'error',
         message: 'Workflow must have at least one input node',
-        code: 'MISSING_INPUT_NODE'
+        code: 'MISSING_INPUT_NODE',
       });
     }
 
     // Check for at least one output node
-    const outputNodes = nodes.filter(n => n.type === 'output');
+    const outputNodes = nodes.filter((n) => n.type === 'output');
     if (outputNodes.length === 0) {
       errors.push({
         type: 'error',
         message: 'Workflow must have at least one output node',
-        code: 'MISSING_OUTPUT_NODE'
+        code: 'MISSING_OUTPUT_NODE',
       });
     }
 
     // Check for disconnected nodes
     const connectedNodeIds = new Set<string>();
-    edges.forEach(edge => {
+    edges.forEach((edge) => {
       connectedNodeIds.add(edge.source);
       connectedNodeIds.add(edge.target);
     });
 
-    nodes.forEach(node => {
+    nodes.forEach((node) => {
       if (node.type !== 'input' && !connectedNodeIds.has(node.id)) {
         errors.push({
           type: 'error',
           nodeId: node.id,
           message: 'Node is not connected to the workflow',
-          code: 'DISCONNECTED_NODE'
+          code: 'DISCONNECTED_NODE',
         });
       }
     });
@@ -343,26 +356,29 @@ class WorkflowValidationService {
       errors.push({
         type: 'error',
         message: `Workflow contains cycles: ${cycles.join(', ')}`,
-        code: 'CYCLIC_WORKFLOW'
+        code: 'CYCLIC_WORKFLOW',
       });
     }
 
     return errors;
   }
 
-  private validateWorkflowWarnings(nodes: Node[], edges: Edge[]): ValidationWarning[] {
+  private validateWorkflowWarnings(
+    nodes: Node[],
+    edges: Edge[],
+  ): ValidationWarning[] {
     const warnings: ValidationWarning[] = [];
 
     // Check for nodes without outgoing connections (except output nodes)
-    nodes.forEach(node => {
+    nodes.forEach((node) => {
       if (node.type !== 'output') {
-        const outgoingEdges = edges.filter(e => e.source === node.id);
+        const outgoingEdges = edges.filter((e) => e.source === node.id);
         if (outgoingEdges.length === 0) {
           warnings.push({
             type: 'warning',
             nodeId: node.id,
             message: 'Node has no outgoing connections',
-            code: 'NO_OUTGOING_CONNECTIONS'
+            code: 'NO_OUTGOING_CONNECTIONS',
           });
         }
       }
@@ -373,7 +389,7 @@ class WorkflowValidationService {
       warnings.push({
         type: 'warning',
         message: 'Large workflows may be difficult to manage and debug',
-        code: 'LARGE_WORKFLOW'
+        code: 'LARGE_WORKFLOW',
       });
     }
 
@@ -395,10 +411,11 @@ class WorkflowValidationService {
     return emailRegex.test(email);
   }
 
-  private isEmailField(field: any): boolean {
-    return field.key.toLowerCase().includes('email') ||
-      field.label.toLowerCase().includes('email') ||
-      field.type === 'email';
+  private isEmailField(field: IntegrationField): boolean {
+    return (
+      field.key.toLowerCase().includes('email') ||
+      field.label.toLowerCase().includes('email')
+    );
   }
 
   private detectCycles(nodes: Node[], edges: Edge[]): string[] {
@@ -420,7 +437,7 @@ class WorkflowValidationService {
       visited.add(nodeId);
       recursionStack.add(nodeId);
 
-      const outgoingEdges = edges.filter(e => e.source === nodeId);
+      const outgoingEdges = edges.filter((e) => e.source === nodeId);
       for (const edge of outgoingEdges) {
         if (dfs(edge.target, [...path, nodeId])) {
           return true;
@@ -431,7 +448,7 @@ class WorkflowValidationService {
       return false;
     };
 
-    nodes.forEach(node => {
+    nodes.forEach((node) => {
       if (!visited.has(node.id)) {
         dfs(node.id, []);
       }
@@ -450,9 +467,12 @@ class WorkflowValidationService {
     }
 
     // Sanitize integration fields
-    if (sanitized.data.integrationType && INTEGRATIONS[sanitized.data.integrationType]) {
+    if (
+      sanitized.data.integrationType &&
+      INTEGRATIONS[sanitized.data.integrationType]
+    ) {
       const integration = INTEGRATIONS[sanitized.data.integrationType];
-      integration.fields.forEach(field => {
+      integration.fields.forEach((field) => {
         const value = sanitized.data[field.key];
         if (typeof value === 'string') {
           if (field.type === 'url') {

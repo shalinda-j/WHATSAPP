@@ -16,7 +16,7 @@ router.get('/', authenticateToken, async (_req: AuthRequest, res) => {
         createdAt: new Date(),
         updatedAt: new Date(),
         nodeCount: 4,
-        edgeCount: 3
+        edgeCount: 3,
       },
       {
         id: '2',
@@ -25,20 +25,20 @@ router.get('/', authenticateToken, async (_req: AuthRequest, res) => {
         createdAt: new Date(Date.now() - 86400000),
         updatedAt: new Date(Date.now() - 43200000),
         nodeCount: 6,
-        edgeCount: 5
-      }
+        edgeCount: 5,
+      },
     ];
 
     res.json({
       success: true,
       data: workflows,
-      total: workflows.length
+      total: workflows.length,
     });
   } catch (error) {
     console.error('Error fetching workflows:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch workflows'
+      error: 'Failed to fetch workflows',
     });
   }
 });
@@ -58,35 +58,35 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
           id: '1',
           type: 'input',
           data: { label: 'Start Workflow' },
-          position: { x: 250, y: 5 }
+          position: { x: 250, y: 5 },
         },
         {
           id: '2',
           type: 'default',
           data: { label: 'AI Processing' },
-          position: { x: 100, y: 100 }
-        }
+          position: { x: 100, y: 100 },
+        },
       ],
       edges: [
         {
           id: 'e1-2',
           source: '1',
-          target: '2'
-        }
+          target: '2',
+        },
       ],
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
     };
 
     res.json({
       success: true,
-      data: workflow
+      data: workflow,
     });
   } catch (error) {
     console.error('Error fetching workflow:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch workflow'
+      error: 'Failed to fetch workflow',
     });
   }
 });
@@ -99,7 +99,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
     if (!name || !nodes || !edges) {
       return res.status(400).json({
         success: false,
-        error: 'Name, nodes, and edges are required'
+        error: 'Name, nodes, and edges are required',
       });
     }
 
@@ -110,7 +110,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
       nodes,
       edges,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
     };
 
     console.log('Created new workflow:', newWorkflow);
@@ -118,13 +118,13 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
     res.status(201).json({
       success: true,
       data: newWorkflow,
-      message: 'Workflow created successfully'
+      message: 'Workflow created successfully',
     });
   } catch (error) {
     console.error('Error creating workflow:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to create workflow'
+      error: 'Failed to create workflow',
     });
   }
 });
@@ -141,7 +141,7 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res) => {
       description: description || '',
       nodes,
       edges,
-      updatedAt: new Date()
+      updatedAt: new Date(),
     };
 
     console.log('Updated workflow:', updatedWorkflow);
@@ -149,13 +149,13 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res) => {
     res.json({
       success: true,
       data: updatedWorkflow,
-      message: 'Workflow updated successfully'
+      message: 'Workflow updated successfully',
     });
   } catch (error) {
     console.error('Error updating workflow:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to update workflow'
+      error: 'Failed to update workflow',
     });
   }
 });
@@ -169,52 +169,60 @@ router.delete('/:id', authenticateToken, async (req: AuthRequest, res) => {
 
     res.json({
       success: true,
-      message: 'Workflow deleted successfully'
+      message: 'Workflow deleted successfully',
     });
   } catch (error) {
     console.error('Error deleting workflow:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to delete workflow'
+      error: 'Failed to delete workflow',
     });
   }
 });
 
 // Execute workflow
-router.post('/:id/execute', authenticateToken, async (req: AuthRequest, res) => {
-  try {
-    const { id } = req.params;
-    const { startNodeId } = req.body;
+router.post(
+  '/:id/execute',
+  authenticateToken,
+  async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { startNodeId } = req.body;
 
-    console.log(`Executing workflow ${id} with start node:`, startNodeId);
+      console.log(`Executing workflow ${id} with start node:`, startNodeId);
 
-    // Mock execution result
-    const executionResult = {
-      executionId: `exec_${Date.now()}`,
-      status: 'completed',
-      startTime: new Date(),
-      endTime: new Date(),
-      duration: 2500,
-      nodesProcessed: 4,
-      edgesProcessed: 3,
-      output: {
+      // Mock execution result
+      const executionResult = {
+        executionId: `exec_${Date.now()}`,
+        status: 'completed',
+        startTime: new Date(),
+        endTime: new Date(),
+        duration: 2500,
+        nodesProcessed: 4,
+        edgesProcessed: 3,
+        output: {
+          message: 'Workflow executed successfully',
+          results: [
+            'Message sent',
+            'AI response generated',
+            'Follow-up scheduled',
+          ],
+        },
+      };
+
+      res.json({
+        success: true,
+        data: executionResult,
         message: 'Workflow executed successfully',
-        results: ['Message sent', 'AI response generated', 'Follow-up scheduled']
-      }
-    };
-
-    res.json({
-      success: true,
-      data: executionResult,
-      message: 'Workflow executed successfully'
-    });
-  } catch (error) {
-    console.error('Error executing workflow:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to execute workflow'
-    });
-  }
-});
+      });
+    } catch (error) {
+      console.error('Error executing workflow:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to execute workflow',
+      });
+    }
+  },
+);
 
 export default router;

@@ -26,6 +26,26 @@ interface VoiceConfigData {
     ttsModel?: 'tts-1' | 'tts-1-hd' | 'eleven_multilingual_v2' | 'eleven_monolingual_v1' | 'eleven_turbo_v2';
 }
 
+// Helper to extract error message from axios errors
+const getErrorMessage = (err: unknown): string => {
+    if (err && typeof err === 'object' && 'response' in err) {
+        const axiosErr = err as { response?: { data?: { message?: string; error?: string }; status?: number } };
+        if (axiosErr.response?.data?.message) {
+            return axiosErr.response.data.message;
+        }
+        if (axiosErr.response?.data?.error) {
+            return axiosErr.response.data.error;
+        }
+        if (axiosErr.response?.status === 503) {
+            return 'Database not connected. Please check if MongoDB is running or check server logs for IP whitelist issues.';
+        }
+    }
+    if (err instanceof Error) {
+        return err.message;
+    }
+    return 'Unknown error';
+};
+
 export default function Config() {
     const [configs, setConfigs] = useState<Config[]>([]);
     const [isEditing, setIsEditing] = useState(false);
@@ -71,6 +91,13 @@ export default function Config() {
             }
         } catch (error) {
             console.error("Failed to fetch configs", error);
+            // Show user-friendly message for 503 errors
+            if (error && typeof error === 'object' && 'response' in error) {
+                const axiosErr = error as { response?: { status?: number } };
+                if (axiosErr.response?.status === 503) {
+                    console.error('Database not connected. Check MongoDB connection.');
+                }
+            }
         }
     };
 
@@ -94,7 +121,7 @@ export default function Config() {
     };
 
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+         
         fetchConfigs();
         fetchVoiceConfig();
     }, []);
@@ -105,9 +132,9 @@ export default function Config() {
                 await api.delete(`/api/config/${id}`);
                 fetchConfigs();
                 alert('Configuration deleted successfully.');
-            } catch (err: any) {
-                console.error('Failed to delete config:', err);
-                alert(`Failed to delete configuration: ${err.response?.data?.error || err.message}`);
+            } catch (error: unknown) {
+                console.error('Failed to delete config:', error);
+                alert(`Failed to delete configuration: ${getErrorMessage(error)}`);
             }
         }
     };
@@ -148,8 +175,8 @@ export default function Config() {
             setIsEditing(false);
             fetchConfigs();
         } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : String(err);
-            alert('Error saving: ' + message);
+            console.error('Failed to save config:', err);
+            alert('Error saving: ' + getErrorMessage(err));
         }
     };
 
@@ -160,7 +187,7 @@ export default function Config() {
             try {
                 await api.put(`/api/config/${nlpConfig._id}`, { ...nlpConfig, value: newValue });
                 fetchConfigs();
-            } catch (err) {
+            } catch {
                 alert('Error updating Local NLP config');
             }
         }
@@ -170,7 +197,7 @@ export default function Config() {
         setVoiceSaving(true);
         setVoiceMessage(null);
         try {
-            const configToSave = voiceConfigs.find((c: any) => c.provider === providerName) || { provider: providerName, mode: 'voice-and-text' };
+            const configToSave = voiceConfigs.find((c) => c.provider === providerName) || { provider: providerName as VoiceConfigData['provider'], mode: 'voice-and-text' as const };
             await api.post('/api/voice-config', configToSave);
             setVoiceMessage({ type: 'success', text: `${providerName} voice configuration activated successfully!` });
             fetchVoiceConfig(); // Refresh to update sorting and active status
@@ -182,23 +209,23 @@ export default function Config() {
         }
     };
 
-    const updateProviderConfig = (providerName: string, updates: any) => {
-        setVoiceConfigs((prev: any[]) => {
-            const exists = prev.find((c: any) => c.provider === providerName);
+    const updateProviderConfig = (providerName: string, updates: Partial<VoiceConfigData>) => {
+        setVoiceConfigs((prev) => {
+            const exists = prev.find((c) => c.provider === providerName);
             if (exists) {
-                return prev.map((c: any) => c.provider === providerName ? { ...c, ...updates } : c);
+                return prev.map((c) => c.provider === providerName ? { ...c, ...updates } : c);
             } else {
-                return [...prev, { provider: providerName, mode: 'voice-and-text', ...updates }];
+                return [...prev, { provider: providerName as VoiceConfigData['provider'], mode: 'voice-and-text' as const, ...updates }];
             }
         });
     };
 
     const getProviderConfig = (providerName: string): VoiceConfigData => {
-        const found = voiceConfigs.find((c: any) => c.provider === providerName);
+        const found = voiceConfigs.find((c) => c.provider === providerName);
         if (found) return found;
 
         return {
-            provider: providerName as any,
+            provider: providerName as VoiceConfigData['provider'],
             mode: 'voice-and-text',
             apiKey: '',
             ttsModel: providerName === 'elevenlabs' ? 'eleven_multilingual_v2' : 'tts-1',
@@ -558,7 +585,7 @@ export default function Config() {
                                             <label className="block text-sm font-medium text-gray-700 mb-2">Response Mode</label>
                                             <select
                                                 value={getProviderConfig('google-free').mode}
-                                                onChange={(e) => updateProviderConfig('google-free', { mode: e.target.value })}
+                                                onChange={(e) => updateProviderConfig('google-free', { mode: e.target.value as VoiceConfigData['mode'] })}
                                                 className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
                                             >
                                                 <option value="voice-and-text">Voice & Text</option>
@@ -599,7 +626,7 @@ export default function Config() {
                                             <label className="block text-sm font-medium text-gray-700 mb-2">Response Mode</label>
                                             <select
                                                 value={getProviderConfig('openai').mode}
-                                                onChange={(e) => updateProviderConfig('openai', { mode: e.target.value })}
+                                                onChange={(e) => updateProviderConfig('openai', { mode: e.target.value as VoiceConfigData['mode'] })}
                                                 className="w-full p-2 border border-blue-200 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
                                             >
                                                 <option value="voice-and-text">Voice & Text</option>
@@ -624,7 +651,7 @@ export default function Config() {
                                                 <label className="block text-xs font-medium text-blue-900 mb-1">Quality</label>
                                                 <select
                                                     value={getProviderConfig('openai').ttsModel || 'tts-1'}
-                                                    onChange={(e) => updateProviderConfig('openai', { ttsModel: e.target.value })}
+                                                    onChange={(e) => updateProviderConfig('openai', { ttsModel: e.target.value as VoiceConfigData['ttsModel'] })}
                                                     className="w-full p-1.5 text-sm border border-blue-200 rounded"
                                                 >
                                                     <option value="tts-1">Standard</option>
@@ -677,7 +704,7 @@ export default function Config() {
                                             <label className="block text-sm font-medium text-gray-700 mb-2">Response Mode</label>
                                             <select
                                                 value={getProviderConfig('elevenlabs').mode}
-                                                onChange={(e) => updateProviderConfig('elevenlabs', { mode: e.target.value })}
+                                                onChange={(e) => updateProviderConfig('elevenlabs', { mode: e.target.value as VoiceConfigData['mode'] })}
                                                 className="w-full p-2 border border-purple-200 rounded focus:ring-2 focus:ring-purple-500 focus:outline-none"
                                             >
                                                 <option value="voice-and-text">Voice & Text</option>
@@ -701,7 +728,7 @@ export default function Config() {
                                             <label className="block text-sm font-medium text-purple-900 mb-2">Engine Model</label>
                                             <select
                                                 value={getProviderConfig('elevenlabs').ttsModel || 'eleven_multilingual_v2'}
-                                                onChange={(e) => updateProviderConfig('elevenlabs', { ttsModel: e.target.value })}
+                                                onChange={(e) => updateProviderConfig('elevenlabs', { ttsModel: e.target.value as VoiceConfigData['ttsModel'] })}
                                                 className="w-full p-2 border border-purple-200 rounded focus:ring-2 focus:ring-purple-500 focus:outline-none"
                                             >
                                                 <option value="eleven_multilingual_v2">Multilingual v2</option>

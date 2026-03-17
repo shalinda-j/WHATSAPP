@@ -7,14 +7,12 @@ import Dashboard from './pages/Dashboard';
 import Datasets from './pages/Datasets';
 import Webhooks from './pages/Webhooks';
 import Config from './pages/Config';
-import VoiceConfig from './pages/VoiceConfig';
 import SystemMaintenance from './pages/SystemMaintenance';
 import BulkSender from './pages/BulkSender';
 import MarketingManager from './pages/MarketingManager';
-import Leads from './pages/Leads';
-import Analytics from './pages/Analytics';
-import N8nWorkflows from './pages/N8nWorkflows';
 import VoiceAgentHub from './pages/VoiceAgentHub';
+import CRM from './pages/CRM';
+import ChatInterface from './pages/ChatInterface';
 
 import Sessions from './pages/Sessions';
 import Layout from './components/Layout';
@@ -37,16 +35,16 @@ function AppRoutes() {
         <Route path="datasets" element={<Datasets />} />
         <Route path="webhooks" element={<Webhooks />} />
         <Route path="config" element={<Config />} />
-        <Route path="voice-config" element={<VoiceConfig />} />
         <Route path="bulk-message" element={<BulkSender />} />
         <Route path="system" element={<SystemMaintenance />} />
         <Route path="marketing" element={<MarketingManager />} />
-        <Route path="n8n" element={<N8nWorkflows />} />
-        <Route path="leads" element={<Leads />} />
-        <Route path="analytics" element={<Analytics />} />
         <Route path="voice-agent-hub" element={<VoiceAgentHub />} />
-
+        <Route path="crm" element={<CRM />} />
+        <Route path="chat" element={<ChatInterface />} />
         <Route path="sessions" element={<Sessions />} />
+        {/* Redirect old routes to CRM */}
+        <Route path="analytics" element={<Navigate to="/crm" replace />} />
+        <Route path="leads" element={<Navigate to="/crm" replace />} />
       </Route>
     </Routes>
   );

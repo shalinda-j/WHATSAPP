@@ -97,20 +97,21 @@ const workflowReducer = (state: WorkflowState, action: WorkflowAction): Workflow
     case 'SET_DIRTY':
       return { ...state, isDirty: action.payload };
     
-    case 'SAVE_TO_HISTORY':
+    case 'SAVE_TO_HISTORY': {
       const newHistory = state.history.slice(0, state.historyIndex + 1);
       newHistory.push({ nodes: state.nodes, edges: state.edges });
-      
+
       // Keep only last 50 states
       if (newHistory.length > 50) {
         newHistory.shift();
       }
-      
+
       return {
         ...state,
         history: newHistory,
         historyIndex: newHistory.length - 1
       };
+    }
     
     case 'UNDO':
       if (state.historyIndex > 0) {
@@ -197,6 +198,7 @@ export const WorkflowProvider = ({ children }: { children: ReactNode }) => {
 };
 
 // Hook
+// eslint-disable-next-line react-refresh/only-export-components
 export const useWorkflow = () => {
   const context = useContext(WorkflowContext);
   if (!context) {

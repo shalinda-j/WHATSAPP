@@ -3,8 +3,14 @@ import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_key_change_in_prod';
 
+export interface JwtUserPayload {
+  id: string;
+  email: string;
+  role: string;
+}
+
 export interface AuthRequest extends Request {
-  user?: any;
+  user?: JwtUserPayload;
 }
 
 export const authenticateToken = (
@@ -17,12 +23,12 @@ export const authenticateToken = (
 
   if (!token) return res.sendStatus(401);
 
-  jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
+  jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
       console.error('JWT Verification Error:', err.message);
       return res.sendStatus(403);
     }
-    req.user = user;
+    req.user = user as JwtUserPayload;
     next();
   });
 };

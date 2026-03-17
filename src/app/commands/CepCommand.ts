@@ -13,19 +13,19 @@ export class CepCommand extends BaseCommand {
   async execute(
     message: proto.IWebMessageInfo,
     args: string[],
-    sessionId: string,
+    _sessionId: string,
   ): Promise<void> {
-    const jid = message.key.remoteJid;
+    const jid = message.key?.remoteJid;
     if (!jid) return;
 
-    await this.sendTyping(message, sessionId);
+    await this.sendTyping(message, _sessionId);
 
     // Validate arguments
     if (args.length === 0) {
       await this.reply(
         message,
         '⚠️ Please provide a postal code.\n\n📖 *Usage:* !cep 01310-100',
-        sessionId,
+        _sessionId,
       );
       return;
     }
@@ -36,7 +36,7 @@ export class CepCommand extends BaseCommand {
       await this.reply(
         message,
         '⚠️ Invalid postal code! The code must have 8 digits.',
-        sessionId,
+        _sessionId,
       );
       return;
     }
@@ -54,14 +54,14 @@ export class CepCommand extends BaseCommand {
           `*Neighborhood:* ${data.neighborhood}\n` +
           `*City:* ${data.city}\n` +
           `*State:* ${data.state}`,
-        sessionId,
+        _sessionId,
       );
     } catch (error) {
       console.error('Error fetching postal code:', error);
       await this.reply(
         message,
         '⚠️ Postal code not found or service unavailable.',
-        sessionId,
+        _sessionId,
       );
     }
   }

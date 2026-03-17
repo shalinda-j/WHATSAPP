@@ -14,6 +14,11 @@ interface Dataset {
     isActive: boolean;
 }
 
+interface Company {
+    _id: string;
+    name: string;
+}
+
 export default function Datasets() {
     const [datasets, setDatasets] = useState<Dataset[]>([]);
     const [isEditing, setIsEditing] = useState(false);
@@ -42,7 +47,7 @@ export default function Datasets() {
             // but the current system seems to use specific string keys.
             // Let's use the ID/Name from the API.
             if (Array.isArray(res.data)) {
-                const companies = res.data.map((c: any) => c.name); // Using Name as scope for now to match UI
+                const companies = res.data.map((c: Company) => c.name); // Using Name as scope for now to match UI
                 setAvailableScopes(companies);
             } else {
                 console.error('Unexpected companies response:', res.data);
@@ -57,7 +62,7 @@ export default function Datasets() {
     };
 
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+         
         fetchDatasets();
         fetchCompanies();
     }, []);
@@ -232,9 +237,9 @@ export default function Datasets() {
                                                     ...prev,
                                                     content: (prev.content ? prev.content + '\n\n' : '') + `[Extracted from ${file.name}]:\n${data.text}`
                                                 }));
-                                            } catch (err: any) {
-                                                console.error(err);
-                                                const backendError = err.response?.data?.error || err.message;
+                                            } catch (error: unknown) {
+                                                console.error(error);
+                                                const backendError = error instanceof Error ? error.message : 'Unknown error';
                                                 alert('Failed to extract text: ' + backendError);
                                             } finally {
                                                 setIsExtracting(false);
@@ -252,13 +257,13 @@ export default function Datasets() {
                             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
                             value={typeof formData.content === 'object' ? JSON.stringify(formData.content, null, 2) : formData.content}
                             onChange={e => {
-                                let val: any = e.target.value;
+                                let val: string | Record<string, unknown> = e.target.value;
                                 try {
                                     val = JSON.parse(val);
                                 } catch {
                                     // keep as string if not valid JSON
                                 }
-                                setFormData({ ...formData, content: val });
+                                setFormData({ ...formData, content: val as string });
                             }}
                         />
                     </div>

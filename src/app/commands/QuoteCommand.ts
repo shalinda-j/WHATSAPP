@@ -16,8 +16,9 @@ export class QuoteCommand extends BaseCommand {
     args: string[],
     sessionId: string,
   ): Promise<void> {
-    const jid = message.key.remoteJid;
+    const jid = message.key?.remoteJid;
     if (!jid) return;
+    const text = args.join(' ');
 
     await this.sendTyping(message, sessionId);
 
@@ -25,12 +26,13 @@ export class QuoteCommand extends BaseCommand {
     const isGroup = await this.requireGroup(message, sessionId);
     if (!isGroup) return;
 
-    // Get user who sent the message
-    const sender = message.key.participant || message.key.remoteJid;
-    if (!sender) return;
+    // Provide a small delay or fetch user profile info for a dynamic reply
+    const senderJid = message.key?.participant || message.key?.remoteJid;
+    if (!senderJid) return;
+    const quotedText = `"${text}" - @${senderJid.split('@')[0]}`;
 
     // Extract stats for permission check (using sender number)
-    const senderNumber = sender.replace(/\D/g, ''); // Extract number only
+    const senderNumber = senderJid.replace(/\D/g, ''); // Extract number only
 
     // Check permissions
     const allowPermissions = company.filter(

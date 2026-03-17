@@ -1,47 +1,55 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 
-export interface IVoiceConfig extends Document {
-    provider: 'google-free' | 'openai' | 'elevenlabs';
-    apiKey?: string;
-    voiceId?: string; // For OpenAI or ElevenLabs specific voice IDs
-    isActive: boolean;
-    mode: 'voice-only' | 'text-only' | 'voice-and-text';
-    updatedAt: Date;
-    ttsModel?: string;
+export type VoiceProvider = 'google-free' | 'openai' | 'elevenlabs';
+export type VoiceMode = 'voice-only' | 'text-only' | 'voice-and-text';
+
+export interface IVoiceConfig {
+  provider: VoiceProvider;
+  apiKey?: string;
+  voiceId?: string;
+  isActive: boolean;
+  mode: VoiceMode;
+  updatedAt: Date;
+  ttsModel?: string;
 }
 
-const VoiceConfigSchema = new Schema({
-    provider: {
-        type: String,
-        enum: ['google-free', 'openai', 'elevenlabs'],
-        default: 'google-free',
-    },
-    apiKey: {
-        type: String,
-        required: false,
-    },
-    voiceId: {
-        type: String,
-        required: false,
-        default: 'alloy',
-    },
-    isActive: {
-        type: Boolean,
-        default: true,
-    },
-    mode: {
-        type: String,
-        enum: ['voice-only', 'text-only', 'voice-and-text'],
-        default: 'voice-and-text',
-    },
-    updatedAt: {
-        type: Date,
-        default: Date.now,
-    },
-    ttsModel: {
-        type: String,
-        default: 'tts-1'
-    },
-} as any);
+const VoiceConfigSchema = new Schema<IVoiceConfig>({
+  provider: {
+    type: String,
+    enum: ['google-free', 'openai', 'elevenlabs'],
+    default: 'google-free',
+  },
+  apiKey: {
+    type: String,
+    required: false,
+  },
+  voiceId: {
+    type: String,
+    required: false,
+    default: 'alloy',
+  },
+  isActive: {
+    type: Boolean,
+    default: true,
+  },
+  mode: {
+    type: String,
+    enum: ['voice-only', 'text-only', 'voice-and-text'],
+    default: 'voice-and-text',
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now,
+  },
+  ttsModel: {
+    type: String,
+    default: 'tts-1',
+  },
+});
 
-export default mongoose.model('VoiceConfig', VoiceConfigSchema as any) as any;
+const VoiceConfig = mongoose.model(
+  'VoiceConfig',
+  VoiceConfigSchema as any,
+) as unknown as mongoose.Model<IVoiceConfig>;
+
+export default VoiceConfig;

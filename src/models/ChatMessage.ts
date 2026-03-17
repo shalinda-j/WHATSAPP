@@ -52,6 +52,7 @@ const ChatMessageSchema = new Schema({
 
 // Indexes for common queries
 ChatMessageSchema.index({ userId: 1, timestamp: -1 });
+ChatMessageSchema.index({ 'metadata.sessionId': 1, timestamp: -1 });
 
 const ChatMessage = mongoose.model(
   'ChatMessage',

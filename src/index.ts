@@ -13,7 +13,12 @@ import {
 import { connectToMongoDB } from './services/MongoAuthService';
 import { seedAIProviders } from './services/AIProviderSeeder';
 import { seedDatasets } from './services/DatasetSeeder';
-import { transcribeAudio, generateSpeech } from './services/voice';
+import {
+  transcribeAudio,
+  generateSpeech,
+  transcribeAudioWithLanguage,
+  detectLanguage,
+} from './services/voice';
 import { aiLoadBalancer } from './services/AILoadBalancer';
 import { nlpService } from './services/NLPService';
 import { analyzeLeadIntent } from './services/gemini';
@@ -35,6 +40,7 @@ import { commandDispatcher } from './app/utils/CommandDispatcher';
 import './app/commands';
 import ChatMessage from './models/ChatMessage';
 import VoiceConfig from './models/VoiceConfig';
+import { initSocket, getIO } from './server/socket';
 
 const PORT = process.env.PORT || 8080;
 let server: any;
@@ -49,7 +55,9 @@ async function startServer() {
       await seedDatasets();
       await nlpService.initializeNLP();
     } catch (dbErr) {
-      console.error('❌ MongoDB Connection Failed. Server starting in LIMITED MODE.');
+      console.error(
+        '❌ MongoDB Connection Failed. Server starting in LIMITED MODE.',
+      );
       console.error(dbErr);
     }
   } else {
@@ -63,6 +71,9 @@ async function startServer() {
     console.log(`🚀 Admin API Server running on port ${PORT}`);
     console.log(`🌐 Health check: http://localhost:${PORT}/health`);
   });
+
+  // Initialize Socket.io
+  initSocket(server);
 
   // 3. Connect to WhatsApp
   await connectToWhatsApp();
@@ -154,9 +165,9 @@ onMessage(async (message, sock, sessionId) => {
     }
 
     let messageType: 'text' | 'voice' = 'text';
+    let detectedVoiceLanguage: string | null = null;
 
     // Helper to extract audio message from various wrappers
-
 
     // Check for Audio Message
     let isVoiceMessage = false;
@@ -167,10 +178,18 @@ onMessage(async (message, sock, sessionId) => {
 
       if (audioBuffer) {
         try {
-          // 1. Transcribe
-          const transcription = await transcribeAudio(audioBuffer);
-          console.log(`   📝 Transcription: "${transcription}"`);
-          text = transcription;
+          // 1. Transcribe with language detection
+          const transcriptionResult = await transcribeAudioWithLanguage(
+            audioBuffer,
+          );
+          console.log(`   📝 Transcription: "${transcriptionResult.text}"`);
+          console.log(
+            `   🌐 Detected language: ${
+              transcriptionResult.detectedLanguage
+            } (${(transcriptionResult.languageConfidence * 100).toFixed(0)}%)`,
+          );
+          text = transcriptionResult.text;
+          detectedVoiceLanguage = transcriptionResult.detectedLanguage;
           isVoiceMessage = true;
         } catch (err: any) {
           console.error('   ❌ Transcription failed:', err);
@@ -199,6 +218,18 @@ onMessage(async (message, sock, sessionId) => {
           isBooking: false,
         },
       });
+
+      // Emit to WebSocket for real-time dashboard
+      try {
+        const io = getIO();
+        io.emit('new-message', savedMsg);
+        console.log(`   📡 Emitted user message to live chat`);
+      } catch (socketErr) {
+        console.error(
+          '   ⚠️ Failed to emit user message to socket:',
+          socketErr,
+        );
+      }
 
       // [NEW] Trigger Webhook for incoming message
       WebhookService.triggerWebhook('message.received', {
@@ -297,6 +328,7 @@ onMessage(async (message, sock, sessionId) => {
       let response: string | undefined;
       let intentAnalysis: any = null;
       let answeredViaNLP = false;
+      let responseLanguage = 'si'; // Default to Sinhala - accessible outside try block
 
       try {
         // Analyze Intent first for metadata
@@ -305,35 +337,67 @@ onMessage(async (message, sock, sessionId) => {
         // LANGUAGE DETECTION: Detect language and set response language accordingly
         // Default language is SINHALA. If user writes in English only, reply in English.
         let finalPrompt = text;
-        if (isVoiceMessage) {
-          // For voice notes, Whisper transcribes Sinhala speech as romanized Latin text,
-          // so Unicode detection won't work. Instead we check if the transcription looks
-          // like English words. If not (e.g., romanized Sinhala like 'mage nama manda'),
-          // we default to Sinhala - the system's primary language.
-          const looksLikeEnglish = /^([a-zA-Z]+\s*){3,}$/.test(text.trim()) &&
-            /\b(the|is|are|I|you|he|she|we|they|my|your|it|and|or|but|what|how|can|could|please|hello|hi|thank|yes|no|okay|ok)\b/i.test(text);
+
+        if (isVoiceMessage && detectedVoiceLanguage) {
+          // For voice messages, use the detected language from transcription
+          responseLanguage = detectedVoiceLanguage;
+
+          if (detectedVoiceLanguage === 'en') {
+            // User spoke in English
+            finalPrompt += `\n\n(SYSTEM: This is a VOICE message spoken in English. Reply ONLY in English, very short, max 2 sentences, natural spoken style.)`;
+          } else if (detectedVoiceLanguage === 'si') {
+            // User spoke in Sinhala (or romanized Sinhala detected as Sinhala)
+            finalPrompt += `\n\n(SYSTEM: මෙය VOICE (හඬ) පණිවිඩයකි. **සිංහල** භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න. ඉතා කෙටිව, ස්වාභාවිකව කතා කරන ශෛලියෙන් යෙදුම් 2කින් හෝ 1කින් ලිවිය යුතුය.)`;
+          } else if (detectedVoiceLanguage === 'ta') {
+            // User spoke in Tamil
+            finalPrompt += `\n\n(SYSTEM: This is a VOICE message. Reply in Tamil language. Keep it short, 1-2 sentences, natural spoken style.)`;
+          } else if (detectedVoiceLanguage === 'hi') {
+            // User spoke in Hindi
+            finalPrompt += `\n\n(SYSTEM: This is a VOICE message. Reply in Hindi language. Keep it short, 1-2 sentences, natural spoken style.)`;
+          } else {
+            // Default to Sinhala for unknown languages
+            finalPrompt += `\n\n(SYSTEM: මෙය VOICE (හඬ) පණිවිඩයකි. **සිංහල** භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න.)`;
+          }
+        } else if (isVoiceMessage) {
+          // Fallback for voice messages without detected language (shouldn't happen)
+          const looksLikeEnglish =
+            /^([a-zA-Z]+\s*){3,}$/.test(text.trim()) &&
+            /\b(the|is|are|I|you|he|she|we|they|my|your|it|and|or|but|what|how|can|could|please|hello|hi|thank|yes|no|okay|ok)\b/i.test(
+              text,
+            );
 
           if (looksLikeEnglish) {
-            // Transcription looks like real English speech
+            responseLanguage = 'en';
             finalPrompt += `\n\n(SYSTEM: This is a VOICE message spoken in English. Reply ONLY in English, very short, max 2 sentences, natural spoken style.)`;
           } else {
-            // Default: treat as Sinhala (the primary system language)
-            // Even if romanized, reply in proper Sinhala script
+            responseLanguage = 'si';
             finalPrompt += `\n\n(SYSTEM: මෙය VOICE (හඬ) පණිවිඩයකි. **සිංහල** භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න. ඉතා කෙටිව, ස්වාභාවිකව කතා කරන ශෛලියෙන් යෙදුම් 2කින් හෝ 1කින් ලිවිය යුතුය.)`;
           }
         } else {
           // Text message: detect language
           const hasSinhala = /[\u0D80-\u0DFF]/.test(text);
-          const isLikelyEnglish = /^[a-zA-Z0-9\s\p{P}!?.,;&'"()+\-*#@%$^\[\]{}|\\/<>=`~]+$/u.test(text.trim());
+          const hasTamil = /[\u0B80-\u0BFF]/.test(text);
+          const hasHindi = /[\u0900-\u097F]/.test(text);
+          const isLikelyEnglish =
+            /^[a-zA-Z0-9\s\p{P}!?.,;&'"()+\-*#@%$^\[\]{}|\\/<>=`~]+$/u.test(
+              text.trim(),
+            );
 
           if (hasSinhala) {
-            // Message contains Sinhala → reply in Sinhala
+            responseLanguage = 'si';
             finalPrompt += `\n\n(SYSTEM: සිංහල භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න.)`;
+          } else if (hasTamil) {
+            responseLanguage = 'ta';
+            finalPrompt += `\n\n(SYSTEM: Reply in Tamil language.)`;
+          } else if (hasHindi) {
+            responseLanguage = 'hi';
+            finalPrompt += `\n\n(SYSTEM: Reply in Hindi language.)`;
           } else if (isLikelyEnglish) {
-            // Pure English message → reply in English
+            responseLanguage = 'en';
             finalPrompt += `\n\n(SYSTEM: The user is writing in English. Reply ONLY in English.)`;
           } else {
-            // Unknown/other language → default to Sinhala (the system's default language)
+            // Unknown/other language → default to Sinhala
+            responseLanguage = 'si';
             finalPrompt += `\n\n(SYSTEM: Default language is Sinhala. සිංහල භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න.)`;
           }
         }
@@ -355,7 +419,7 @@ onMessage(async (message, sock, sessionId) => {
 
           // Learn from AI response dynamically (Fire & Forget)
           if (isLocalNLPEnabled && response && response.trim() !== '') {
-            nlpService.learnFromAI(text, response).catch(err => {
+            nlpService.learnFromAI(text, response).catch((err) => {
               console.error('Failed to learn from AI:', err);
             });
           }
@@ -380,7 +444,7 @@ onMessage(async (message, sock, sessionId) => {
 
       // [NEW] 2. Save BOT Response to DB
       try {
-        await ChatMessage.create({
+        const savedBotMsg = await ChatMessage.create({
           userId: jid,
           role: 'assistant',
           type: 'text',
@@ -391,6 +455,18 @@ onMessage(async (message, sock, sessionId) => {
             buyingSignal: intentAnalysis?.buyingSignal || 'None',
           },
         });
+
+        // Emit to WebSocket for real-time dashboard
+        try {
+          const io = getIO();
+          io.emit('new-message', savedBotMsg);
+          console.log(`   📡 Emitted bot message to live chat`);
+        } catch (socketErr) {
+          console.error(
+            '   ⚠️ Failed to emit bot message to socket:',
+            socketErr,
+          );
+        }
       } catch (dbErr) {
         console.error('   ❌ Failed to save bot response:', dbErr);
       }
@@ -409,14 +485,30 @@ onMessage(async (message, sock, sessionId) => {
         }
 
         // If mode requires voice, generate and send it
-        if (responseMode === 'voice-only' || responseMode === 'voice-and-text') {
+        if (
+          responseMode === 'voice-only' ||
+          responseMode === 'voice-and-text'
+        ) {
           try {
-            console.log('   🗣️ Generating voice response...');
-            const audioResponse = await generateSpeech(response);
-            await sendVoiceMessage(jid, audioResponse, sessionId);
-            console.log('   ✅ AI voice response sent (based on mode)');
-          } catch (ttsError) {
-            console.error('   ❌ TTS failed:', ttsError);
+            console.log(
+              `   🗣️ Generating voice response in language: ${responseLanguage}...`,
+            );
+            const audioResponse = await generateSpeech(
+              response,
+              responseLanguage,
+            );
+            const voiceSent = await sendVoiceMessage(
+              jid,
+              audioResponse,
+              sessionId,
+            );
+            if (voiceSent) {
+              console.log('   ✅ AI voice response sent (based on mode)');
+            } else {
+              console.log('   ⚠️ Voice send returned false');
+            }
+          } catch (ttsError: any) {
+            console.error('   ❌ TTS failed:', ttsError.message || ttsError);
             // Fallback if we didn't already send text
             if (!sentText) {
               await sendMessage(jid, response, sessionId);

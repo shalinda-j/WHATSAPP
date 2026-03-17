@@ -19,9 +19,9 @@ const storage = multer.diskStorage({
     cb(null, UPLOAD_DIR);
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
+  },
 });
 
 const upload = multer({
@@ -29,13 +29,15 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|pdf|doc|docx/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const extname = allowedTypes.test(
+      path.extname(file.originalname).toLowerCase(),
+    );
     const mimetype = allowedTypes.test(file.mimetype);
     if (extname && mimetype) {
       return cb(null, true);
     }
     cb(new Error('Only images and PDF files are allowed'));
-  }
+  },
 });
 
 // Public route for bot registration (no auth required)
@@ -54,7 +56,7 @@ router.post('/register', async (req, res) => {
       email,
       jobVacancyType,
       status: 'new',
-      registeredAt: new Date()
+      registeredAt: new Date(),
     });
 
     await lead.save();
@@ -79,7 +81,7 @@ router.get('/', async (req, res) => {
       query.$or = [
         { fullName: { $regex: search, $options: 'i' } },
         { phoneNumber: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
+        { email: { $regex: search, $options: 'i' } },
       ];
     }
 
@@ -93,7 +95,7 @@ router.get('/', async (req, res) => {
       leads,
       total,
       page: Number(page),
-      totalPages: Math.ceil(total / Number(limit))
+      totalPages: Math.ceil(total / Number(limit)),
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -104,10 +106,10 @@ router.get('/stats', async (req, res) => {
   try {
     const totalLeads = await Lead.countDocuments();
     const byStatus = await Lead.aggregate([
-      { $group: { _id: '$status', count: { $sum: 1 } } }
+      { $group: { _id: '$status', count: { $sum: 1 } } },
     ]);
     const byJobType = await Lead.aggregate([
-      { $group: { _id: '$jobVacancyType', count: { $sum: 1 } } }
+      { $group: { _id: '$jobVacancyType', count: { $sum: 1 } } },
     ]);
 
     res.json({
@@ -119,7 +121,7 @@ router.get('/stats', async (req, res) => {
       byJobType: byJobType.reduce((acc: any, item: any) => {
         acc[item._id] = item.count;
         return acc;
-      }, {})
+      }, {}),
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -142,7 +144,7 @@ router.get('/job-types', (req, res) => {
     'Carpenter',
     'Mason',
     'Painter',
-    'AC Technician'
+    'AC Technician',
   ];
   res.json(jobTypes);
 });
@@ -151,10 +153,21 @@ router.get('/export', async (req, res) => {
   try {
     const leads = await Lead.find().sort({ registeredAt: -1 });
 
-    const headers = ['ID', 'Full Name', 'Phone Number', 'Email', 'Address', 'Job Vacancy', 'Status', 'Registration Date', 'Notes'];
+    const headers = [
+      'ID',
+      'Full Name',
+      'Phone Number',
+      'Email',
+      'Address',
+      'Job Vacancy',
+      'Status',
+      'Registration Date',
+      'Notes',
+    ];
 
     const csvRows = leads.map((lead: any) => {
-      const escapeCsv = (str: string) => `"${(str || '').toString().replace(/"/g, '""')}"`;
+      const escapeCsv = (str: string) =>
+        `"${(str || '').toString().replace(/"/g, '""')}"`;
       return [
         lead._id,
         escapeCsv(lead.fullName),
@@ -164,14 +177,19 @@ router.get('/export', async (req, res) => {
         escapeCsv(lead.jobVacancyType),
         escapeCsv(lead.status),
         new Date(lead.registeredAt).toISOString(),
-        escapeCsv(lead.notes)
+        escapeCsv(lead.notes),
       ].join(',');
     });
 
     const csvContent = [headers.join(','), ...csvRows].join('\n');
 
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="leads-export-${new Date().toISOString().split('T')[0]}.csv"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="leads-export-${
+        new Date().toISOString().split('T')[0]
+      }.csv"`,
+    );
     res.send(csvContent);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -197,18 +215,25 @@ router.get('/:id/messages', async (req, res) => {
       return res.status(404).json({ error: 'Lead not found' });
     }
 
-    // Match messages by formatting the phone number to the WhatsApp JID format
-    // E.g., strip non-digits and append @c.us OR use regex
+    const { page = 1, limit = 50 } = req.query;
     const phoneDigits = lead.phoneNumber.replace(/\D/g, '');
     if (!phoneDigits) {
-      return res.json([]);
+      return res.json({ messages: [], total: 0, page: 1, totalPages: 0 });
     }
 
-    const messages = await ChatMessage.find({
-      userId: { $regex: new RegExp(`^${phoneDigits}.*`) }
-    }).sort({ timestamp: -1 }).limit(100);
+    const query = { userId: { $regex: new RegExp(`^${phoneDigits}.*`) } };
+    const total = await ChatMessage.countDocuments(query);
+    const messages = await ChatMessage.find(query)
+      .sort({ timestamp: -1 })
+      .skip((Number(page) - 1) * Number(limit))
+      .limit(Number(limit));
 
-    res.json(messages.reverse() || []);
+    res.json({
+      messages: messages.reverse(),
+      total,
+      page: Number(page),
+      totalPages: Math.ceil(total / Number(limit)),
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -229,7 +254,7 @@ router.put('/:id', async (req, res) => {
     const lead = await Lead.findByIdAndUpdate(
       req.params.id,
       { ...req.body, updatedAt: new Date() },
-      { new: true }
+      { new: true },
     );
     if (!lead) {
       return res.status(404).json({ error: 'Lead not found' });
@@ -288,7 +313,7 @@ router.post('/:id/qualifications', upload.single('file'), async (req, res) => {
       filePath: `/uploads/qualifications/${req.file.filename}`,
       fileSize: req.file.size,
       extractedText,
-      uploadedAt: new Date()
+      uploadedAt: new Date(),
     };
 
     const leadDoc = lead as any;
@@ -313,7 +338,11 @@ router.get('/:id/qualifications/:qualIndex/download', async (req, res) => {
     }
 
     const qualIndex = parseInt(req.params.qualIndex);
-    if (isNaN(qualIndex) || qualIndex < 0 || qualIndex >= lead.qualifications.length) {
+    if (
+      isNaN(qualIndex) ||
+      qualIndex < 0 ||
+      qualIndex >= lead.qualifications.length
+    ) {
       return res.status(404).json({ error: 'Qualification not found' });
     }
 

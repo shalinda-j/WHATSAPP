@@ -100,9 +100,10 @@ export default function SystemMaintenance() {
             alert('System has been reset. You will be logged out.');
             logout();
             window.location.href = '/login';
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Factory reset failed:', error);
-            setMessage({ type: 'error', text: error.response?.data?.error || 'Factory reset failed.' });
+            const errorMessage = error instanceof Error ? error.message : 'Factory reset failed.';
+            setMessage({ type: 'error', text: errorMessage });
             setIsResetting(false);
             setShowResetModal(false);
             setResetStep(0);

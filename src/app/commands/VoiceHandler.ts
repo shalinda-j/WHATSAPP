@@ -24,12 +24,20 @@ export class VoiceHandler {
   }
 
   /**
+   * Check if the message is from a group chat
+   */
+  static isGroup(message: proto.IWebMessageInfo): boolean {
+    return message.key?.remoteJid?.endsWith('@g.us') || false;
+  }
+
+  /**
    * Handle incoming voice messages
    */
   static async handleVoiceMessage(
+    _sock: any,
     message: proto.IWebMessageInfo,
     sessionId: string,
-  ): Promise<void> {
+  ) {
     const msg = message.message?.audioMessage;
     if (!msg) return;
 
@@ -38,7 +46,7 @@ export class VoiceHandler {
       return;
     }
 
-    const jid = message.key.remoteJid;
+    const jid = message.key?.remoteJid;
     if (!jid) return;
 
     try {
@@ -74,6 +82,27 @@ export class VoiceHandler {
       );
       console.log(`   Transcription: ${transcription}`);
 
+      // Get voice mode and agent status
+      const { getVoiceMode, isVoiceAgentEnabled } = await import(
+        '../../services/voice'
+      );
+      const voiceMode = await getVoiceMode();
+      const isAgentEnabled = await isVoiceAgentEnabled();
+
+      console.log(
+        `   Voice Mode: ${voiceMode}, Agent Enabled: ${isAgentEnabled}`,
+      );
+
+      // If voice agent is disabled, just send transcription
+      if (!isAgentEnabled) {
+        await sendMessage(
+          jid,
+          `🎤 *Voice Transcription:*\n\n"${transcription}"\n\n_Voice AI is currently disabled._`,
+          sessionId,
+        );
+        return;
+      }
+
       // Check if transcription looks like a question or command
       const lowerText = transcription.toLowerCase().trim();
       const isQuestion =
@@ -92,26 +121,43 @@ export class VoiceHandler {
         // If it's a question, get an AI response via Load Balancer
         const aiResponse = await aiLoadBalancer.sendMessage(jid, transcription);
 
-        await sendMessage(
-          jid,
-          `🎤 *Voice Transcription:*\n"${transcription}"\n\n` +
-          `🤖 *AI Response:*\n${aiResponse}`,
-          sessionId,
-        );
+        // Determine response format based on mode
+        const shouldSendText =
+          voiceMode === 'text-only' || voiceMode === 'voice-and-text';
+        const shouldSendVoice =
+          voiceMode === 'voice-only' || voiceMode === 'voice-and-text';
 
-        // Generate and send voice reply
-        try {
-          const { generateSpeech } = await import('../../services/voice');
-          const { sendVoiceMessage } = await import('../../services/whatsapp');
-
-          const audioBuffer = await generateSpeech(aiResponse);
-          await sendVoiceMessage(jid, audioBuffer, sessionId);
-
-        } catch (ttsError) {
-          console.error('TTS Error:', ttsError);
-          // Fallback is already handled (text message sent above)
+        if (shouldSendText) {
+          await sendMessage(
+            jid,
+            `🎤 *Voice Transcription:*\n"${transcription}"\n\n` +
+              `🤖 *AI Response:*\n${aiResponse}`,
+            sessionId,
+          );
         }
 
+        // Generate and send voice reply if mode allows
+        if (shouldSendVoice) {
+          try {
+            const { generateSpeech } = await import('../../services/voice');
+            const { sendVoiceMessage } = await import(
+              '../../services/whatsapp'
+            );
+
+            const audioBuffer = await generateSpeech(aiResponse);
+            await sendVoiceMessage(jid, audioBuffer, sessionId);
+          } catch (ttsError) {
+            console.error('TTS Error:', ttsError);
+            // If voice fails and we didn't send text, send text as fallback
+            if (!shouldSendText) {
+              await sendMessage(
+                jid,
+                `🤖 *AI Response:*\n${aiResponse}\n\n_Voice synthesis failed._`,
+                sessionId,
+              );
+            }
+          }
+        }
       } else {
         // Just return the transcription
         await sendMessage(

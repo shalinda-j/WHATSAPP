@@ -13,6 +13,9 @@ const SettingsPanel = ({ selectedNode, setNodes, onClose }: SettingsPanelProps) 
     const [label, setLabel] = useState('');
     const [configValues, setConfigValues] = useState<Record<string, string>>({});
 
+    // Sync node data to local state when selection changes
+    // This is a legitimate pattern for syncing props to state for editable form inputs
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         if (selectedNode) {
             setLabel(selectedNode.data.label || '');
@@ -29,6 +32,7 @@ const SettingsPanel = ({ selectedNode, setNodes, onClose }: SettingsPanelProps) 
             setConfigValues(initialConfig);
         }
     }, [selectedNode]);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     if (!selectedNode) return null;
 

@@ -9,11 +9,27 @@ import ErrorBoundary from '../components/workflow/ErrorBoundary';
 import LoadingState from '../components/workflow/LoadingState';
 import { ToastContainer } from '../components/workflow/Toast';
 
+interface ValidationErrorItem {
+    nodeId?: string;
+    message: string;
+}
+
+interface ValidationWarningItem {
+    nodeId?: string;
+    message: string;
+}
+
+interface ValidationResult {
+    isValid: boolean;
+    errors: ValidationErrorItem[];
+    warnings: ValidationWarningItem[];
+}
+
 function MarketingManagerInner() {
     const { state, actions } = useWorkflow();
     const [isExecuting, setIsExecuting] = useState(false);
     const [toasts, setToasts] = useState<Array<{ id: string; message: string; type?: 'success' | 'error' | 'warning' | 'info' }>>([]);
-    const [validationResult, setValidationResult] = useState<any>(null);
+    const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
 
     // Auto-save functionality
     useEffect(() => {
@@ -24,6 +40,7 @@ function MarketingManagerInner() {
 
             return () => clearTimeout(autoSaveTimer);
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [state.isDirty, state.isLoading, state.nodes, state.edges]);
 
     // Load auto-saved workflow on mount
@@ -34,6 +51,7 @@ function MarketingManagerInner() {
             actions.setEdges(autoSave.edges);
             addToast('Auto-saved workflow restored', 'info');
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Validate workflow when nodes/edges change

@@ -1,13 +1,16 @@
 import mongoose from 'mongoose';
 
-const QualificationSchema = new (mongoose as any).Schema({
-  documentType: { type: String, default: 'other' },
-  fileName: { type: String, required: true },
-  filePath: { type: String, required: true },
-  fileSize: { type: Number },
-  extractedText: { type: String },
-  uploadedAt: { type: Date, default: Date.now }
-}, { _id: false });
+const QualificationSchema = new (mongoose as any).Schema(
+  {
+    documentType: { type: String, default: 'other' },
+    fileName: { type: String, required: true },
+    filePath: { type: String, required: true },
+    fileSize: { type: Number },
+    extractedText: { type: String },
+    uploadedAt: { type: Date, default: Date.now },
+  },
+  { _id: false },
+);
 
 const LeadSchema = new (mongoose as any).Schema({
   fullName: { type: String, required: true },
@@ -16,15 +19,15 @@ const LeadSchema = new (mongoose as any).Schema({
   email: { type: String },
   jobVacancyType: { type: String, required: true, index: true },
   qualifications: [QualificationSchema],
-  status: { 
-    type: String, 
-    enum: ['new', 'reviewed', 'contacted', 'accepted', 'rejected'], 
+  status: {
+    type: String,
+    enum: ['new', 'reviewed', 'contacted', 'accepted', 'rejected'],
     default: 'new',
-    index: true 
+    index: true,
   },
   notes: { type: String },
   registeredAt: { type: Date, default: Date.now, index: true },
-  updatedAt: { type: Date, default: Date.now }
+  updatedAt: { type: Date, default: Date.now },
 });
 
 LeadSchema.index({ fullName: 'text', phoneNumber: 'text', email: 'text' });
