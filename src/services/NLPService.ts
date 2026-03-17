@@ -210,7 +210,7 @@ class NLPService {
       if (cache) {
         // Check if this exact utterance already exists (case-insensitive check)
         const utteranceExists = cache.userUtterances.some(
-          (u) => u.toLowerCase() === normalizedMessage,
+          (u: string) => u.toLowerCase() === normalizedMessage,
         );
 
         if (!utteranceExists) {
@@ -283,7 +283,7 @@ class NLPService {
     try {
       const caches = await NLPCache.find();
       const totalUtterances = caches.reduce(
-        (sum, c) => sum + c.userUtterances.length,
+        (sum: number, c: any) => sum + c.userUtterances.length,
         0,
       );
       return {

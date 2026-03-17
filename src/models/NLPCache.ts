@@ -1,25 +1,24 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema, Document } from 'mongoose';
 
 export interface INLPCache extends Document {
   intentName: string;
   userUtterances: string[];
   aiResponse: string;
-  createdAt: Date;
-  updatedAt: Date;
 }
 
-const NLPCacheSchema = new Schema<INLPCache>(
+const NLPCacheSchema = new Schema(
   {
     intentName: { type: String, required: true, unique: true },
     userUtterances: [{ type: String, required: true }],
     aiResponse: { type: String, required: true },
-  },
+  } as any,
   { timestamps: true },
 );
 
-// Handle hot-reloading by checking if model already exists
-const NLPCache: Model<INLPCache> =
-  (mongoose.models.NLPCache as Model<INLPCache>) ||
-  mongoose.model<INLPCache>('NLPCache', NLPCacheSchema);
+// Index for faster lookups
+NLPCacheSchema.index({ intentName: 1 });
 
-export default NLPCache;
+export default mongoose.model(
+  'NLPCache',
+  NLPCacheSchema as any,
+) as unknown as mongoose.Model<INLPCache>;
