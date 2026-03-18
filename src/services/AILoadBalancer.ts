@@ -13,6 +13,7 @@ import { OpenRouterService } from './openrouter';
 
 import Config from '../models/Config';
 import { createCompanyConfig } from '../config/companies';
+import { configService } from './ConfigService';
 
 // Default company for load balancer if not specified (legacy support)
 const defaultConfig = createCompanyConfig('default');
@@ -147,23 +148,13 @@ export class AILoadBalancer {
   }
 
   private async getInitialHistory(): Promise<AIChatMessage[]> {
-    let knowledgeBase = JOB_KNOWLEDGE_BASE(defaultConfig);
-    try {
-      const datasets = await Dataset.find({ isActive: true });
-      if (datasets.length > 0) {
-        const combinedData = datasets
-          .map((ds) => ds.content)
-          .join('\n\n---\n\n');
-        knowledgeBase = `\n# 🌍 Knowledge Base (Dynamic)\n${combinedData}\n`;
-      }
-    } catch (err) {
-      console.error('Dataset load error:', err);
-    }
+    const knowledgeBase = await configService.getDynamicKnowledgeBase();
+    const aiPersonality = await configService.getAIPersonality();
 
     const history: AIChatMessage[] = [
       {
         role: 'system',
-        content: `${AI_PERSONALITY(defaultConfig)}\n\n${knowledgeBase}`,
+        content: `${aiPersonality}\n\n${knowledgeBase}`,
       },
     ];
 

@@ -169,7 +169,9 @@ export class WhatsAppSessionManager {
             statusCode === 401;
 
           console.log(
-            `⚠️ Session ${sessionId} Closed: ${statusCode} (conflict: ${isConflict}, loggedOut: ${isLoggedOut}, deleted: ${this.deletedSessions.has(sessionId)})`,
+            `⚠️ Session ${sessionId} Closed: ${statusCode} (conflict: ${isConflict}, loggedOut: ${isLoggedOut}, deleted: ${this.deletedSessions.has(
+              sessionId,
+            )})`,
           );
 
           // Check if this session was deliberately deleted - don't auto-restart
@@ -401,7 +403,9 @@ export class WhatsAppSessionManager {
       );
       console.log(`   ✅ Marked session as deleted in database: ${sessionId}`);
     } catch (dbErr: any) {
-      console.error(`   ⚠️ Failed to mark session as deleted in DB: ${dbErr.message}`);
+      console.error(
+        `   ⚠️ Failed to mark session as deleted in DB: ${dbErr.message}`,
+      );
       // Continue with deletion anyway
     }
 
@@ -437,7 +441,9 @@ export class WhatsAppSessionManager {
         // Import dynamically to avoid circular dependency
         const { clearSessionAuthData } = await import('./MongoAuthService');
         await clearSessionAuthData(sessionId);
-        console.log(`   ✅ Cleared auth data from MongoDB for session: ${sessionId}`);
+        console.log(
+          `   ✅ Cleared auth data from MongoDB for session: ${sessionId}`,
+        );
       } catch (authErr: any) {
         console.error(`   ⚠️ Failed to clear auth data: ${authErr.message}`);
       }
@@ -464,7 +470,9 @@ export class WhatsAppSessionManager {
   /**
    * Get the connection state of a specific session
    */
-  getConnectionState(sessionId: string): 'connecting' | 'connected' | 'disconnected' | undefined {
+  getConnectionState(
+    sessionId: string,
+  ): 'connecting' | 'connected' | 'disconnected' | undefined {
     return this.connectionStates.get(sessionId);
   }
 
@@ -474,7 +482,9 @@ export class WhatsAppSessionManager {
    */
   allowSessionRestart(sessionId: string): void {
     this.deletedSessions.delete(sessionId);
-    console.log(`🔓 Session ${sessionId} removed from deleted list, can now be restarted`);
+    console.log(
+      `🔓 Session ${sessionId} removed from deleted list, can now be restarted`,
+    );
   }
 
   /**
@@ -620,11 +630,19 @@ async function processVoiceQueue(): Promise<void> {
     }
 
     try {
-      await sendVoiceMessageDirect(sock, msg.jid, msg.audioBuffer, msg.sessionId);
+      await sendVoiceMessageDirect(
+        sock,
+        msg.jid,
+        msg.audioBuffer,
+        msg.sessionId,
+      );
       voiceMessageQueue.shift();
       console.log(`✅ Queued voice message sent to ${msg.jid}`);
     } catch (error) {
-      console.error(`❌ Failed to send queued voice message to ${msg.jid}:`, error);
+      console.error(
+        `❌ Failed to send queued voice message to ${msg.jid}:`,
+        error,
+      );
       if (msg.attempts >= MAX_VOICE_RETRIES) {
         voiceMessageQueue.shift();
       } else {
@@ -692,7 +710,9 @@ async function sendVoiceMessageDirect(
 
     // Validate converted buffer
     if (opusBuffer.length < 50) {
-      console.error('   ❌ Converted audio too small, likely conversion failed');
+      console.error(
+        '   ❌ Converted audio too small, likely conversion failed',
+      );
       return false;
     }
 

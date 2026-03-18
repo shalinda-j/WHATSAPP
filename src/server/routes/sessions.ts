@@ -9,7 +9,9 @@ const manager = WhatsAppSessionManager.instance;
 router.get('/', async (req, res) => {
   try {
     // Only return non-deleted sessions
-    const sessions = await Session.find({ deleted: { $ne: true } }).sort({ createdAt: -1 });
+    const sessions = await Session.find({ deleted: { $ne: true } }).sort({
+      createdAt: -1,
+    });
     const activeCount = manager.getActiveSessionsCount();
     res.json({
       sessions,
@@ -34,7 +36,9 @@ router.post('/', async (req, res) => {
 
     // If this session was previously deleted, allow it to restart
     if (manager.isSessionDeleted(newId)) {
-      console.log(`   🔄 Session ${newId} was previously deleted (in-memory). Allowing restart...`);
+      console.log(
+        `   🔄 Session ${newId} was previously deleted (in-memory). Allowing restart...`,
+      );
       manager.allowSessionRestart(newId);
     }
 

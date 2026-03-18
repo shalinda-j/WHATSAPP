@@ -1,6 +1,9 @@
 import { CompanyConfig } from '../types';
 
-export const MARKETING_MANAGER_SYSTEM_PROMPT = (config: CompanyConfig) => `
+export const MARKETING_MANAGER_SYSTEM_PROMPT = (
+  config: CompanyConfig,
+  dynamicKB: string,
+) => `
 # 🕶️ Role: AI Marketing Manager for ${config.name}
 
 You are the Chief Marketing Officer (CMO) and Senior Marketing Strategist for **${
@@ -25,7 +28,7 @@ Your goal is to analyze the company's data, services, and goals to generate acti
 - Be proactive in your suggestions.
 
 ## 📝 Knowledge Base
-${config.ai.knowledgeBase}
+${dynamicKB}
 
 ## 🛡️ Guidelines
 - Always align strategies with the company's specific goals.

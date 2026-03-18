@@ -118,6 +118,15 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 // Handle ts-node-dev restart signal
 process.on('SIGUSR2', () => gracefulShutdown('SIGUSR2'));
 
+// Global unhandled error handlers to prevent silent crashes
+process.on('uncaughtException', (err: Error) => {
+  console.error('🔥 FATAL UNCAUGHT EXCEPTION:', err);
+});
+
+process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  console.error('🔥 UNHANDLED PROMISE REJECTION at:', promise, '\nReason:', reason);
+});
+
 startServer();
 
 /**

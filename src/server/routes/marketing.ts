@@ -25,10 +25,11 @@ router.post('/chat', authenticateToken, async (req, res) => {
         .json({ error: 'Gemini API Key is not configured.' });
     }
 
+    const dynamicKB = await configService.getDynamicKnowledgeBase();
     const genAI = new GoogleGenerativeAI(validKey);
     const model = genAI.getGenerativeModel({
       model: 'gemini-1.5-flash',
-      systemInstruction: MARKETING_MANAGER_SYSTEM_PROMPT(config),
+      systemInstruction: MARKETING_MANAGER_SYSTEM_PROMPT(config, dynamicKB),
     });
 
     const result = await model.generateContent(message);

@@ -258,10 +258,14 @@ export const useMongoDBAuthState = async (
  * Standalone function to clear auth data for a session
  * Can be called from outside the auth state initialization
  */
-export const clearSessionAuthData = async (sessionId: string): Promise<void> => {
+export const clearSessionAuthData = async (
+  sessionId: string,
+): Promise<void> => {
   try {
     const result = await AuthModel.deleteMany({ sessionId });
-    console.log(`🧹 Cleared ${result.deletedCount} auth entries for session: ${sessionId}`);
+    console.log(
+      `🧹 Cleared ${result.deletedCount} auth entries for session: ${sessionId}`,
+    );
   } catch (error) {
     console.error(`Error clearing auth data for session ${sessionId}:`, error);
     throw error;
