@@ -1,7 +1,7 @@
 import { useState, memo } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, Database, Settings, LogOut, Smartphone, Menu, X, Globe, AudioLines, Megaphone, Briefcase, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, Database, Settings, LogOut, Smartphone, Menu, X, Globe, AudioLines, Megaphone, Briefcase, MessageSquare, FileText } from 'lucide-react';
 
 // Define proper types for the NavLink component
 interface NavLinkProps {
@@ -77,6 +77,7 @@ export default function Layout() {
                         <NavLink to="/voice-agent-hub" icon={AudioLines} isActive={isActive} onClick={closeSidebar}>Voice Agent Hub</NavLink>
                         <NavLink to="/bulk-message" icon={Megaphone} isActive={isActive} onClick={closeSidebar}>Bulk Messaging</NavLink>
                         <NavLink to="/marketing" icon={Megaphone} isActive={isActive} onClick={closeSidebar}>Marketing Manager</NavLink>
+                        <NavLink to="/form-builder" icon={FileText} isActive={isActive} onClick={closeSidebar}>Form Builder</NavLink>
                         <NavLink to="/system" icon={Database} isActive={isActive} onClick={closeSidebar}>System Maintenance</NavLink>
 
                         <NavLink to="/config" icon={Settings} isActive={isActive} onClick={closeSidebar}>Configuration</NavLink>

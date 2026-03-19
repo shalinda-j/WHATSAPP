@@ -111,9 +111,15 @@ interface LeadRegistration {
   _id: string;
   fullName: string;
   phoneNumber: string;
-  address: string;
+  age?: number;
   email?: string;
+  address?: string;
+  interestedCountry?: string;
+  experienceYears?: string;
   jobVacancyType: string;
+  cvUrl?: string;
+  cvFileName?: string;
+  cvUploadedAt?: Date;
   qualifications: {
     documentType: string;
     fileName: string;
@@ -122,7 +128,7 @@ interface LeadRegistration {
     extractedText?: string;
     uploadedAt: Date;
   }[];
-  status: 'new' | 'reviewed' | 'contacted' | 'accepted' | 'rejected';
+  status: 'new' | 'reviewed' | 'contacted' | 'interviewed' | 'accepted' | 'rejected';
   notes?: string;
   registeredAt: Date;
 }
@@ -131,6 +137,7 @@ const leadStatusConfig = {
   new: { label: 'New', color: 'bg-blue-50 text-blue-700 border-blue-200', icon: Clock },
   reviewed: { label: 'Reviewed', color: 'bg-yellow-50 text-yellow-700 border-yellow-200', icon: Eye },
   contacted: { label: 'Contacted', color: 'bg-purple-50 text-purple-700 border-purple-200', icon: Phone },
+  interviewed: { label: 'Interviewed', color: 'bg-cyan-50 text-cyan-700 border-cyan-200', icon: Calendar },
   accepted: { label: 'Accepted', color: 'bg-green-50 text-green-700 border-green-200', icon: CheckCircle },
   rejected: { label: 'Rejected', color: 'bg-red-50 text-red-700 border-red-200', icon: X }
 };
@@ -533,14 +540,14 @@ export default function CRM() {
       params.append('limit', '20');
       if (registrationSearch) params.append('search', registrationSearch);
       if (registrationStatusFilter) params.append('status', registrationStatusFilter);
-      if (registrationJobFilter) params.append('jobVacancyType', registrationJobFilter);
+      if (registrationJobFilter) params.append('jobType', registrationJobFilter);
 
-      const res = await api.get(`/api/leads?${params}`);
-      setRegistrations(res.data.leads);
+      const res = await api.get(`/api/crm/registrations?${params}`);
+      setRegistrations(res.data.registrations);
       setRegistrationsTotal(res.data.total);
       setRegistrationsTotalPages(res.data.totalPages);
     } catch (err) {
-      console.error('Failed to fetch leads:', err);
+      console.error('Failed to fetch registrations:', err);
     } finally {
       setLoading(false);
     }
@@ -548,7 +555,7 @@ export default function CRM() {
 
   const fetchRegistrationStats = async () => {
     try {
-      const res = await api.get('/api/leads/stats');
+      const res = await api.get('/api/crm/registrations/stats');
       setRegistrationStats(res.data);
     } catch (err) {
       console.error('Failed to fetch stats:', err);
@@ -557,10 +564,22 @@ export default function CRM() {
 
   const fetchJobTypes = async () => {
     try {
-      const res = await api.get('/api/leads/job-types');
-      setJobTypes(res.data);
+      // Get unique job types from stats
+      const res = await api.get('/api/crm/registrations/stats');
+      const types = Object.keys(res.data.byJobType || {});
+      setJobTypes(types.length > 0 ? types : [
+        'Electrician', 'Plumber', 'Asphalt Worker', 'Concrete Pump Driver',
+        'Excavator Operator', 'JCB Operator', 'Heavy Duty Cleaner',
+        'Gypsum Fixer', 'Tile Fixer', 'General Worker', 'Welder',
+        'Carpenter', 'Mason', 'Painter', 'AC Technician', 'Driver'
+      ]);
     } catch (err) {
       console.error('Failed to fetch job types:', err);
+      setJobTypes([
+        'Electrician', 'Plumber', 'Asphalt Worker', 'Concrete Pump Driver',
+        'Excavator Operator', 'JCB Operator', 'Heavy Duty Cleaner',
+        'Gypsum Fixer', 'Tile Fixer', 'General Worker'
+      ]);
     }
   };
 
@@ -584,7 +603,7 @@ export default function CRM() {
 
   const handleRegistrationStatusChange = async (leadId: string, newStatus: string) => {
     try {
-      await api.put(`/api/leads/${leadId}`, { status: newStatus });
+      await api.put(`/api/crm/registrations/${leadId}/status`, { status: newStatus });
       fetchRegistrations();
       fetchRegistrationStats();
       showRegistrationNotify('Status updated', 'success');
@@ -594,36 +613,40 @@ export default function CRM() {
   };
 
   const handleDeleteRegistration = async (leadId: string) => {
-    if (!confirm('Are you sure you want to delete this lead?')) return;
+    if (!confirm('Are you sure you want to delete this registration?')) return;
     try {
-      await api.delete(`/api/leads/${leadId}`);
+      await api.delete(`/api/crm/registrations/${leadId}`);
       if (showRegistrationModal && selectedRegistration?._id === leadId) {
         setShowRegistrationModal(false);
         setSelectedRegistration(null);
       }
       fetchRegistrations();
       fetchRegistrationStats();
-      showRegistrationNotify('Lead deleted successfully', 'success');
+      showRegistrationNotify('Registration deleted successfully', 'success');
     } catch {
-      showRegistrationNotify('Failed to delete lead', 'error');
+      showRegistrationNotify('Failed to delete registration', 'error');
     }
   };
 
   const handleQualificationUpload = async (leadId: string, file: File) => {
     setUploadingQualification(true);
     const formData = new FormData();
-    formData.append('file', file);
-    formData.append('documentType', 'qualification');
+    formData.append('cv', file);
 
     try {
-      const res = await api.post(`/api/leads/${leadId}/qualifications`, formData, {
+      const res = await api.post(`/api/crm/registrations/${leadId}/cv`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       if (selectedRegistration && selectedRegistration._id === leadId) {
-        setSelectedRegistration({ ...selectedRegistration, qualifications: res.data.qualifications });
+        setSelectedRegistration({
+          ...selectedRegistration,
+          cvUrl: res.data.cvUrl,
+          cvFileName: res.data.fileName,
+          cvUploadedAt: new Date()
+        });
       }
       fetchRegistrations();
-      showRegistrationNotify('File uploaded successfully', 'success');
+      showRegistrationNotify('CV uploaded successfully', 'success');
     } catch {
       showRegistrationNotify('Upload failed', 'error');
     } finally {
@@ -633,11 +656,11 @@ export default function CRM() {
 
   const handleExportLeadsCSV = async () => {
     try {
-      const res = await api.get('/api/leads/export', { responseType: 'blob' });
+      const res = await api.get('/api/crm/registrations/export', { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `leads-export-${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute('download', `registrations-export-${new Date().toISOString().split('T')[0]}.csv`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -1412,8 +1435,9 @@ export default function CRM() {
             <thead>
               <tr className="bg-gray-50 border-b">
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Lead</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Contact</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Job Category</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Details</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Job / Country</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">CV</th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Status</th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Registered</th>
                 <th className="px-6 py-4 text-right text-xs font-bold text-gray-400 uppercase">Actions</th>
@@ -1422,11 +1446,11 @@ export default function CRM() {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-400">Loading...</td>
+                  <td colSpan={7} className="px-6 py-12 text-center text-gray-400">Loading...</td>
                 </tr>
               ) : registrations.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-400">No leads found</td>
+                  <td colSpan={7} className="px-6 py-12 text-center text-gray-400">No registrations found</td>
                 </tr>
               ) : (
                 registrations.map((lead) => (
@@ -1438,7 +1462,7 @@ export default function CRM() {
                         </div>
                         <div>
                           <p className="font-medium text-gray-800">{lead.fullName}</p>
-                          <p className="text-xs text-gray-400">{lead._id.slice(-8)}</p>
+                          <p className="text-xs text-gray-400">Age: {lead.age || 'N/A'}</p>
                         </div>
                       </div>
                     </td>
@@ -1452,11 +1476,32 @@ export default function CRM() {
                           <Mail className="h-3 w-3" />{lead.email}
                         </div>
                       )}
+                      {lead.experienceYears && (
+                        <p className="text-xs text-gray-400 mt-1">Exp: {lead.experienceYears} yrs</p>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <span className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-medium">
                         {lead.jobVacancyType}
                       </span>
+                      {lead.interestedCountry && (
+                        <p className="text-xs text-gray-500 mt-1">{lead.interestedCountry}</p>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {lead.cvUrl ? (
+                        <a
+                          href={`${import.meta.env.VITE_API_URL || ''}${lead.cvUrl}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-green-600 hover:text-green-700"
+                        >
+                          <FileText className="h-4 w-4" />
+                          <span className="text-xs">View CV</span>
+                        </a>
+                      ) : (
+                        <span className="text-xs text-gray-400">No CV</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <select
@@ -1486,7 +1531,6 @@ export default function CRM() {
                           onClick={() => {
                             setSelectedRegistration(lead);
                             setShowRegistrationModal(true);
-                            fetchRegistrationMessages(lead._id);
                           }}
                           className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
                         >
@@ -1551,22 +1595,50 @@ export default function CRM() {
             </div>
 
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Left: Info */}
+              {/* Left: Personal Info */}
               <div className="space-y-4">
-                <div className="bg-gray-50 p-4 rounded-xl">
-                  <p className="text-xs text-gray-400 mb-1">Phone</p>
-                  <p className="font-medium">{selectedRegistration.phoneNumber}</p>
+                <h4 className="font-bold text-gray-800 flex items-center gap-2">
+                  <Users className="h-4 w-4" /> Personal Information
+                </h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gray-50 p-3 rounded-xl">
+                    <p className="text-xs text-gray-400 mb-1">Age</p>
+                    <p className="font-medium">{selectedRegistration.age || 'N/A'}</p>
+                  </div>
+                  <div className="bg-gray-50 p-3 rounded-xl">
+                    <p className="text-xs text-gray-400 mb-1">Phone</p>
+                    <p className="font-medium">{selectedRegistration.phoneNumber}</p>
+                  </div>
                 </div>
-                <div className="bg-gray-50 p-4 rounded-xl">
+                <div className="bg-gray-50 p-3 rounded-xl">
                   <p className="text-xs text-gray-400 mb-1">Email</p>
                   <p className="font-medium">{selectedRegistration.email || 'N/A'}</p>
                 </div>
-                <div className="bg-gray-50 p-4 rounded-xl">
+                <div className="bg-gray-50 p-3 rounded-xl">
                   <p className="text-xs text-gray-400 mb-1">Address</p>
-                  <p className="font-medium">{selectedRegistration.address}</p>
+                  <p className="font-medium">{selectedRegistration.address || 'N/A'}</p>
                 </div>
-                <div className="bg-indigo-50 p-4 rounded-xl">
-                  <p className="text-xs text-indigo-400 mb-1">Status</p>
+
+                <h4 className="font-bold text-gray-800 flex items-center gap-2 pt-2">
+                  <Briefcase className="h-4 w-4" /> Job Details
+                </h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-indigo-50 p-3 rounded-xl">
+                    <p className="text-xs text-indigo-400 mb-1">Job Category</p>
+                    <p className="font-medium">{selectedRegistration.jobVacancyType}</p>
+                  </div>
+                  <div className="bg-indigo-50 p-3 rounded-xl">
+                    <p className="text-xs text-indigo-400 mb-1">Country</p>
+                    <p className="font-medium">{selectedRegistration.interestedCountry || 'N/A'}</p>
+                  </div>
+                </div>
+                <div className="bg-indigo-50 p-3 rounded-xl">
+                  <p className="text-xs text-indigo-400 mb-1">Experience</p>
+                  <p className="font-medium">{selectedRegistration.experienceYears ? `${selectedRegistration.experienceYears} years` : 'N/A'}</p>
+                </div>
+
+                <div className="bg-purple-50 p-4 rounded-xl">
+                  <p className="text-xs text-purple-400 mb-1">Status</p>
                   <select
                     value={selectedRegistration.status}
                     onChange={async (e) => {
@@ -1580,38 +1652,53 @@ export default function CRM() {
                     ))}
                   </select>
                 </div>
+
+                {selectedRegistration.notes && (
+                  <div className="bg-yellow-50 p-3 rounded-xl">
+                    <p className="text-xs text-yellow-600 mb-1">Notes</p>
+                    <p className="font-medium text-sm">{selectedRegistration.notes}</p>
+                  </div>
+                )}
               </div>
 
-              {/* Right: Documents */}
+              {/* Right: CV & Documents */}
               <div className="space-y-4">
-                <h4 className="font-bold text-gray-800">Qualifications</h4>
-                {selectedRegistration.qualifications.length === 0 ? (
-                  <div className="text-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                    <FileText className="h-8 w-8 text-gray-200 mx-auto mb-2" />
-                    <p className="text-sm text-gray-400">No documents</p>
-                  </div>
-                ) : (
-                  selectedRegistration.qualifications.map((qual, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-4 bg-white border rounded-xl">
+                <h4 className="font-bold text-gray-800 flex items-center gap-2">
+                  <FileText className="h-4 w-4" /> CV / Resume
+                </h4>
+                {selectedRegistration.cvUrl ? (
+                  <div className="bg-green-50 border border-green-200 p-4 rounded-xl">
+                    <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <FileText className="h-5 w-5 text-orange-500" />
+                        <div className="p-2 bg-green-100 rounded-lg">
+                          <FileText className="h-6 w-6 text-green-600" />
+                        </div>
                         <div>
-                          <p className="font-medium text-sm">{qual.fileName}</p>
-                          <p className="text-xs text-gray-400">{(qual.fileSize / 1024).toFixed(1)} KB</p>
+                          <p className="font-medium text-green-800">{selectedRegistration.cvFileName || 'CV Document'}</p>
+                          <p className="text-xs text-green-600">
+                            Uploaded: {selectedRegistration.cvUploadedAt ? new Date(selectedRegistration.cvUploadedAt).toLocaleDateString() : 'N/A'}
+                          </p>
                         </div>
                       </div>
                       <a
-                        href={`${import.meta.env.VITE_API_URL || ''}${qual.filePath}`}
+                        href={`${import.meta.env.VITE_API_URL || ''}${selectedRegistration.cvUrl}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="p-2 hover:bg-gray-100 rounded-lg"
+                        className="flex items-center gap-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                       >
-                        <Download className="h-4 w-4" />
+                        <Download className="h-4 w-4" /> View
                       </a>
                     </div>
-                  ))
+                  </div>
+                ) : (
+                  <div className="text-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                    <FileText className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                    <p className="text-sm text-gray-400">No CV uploaded</p>
+                  </div>
                 )}
-                <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-100 rounded-xl cursor-pointer hover:bg-indigo-50/30">
+
+                {/* Upload CV */}
+                <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-indigo-200 rounded-xl cursor-pointer hover:bg-indigo-50/30 transition">
                   <input
                     type="file"
                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
@@ -1622,9 +1709,38 @@ export default function CRM() {
                     disabled={uploadingQualification}
                     className="hidden"
                   />
-                  <Upload className="h-6 w-6 text-gray-400 mb-2" />
-                  <span className="text-sm text-gray-500">{uploadingQualification ? 'Uploading...' : 'Upload Document'}</span>
+                  <Upload className="h-6 w-6 text-indigo-400 mb-2" />
+                  <span className="text-sm text-indigo-600 font-medium">
+                    {uploadingQualification ? 'Uploading...' : 'Upload CV / Document'}
+                  </span>
+                  <span className="text-xs text-gray-400 mt-1">PDF, DOC, DOCX, JPG, PNG</span>
                 </label>
+
+                {/* Qualifications */}
+                {selectedRegistration.qualifications && selectedRegistration.qualifications.length > 0 && (
+                  <>
+                    <h4 className="font-bold text-gray-800 pt-2">Other Documents</h4>
+                    {selectedRegistration.qualifications.map((qual, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3 bg-white border rounded-xl">
+                        <div className="flex items-center gap-3">
+                          <FileText className="h-5 w-5 text-orange-500" />
+                          <div>
+                            <p className="font-medium text-sm">{qual.fileName}</p>
+                            <p className="text-xs text-gray-400">{(qual.fileSize / 1024).toFixed(1)} KB</p>
+                          </div>
+                        </div>
+                        <a
+                          href={`${import.meta.env.VITE_API_URL || ''}${qual.filePath}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 hover:bg-gray-100 rounded-lg"
+                        >
+                          <Download className="h-4 w-4" />
+                        </a>
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
             </div>
 

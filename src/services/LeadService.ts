@@ -351,8 +351,9 @@ export async function handleLeadMessage(
           sessionId,
         );
         return true;
-      } else if (cvChoice === 2 || cleanText.toLowerCase() === 'skip') {
-        // No CV or skip - proceed to save
+      } else if (cvChoice === 2 || cleanText.toLowerCase() === 'skip' || cleanText.toLowerCase() === 'no' || cleanText.toLowerCase().includes('no cv') || cleanText.toLowerCase().includes("don't have")) {
+        // No CV or skip - proceed to save with empty cvUrl
+        session.data.cvUrl = ''; // Explicitly set empty string
         await saveLeadRegistration(jid, session, sessionId);
         return true;
       } else if (cleanText.toLowerCase() === 'done') {
@@ -384,18 +385,25 @@ async function saveLeadRegistration(
   await sendTyping(jid, sessionId);
 
   try {
+    console.log('📋 Saving lead registration:', JSON.stringify(session.data, null, 2));
+
     // Create lead in database
-    const lead = await Lead.create({
+    const leadData = {
       fullName: session.data.fullName,
       age: session.data.age,
       phoneNumber: session.data.phoneNumber,
       interestedCountry: session.data.interestedCountry,
       experienceYears: session.data.experienceYears,
       jobVacancyType: session.data.jobVacancyType,
-      cvUrl: session.data.cvUrl,
+      cvUrl: session.data.cvUrl || '',
       status: 'new',
       source: 'whatsapp',
-    });
+    };
+
+    console.log('📋 Lead data to save:', JSON.stringify(leadData, null, 2));
+
+    const lead = await Lead.create(leadData);
+    console.log('✅ Lead created successfully:', lead._id);
 
     // Also create CRM contact
     try {
@@ -415,15 +423,17 @@ async function saveLeadRegistration(
           experience: session.data.experienceYears,
           jobType: session.data.jobVacancyType,
           leadId: lead._id.toString(),
+          hasCV: session.data.cvUrl ? 'yes' : 'no',
         },
       });
 
       // Link CRM contact to lead
       if (crmContact) {
         await Lead.findByIdAndUpdate(lead._id, { crmContactId: crmContact._id });
+        console.log('✅ CRM contact linked:', crmContact._id);
       }
     } catch (crmError) {
-      console.error('CRM sync error (non-critical):', crmError);
+      console.error('⚠️ CRM sync error (non-critical):', crmError);
       // Continue even if CRM sync fails
     }
 
@@ -442,6 +452,7 @@ async function saveLeadRegistration(
         `🌍 *Country:* ${selectedCountry?.flag || ''} ${session.data.interestedCountry}\n` +
         `⏱️ *Experience:* ${session.data.experienceYears} years\n` +
         `💼 *Job:* ${session.data.jobVacancyType}\n` +
+        `📄 *CV:* ${session.data.cvUrl ? 'Uploaded' : 'Not provided'}\n` +
         `━━━━━━━━━━━━━━━━━━━━━\n\n` +
         `📋 *Registration ID:* ${lead._id}\n\n` +
         `✅ Your application has been submitted!\n` +
@@ -452,8 +463,11 @@ async function saveLeadRegistration(
 
     // Clear session
     leadSessions.delete(jid);
-  } catch (error) {
-    console.error('Lead registration error:', error);
+  } catch (error: any) {
+    console.error('❌ Lead registration error:', error);
+    console.error('❌ Error details:', error.message);
+    console.error('❌ Error stack:', error.stack);
+
     await sendMessage(
       jid,
       `❌ Registration failed. Please try again later or contact support.\n\n` +

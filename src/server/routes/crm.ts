@@ -1,8 +1,43 @@
 import { Router } from 'express';
 import { CRMService } from '../../services/CRMService';
 import { authenticateToken } from '../middleware/auth';
+import Lead from '../../models/Lead';
+import * as path from 'path';
+import * as fs from 'fs';
+import multer from 'multer';
 
 const router = Router();
+
+// Configure multer for CV uploads
+const uploadDir = path.join(__dirname, '../../../uploads/cvs');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, `cv-${uniqueSuffix}${ext}`);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedTypes.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only PDF, DOC, DOCX, and images are allowed.'));
+    }
+  },
+});
 
 // All CRM routes require authentication
 router.use(authenticateToken);
@@ -307,6 +342,213 @@ router.delete('/pipeline-stages/:id', async (req, res) => {
       return res.status(404).json({ error: 'Pipeline stage not found' });
     }
     res.json({ message: 'Pipeline stage deleted successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==================== REGISTRATIONS (Leads) ====================
+
+// Get all registrations/leads
+router.get('/registrations', async (req, res) => {
+  try {
+    const { page, limit, search, status, country, jobType } = req.query;
+
+    const query: any = {};
+    if (status) query.status = status;
+    if (country) query.interestedCountry = country;
+    if (jobType) query.jobVacancyType = jobType;
+    if (search) {
+      query.$or = [
+        { fullName: { $regex: search, $options: 'i' } },
+        { phoneNumber: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const total = await Lead.countDocuments(query);
+    const registrations = await Lead.find(query)
+      .sort({ registeredAt: -1 })
+      .skip((Number(page || 1) - 1) * Number(limit || 20))
+      .limit(Number(limit || 20))
+      .lean();
+
+    res.json({
+      registrations,
+      total,
+      page: Number(page || 1),
+      totalPages: Math.ceil(total / Number(limit || 20)),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get registration stats
+router.get('/registrations/stats', async (req, res) => {
+  try {
+    const [total, byStatus, byCountry, byJobType, recentCount] = await Promise.all([
+      Lead.countDocuments(),
+      Lead.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+      Lead.aggregate([{ $group: { _id: '$interestedCountry', count: { $sum: 1 } } }]),
+      Lead.aggregate([{ $group: { _id: '$jobVacancyType', count: { $sum: 1 } } }]),
+      Lead.countDocuments({
+        registeredAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+      }),
+    ]);
+
+    res.json({
+      total,
+      recentCount,
+      byStatus: byStatus.reduce((acc: Record<string, number>, item: any) => {
+        acc[item._id || 'unknown'] = item.count;
+        return acc;
+      }, {}),
+      byCountry: byCountry.reduce((acc: Record<string, number>, item: any) => {
+        acc[item._id || 'unknown'] = item.count;
+        return acc;
+      }, {}),
+      byJobType: byJobType.reduce((acc: Record<string, number>, item: any) => {
+        acc[item._id || 'unknown'] = item.count;
+        return acc;
+      }, {}),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get single registration
+router.get('/registrations/:id', async (req, res) => {
+  try {
+    const registration = await Lead.findById(req.params.id).lean();
+    if (!registration) {
+      return res.status(404).json({ error: 'Registration not found' });
+    }
+    res.json(registration);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update registration status
+router.put('/registrations/:id/status', async (req, res) => {
+  try {
+    const { status, notes } = req.body;
+    const registration = await Lead.findByIdAndUpdate(
+      req.params.id,
+      { status, notes, updatedAt: new Date() },
+      { new: true },
+    );
+    if (!registration) {
+      return res.status(404).json({ error: 'Registration not found' });
+    }
+    res.json(registration);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Upload CV for registration
+router.post('/registrations/:id/cv', upload.single('cv'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const registration = await Lead.findById(req.params.id);
+    if (!registration) {
+      // Delete uploaded file if registration not found
+      fs.unlinkSync(req.file.path);
+      return res.status(404).json({ error: 'Registration not found' });
+    }
+
+    const cvUrl = `/uploads/cvs/${req.file.filename}`;
+    registration.cvUrl = cvUrl;
+    registration.cvFileName = req.file.originalname;
+    registration.cvUploadedAt = new Date();
+    await registration.save();
+
+    res.json({
+      success: true,
+      cvUrl,
+      fileName: req.file.originalname,
+      message: 'CV uploaded successfully',
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete CV
+router.delete('/registrations/:id/cv', async (req, res) => {
+  try {
+    const registration = await Lead.findById(req.params.id);
+    if (!registration) {
+      return res.status(404).json({ error: 'Registration not found' });
+    }
+
+    // Delete file from disk
+    if (registration.cvUrl) {
+      const filePath = path.join(__dirname, '../../..', registration.cvUrl);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+
+    registration.cvUrl = '';
+    registration.cvFileName = '';
+    registration.cvUploadedAt = undefined;
+    await registration.save();
+
+    res.json({ success: true, message: 'CV deleted successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Export registrations to CSV
+router.get('/registrations/export', async (req, res) => {
+  try {
+    const registrations = await Lead.find().sort({ registeredAt: -1 }).lean();
+
+    if (registrations.length === 0) {
+      return res.status(400).json({ error: 'No registrations to export' });
+    }
+
+    const headers = [
+      'ID',
+      'Full Name',
+      'Age',
+      'Phone',
+      'Country',
+      'Experience',
+      'Job Type',
+      'CV',
+      'Status',
+      'Registered At',
+    ];
+
+    const csvRows = registrations.map((r: any) => [
+      r._id,
+      `"${r.fullName || ''}"`,
+      r.age || '',
+      `"${r.phoneNumber || ''}"`,
+      `"${r.interestedCountry || ''}"`,
+      `"${r.experienceYears || ''}"`,
+      `"${r.jobVacancyType || ''}"`,
+      r.cvUrl ? 'Yes' : 'No',
+      `"${r.status || ''}"`,
+      new Date(r.registeredAt).toISOString(),
+    ]);
+
+    const csvContent = [headers.join(','), ...csvRows.map((row: string[]) => row.join(','))].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="registrations-${new Date().toISOString().split('T')[0]}.csv"`,
+    );
+    res.send(csvContent);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

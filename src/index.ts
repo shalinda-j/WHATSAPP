@@ -13,6 +13,7 @@ import {
 import { connectToMongoDB } from './services/MongoAuthService';
 import { seedAIProviders } from './services/AIProviderSeeder';
 import { seedDatasets } from './services/DatasetSeeder';
+import { seedDefaultFormTemplate } from './services/FormTemplateSeeder';
 import {
   transcribeAudio,
   generateSpeech,
@@ -35,6 +36,7 @@ import {
   startLeadRegistration,
   isUserInLeadFlow,
 } from './services/LeadService';
+import { FormService } from './services/FormService';
 import app from './server/app';
 import mongoose from 'mongoose';
 import { commandDispatcher } from './app/utils/CommandDispatcher';
@@ -54,6 +56,7 @@ async function startServer() {
       // Seed AI providers from .env into the Config collection
       await seedAIProviders();
       await seedDatasets();
+      await seedDefaultFormTemplate();
       await nlpService.initializeNLP();
     } catch (dbErr) {
       console.error(
@@ -130,6 +133,83 @@ process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
 
 startServer();
 
+// Track last message time per user for auto-registration trigger
+const lastMessageTime = new Map<string, number>();
+const AUTO_REG_DELAY_MS = 10 * 1000; // 10 seconds after last message
+
+/**
+ * Schedule auto-registration check after conversation ends
+ * Waits for a delay after the last message, then triggers form if appropriate
+ */
+async function scheduleAutoRegistration(jid: string, sessionId: string): Promise<void> {
+  const now = Date.now();
+  lastMessageTime.set(jid, now);
+
+  // Wait for the delay period
+  await new Promise(resolve => setTimeout(resolve, AUTO_REG_DELAY_MS + 1000));
+
+  // Check if this is still the most recent message (no new messages came in)
+  const lastTime = lastMessageTime.get(jid);
+  if (lastTime !== now) {
+    // User sent another message, abort this trigger
+    return;
+  }
+
+  // Check if we should trigger auto-registration
+  try {
+    const template = await FormService.getActiveFormTemplate();
+    if (!template) {
+      // No active form template
+      return;
+    }
+
+    // Check trigger mode
+    if (template.triggerMode !== 'auto' && template.triggerMode !== 'both') {
+      // Auto-trigger not enabled for this form
+      return;
+    }
+
+    // Check if user already has an active session
+    if (FormService.hasActiveFormSession(jid)) {
+      return;
+    }
+
+    // Check if user already submitted recently (last 24 hours)
+    const FormSubmission = (await import('./models/FormSubmission')).default;
+    const recentSubmission = await FormSubmission.findOne({
+      phoneNumber: jid,
+      submittedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+    });
+
+    if (recentSubmission) {
+      return;
+    }
+
+    // All conditions met - trigger the form
+    console.log(`   📋 Auto-triggering registration form for ${jid}`);
+    const result = await FormService.startFormSession(jid, jid);
+    if (result.success && result.field) {
+      const delay = template.triggerDelay || 10;
+      // Wait for the configured delay before showing the form
+      await new Promise(resolve => setTimeout(resolve, delay * 1000));
+
+      // Double-check that no new messages came in during the delay
+      const finalTime = lastMessageTime.get(jid);
+      if (finalTime !== now) {
+        return;
+      }
+
+      if (result.welcomeMessage) {
+        await sendMessage(jid, result.welcomeMessage, sessionId);
+      }
+      const prompt = FormService.getFieldPrompt(result.field);
+      await sendMessage(jid, prompt, sessionId);
+    }
+  } catch (err) {
+    console.error('   ⚠️ Auto-registration trigger error:', err);
+  }
+}
+
 /**
  * Main message handler
  * Processes incoming messages and responds with AI
@@ -141,6 +221,9 @@ onMessage(async (message, sock, sessionId) => {
 
     // Debug: Log incoming messages
     console.log(`📩 Message: "${text.substring(0, 50)}..." from ${jid}`);
+
+    // Update last message time for auto-registration
+    lastMessageTime.set(jid, Date.now());
 
     // Ignore messages from self
     if (isFromMe(message)) {
@@ -265,6 +348,27 @@ onMessage(async (message, sock, sessionId) => {
     const handledByLead = await handleLeadMessage(jid, text, sessionId);
     if (handledByLead) {
       console.log('   📝 Handled by LeadService');
+      return;
+    }
+
+    // 2.5. Check if user is in dynamic form flow
+    if (FormService.hasActiveFormSession(jid)) {
+      console.log('   📋 Processing form field answer...');
+      const result = await FormService.processFieldAnswer(jid, text);
+      if (result.success) {
+        if (result.isComplete) {
+          await sendMessage(jid, result.completionMessage || '✅ Thank you! Your registration has been submitted.', sessionId);
+        } else if (result.field) {
+          const prompt = FormService.getFieldPrompt(result.field);
+          await sendMessage(jid, prompt, sessionId);
+        }
+      } else {
+        await sendMessage(jid, result.message || 'Something went wrong. Please try again.', sessionId);
+        if (result.field) {
+          const prompt = FormService.getFieldPrompt(result.field);
+          await sendMessage(jid, prompt, sessionId);
+        }
+      }
       return;
     }
 
@@ -533,6 +637,12 @@ onMessage(async (message, sock, sessionId) => {
           console.log('   ❌ Failed to send response');
         }
       }
+
+      // Auto-registration trigger: Check if we should show registration form after conversation
+      // This runs asynchronously and doesn't block the response
+      scheduleAutoRegistration(jid, sessionId).catch(err => {
+        console.error('   ⚠️ Auto-registration check failed:', err);
+      });
     } catch (aiError: any) {
       console.error('   ❌ AI response error:', aiError.message || aiError);
 
@@ -615,8 +725,21 @@ async function handleCommand(
     case '!register':
     case '!join':
     case '!apply':
-      console.log('   📝 Starting lead registration flow...');
-      await startLeadRegistration(jid, sessionId);
+      console.log('   📝 Starting registration flow...');
+      // Try dynamic form first
+      const formResult = await FormService.startFormSession(jid, jid);
+      if (formResult.success) {
+        if (formResult.welcomeMessage) {
+          await sendMessage(jid, formResult.welcomeMessage, sessionId);
+        }
+        if (formResult.field) {
+          const prompt = FormService.getFieldPrompt(formResult.field);
+          await sendMessage(jid, prompt, sessionId);
+        }
+      } else {
+        // Fallback to legacy lead registration
+        await startLeadRegistration(jid, sessionId);
+      }
       break;
 
     case '!payment':

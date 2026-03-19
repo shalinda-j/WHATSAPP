@@ -22,9 +22,10 @@ const LeadSchema = new (mongoose as any).Schema({
   // NEW: Additional Fields
   age: { type: Number },
   interestedCountry: { type: String, index: true },
-  experienceYears: { type: Number },
+  experienceYears: { type: String }, // Changed to String to support ranges like "0-1", "1-3"
   cvUrl: { type: String },
   cvFileName: { type: String },
+  cvUploadedAt: { type: Date },
 
   // Job Information
   jobVacancyType: { type: String, required: true, index: true },

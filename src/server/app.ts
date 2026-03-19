@@ -20,6 +20,7 @@ import analyticsRouter from './routes/analytics';
 import crmRouter from './routes/crm';
 import chatRouter from './routes/chat';
 import workflowRouter from './routes/workflows';
+import formsRouter from './routes/forms';
 
 import mongoose from 'mongoose';
 import { authenticateToken } from './middleware/auth';
@@ -92,6 +93,13 @@ app.use('/api/analytics', authenticateToken, analyticsRouter);
 app.use('/api/crm', authenticateToken, crmRouter);
 app.use('/api/chat', authenticateToken, chatRouter);
 app.use('/api/workflows', authenticateToken, workflowRouter);
+app.use('/api/forms', authenticateToken, formsRouter);
+
+// Public forms endpoint (for bot)
+app.use('/api/forms/default', async (req, res, next) => {
+  // Bypass auth for default form
+  next();
+});
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));

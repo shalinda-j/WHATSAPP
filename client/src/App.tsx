@@ -15,6 +15,7 @@ import CRM from './pages/CRM';
 import ChatInterface from './pages/ChatInterface';
 
 import Sessions from './pages/Sessions';
+import FormBuilder from './pages/FormBuilder';
 import Layout from './components/Layout';
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
@@ -42,6 +43,7 @@ function AppRoutes() {
         <Route path="crm" element={<CRM />} />
         <Route path="chat" element={<ChatInterface />} />
         <Route path="sessions" element={<Sessions />} />
+        <Route path="form-builder" element={<FormBuilder />} />
         {/* Redirect old routes to CRM */}
         <Route path="analytics" element={<Navigate to="/crm" replace />} />
         <Route path="leads" element={<Navigate to="/crm" replace />} />
