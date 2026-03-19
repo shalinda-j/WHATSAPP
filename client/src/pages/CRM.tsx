@@ -8,7 +8,7 @@ import {
   BarChart3, Activity, CheckSquare,
   MessageCircle, FileText, Mic, Download,
   Eye, Upload, RotateCcw, AlertCircle,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Briefcase
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
