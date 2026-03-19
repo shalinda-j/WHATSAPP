@@ -33,3 +33,30 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Python / Autoresearch
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ai-research/.venv/
+ai-research/*.log
+ai-research/run.log
+ai-research/results.tsv
+*.parquet
+*.pkl
+
+# Model files (large)
+*.pt
+*.bin
+*.onnx
+model.nlp
+
+# Claude Code
+.claude/settings.json
+.claude/settings.local.json
+.claude/plans/
+.claude/memory/

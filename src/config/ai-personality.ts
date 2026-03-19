@@ -1,4 +1,5 @@
 import { CompanyConfig } from './types';
+import { configService, ConversationExample } from '../services/ConfigService';
 
 /**
  * AI Personality Configuration
@@ -26,9 +27,27 @@ export const AI_PERSONALITY = (config: CompanyConfig) => config.ai.personality;
 export const SINHALA_SYSTEM_PROMPT = (config: CompanyConfig) =>
   config.getSystemPrompt();
 
-export const CONVERSATION_EXAMPLES = [
+// Default conversation examples (fallback)
+const DEFAULT_CONVERSATION_EXAMPLES: ConversationExample[] = [
   {
     user: 'Tell me about services.',
     assistant: 'We offer training and job placement services.',
   },
 ];
+
+/**
+ * Get conversation examples for AI training
+ * Can be configured dynamically via admin panel (CONVERSATION_EXAMPLES dataset)
+ */
+export async function getConversationExamples(): Promise<ConversationExample[]> {
+  try {
+    const examples = await configService.getConversationExamples();
+    return examples.length > 0 ? examples : DEFAULT_CONVERSATION_EXAMPLES;
+  } catch (error) {
+    console.error('Error fetching conversation examples:', error);
+    return DEFAULT_CONVERSATION_EXAMPLES;
+  }
+}
+
+// Legacy export for backward compatibility (static fallback)
+export const CONVERSATION_EXAMPLES = DEFAULT_CONVERSATION_EXAMPLES;

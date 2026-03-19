@@ -21,6 +21,7 @@ import {
 } from './services/voice';
 import { aiLoadBalancer } from './services/AILoadBalancer';
 import { nlpService } from './services/NLPService';
+import { autoresearchNLP, classifyMessage } from './services/autoresearchNLP';
 import { analyzeLeadIntent } from './services/gemini';
 import { WebhookService } from './services/WebhookService';
 import { configService } from './services/ConfigService';
@@ -282,32 +283,8 @@ onMessage(async (message, sock, sessionId) => {
 
       // 3. New Lead & Intent Analysis
       // Only check if message contains date/time related keywords (performance optimization)
-      const bookingKeywords = [
-        'tomorrow',
-        'today',
-        'monday',
-        'tuesday',
-        'wednesday',
-        'thursday',
-        'friday',
-        'saturday',
-        'sunday',
-        'am',
-        'pm',
-        'morning',
-        'afternoon',
-        'evening',
-        'visit',
-        'appointment',
-        'schedule',
-        'book',
-        'meet',
-        'හෙට',
-        'අද',
-        'පැමිණ',
-        'හමුවීම',
-        'වේලාව',
-      ];
+      // Fetch booking keywords from config (with fallback)
+      const bookingKeywords = await configService.getBookingKeywords();
       const hasBookingKeyword = bookingKeywords.some((keyword) =>
         text.toLowerCase().includes(keyword),
       );
@@ -337,9 +314,33 @@ onMessage(async (message, sock, sessionId) => {
       let response: string | undefined;
       let intentAnalysis: any = null;
       let answeredViaNLP = false;
+      let autoresearchIntent: string | null = null;
       let responseLanguage = 'si'; // Default to Sinhala - accessible outside try block
 
       try {
+        // Autoresearch NLP Intent Classification (fast, under 200ms)
+        try {
+          const intentResult = await classifyMessage(text);
+          autoresearchIntent = intentResult.intent;
+          console.log(`   🤖 AutoresearchNLP: ${autoresearchIntent} (${(intentResult.confidence * 100).toFixed(0)}%) in ${intentResult.inference_time_ms}ms`);
+
+          // Route based on intent
+          if (autoresearchIntent === 'booking' && intentResult.confidence > 0.8) {
+            console.log('   📅 High-confidence booking intent detected via AutoresearchNLP');
+            await startBookingFlow(jid, sessionId);
+            return;
+          } else if (autoresearchIntent === 'lead_register' && intentResult.confidence > 0.8) {
+            console.log('   📝 High-confidence lead registration intent detected via AutoresearchNLP');
+            await startLeadRegistration(jid, sessionId);
+            return;
+          } else if (autoresearchIntent === 'greeting' && intentResult.confidence > 0.85) {
+            console.log('   👋 Greeting detected via AutoresearchNLP');
+            // Let AI handle greetings naturally
+          }
+        } catch (nlpErr) {
+          console.log('   ⚠️ AutoresearchNLP unavailable, using fallback');
+        }
+
         // Analyze Intent first for metadata
         intentAnalysis = await analyzeLeadIntent(text);
 

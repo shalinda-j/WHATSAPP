@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { sendMessage, sendTyping, getSocket } from './whatsapp';
+import { configurationManager } from './ConfigurationManagerService';
 
 interface LeadData {
   fullName?: string;
@@ -21,11 +22,13 @@ enum LeadState {
 interface UserLeadSession {
   state: LeadState;
   data: LeadData;
+  jobTypes?: string[]; // Cache job types for this session
 }
 
 const leadSessions = new Map<string, UserLeadSession>();
 
-const JOB_TYPES = [
+// Default job types (fallback)
+const DEFAULT_JOB_TYPES = [
   'Electrician',
   'Plumber',
   'Asphalt Worker',
@@ -43,9 +46,12 @@ const JOB_TYPES = [
   'AC Technician',
 ];
 
-export const JOB_TYPE_MENU = JOB_TYPES.map((job, i) => `${i + 1}. ${job}`).join(
-  '\n',
-);
+/**
+ * Get job types menu string
+ */
+async function getJobTypeMenu(jobTypes: string[]): Promise<string> {
+  return jobTypes.map((job, i) => `${i + 1}. ${job}`).join('\n');
+}
 
 export function isUserInLeadFlow(jid: string): boolean {
   const session = leadSessions.get(jid);
@@ -56,9 +62,13 @@ export async function startLeadRegistration(
   jid: string,
   sessionId: string,
 ): Promise<void> {
+  // Fetch job types from config
+  const jobTypes = await configurationManager.getJobTypes();
+
   const session: UserLeadSession = {
     state: LeadState.AWAITING_NAME,
     data: { phoneNumber: jid.split('@')[0] },
+    jobTypes,
   };
   leadSessions.set(jid, session);
 
@@ -82,6 +92,8 @@ export async function handleLeadMessage(
   if (!session || session.state === LeadState.IDLE) return false;
 
   const cleanText = text.trim();
+  // Use cached job types or fetch new ones
+  const jobTypes = session.jobTypes || await configurationManager.getJobTypes();
 
   switch (session.state) {
     case LeadState.AWAITING_NAME:
@@ -115,30 +127,33 @@ export async function handleLeadMessage(
     case LeadState.AWAITING_ADDRESS:
       session.data.address = cleanText;
       session.state = LeadState.AWAITING_JOB_TYPE;
+      session.jobTypes = jobTypes; // Cache for later use
+
+      const jobMenu = await getJobTypeMenu(jobTypes);
 
       await sendTyping(jid, sessionId);
       await sendMessage(
         jid,
         `✅ Address recorded.\n\n` +
           `*4. Select Job Vacancy:*\n\n` +
-          `${JOB_TYPE_MENU}\n\n` +
-          `Reply with the number (1-${JOB_TYPES.length})`,
+          `${jobMenu}\n\n` +
+          `Reply with the number (1-${jobTypes.length})`,
         sessionId,
       );
       break;
 
     case LeadState.AWAITING_JOB_TYPE:
       const selection = parseInt(cleanText);
-      if (isNaN(selection) || selection < 1 || selection > JOB_TYPES.length) {
+      if (isNaN(selection) || selection < 1 || selection > jobTypes.length) {
         await sendMessage(
           jid,
-          `⚠️ Invalid selection. Please reply with a number between 1 and ${JOB_TYPES.length}`,
+          `⚠️ Invalid selection. Please reply with a number between 1 and ${jobTypes.length}`,
           sessionId,
         );
         return true;
       }
 
-      session.data.jobVacancyType = JOB_TYPES[selection - 1];
+      session.data.jobVacancyType = jobTypes[selection - 1];
 
       await sendTyping(jid, sessionId);
 

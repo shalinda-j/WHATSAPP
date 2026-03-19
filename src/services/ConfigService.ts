@@ -9,6 +9,87 @@ import { createCompanyConfig } from '../config/companies';
 
 const defaultConfig = createCompanyConfig('default');
 
+// Types for configurable settings
+export interface HumanizerConfig {
+  enabled: boolean;
+  maxQueueSize: number;
+  maxRetries: number;
+  retryDelayMs: number;
+  reactionDelayMin: number;
+  reactionDelayMax: number;
+  typingSpeedCharsPerMin: number;
+  minTypingDelayMs: number;
+  maxTypingDelayMs: number;
+}
+
+export interface ConversationExample {
+  user: string;
+  assistant: string;
+}
+
+// Booking Configuration Interface
+export interface BookingConfig {
+  campusLocation: string;
+  organizerName: string;
+  organizerEmail: string;
+  eventTitle: string;
+  eventDescription: string;
+  workHoursStart: number;
+  workHoursEnd: number;
+  eventDurationHours: number;
+  acceptanceKeywords: string[];
+}
+
+// Company Info Interface
+export interface CompanyInfo {
+  name: string;
+  contact: string;
+  address: string;
+  email?: string;
+}
+
+// ============================================
+// EMPTY DEFAULTS - Configure via Admin Panel
+// All values must be set through Datasets section
+// ============================================
+
+const DEFAULT_HUMANIZER_CONFIG: HumanizerConfig = {
+  enabled: true,
+  maxQueueSize: 100,
+  maxRetries: 3,
+  retryDelayMs: 5000,
+  reactionDelayMin: 1000,
+  reactionDelayMax: 2500,
+  typingSpeedCharsPerMin: 250,
+  minTypingDelayMs: 1500,
+  maxTypingDelayMs: 8000,
+};
+
+const DEFAULT_CONVERSATION_EXAMPLES: ConversationExample[] = [];
+
+const DEFAULT_JOB_TYPES: string[] = [];
+
+const DEFAULT_BOOKING_KEYWORDS: string[] = [];
+
+const DEFAULT_BOOKING_CONFIG: BookingConfig = {
+  campusLocation: '',
+  organizerName: '',
+  organizerEmail: '',
+  eventTitle: '',
+  eventDescription: '',
+  workHoursStart: 8,
+  workHoursEnd: 17,
+  eventDurationHours: 1,
+  acceptanceKeywords: [],
+};
+
+const DEFAULT_COMPANY_INFO: CompanyInfo = {
+  name: '',
+  contact: '',
+  address: '',
+  email: '',
+};
+
 export class ConfigService {
   private static instance: ConfigService;
   // Simple in-memory cache to avoid DB hits on every message
@@ -85,16 +166,12 @@ export class ConfigService {
    */
   public async getGoogleProviderKey(): Promise<string | undefined> {
     try {
-      // Avoid circular dependency if Config is imported? No, ConfigService imports Dataset.
-      // We need to import Config model. But ConfigService.ts imports Dataset.
-      // Let's import Config at top of file.
-      const config = await import('../models/Config').then((m) =>
-        m.default.findOne({
-          isProvider: true,
-          providerType: 'google',
-          isActive: true,
-        }),
-      );
+      const ConfigModel = (await import('../models/Config')).default;
+      const config = await ConfigModel.findOne({
+        isProvider: true,
+        providerType: 'google',
+        isActive: true,
+      });
       return config?.apiKey;
     } catch (error) {
       console.error('Error fetching Google Provider Key:', error);
@@ -104,15 +181,99 @@ export class ConfigService {
 
   public async getLocalNLPEnabled(): Promise<boolean> {
     try {
-      const config = await import('../models/Config').then((m) =>
-        m.default.findOne({ key: 'LOCAL_NLP_ENABLED' }),
-      );
+      const ConfigModel = (await import('../models/Config')).default;
+      const config = await ConfigModel.findOne({ key: 'LOCAL_NLP_ENABLED' });
       // Default to false if not set
       return config?.value === 'true';
     } catch (error) {
       console.error('Error fetching Local NLP flag:', error);
       return false;
     }
+  }
+
+  /**
+   * Get Humanizer configuration with timing parameters
+   * Configure via Admin Panel > Datasets > HUMANIZER_CONFIG
+   */
+  public async getHumanizerConfig(): Promise<HumanizerConfig> {
+    const config = await this.get('HUMANIZER_CONFIG', DEFAULT_HUMANIZER_CONFIG);
+    // Merge with defaults to ensure all fields are present
+    return { ...DEFAULT_HUMANIZER_CONFIG, ...config };
+  }
+
+  /**
+   * Get Conversation Examples for AI training
+   * Configure via Admin Panel > Datasets > CONVERSATION_EXAMPLES
+   */
+  public async getConversationExamples(): Promise<ConversationExample[]> {
+    const examples = await this.get('CONVERSATION_EXAMPLES', DEFAULT_CONVERSATION_EXAMPLES);
+    // Validate it's an array
+    if (Array.isArray(examples) && examples.length > 0) {
+      return examples;
+    }
+    return DEFAULT_CONVERSATION_EXAMPLES;
+  }
+
+  /**
+   * Get Job Types for Lead Registration
+   * Configure via Admin Panel > Datasets > JOB_TYPES
+   */
+  public async getJobTypes(): Promise<string[]> {
+    const jobTypes = await this.get('JOB_TYPES', DEFAULT_JOB_TYPES);
+    // Validate it's an array with content
+    if (Array.isArray(jobTypes) && jobTypes.length > 0) {
+      return jobTypes;
+    }
+    console.warn('⚠️ JOB_TYPES not configured. Please set up in Admin Panel > Datasets.');
+    return DEFAULT_JOB_TYPES;
+  }
+
+  /**
+   * Get Booking Keywords for intent detection
+   * Configure via Admin Panel > Datasets > BOOKING_KEYWORDS
+   */
+  public async getBookingKeywords(): Promise<string[]> {
+    const keywords = await this.get('BOOKING_KEYWORDS', DEFAULT_BOOKING_KEYWORDS);
+    // Validate it's an array with content
+    if (Array.isArray(keywords) && keywords.length > 0) {
+      return keywords;
+    }
+    console.warn('⚠️ BOOKING_KEYWORDS not configured. Please set up in Admin Panel > Datasets.');
+    return DEFAULT_BOOKING_KEYWORDS;
+  }
+
+  /**
+   * Get Booking Configuration (location, organizer, etc.)
+   * Configure via Admin Panel > Datasets > BOOKING_CONFIG
+   */
+  public async getBookingConfig(): Promise<BookingConfig> {
+    const config = await this.get('BOOKING_CONFIG', DEFAULT_BOOKING_CONFIG);
+    // Merge with defaults to ensure all fields are present
+    const merged = { ...DEFAULT_BOOKING_CONFIG, ...config };
+
+    // Warn if critical fields are empty
+    if (!merged.campusLocation || !merged.organizerName) {
+      console.warn('⚠️ BOOKING_CONFIG not fully configured. Please set up in Admin Panel > Datasets.');
+    }
+
+    return merged;
+  }
+
+  /**
+   * Get Company Information
+   * Configure via Admin Panel > Datasets > COMPANY_INFO
+   */
+  public async getCompanyInfo(): Promise<CompanyInfo> {
+    const info = await this.get('COMPANY_INFO', DEFAULT_COMPANY_INFO);
+    // Merge with defaults to ensure all fields are present
+    const merged = { ...DEFAULT_COMPANY_INFO, ...info };
+
+    // Warn if critical fields are empty
+    if (!merged.name || !merged.contact) {
+      console.warn('⚠️ COMPANY_INFO not fully configured. Please set up in Admin Panel > Datasets.');
+    }
+
+    return merged;
   }
 
   public async getRegistrationMessage(): Promise<string> {

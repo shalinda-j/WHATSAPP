@@ -1,4 +1,5 @@
 import { sendTyping, getSocket } from './whatsapp';
+import { configurationManager, HumanizerConfig } from './ConfigurationManagerService';
 import type { WASocket } from '@whiskeysockets/baileys';
 
 interface QueuedMessage {
@@ -12,9 +13,9 @@ interface QueuedMessage {
 export class HumanizerService {
   private static messageQueue: QueuedMessage[] = [];
   private static isProcessingQueue = false;
-  private static readonly MAX_QUEUE_SIZE = 100;
-  private static readonly MAX_RETRIES = 3;
-  private static readonly RETRY_DELAY_MS = 5000;
+  private static cachedConfig: HumanizerConfig | null = null;
+  private static configCacheTime = 0;
+  private static readonly CONFIG_CACHE_TTL = 60000; // 1 minute cache
 
   /**
    * Helper function to wait for a specific amount of time
@@ -31,14 +32,39 @@ export class HumanizerService {
   }
 
   /**
+   * Get humanizer config with caching
+   */
+  private static async getConfig(): Promise<HumanizerConfig> {
+    const now = Date.now();
+    if (this.cachedConfig && now - this.configCacheTime < this.CONFIG_CACHE_TTL) {
+      return this.cachedConfig;
+    }
+
+    this.cachedConfig = await configurationManager.getHumanizerConfig();
+    this.configCacheTime = now;
+    return this.cachedConfig;
+  }
+
+  /**
+   * Clear config cache (call when settings are updated)
+   */
+  public static clearConfigCache(): void {
+    this.cachedConfig = null;
+    this.configCacheTime = 0;
+    configurationManager.clearCache(); // Clear the main config cache as well
+    console.log('🧹 Humanizer config cache cleared');
+  }
+
+  /**
    * Add message to queue for retry when connection is unavailable
    */
-  private static queueMessage(
+  private static async queueMessage(
     jid: string,
     text: string,
     sessionId: string,
-  ): void {
-    if (this.messageQueue.length >= this.MAX_QUEUE_SIZE) {
+  ): Promise<void> {
+    const config = await this.getConfig();
+    if (this.messageQueue.length >= config.maxQueueSize) {
       console.warn('⚠️ Message queue full, dropping oldest message');
       this.messageQueue.shift();
     }
@@ -62,6 +88,7 @@ export class HumanizerService {
     if (this.isProcessingQueue || this.messageQueue.length === 0) return;
 
     this.isProcessingQueue = true;
+    const config = await this.getConfig();
 
     while (this.messageQueue.length > 0) {
       const msg = this.messageQueue[0];
@@ -69,7 +96,7 @@ export class HumanizerService {
 
       if (!sock) {
         // No socket available, wait and retry
-        if (msg.attempts >= this.MAX_RETRIES) {
+        if (msg.attempts >= config.maxRetries) {
           console.error(
             `❌ Max retries reached for queued message to ${msg.jid}, dropping`,
           );
@@ -80,10 +107,10 @@ export class HumanizerService {
         msg.attempts++;
         console.log(
           `⏳ No socket available, waiting ${
-            this.RETRY_DELAY_MS / 1000
-          }s before retry (${msg.attempts}/${this.MAX_RETRIES})`,
+            config.retryDelayMs / 1000
+          }s before retry (${msg.attempts}/${config.maxRetries})`,
         );
-        await this.sleep(this.RETRY_DELAY_MS);
+        await this.sleep(config.retryDelayMs);
         continue;
       }
 
@@ -94,11 +121,11 @@ export class HumanizerService {
         console.log(`✅ Queued message sent to ${msg.jid}`);
       } catch (error) {
         console.error(`❌ Failed to send queued message to ${msg.jid}:`, error);
-        if (msg.attempts >= this.MAX_RETRIES) {
+        if (msg.attempts >= config.maxRetries) {
           this.messageQueue.shift();
         } else {
           msg.attempts++;
-          await this.sleep(this.RETRY_DELAY_MS);
+          await this.sleep(config.retryDelayMs);
         }
       }
     }
@@ -119,16 +146,27 @@ export class HumanizerService {
       throw new Error('Socket not available');
     }
 
+    const config = await this.getConfig();
+
+    // Check if humanizer is enabled
+    if (!config.enabled) {
+      // Send immediately without delays
+      console.log(`📤 Sending message immediately (humanizer disabled)`);
+      await sock.sendMessage(jid, { text });
+      return true;
+    }
+
     // 1. Initial reaction delay (simulate reading the message before typing)
-    const reactionDelay = this.getRandomDelay(1000, 2500);
+    const reactionDelay = this.getRandomDelay(config.reactionDelayMin, config.reactionDelayMax);
     await this.sleep(reactionDelay);
 
-    // 2. Calculate typing duration (avg 250 chars per minute ~ 4 chars per second)
+    // 2. Calculate typing duration based on typing speed
     const charCount = text.length;
-    let typingDelay = Math.floor((charCount / 4) * 1000);
+    const charsPerSecond = config.typingSpeedCharsPerMin / 60;
+    let typingDelay = Math.floor((charCount / charsPerSecond) * 1000);
     const variance = typingDelay * 0.15;
     typingDelay = typingDelay + this.getRandomDelay(-variance, variance);
-    typingDelay = Math.max(1500, Math.min(typingDelay, 8000));
+    typingDelay = Math.max(config.minTypingDelayMs, Math.min(typingDelay, config.maxTypingDelayMs));
 
     console.log(
       `   ⏳ Humanizer: Intentionally delaying for ${Math.round(
@@ -167,7 +205,7 @@ export class HumanizerService {
       console.warn(
         `⚠️ sendHumanizedMessage: Session '${sessionId}' socket not available. Queueing message...`,
       );
-      this.queueMessage(jid, text, sessionId);
+      await this.queueMessage(jid, text, sessionId);
       return false;
     }
 
@@ -176,7 +214,7 @@ export class HumanizerService {
     } catch (error) {
       console.error('❌ Error sending humanized message:', error);
       // Queue for retry on error
-      this.queueMessage(jid, text, sessionId);
+      await this.queueMessage(jid, text, sessionId);
       return false;
     }
   }

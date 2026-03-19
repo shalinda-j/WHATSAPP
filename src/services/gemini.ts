@@ -3,7 +3,7 @@ import {
   AI_PERSONALITY,
   SINHALA_SYSTEM_PROMPT,
   JOB_KNOWLEDGE_BASE,
-  CONVERSATION_EXAMPLES,
+  getConversationExamples,
 } from '../config/ai-personality';
 import { AIService, AIChatMessage } from '../interfaces/AIService';
 
@@ -56,10 +56,11 @@ const chatSessions: Map<string, ChatSession> = new Map();
 /**
  * Build conversation history from examples
  */
-function buildExampleHistory() {
+async function buildExampleHistory() {
   const history: { role: 'user' | 'model'; parts: { text: string }[] }[] = [];
 
-  for (const example of CONVERSATION_EXAMPLES) {
+  const examples = await getConversationExamples();
+  for (const example of examples) {
     history.push({ role: 'user', parts: [{ text: example.user }] });
     history.push({ role: 'model', parts: [{ text: example.assistant }] });
   }
@@ -120,6 +121,7 @@ export async function generateSinhalaResponse(prompt: string): Promise<string> {
 export async function getChatSession(userId: string): Promise<ChatSession> {
   if (!chatSessions.has(userId)) {
     const model = await getGeminiModel();
+    const exampleHistory = await buildExampleHistory();
     const chat = model.startChat({
       systemInstruction: `${AI_PERSONALITY}\n\n${JOB_KNOWLEDGE_BASE}`,
       history: [
@@ -131,7 +133,7 @@ export async function getChatSession(userId: string): Promise<ChatSession> {
             },
           ],
         },
-        ...buildExampleHistory(),
+        ...exampleHistory,
       ],
     });
     chatSessions.set(userId, chat);

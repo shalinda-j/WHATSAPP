@@ -3,7 +3,7 @@ import { GeminiService } from './gemini';
 import {
   AI_PERSONALITY,
   JOB_KNOWLEDGE_BASE,
-  CONVERSATION_EXAMPLES,
+  getConversationExamples,
 } from '../config/ai-personality';
 import Dataset from '../models/Dataset';
 
@@ -13,7 +13,7 @@ import { OpenRouterService } from './openrouter';
 
 import Config from '../models/Config';
 import { createCompanyConfig } from '../config/companies';
-import { configService } from './ConfigService';
+import { configurationManager } from './ConfigurationManagerService';
 
 // Default company for load balancer if not specified (legacy support)
 const defaultConfig = createCompanyConfig('default');
@@ -148,8 +148,9 @@ export class AILoadBalancer {
   }
 
   private async getInitialHistory(): Promise<AIChatMessage[]> {
-    const knowledgeBase = await configService.getDynamicKnowledgeBase();
-    const aiPersonality = await configService.getAIPersonality();
+    const knowledgeBase = await configurationManager.getAIKnowledgeBase();
+    const aiPersonality = await configurationManager.getAIPersonality();
+    const conversationExamples = await getConversationExamples();
 
     const history: AIChatMessage[] = [
       {
@@ -158,7 +159,7 @@ export class AILoadBalancer {
       },
     ];
 
-    for (const ex of CONVERSATION_EXAMPLES) {
+    for (const ex of conversationExamples) {
       history.push({ role: 'user', content: ex.user });
       history.push({ role: 'assistant', content: ex.assistant });
     }

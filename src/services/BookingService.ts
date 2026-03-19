@@ -5,6 +5,7 @@ import {
   createGoogleCalendarEvent,
 } from './GoogleCalendarService';
 import { addDays, setHours, setMinutes, format } from 'date-fns';
+import { configurationManager } from './ConfigurationManagerService';
 
 // Define the stages of the booking conversation
 export enum BookingInitState {
@@ -17,13 +18,11 @@ interface UserSession {
   state: BookingInitState;
   selectedDate?: Date;
   availableSlots?: number[]; // Store the slots we offered
+  bookingConfig?: any; // Cache booking config for this session
 }
 
 // In-memory session store (Map<Jid, Session>)
 const sessions = new Map<string, UserSession>();
-
-const CAMPUS_LOCATION = 'JCETI Campus, No 33, Main Street, Colombo';
-const ORGANIZER = { name: 'Jayalath Institute', email: 'info@jayalath.com' };
 
 /**
  * Check if user is currently in a booking flow
@@ -40,7 +39,11 @@ export async function startBookingFlow(
   jid: string,
   sessionId: string,
 ): Promise<void> {
-  const session: UserSession = { state: BookingInitState.AWAITING_RESPONSE };
+  const bookingConfig = await configurationManager.getBookingConfig();
+  const session: UserSession = {
+    state: BookingInitState.AWAITING_RESPONSE,
+    bookingConfig
+  };
   sessions.set(jid, session);
 
   await sendTyping(jid, sessionId);
@@ -68,11 +71,16 @@ export async function handleBookingMessage(
 
   const cleanText = text.trim().toLowerCase();
 
+  // Get booking config (from session cache or fetch new)
+  const bookingConfig = session.bookingConfig || await configurationManager.getBookingConfig();
+  const acceptanceKeywords = bookingConfig.acceptanceKeywords || ['yes', 'ow', 'y', 'ok'];
+
   // 1. Awaiting "Yes" to invitation
   if (session.state === BookingInitState.AWAITING_RESPONSE) {
-    if (['yes', 'ow', 'y', 'ok'].includes(cleanText)) {
+    if (acceptanceKeywords.includes(cleanText)) {
       // User accepted, show slots
       session.state = BookingInitState.SELECTING_TIME;
+      session.bookingConfig = bookingConfig; // Cache for later use
 
       // For MVP, offer slots for "Tomorrow"
       // Ensure we don't offer Sat/Sun if closed, but for now simple +1 day
@@ -176,27 +184,33 @@ async function finalizeBooking(
   const sock = getSocket(sessionId);
   if (!sock) return;
 
+  // Get booking config for dynamic values
+  const bookingConfig = await configurationManager.getBookingConfig();
+  const campusLocation = bookingConfig.campusLocation || 'Campus';
+  const organizerName = bookingConfig.organizerName || 'Organization';
+  const organizerEmail = bookingConfig.organizerEmail || 'info@example.com';
+  const eventTitle = bookingConfig.eventTitle || 'Campus Visit';
+  const eventDescription = bookingConfig.eventDescription || 'Introduction and Assessment';
+  const eventDuration = bookingConfig.eventDurationHours || 1;
+
   await sendMessage(jid, `✅ *Confirming your appointment...*`, sessionId);
 
   try {
-    const title = 'Campus Visit - Jayalath Institute';
-    const desc = 'Introduction and Skill Assessment';
-
     // 1. Create Google Calendar Event (if credentials exist)
     const gcalLink = await createGoogleCalendarEvent(
       appointmentDate,
-      title,
-      desc,
+      eventTitle,
+      eventDescription,
     );
 
     // 2. Generate ICS file (Backup/Personal Calendar)
     const icsContent = await generateIcsFile({
       start: appointmentDate,
-      durationHours: 1,
-      title: title,
-      description: desc,
-      location: CAMPUS_LOCATION,
-      organizer: ORGANIZER,
+      durationHours: eventDuration,
+      title: eventTitle,
+      description: eventDescription,
+      location: campusLocation,
+      organizer: { name: organizerName, email: organizerEmail },
     });
 
     // Send confirmation text
@@ -204,7 +218,7 @@ async function finalizeBooking(
     let msg =
       `🎉 *Appointment Confirmed!*\n\n` +
       `📅 Time: ${timeStr}\n` +
-      `📍 Location: ${CAMPUS_LOCATION}\n\n`;
+      `📍 Location: ${campusLocation}\n\n`;
 
     if (gcalLink) {
       // Keep it simple for WhatsApp, maybe don't flood with links if we send the ICS
@@ -218,7 +232,7 @@ async function finalizeBooking(
     await sock.sendMessage(jid, {
       document: Buffer.from(icsContent),
       mimetype: 'text/calendar',
-      fileName: 'Jayalath-Invite.ics',
+      fileName: `${organizerName.replace(/\s+/g, '-')}-Invite.ics`,
       caption: '📅 Add to Calendar',
     });
 
