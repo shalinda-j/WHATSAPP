@@ -40,6 +40,49 @@ interface UserLeadSession {
 
 const leadSessions = new Map<string, UserLeadSession>();
 
+// Default fallback values (used if configuration is empty)
+const DEFAULT_JOB_TYPES = [
+  'Electrician',
+  'Plumber',
+  'Asphalt Worker',
+  'Concrete Pump Driver',
+  'Excavator Operator',
+  'JCB Operator',
+  'Heavy Duty Cleaner',
+  'Gypsum Fixer',
+  'Tile Fixer',
+  'General Worker',
+  'Welder',
+  'Carpenter',
+  'Mason',
+  'Painter',
+  'AC Technician',
+  'Driver',
+  'Security Guard',
+  'Cook',
+  'Cleaner',
+];
+
+const DEFAULT_COUNTRIES = [
+  { code: 'IL', name: 'Israel', flag: '🇮🇱' },
+  { code: 'AE', name: 'UAE (Dubai)', flag: '🇦🇪' },
+  { code: 'SA', name: 'Saudi Arabia', flag: '🇸🇦' },
+  { code: 'QA', name: 'Qatar', flag: '🇶🇦' },
+  { code: 'KW', name: 'Kuwait', flag: '🇰🇼' },
+  { code: 'MY', name: 'Malaysia', flag: '🇲🇾' },
+  { code: 'SG', name: 'Singapore', flag: '🇸🇬' },
+  { code: 'LK', name: 'Sri Lanka', flag: '🇱🇰' },
+  { code: 'OTHER', name: 'Other', flag: '🌍' },
+];
+
+const DEFAULT_EXPERIENCE_LEVELS = [
+  { value: '0-1', label: '0-1 years (Fresher)' },
+  { value: '1-3', label: '1-3 years' },
+  { value: '3-5', label: '3-5 years' },
+  { value: '5-10', label: '5-10 years' },
+  { value: '10+', label: '10+ years (Expert)' },
+];
+
 /**
  * Get country menu string
  */
@@ -76,10 +119,24 @@ export async function startLeadRegistration(
   jid: string,
   sessionId: string,
 ): Promise<void> {
-  // Fetch configuration data
-  const jobTypes = await configurationManager.getJobTypes();
-  const countries = await configurationManager.getCountries();
-  const experienceLevels = await configurationManager.getExperienceLevels();
+  // Fetch configuration data with fallbacks
+  let jobTypes = await configurationManager.getJobTypes();
+  let countries = await configurationManager.getCountries();
+  let experienceLevels = await configurationManager.getExperienceLevels();
+
+  // Use defaults if configuration is empty
+  if (!jobTypes || jobTypes.length === 0) {
+    console.warn('⚠️ JOB_TYPES not configured, using defaults');
+    jobTypes = DEFAULT_JOB_TYPES;
+  }
+  if (!countries || countries.length === 0) {
+    console.warn('⚠️ COUNTRIES not configured, using defaults');
+    countries = DEFAULT_COUNTRIES;
+  }
+  if (!experienceLevels || experienceLevels.length === 0) {
+    console.warn('⚠️ EXPERIENCE_LEVELS not configured, using defaults');
+    experienceLevels = DEFAULT_EXPERIENCE_LEVELS;
+  }
 
   const session: UserLeadSession = {
     state: LeadState.AWAITING_NAME,
@@ -114,9 +171,16 @@ export async function handleLeadMessage(
   if (!session || session.state === LeadState.IDLE) return false;
 
   const cleanText = text.trim();
-  const jobTypes = session.jobTypes || await configurationManager.getJobTypes();
-  const countries = session.countries || await configurationManager.getCountries();
-  const experienceLevels = session.experienceLevels || await configurationManager.getExperienceLevels();
+
+  // Get configuration with fallbacks
+  let jobTypes = session.jobTypes || await configurationManager.getJobTypes();
+  let countries = session.countries || await configurationManager.getCountries();
+  let experienceLevels = session.experienceLevels || await configurationManager.getExperienceLevels();
+
+  // Use defaults if empty
+  if (!jobTypes || jobTypes.length === 0) jobTypes = DEFAULT_JOB_TYPES;
+  if (!countries || countries.length === 0) countries = DEFAULT_COUNTRIES;
+  if (!experienceLevels || experienceLevels.length === 0) experienceLevels = DEFAULT_EXPERIENCE_LEVELS;
 
   switch (session.state) {
     // Step 1: Name
