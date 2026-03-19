@@ -1,8 +1,8 @@
 import Dataset from '../models/Dataset';
-import { configService, HumanizerConfig, CompanyInfo, BookingConfig } from './ConfigService';
+import { configService, HumanizerConfig, CompanyInfo, BookingConfig, CountryOption, ExperienceOption } from './ConfigService';
 
 // Re-export types for convenience
-export { HumanizerConfig, CompanyInfo, BookingConfig };
+export { HumanizerConfig, CompanyInfo, BookingConfig, CountryOption, ExperienceOption };
 
 export interface ConfigurationManager {
   // Humanizer configuration
@@ -426,6 +426,56 @@ export class ConfigurationManagerService {
     this.cache.clear();
     this.cacheExpiry.clear();
     configService.clearCache(); // Also clear the base config service cache
+  }
+
+  /**
+   * Get countries for job placement
+   */
+  async getCountries(): Promise<CountryOption[]> {
+    const cacheKey = 'countries';
+
+    if (this.isCacheValid(cacheKey)) {
+      return this.cache.get(cacheKey);
+    }
+
+    try {
+      const countries = await configService.getCountries();
+      this.setCache(cacheKey, countries);
+      return countries;
+    } catch (error) {
+      console.error('Error fetching countries:', error);
+      return [
+        { code: 'IL', name: 'Israel', flag: '🇮🇱' },
+        { code: 'AE', name: 'UAE (Dubai)', flag: '🇦🇪' },
+        { code: 'SA', name: 'Saudi Arabia', flag: '🇸🇦' },
+        { code: 'OTHER', name: 'Other', flag: '🌍' },
+      ];
+    }
+  }
+
+  /**
+   * Get experience levels
+   */
+  async getExperienceLevels(): Promise<ExperienceOption[]> {
+    const cacheKey = 'experienceLevels';
+
+    if (this.isCacheValid(cacheKey)) {
+      return this.cache.get(cacheKey);
+    }
+
+    try {
+      const levels = await configService.getExperienceLevels();
+      this.setCache(cacheKey, levels);
+      return levels;
+    } catch (error) {
+      console.error('Error fetching experience levels:', error);
+      return [
+        { value: '0-1', label: '0-1 years (Fresher)' },
+        { value: '1-3', label: '1-3 years' },
+        { value: '3-5', label: '3-5 years' },
+        { value: '5+', label: '5+ years' },
+      ];
+    }
   }
 }
 

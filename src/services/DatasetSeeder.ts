@@ -114,6 +114,36 @@ export const seedDatasets = async () => {
         content: [],  // Empty - must be configured via admin panel
         description: 'Training examples for AI conversation context - CONFIGURE IN ADMIN PANEL',
       },
+      {
+        key: 'COUNTRIES',
+        name: 'Job Placement Countries',
+        category: 'config',
+        content: [
+          { code: 'IL', name: 'Israel', flag: '🇮🇱' },
+          { code: 'AE', name: 'UAE (Dubai)', flag: '🇦🇪' },
+          { code: 'SA', name: 'Saudi Arabia', flag: '🇸🇦' },
+          { code: 'QA', name: 'Qatar', flag: '🇶🇦' },
+          { code: 'KW', name: 'Kuwait', flag: '🇰🇼' },
+          { code: 'MY', name: 'Malaysia', flag: '🇲🇾' },
+          { code: 'SG', name: 'Singapore', flag: '🇸🇬' },
+          { code: 'LK', name: 'Sri Lanka', flag: '🇱🇰' },
+          { code: 'OTHER', name: 'Other', flag: '🌍' },
+        ],
+        description: 'Countries available for job placement - CONFIGURE IN ADMIN PANEL',
+      },
+      {
+        key: 'EXPERIENCE_LEVELS',
+        name: 'Experience Levels',
+        category: 'config',
+        content: [
+          { value: '0-1', label: '0-1 years (Fresher)' },
+          { value: '1-3', label: '1-3 years' },
+          { value: '3-5', label: '3-5 years' },
+          { value: '5-10', label: '5-10 years' },
+          { value: '10+', label: '10+ years (Expert)' },
+        ],
+        description: 'Experience level options for lead registration - CONFIGURE IN ADMIN PANEL',
+      },
     ];
 
     for (const seed of seeds) {

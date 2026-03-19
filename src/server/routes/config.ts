@@ -3,7 +3,7 @@ import Config from '../../models/Config';
 import Dataset from '../../models/Dataset';
 import { authenticateToken } from '../middleware/auth';
 import { HumanizerService } from '../../services/HumanizerService';
-import { configService, HumanizerConfig, ConversationExample } from '../../services/ConfigService';
+import { configService, HumanizerConfig, ConversationExample, CountryOption, ExperienceOption } from '../../services/ConfigService';
 
 const router = Router();
 
@@ -393,6 +393,124 @@ router.put('/company-info', async (req, res) => {
     configService.clearCache();
 
     res.json({ success: true, info: dataset.content });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
+// Countries Endpoints (for Lead Registration)
+// ============================================
+
+/**
+ * GET /api/config/countries
+ * Get countries for job placement
+ */
+router.get('/countries', async (req, res) => {
+  try {
+    const countries = await configService.getCountries();
+    res.json(countries);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PUT /api/config/countries
+ * Update countries for job placement
+ */
+router.put('/countries', async (req, res) => {
+  try {
+    const countries = req.body as CountryOption[];
+
+    // Validate it's an array
+    if (!Array.isArray(countries)) {
+      return res.status(400).json({ error: 'Countries must be an array' });
+    }
+
+    // Find or create the dataset
+    let dataset = await Dataset.findOne({ key: 'COUNTRIES' });
+
+    if (dataset) {
+      dataset.content = countries;
+      dataset.isActive = true;
+      await dataset.save();
+    } else {
+      dataset = new Dataset({
+        name: 'Job Placement Countries',
+        key: 'COUNTRIES',
+        content: countries,
+        scope: 'ALL',
+        category: 'config',
+        isActive: true,
+        description: 'Countries available for job placement',
+      });
+      await dataset.save();
+    }
+
+    // Clear cache to apply changes immediately
+    configService.clearCache();
+
+    res.json({ success: true, countries: dataset.content });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
+// Experience Levels Endpoints
+// ============================================
+
+/**
+ * GET /api/config/experience-levels
+ * Get experience levels for lead registration
+ */
+router.get('/experience-levels', async (req, res) => {
+  try {
+    const levels = await configService.getExperienceLevels();
+    res.json(levels);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PUT /api/config/experience-levels
+ * Update experience levels
+ */
+router.put('/experience-levels', async (req, res) => {
+  try {
+    const levels = req.body as ExperienceOption[];
+
+    // Validate it's an array
+    if (!Array.isArray(levels)) {
+      return res.status(400).json({ error: 'Experience levels must be an array' });
+    }
+
+    // Find or create the dataset
+    let dataset = await Dataset.findOne({ key: 'EXPERIENCE_LEVELS' });
+
+    if (dataset) {
+      dataset.content = levels;
+      dataset.isActive = true;
+      await dataset.save();
+    } else {
+      dataset = new Dataset({
+        name: 'Experience Levels',
+        key: 'EXPERIENCE_LEVELS',
+        content: levels,
+        scope: 'ALL',
+        category: 'config',
+        isActive: true,
+        description: 'Experience level options for lead registration',
+      });
+      await dataset.save();
+    }
+
+    // Clear cache to apply changes immediately
+    configService.clearCache();
+
+    res.json({ success: true, levels: dataset.content });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

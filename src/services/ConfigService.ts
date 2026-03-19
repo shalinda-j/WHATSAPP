@@ -48,6 +48,19 @@ export interface CompanyInfo {
   email?: string;
 }
 
+// Country for Job Placement
+export interface CountryOption {
+  code: string;
+  name: string;
+  flag: string;
+}
+
+// Experience Level
+export interface ExperienceOption {
+  value: string;
+  label: string;
+}
+
 // ============================================
 // EMPTY DEFAULTS - Configure via Admin Panel
 // All values must be set through Datasets section
@@ -89,6 +102,28 @@ const DEFAULT_COMPANY_INFO: CompanyInfo = {
   address: '',
   email: '',
 };
+
+// Default countries for job placement
+const DEFAULT_COUNTRIES: CountryOption[] = [
+  { code: 'IL', name: 'Israel', flag: '🇮🇱' },
+  { code: 'AE', name: 'UAE (Dubai)', flag: '🇦🇪' },
+  { code: 'SA', name: 'Saudi Arabia', flag: '🇸🇦' },
+  { code: 'QA', name: 'Qatar', flag: '🇶🇦' },
+  { code: 'KW', name: 'Kuwait', flag: '🇰🇼' },
+  { code: 'MY', name: 'Malaysia', flag: '🇲🇾' },
+  { code: 'SG', name: 'Singapore', flag: '🇸🇬' },
+  { code: 'LK', name: 'Sri Lanka', flag: '🇱🇰' },
+  { code: 'OTHER', name: 'Other', flag: '🌍' },
+];
+
+// Default experience levels
+const DEFAULT_EXPERIENCE_LEVELS: ExperienceOption[] = [
+  { value: '0-1', label: '0-1 years (Fresher)' },
+  { value: '1-3', label: '1-3 years' },
+  { value: '3-5', label: '3-5 years' },
+  { value: '5-10', label: '5-10 years' },
+  { value: '10+', label: '10+ years (Expert)' },
+];
 
 export class ConfigService {
   private static instance: ConfigService;
@@ -357,6 +392,30 @@ export class ConfigService {
     this.lastFetch = {};
     console.log(`🧹 ConfigService cache cleared (${count} items removed)`);
     return count;
+  }
+
+  /**
+   * Get Countries for Job Placement
+   * Configure via Admin Panel > Datasets > COUNTRIES
+   */
+  public async getCountries(): Promise<CountryOption[]> {
+    const countries = await this.get('COUNTRIES', DEFAULT_COUNTRIES);
+    if (Array.isArray(countries) && countries.length > 0) {
+      return countries;
+    }
+    return DEFAULT_COUNTRIES;
+  }
+
+  /**
+   * Get Experience Levels
+   * Configure via Admin Panel > Datasets > EXPERIENCE_LEVELS
+   */
+  public async getExperienceLevels(): Promise<ExperienceOption[]> {
+    const levels = await this.get('EXPERIENCE_LEVELS', DEFAULT_EXPERIENCE_LEVELS);
+    if (Array.isArray(levels) && levels.length > 0) {
+      return levels;
+    }
+    return DEFAULT_EXPERIENCE_LEVELS;
   }
 }
 

@@ -6,6 +6,7 @@ import * as path from 'path';
 import authRoutes from './routes/auth';
 import datasetRoutes from './routes/datasets';
 import sessionsRouter from './routes/sessions';
+import configRouter from './routes/config';
 import configsRouter from './routes/configs';
 import voiceConfigRouter from './routes/voice-config';
 import webhookRouter from './routes/webhooks';
@@ -78,6 +79,7 @@ app.use('/api/webhooks', webhookRouter); // Webhooks manage their own security
 // Protected Routes
 app.use('/api/datasets', authenticateToken, datasetRoutes);
 app.use('/api/sessions', authenticateToken, sessionsRouter);
+app.use('/api/config', authenticateToken, configRouter);
 app.use('/api/configs', authenticateToken, configsRouter);
 app.use('/api/voice-config', authenticateToken, voiceConfigRouter);
 app.use('/api/whatsapp', authenticateToken, whatsappRouter);

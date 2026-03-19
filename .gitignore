@@ -42,10 +42,7 @@ __pycache__/
 .Python
 .venv/
 venv/
-ai-research/.venv/
-ai-research/*.log
-ai-research/run.log
-ai-research/results.tsv
+ai-research/
 *.parquet
 *.pkl
 

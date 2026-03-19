@@ -43,19 +43,34 @@ const upload = multer({
 // Public route for bot registration (no auth required)
 router.post('/register', async (req, res) => {
   try {
-    const { fullName, phoneNumber, address, email, jobVacancyType } = req.body;
+    const {
+      fullName,
+      age,
+      phoneNumber,
+      address,
+      email,
+      interestedCountry,
+      experienceYears,
+      jobVacancyType,
+      cvUrl,
+    } = req.body;
 
-    if (!fullName || !phoneNumber || !address || !jobVacancyType) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    if (!fullName || !phoneNumber || !jobVacancyType) {
+      return res.status(400).json({ error: 'Missing required fields: fullName, phoneNumber, jobVacancyType' });
     }
 
     const lead = new Lead({
       fullName,
+      age,
       phoneNumber,
       address,
       email,
+      interestedCountry,
+      experienceYears,
       jobVacancyType,
+      cvUrl,
       status: 'new',
+      source: 'whatsapp',
       registeredAt: new Date(),
     });
 
@@ -71,17 +86,20 @@ router.use(authenticateToken);
 
 router.get('/', async (req, res) => {
   try {
-    const { status, jobVacancyType, search, page = 1, limit = 20 } = req.query;
+    const { status, jobVacancyType, interestedCountry, experienceYears, search, page = 1, limit = 20 } = req.query;
 
     const query: any = {};
 
     if (status) query.status = status;
     if (jobVacancyType) query.jobVacancyType = jobVacancyType;
+    if (interestedCountry) query.interestedCountry = interestedCountry;
+    if (experienceYears) query.experienceYears = experienceYears;
     if (search) {
       query.$or = [
         { fullName: { $regex: search, $options: 'i' } },
         { phoneNumber: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } },
+        { interestedCountry: { $regex: search, $options: 'i' } },
       ];
     }
 
@@ -111,6 +129,12 @@ router.get('/stats', async (req, res) => {
     const byJobType = await Lead.aggregate([
       { $group: { _id: '$jobVacancyType', count: { $sum: 1 } } },
     ]);
+    const byCountry = await Lead.aggregate([
+      { $group: { _id: '$interestedCountry', count: { $sum: 1 } } },
+    ]);
+    const byExperience = await Lead.aggregate([
+      { $group: { _id: '$experienceYears', count: { $sum: 1 } } },
+    ]);
 
     res.json({
       totalLeads,
@@ -119,6 +143,14 @@ router.get('/stats', async (req, res) => {
         return acc;
       }, {}),
       byJobType: byJobType.reduce((acc: any, item: any) => {
+        acc[item._id] = item.count;
+        return acc;
+      }, {}),
+      byCountry: byCountry.reduce((acc: any, item: any) => {
+        acc[item._id] = item.count;
+        return acc;
+      }, {}),
+      byExperience: byExperience.reduce((acc: any, item: any) => {
         acc[item._id] = item.count;
         return acc;
       }, {}),
@@ -156,11 +188,16 @@ router.get('/export', async (req, res) => {
     const headers = [
       'ID',
       'Full Name',
+      'Age',
       'Phone Number',
       'Email',
       'Address',
+      'Interested Country',
+      'Experience',
       'Job Vacancy',
+      'CV URL',
       'Status',
+      'Source',
       'Registration Date',
       'Notes',
     ];
@@ -171,11 +208,16 @@ router.get('/export', async (req, res) => {
       return [
         lead._id,
         escapeCsv(lead.fullName),
+        lead.age || '',
         escapeCsv(lead.phoneNumber),
         escapeCsv(lead.email),
         escapeCsv(lead.address),
+        escapeCsv(lead.interestedCountry),
+        escapeCsv(lead.experienceYears),
         escapeCsv(lead.jobVacancyType),
+        escapeCsv(lead.cvUrl),
         escapeCsv(lead.status),
+        escapeCsv(lead.source),
         new Date(lead.registeredAt).toISOString(),
         escapeCsv(lead.notes),
       ].join(',');
