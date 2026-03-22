@@ -3,7 +3,7 @@ import multer from 'multer';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const pdf = require('pdf-parse');
 import * as xlsx from 'xlsx';
-import Dataset from '../../models/Dataset';
+import Dataset, { DatasetType, Language } from '../../models/Dataset';
 import { authenticateToken } from '../middleware/auth';
 import { extractTextFromImage } from '../../services/gemini';
 
@@ -16,12 +16,37 @@ const upload = multer({
 });
 
 // Public read (for bot) - though bot likely imports model directly
-// Keeping this authenticatd for admin panel
+// Keeping this authenticated for admin panel
 router.use(authenticateToken);
 
+// Get all datasets (with optional type filter)
 router.get('/', async (req, res) => {
   try {
-    const datasets = await Dataset.find().sort({ createdAt: -1 });
+    const { type, scope, category } = req.query;
+
+    const filter: Record<string, unknown> = {};
+    if (type) filter.type = type;
+    if (scope) filter.scope = scope;
+    if (category) filter.category = category;
+
+    const datasets = await Dataset.find(filter).sort({ createdAt: -1 });
+    res.json(datasets);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get datasets by type
+router.get('/type/:type', async (req, res) => {
+  try {
+    const { type } = req.params as { type: DatasetType };
+    const validTypes = ['knowledge', 'command', 'link', 'marketing', 'megatext', 'personality'];
+
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({ error: 'Invalid dataset type' });
+    }
+
+    const datasets = await Dataset.find({ type, isActive: true }).sort({ createdAt: -1 });
     res.json(datasets);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -33,6 +58,36 @@ router.get('/:id', async (req, res) => {
     const dataset = await Dataset.findById(req.params.id);
     if (!dataset) return res.status(404).json({ message: 'Dataset not found' });
     res.json(dataset);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Update language-specific content
+ */
+router.put('/:id/language/:lang', async (req, res) => {
+  try {
+    const { id, lang } = req.params as { id: string; lang: Language };
+    const { content } = req.body;
+
+    const validLanguages = ['en', 'si', 'ta'];
+    if (!validLanguages.includes(lang)) {
+      return res.status(400).json({ error: 'Invalid language. Use: en, si, or ta' });
+    }
+
+    const updatePath = `content.${lang}`;
+    const updatedDataset = await Dataset.findByIdAndUpdate(
+      id,
+      { $set: { [updatePath]: content } },
+      { new: true }
+    );
+
+    if (!updatedDataset) {
+      return res.status(404).json({ message: 'Dataset not found' });
+    }
+
+    res.json(updatedDataset);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -90,14 +145,20 @@ router.post('/extract', upload.single('file'), async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { name, content, scope, category, isActive } = req.body;
+    const { name, description, type, content, scope, category, key, isActive, metadata } = req.body;
+
     const newDataset = new Dataset({
       name,
-      content,
-      scope,
-      category,
-      isActive,
+      description,
+      type: type || 'knowledge',
+      content: content || {},
+      scope: scope || 'ALL',
+      category: category || 'general',
+      key,
+      isActive: isActive !== undefined ? isActive : true,
+      metadata: metadata || {},
     });
+
     await newDataset.save();
     res.json(newDataset);
   } catch (err: any) {
@@ -107,10 +168,21 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const { name, content, scope, category, isActive } = req.body;
+    const { name, description, type, content, scope, category, key, isActive, metadata } = req.body;
+
     const updatedDataset = await Dataset.findByIdAndUpdate(
       req.params.id,
-      { name, content, scope, category, isActive },
+      {
+        name,
+        description,
+        type,
+        content,
+        scope,
+        category,
+        key,
+        isActive,
+        metadata,
+      },
       { new: true },
     );
     res.json(updatedDataset);

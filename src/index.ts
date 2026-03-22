@@ -267,7 +267,7 @@ async function scheduleAutoRegistration(jid: string, sessionId: string): Promise
       if (result.welcomeMessage) {
         await sendMessage(jid, result.welcomeMessage, sessionId);
       }
-      const prompt = FormService.getFieldPrompt(result.field);
+      const prompt = await FormService.getFieldPrompt(result.field);
       await sendMessage(jid, prompt, sessionId);
     }
   } catch (err) {
@@ -431,13 +431,13 @@ onMessage(async (message, sock, sessionId) => {
         if (result.isComplete) {
           await sendMessage(jid, result.completionMessage || '✅ Thank you! Your registration has been submitted.', sessionId);
         } else if (result.field) {
-          const prompt = FormService.getFieldPrompt(result.field);
+          const prompt = await FormService.getFieldPrompt(result.field);
           await sendMessage(jid, prompt, sessionId);
         }
       } else {
         await sendMessage(jid, result.message || 'Something went wrong. Please try again.', sessionId);
         if (result.field) {
-          const prompt = FormService.getFieldPrompt(result.field);
+          const prompt = await FormService.getFieldPrompt(result.field);
           await sendMessage(jid, prompt, sessionId);
         }
       }
@@ -839,7 +839,7 @@ async function handleCommand(
           await sendMessage(jid, formResult.welcomeMessage, sessionId);
         }
         if (formResult.field) {
-          const prompt = FormService.getFieldPrompt(formResult.field);
+          const prompt = await FormService.getFieldPrompt(formResult.field);
           await sendMessage(jid, prompt, sessionId);
         }
       } else {

@@ -6,6 +6,7 @@ import Lead from '../../models/Lead';
 import { authenticateToken } from '../middleware/auth';
 import pdf from 'pdf-parse';
 import ChatMessage from '../../models/ChatMessage';
+import { configurationManager } from '../../services/ConfigurationManagerService';
 
 const router = Router();
 
@@ -160,25 +161,14 @@ router.get('/stats', async (req, res) => {
   }
 });
 
-router.get('/job-types', (req, res) => {
-  const jobTypes = [
-    'Electrician',
-    'Plumber',
-    'Asphalt Worker',
-    'Concrete Pump Driver',
-    'Excavator Operator',
-    'JCB Operator',
-    'Heavy Duty Cleaner',
-    'Gypsum Fixer',
-    'Tile Fixer',
-    'General Worker',
-    'Welder',
-    'Carpenter',
-    'Mason',
-    'Painter',
-    'AC Technician',
-  ];
-  res.json(jobTypes);
+router.get('/job-types', async (req, res) => {
+  try {
+    const jobTypes = await configurationManager.getJobTypes();
+    res.json(jobTypes);
+  } catch (error) {
+    console.error('Error fetching job types:', error);
+    res.json([]);
+  }
 });
 
 router.get('/export', async (req, res) => {

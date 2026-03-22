@@ -1,6 +1,7 @@
 import FormTemplate, { FormField } from '../models/FormTemplate';
 import FormSubmission from '../models/FormSubmission';
 import sessionStateService from './SessionStateService';
+import { configurationManager } from './ConfigurationManagerService';
 
 interface UserFormState {
   formId: string;
@@ -15,10 +16,46 @@ interface UserFormState {
 /**
  * FormService - Handles dynamic registration forms for WhatsApp bot
  * Now uses persistent storage via SessionStateService
+ * Options for job_type, country, experience are pulled from Datasets at runtime
  */
 export class FormService {
   // Session TTL: 30 minutes
   private static SESSION_TTL_MS = 30 * 60 * 1000;
+
+  /**
+   * Get dynamic options for a field from Datasets
+   */
+  static async getDynamicOptions(field: FormField): Promise<string[]> {
+    const dataSource = (field as any)._dataSource;
+
+    if (!dataSource) {
+      return field.options || [];
+    }
+
+    try {
+      switch (dataSource) {
+        case 'JOB_TYPES': {
+          const jobTypes = await configurationManager.getJobTypes();
+          return jobTypes.length > 0 ? jobTypes : [];
+        }
+        case 'COUNTRIES': {
+          const countries = await configurationManager.getCountries();
+          return countries.map((c: { name: string; flag?: string }) =>
+            c.flag ? `${c.name} ${c.flag}` : c.name
+          );
+        }
+        case 'EXPERIENCE_LEVELS': {
+          const levels = await configurationManager.getExperienceLevels();
+          return levels.map((l: { label: string }) => l.label);
+        }
+        default:
+          return field.options || [];
+      }
+    } catch (error) {
+      console.error(`❌ [FormService] Error fetching dynamic options for ${dataSource}:`, error);
+      return field.options || [];
+    }
+  }
 
   /**
    * Get the active/default form template
@@ -170,7 +207,7 @@ export class FormService {
       }
 
       // Validate answer
-      const validationResult = this.validateFieldAnswer(currentField, answer);
+      const validationResult = await this.validateFieldAnswer(currentField, answer);
       if (!validationResult.valid) {
         return {
           success: false,
@@ -223,10 +260,10 @@ export class FormService {
   /**
    * Validate a field answer
    */
-  static validateFieldAnswer(
+  static async validateFieldAnswer(
     field: FormField,
     answer: string,
-  ): { valid: boolean; value?: any; message?: string } {
+  ): Promise<{ valid: boolean; value?: any; message?: string }> {
     const trimmedAnswer = answer.trim();
 
     // Check required
@@ -284,26 +321,37 @@ export class FormService {
         }
         return { valid: true, value: trimmedAnswer.replace(/[\s\-\(\)]/g, '') };
 
-      case 'select':
-        if (field.options && !field.options.includes(trimmedAnswer)) {
+      case 'select': {
+        // Get dynamic options from datasets
+        const options = await this.getDynamicOptions(field);
+        // Also accept numeric selection (1, 2, 3, etc.)
+        const selectedIndex = parseInt(trimmedAnswer);
+        if (!isNaN(selectedIndex) && selectedIndex > 0 && selectedIndex <= options.length) {
+          return { valid: true, value: options[selectedIndex - 1] };
+        }
+        if (options.length > 0 && !options.includes(trimmedAnswer)) {
           return {
             valid: false,
-            message: `Please select one of: ${field.options.join(', ')}`,
+            message: `Please select one of: ${options.join(', ')}`,
           };
         }
         return { valid: true, value: trimmedAnswer };
+      }
 
-      case 'multiselect':
+      case 'multiselect': {
+        // Get dynamic options from datasets
+        const options = await this.getDynamicOptions(field);
         // Split by comma or space
         const values = trimmedAnswer.split(/[,\s]+/).filter(Boolean);
-        const invalidValues = values.filter((v) => field.options && !field.options.includes(v));
+        const invalidValues = values.filter((v) => options.length > 0 && !options.includes(v));
         if (invalidValues.length > 0) {
           return {
             valid: false,
-            message: `Invalid selections: ${invalidValues.join(', ')}. Options: ${field.options?.join(', ')}`,
+            message: `Invalid selections: ${invalidValues.join(', ')}. Options: ${options.join(', ')}`,
           };
         }
         return { valid: true, value: values };
+      }
 
       case 'date':
         const dateValue = new Date(trimmedAnswer);
@@ -359,13 +407,18 @@ export class FormService {
   /**
    * Get field prompt message
    */
-  static getFieldPrompt(field: FormField): string {
+  static async getFieldPrompt(field: FormField): Promise<string> {
     let prompt = `*${field.label}*`;
 
-    if (field.type === 'select' && field.options) {
-      prompt += `\nOptions: ${field.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}`;
-    } else if (field.type === 'multiselect' && field.options) {
-      prompt += `\nOptions: ${field.options.join(', ')}`;
+    // Get dynamic options if this field uses a data source
+    const options = await this.getDynamicOptions(field);
+
+    if (field.type === 'select' && options.length > 0) {
+      prompt += `\nOptions: ${options.map((o, i) => `${i + 1}. ${o}`).join('\n')}`;
+    } else if (field.type === 'select' && (!options || options.length === 0)) {
+      prompt += `\n⚠️ Options not configured. Please contact support.`;
+    } else if (field.type === 'multiselect' && options.length > 0) {
+      prompt += `\nOptions: ${options.join(', ')}`;
       prompt += `\n(You can select multiple, separated by commas)`;
     }
 

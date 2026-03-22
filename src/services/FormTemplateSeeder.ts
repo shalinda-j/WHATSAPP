@@ -2,6 +2,8 @@ import FormTemplate from '../models/FormTemplate';
 
 /**
  * Seed default form template for registration
+ * NOTE: Job types and countries are pulled from Datasets at runtime
+ * Configure via Admin Panel > Datasets > JOB_TYPES and COUNTRIES
  */
 export async function seedDefaultFormTemplate(): Promise<void> {
   try {
@@ -13,9 +15,10 @@ export async function seedDefaultFormTemplate(): Promise<void> {
     }
 
     // Create default registration form
+    // Options for job_type and country are pulled from Datasets at runtime
     const defaultTemplate = new FormTemplate({
       name: 'Default Registration Form',
-      description: 'Standard registration form for job applicants',
+      description: 'Standard registration form for job applicants - Configure JOB_TYPES and COUNTRIES in Admin Panel > Datasets',
       isActive: true,
       isDefault: true,
       triggerMode: 'both', // Can be triggered manually (!register) or automatically
@@ -44,7 +47,7 @@ export async function seedDefaultFormTemplate(): Promise<void> {
           order: 2,
           validation: {
             min: 18,
-            max: 65
+            max: 70
           }
         },
         {
@@ -61,27 +64,19 @@ export async function seedDefaultFormTemplate(): Promise<void> {
           label: 'Which country are you interested in working?',
           required: true,
           order: 4,
-          options: [
-            'Israel 🇮🇱',
-            'Romania 🇷🇴',
-            'Poland 🇵🇱',
-            'Portugal 🇵🇹',
-            'Cyprus 🇨🇾',
-            'Malta 🇲🇹',
-            'Other'
-          ]
+          // Options pulled from Datasets > COUNTRIES at runtime
+          options: [],
+          _dataSource: 'COUNTRIES' // Indicates this field should use dataset
         },
         {
           id: 'experience',
-          type: 'number',
+          type: 'select',
           label: 'Years of Experience',
-          placeholder: '5',
           required: true,
           order: 5,
-          validation: {
-            min: 0,
-            max: 50
-          }
+          // Options pulled from Datasets > EXPERIENCE_LEVELS at runtime
+          options: [],
+          _dataSource: 'EXPERIENCE_LEVELS'
         },
         {
           id: 'job_type',
@@ -89,21 +84,9 @@ export async function seedDefaultFormTemplate(): Promise<void> {
           label: 'What type of job are you interested in?',
           required: true,
           order: 6,
-          options: [
-            'Electrician',
-            'Plumber',
-            'Asphalt Worker',
-            'Concrete Pump Driver',
-            'Excavator/JCB Operator',
-            'Heavy Duty Cleaner',
-            'Gypsum/Tile Fixer',
-            'Welder',
-            'Carpenter',
-            'Mason',
-            'Painter',
-            'General Worker',
-            'Other'
-          ]
+          // Options pulled from Datasets > JOB_TYPES at runtime
+          options: [],
+          _dataSource: 'JOB_TYPES'
         },
         {
           id: 'cv_link',
@@ -118,6 +101,7 @@ export async function seedDefaultFormTemplate(): Promise<void> {
 
     await defaultTemplate.save();
     console.log('✅ Default registration form template seeded successfully');
+    console.log('   ⚠️ IMPORTANT: Configure JOB_TYPES, COUNTRIES, and EXPERIENCE_LEVELS in Admin Panel > Datasets');
   } catch (error) {
     console.error('❌ Error seeding default form template:', error);
   }
