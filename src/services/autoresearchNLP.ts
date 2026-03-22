@@ -79,14 +79,12 @@ const FALLBACK_INTENTS: Record<string, Intent> = {
   'පැමිණ': 'booking', // Sinhala - visit
   'හමුවීම': 'booking', // Sinhala - meeting
 
-  // Lead Registration
-  'register': 'lead_register',
-  'signup': 'lead_register',
-  'join': 'lead_register',
-  'apply': 'lead_register',
-  'job': 'lead_register',
-  'work': 'lead_register',
-  'ලියාපදිංචි': 'lead_register', // Sinhala - register
+  // Lead Registration - DISABLED for NLP routing
+  // Forms should ONLY trigger via !register command in index.ts
+  // 'register': 'lead_register',  // DISABLED
+  // 'signup': 'lead_register',    // DISABLED
+  // 'ලියාපදිංචි': 'lead_register', // DISABLED
+  // These keywords are too common in normal conversations and cause false positives
 
   // Commands
   '!help': 'command',

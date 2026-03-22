@@ -30,7 +30,7 @@ export class GeminiCommand extends BaseCommand {
 
     // Handle clear command
     if (args[0]?.toLowerCase() === 'clear') {
-      aiLoadBalancer.clearConversation(jid);
+      await aiLoadBalancer.clearConversation(jid);
       await sendMessage(
         jid,
         '🧹 Conversation history cleared! Starting fresh.',

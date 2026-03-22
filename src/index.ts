@@ -58,6 +58,12 @@ async function startServer() {
       await seedDatasets();
       await seedDefaultFormTemplate();
       await nlpService.initializeNLP();
+
+      // CRITICAL: Clean up any old/stuck sessions on startup
+      // This prevents old sessions from triggering forms unexpectedly
+      const SessionState = (await import('./models/SessionState')).default;
+      const result = await SessionState.deleteMany({});
+      console.log(`🧹 Cleaned up ${result.deletedCount} old sessions on startup`);
     } catch (dbErr) {
       console.error(
         '❌ MongoDB Connection Failed. Server starting in LIMITED MODE.',
@@ -493,16 +499,21 @@ onMessage(async (message, sock, sessionId) => {
           autoresearchIntent = intentResult.intent;
           console.log(`   🤖 AutoresearchNLP: ${autoresearchIntent} (${(intentResult.confidence * 100).toFixed(0)}%) in ${intentResult.inference_time_ms}ms`);
 
-          // Route based on intent
-          if (autoresearchIntent === 'booking' && intentResult.confidence > 0.8) {
+          // Route based on intent - DISABLED FOR lead_register
+          // Forms should ONLY trigger via !register command or explicit keyword
+          if (autoresearchIntent === 'booking' && intentResult.confidence > 0.85) {
             console.log('   📅 High-confidence booking intent detected via AutoresearchNLP');
             await startBookingFlow(jid, sessionId);
             return;
-          } else if (autoresearchIntent === 'lead_register' && intentResult.confidence > 0.8) {
-            console.log('   📝 High-confidence lead registration intent detected via AutoresearchNLP');
-            await startLeadRegistration(jid, sessionId);
-            return;
-          } else if (autoresearchIntent === 'greeting' && intentResult.confidence > 0.85) {
+          }
+          // lead_register intent is DISABLED - use !register command instead
+          // This prevents random chat messages from triggering the form
+          // else if (autoresearchIntent === 'lead_register' && intentResult.confidence > 0.9) {
+          //   console.log('   📝 High-confidence lead registration intent detected via AutoresearchNLP');
+          //   await startLeadRegistration(jid, sessionId);
+          //   return;
+          // }
+          else if (autoresearchIntent === 'greeting' && intentResult.confidence > 0.85) {
             console.log('   👋 Greeting detected via AutoresearchNLP');
             // Let AI handle greetings naturally
           }
@@ -704,11 +715,12 @@ onMessage(async (message, sock, sessionId) => {
         }
       }
 
-      // Auto-registration trigger: Check if we should show registration form after conversation
-      // This runs asynchronously and doesn't block the response
-      scheduleAutoRegistration(jid, sessionId).catch(err => {
-        console.error('   ⚠️ Auto-registration check failed:', err);
-      });
+      // Auto-registration trigger: DISABLED by default
+      // Forms should only be triggered via !register command or explicit NLP intent
+      // Uncomment below if you want auto-registration after conversations
+      // scheduleAutoRegistration(jid, sessionId).catch(err => {
+      //   console.error('   ⚠️ Auto-registration check failed:', err);
+      // });
     } catch (aiError: any) {
       console.error('   ❌ AI response error:', aiError.message || aiError);
 
@@ -782,7 +794,7 @@ async function handleCommand(
       break;
 
     case '!clear':
-      aiLoadBalancer.clearConversation(jid);
+      await aiLoadBalancer.clearConversation(jid);
       await sendMessage(
         jid,
         '🗑️ කතාබහ ඉතිහාසය මකා දැමුවා!\nදැන් අලුතින් ආරම්භ කරමු! 🏗️',

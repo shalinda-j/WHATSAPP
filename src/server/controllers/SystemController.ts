@@ -35,7 +35,7 @@ export const getStats = async (req: Request, res: Response) => {
 export const clearCache = async (req: Request, res: Response) => {
   try {
     const configCleared = configService.clearCache();
-    const conversationsCleared = aiLoadBalancer.clearAllConversations();
+    const conversationsCleared = await aiLoadBalancer.clearAllConversations();
 
     res.json({
       message: 'RAM Cache cleared successfully',
@@ -92,7 +92,7 @@ export const resetSystem = async (req: Request, res: Response) => {
 
     // 1. Clear RAM Cache first
     configService.clearCache();
-    aiLoadBalancer.clearAllConversations();
+    await aiLoadBalancer.clearAllConversations();
 
     // 2. Drop Collections
     // We KEEP 'admins' (Admin model) to avoid locking the user out.

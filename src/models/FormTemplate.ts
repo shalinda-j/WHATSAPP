@@ -60,7 +60,7 @@ const FormTemplateSchema = new (mongoose as any).Schema({
   description: { type: String },
   isActive: { type: Boolean, default: true },
   isDefault: { type: Boolean, default: false },
-  triggerMode: { type: String, enum: ['manual', 'auto', 'both'], default: 'both' },
+  triggerMode: { type: String, enum: ['manual', 'auto', 'both'], default: 'manual' },
   triggerDelay: { type: Number, default: 10 }, // 10 seconds default
   fields: [FormFieldSchema],
   welcomeMessage: { type: String },
