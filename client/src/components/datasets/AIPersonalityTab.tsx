@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../config';
 import { Save, RefreshCw, Bot, MessageSquare, Sparkles } from 'lucide-react';
-import LanguageSwitcher, { Language } from './LanguageSwitcher';
+import LanguageSwitcher, { type Language } from './LanguageSwitcher';
 
 interface AIPersonalityConfig {
   _id: string;

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../config';
 import { Plus, Trash, Edit, Save, X, Send, Calendar, Users, BarChart3, RefreshCw } from 'lucide-react';
-import LanguageSwitcher, { Language } from './LanguageSwitcher';
+import LanguageSwitcher, { type Language } from './LanguageSwitcher';
 
 interface MarketingTemplate {
   _id: string;

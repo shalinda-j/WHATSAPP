@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Database, Terminal, Link, Megaphone, FileText, Bot, Plus } from 'lucide-react';
 import { api } from '../config';
-import LanguageSwitcher, { Language } from '../components/datasets/LanguageSwitcher';
+import LanguageSwitcher, { type Language } from '../components/datasets/LanguageSwitcher';
 import KnowledgeTab from '../components/datasets/KnowledgeTab';
 import CommandsTab from '../components/datasets/CommandsTab';
 import LinksTab from '../components/datasets/LinksTab';

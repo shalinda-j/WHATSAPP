@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../config';
 import { Plus, Trash, Edit, Save, X, ExternalLink, RefreshCw } from 'lucide-react';
-import LanguageSwitcher, { Language } from './LanguageSwitcher';
+import LanguageSwitcher, { type Language } from './LanguageSwitcher';
 
 interface LinkConfig {
   _id: string;
@@ -60,7 +60,7 @@ export default function LinksTab({ language, onDataChange }: LinksTabProps) {
       _id: '',
       name: type || 'custom',
       description: linkTypes.find((t) => t.id === type)?.description || '',
-      content: { en: {}, si: {}, ta: {} },
+      content: { en: { message: '' }, si: { message: '' }, ta: { message: '' } },
       isActive: true,
       metadata: { url: '' },
     };

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../config';
 import { Plus, Trash, Edit, Save, X, Upload, Database } from 'lucide-react';
-import LanguageSwitcher, { Language } from './LanguageSwitcher';
+import LanguageSwitcher, { type Language } from './LanguageSwitcher';
 
 interface KnowledgeItem {
   _id: string;

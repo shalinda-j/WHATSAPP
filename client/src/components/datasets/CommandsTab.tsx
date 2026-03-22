@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../config';
 import { ToggleLeft, ToggleRight, Edit, Save, X, RefreshCw } from 'lucide-react';
-import LanguageSwitcher, { Language } from './LanguageSwitcher';
+import LanguageSwitcher, { type Language } from './LanguageSwitcher';
 
 interface CommandConfig {
   _id: string;
+  key?: string;
   name: string;
   description?: string;
   content: {
