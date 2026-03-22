@@ -71,6 +71,13 @@ export default function ChatInterface() {
       });
     });
 
+    // Handle messages-read event from server (sync across multiple admin tabs)
+    newSocket.on('messages-read', (data: { userId: string }) => {
+      setConversations(prev => prev.map(c =>
+        c.userId === data.userId ? { ...c, unreadCount: 0 } : c
+      ));
+    });
+
     setSocket(newSocket);
 
     return () => {
@@ -111,6 +118,17 @@ export default function ChatInterface() {
     try {
       const res = await api.get(`/api/chat/messages/${encodeURIComponent(userId)}`);
       setMessages(res.data.messages || []);
+
+      // Mark messages as read when opening the chat
+      try {
+        await api.post(`/api/chat/mark-read/${encodeURIComponent(userId)}`);
+        // Update local conversation list to reflect read status
+        setConversations(prev => prev.map(c =>
+          c.userId === userId ? { ...c, unreadCount: 0 } : c
+        ));
+      } catch (markReadError) {
+        console.error('Failed to mark messages as read:', markReadError);
+      }
     } catch (error) {
       console.error('Failed to fetch messages:', error);
       setMessages([]);

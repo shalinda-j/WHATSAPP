@@ -32,11 +32,10 @@ router.get('/conversations', async (req: Request, res: Response) => {
       },
     ]);
 
-    // Get unread counts (messages from user that haven't been seen)
-    // For simplicity, we'll count user messages as unread
+    // Get unread counts (messages from user that haven't been read by admin)
     const unreadCounts = await ChatMessage.aggregate([
       {
-        $match: { role: 'user' },
+        $match: { role: 'user', read: { $ne: true } },
       },
       {
         $group: {
@@ -120,6 +119,12 @@ router.post('/send', async (req: Request, res: Response) => {
       return res.status(503).json({ error: 'WhatsApp session not connected' });
     }
 
+    // Mark all user messages as read (admin is viewing this chat)
+    await ChatMessage.updateMany(
+      { userId, role: 'user', read: false },
+      { $set: { read: true } }
+    );
+
     // Send message via WhatsApp
     const sent = await sendMessage(userId, message, sessionId);
 
@@ -134,6 +139,7 @@ router.post('/send', async (req: Request, res: Response) => {
       type: 'text',
       content: message,
       timestamp: new Date(),
+      read: true, // Admin's messages are always read
       metadata: {
         sessionId,
         source: 'admin_panel',
@@ -190,10 +196,24 @@ router.get('/status', async (req: Request, res: Response) => {
 router.post('/mark-read/:userId', async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
+    const decodedUserId = decodeURIComponent(Array.isArray(userId) ? userId[0] : userId);
 
-    // For now, we just acknowledge the request
-    // In a real implementation, you'd track read status per message
-    res.json({ success: true });
+    // Mark all user messages as read
+    const result = await ChatMessage.updateMany(
+      { userId: decodedUserId, role: 'user', read: false },
+      { $set: { read: true } }
+    );
+
+    console.log(`📖 Marked ${result.modifiedCount} messages as read for user: ${decodedUserId}`);
+
+    // Emit socket event to notify other clients (if any) about read status update
+    try {
+      getIO().emit('messages-read', { userId: decodedUserId });
+    } catch (e) {
+      console.error('Failed to emit messages-read event:', e);
+    }
+
+    res.json({ success: true, modifiedCount: result.modifiedCount });
   } catch (error) {
     console.error('Error marking as read:', error);
     res.status(500).json({ error: 'Failed to mark as read' });

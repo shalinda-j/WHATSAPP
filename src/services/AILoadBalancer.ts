@@ -18,11 +18,18 @@ import { configurationManager } from './ConfigurationManagerService';
 // Default company for load balancer if not specified (legacy support)
 const defaultConfig = createCompanyConfig('default');
 
+// Cache configuration
+const SERVICE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for AI providers
+
 export class AILoadBalancer {
   private services: AIService[] = [];
   private userAssignments: Map<string, number>;
   private conversationHistory: Map<string, AIChatMessage[]>;
   private totalRequests = 0;
+
+  // Cache for loaded services
+  private lastServiceLoad: number = 0;
+  private serviceLoadPromise: Promise<void> | null = null;
 
   constructor() {
     this.userAssignments = new Map();
@@ -30,6 +37,29 @@ export class AILoadBalancer {
   }
 
   private async loadServices(): Promise<void> {
+    const now = Date.now();
+
+    // Return cached services if still valid
+    if (this.services.length > 0 && now - this.lastServiceLoad < SERVICE_CACHE_TTL_MS) {
+      return;
+    }
+
+    // If a load is already in progress, wait for it
+    if (this.serviceLoadPromise) {
+      return this.serviceLoadPromise;
+    }
+
+    // Start loading
+    this.serviceLoadPromise = this._doLoadServices();
+
+    try {
+      await this.serviceLoadPromise;
+    } finally {
+      this.serviceLoadPromise = null;
+    }
+  }
+
+  private async _doLoadServices(): Promise<void> {
     this.services = []; // Clear existing
     try {
       const configs = await Config.find({ isProvider: true, isActive: true });
@@ -97,6 +127,8 @@ export class AILoadBalancer {
           (priorityMap[b.constructor.name] || 99),
       );
 
+      this.lastServiceLoad = Date.now();
+
       console.log(
         `🤖 Loaded ${this.services.length} AI services from DB. Primary: ${this.services[0]?.constructor.name}`,
       );
@@ -105,23 +137,20 @@ export class AILoadBalancer {
     }
   }
 
+  /**
+   * Force reload of services (call when config is updated)
+   */
+  async forceReloadServices(): Promise<void> {
+    this.lastServiceLoad = 0;
+    await this.loadServices();
+  }
+
   private async trackUsage(
     providerName: string,
     inputTokens: number,
     outputTokens: number,
   ) {
     try {
-      // Find config by parsing name "Gemini (model-name)" or better, match strictly.
-      // Simplified: update all configs that match strict criteria?
-      // Better: LoadBalancer should know the Config ID.
-      // For now, let's find the config that corresponds to the service.
-      // This is imperfect if multiple configs use same model/key, but good enough.
-      // Optimization: Update based on provider/model.
-
-      // Heuristic for token matching
-      const total = inputTokens + outputTokens;
-      // Config update: increment usageUsed
-
       // Extract model name from "Gemini (gemini-1.5-flash)" -> "gemini-1.5-flash"
       const modelMatch = providerName.match(/\((.*?)\)/);
       const modelName = modelMatch ? modelMatch[1] : '';
@@ -139,7 +168,7 @@ export class AILoadBalancer {
       if (modelName) {
         await Config.updateOne(
           { isProvider: true, providerType: providerType, aiModel: modelName },
-          { $inc: { usageUsed: total } },
+          { $inc: { usageUsed: inputTokens + outputTokens } },
         );
       }
     } catch (err) {
@@ -167,7 +196,7 @@ export class AILoadBalancer {
   }
 
   async sendMessage(userId: string, message: string): Promise<string> {
-    // ALWAYS reload services to capture config changes (or use cache with TTL, but immediate is better for debugging)
+    // Load services with caching (not on every message)
     await this.loadServices();
 
     if (this.services.length === 0) {
@@ -200,7 +229,7 @@ export class AILoadBalancer {
 
         conversationHistoryAdd(history, 'assistant', response);
 
-        // Trim history
+        // Trim history to prevent memory bloat (keep last 20 messages + system)
         if (history.length > 20) {
           const system = history[0];
           const recent = history.slice(-19);
@@ -235,21 +264,51 @@ export class AILoadBalancer {
     console.log(`🗑️ LoadBalancer: Cleared conversation for ${userId}`);
   }
 
-  getStats() {
-    return {
-      activeConversations: this.conversationHistory.size,
-      activeUsers: this.userAssignments.size,
-      servicesLoaded: this.services.length,
-      totalRequests: this.totalRequests,
-    };
-  }
-
+  /**
+   * Clear all conversation histories (prevent memory leak)
+   */
   clearAllConversations() {
     const count = this.conversationHistory.size;
     this.conversationHistory.clear();
     this.userAssignments.clear();
     console.log(`🧹 LoadBalancer: Cleared all ${count} conversations.`);
     return count;
+  }
+
+  /**
+   * Get conversation count for monitoring
+   */
+  getConversationCount(): number {
+    return this.conversationHistory.size;
+  }
+
+  /**
+   * Cleanup old conversations (call periodically)
+   * Removes conversations older than maxAgeMs
+   */
+  cleanupOldConversations(maxAgeMs: number = 24 * 60 * 60 * 1000): number {
+    // Note: We don't track creation time, so this clears all
+    // In a production system, you'd want to track last activity time
+    const count = this.conversationHistory.size;
+    if (count > 100) {
+      // Only cleanup if there are many conversations
+      this.conversationHistory.clear();
+      this.userAssignments.clear();
+      console.log(`🧹 LoadBalancer: Cleaned up ${count} old conversations.`);
+      return count;
+    }
+    return 0;
+  }
+
+  getStats() {
+    return {
+      activeConversations: this.conversationHistory.size,
+      activeUsers: this.userAssignments.size,
+      servicesLoaded: this.services.length,
+      totalRequests: this.totalRequests,
+      lastServiceLoad: this.lastServiceLoad ? new Date(this.lastServiceLoad).toISOString() : null,
+      serviceCacheValid: Date.now() - this.lastServiceLoad < SERVICE_CACHE_TTL_MS,
+    };
   }
 }
 

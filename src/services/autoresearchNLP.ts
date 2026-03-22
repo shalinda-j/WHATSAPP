@@ -6,10 +6,11 @@
 
 import fetch from 'node-fetch';
 
-// Configuration
+// Configuration - All configurable via environment variables
 const NLP_SERVER_URL = process.env.NLP_SERVER_URL || 'http://localhost:8001';
-const INFERENCE_TIMEOUT_MS = 200; // 200ms timeout for inference
-const HEALTH_CHECK_INTERVAL_MS = 30000; // 30 seconds
+const INFERENCE_TIMEOUT_MS = parseInt(process.env.NLP_INFERENCE_TIMEOUT_MS || '500', 10); // 500ms default
+const HEALTH_CHECK_INTERVAL_MS = parseInt(process.env.NLP_HEALTH_CHECK_INTERVAL_MS || '30000', 10); // 30 seconds
+const HEALTH_CHECK_TIMEOUT_MS = parseInt(process.env.NLP_HEALTH_CHECK_TIMEOUT_MS || '3000', 10); // 3 seconds
 
 // Intent types
 export type Intent =
@@ -152,6 +153,7 @@ export class AutoresearchNLPService {
   private static instance: AutoresearchNLPService;
   private serverHealthy = false;
   private lastHealthCheck = 0;
+  private healthCheckInterval: NodeJS.Timeout | null = null;
 
   private constructor() {
     // Start periodic health checks
@@ -169,7 +171,12 @@ export class AutoresearchNLPService {
    * Start periodic health checks
    */
   private startHealthChecks(): void {
-    setInterval(async () => {
+    // Clear existing interval if any
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+    }
+
+    this.healthCheckInterval = setInterval(async () => {
       await this.checkHealth();
     }, HEALTH_CHECK_INTERVAL_MS);
 
@@ -183,7 +190,7 @@ export class AutoresearchNLPService {
   public async checkHealth(): Promise<boolean> {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
 
       const response = await fetch(`${NLP_SERVER_URL}/health`, {
         signal: controller.signal,
@@ -211,6 +218,13 @@ export class AutoresearchNLPService {
    */
   public isServerAvailable(): boolean {
     return this.serverHealthy;
+  }
+
+  /**
+   * Get the NLP server URL
+   */
+  public getServerUrl(): string {
+    return NLP_SERVER_URL;
   }
 
   /**
@@ -364,9 +378,14 @@ export class AutoresearchNLPService {
    */
   public async getServerHealth(): Promise<HealthResponse | null> {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
+
       const response = await fetch(`${NLP_SERVER_URL}/health`, {
-        timeout: 2000,
-      } as any);
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         return null;
@@ -376,6 +395,23 @@ export class AutoresearchNLPService {
     } catch (error) {
       return null;
     }
+  }
+
+  /**
+   * Get service status info
+   */
+  public getStatus(): {
+    serverUrl: string;
+    serverHealthy: boolean;
+    lastHealthCheck: string | null;
+    inferenceTimeoutMs: number;
+  } {
+    return {
+      serverUrl: NLP_SERVER_URL,
+      serverHealthy: this.serverHealthy,
+      lastHealthCheck: this.lastHealthCheck ? new Date(this.lastHealthCheck).toISOString() : null,
+      inferenceTimeoutMs: INFERENCE_TIMEOUT_MS,
+    };
   }
 }
 

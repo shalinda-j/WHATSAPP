@@ -7,6 +7,7 @@ export interface IChatMessage {
   content: string;
   mediaUrl?: string;
   timestamp: Date;
+  read?: boolean; // Track if message has been seen by admin
   questionCategory?: string;
   questionKeywords?: string[];
   metadata?: {
@@ -33,6 +34,7 @@ const ChatMessageSchema = new Schema({
   content: { type: String, required: true },
   mediaUrl: { type: String },
   timestamp: { type: Date, default: Date.now, index: true },
+  read: { type: Boolean, default: false, index: true }, // Track if message has been seen by admin
   questionCategory: { type: String, index: true },
   questionKeywords: [{ type: String }],
   metadata: {

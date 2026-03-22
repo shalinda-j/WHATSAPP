@@ -1,8 +1,8 @@
-import axios from 'axios';
 import { sendMessage, sendTyping, getSocket } from './whatsapp';
 import { configurationManager } from './ConfigurationManagerService';
 import { CRMService } from './CRMService';
 import Lead from '../models/Lead';
+import sessionStateService from './SessionStateService';
 
 // Extended Lead Data Interface
 interface LeadData {
@@ -38,7 +38,8 @@ interface UserLeadSession {
   experienceLevels?: { value: string; label: string }[];
 }
 
-const leadSessions = new Map<string, UserLeadSession>();
+// Session TTL: 30 minutes
+const SESSION_TTL_MS = 30 * 60 * 1000;
 
 // Default fallback values (used if configuration is empty)
 const DEFAULT_JOB_TYPES = [
@@ -107,9 +108,45 @@ function getJobTypeMenu(jobTypes: string[]): string {
 /**
  * Check if user is in lead registration flow
  */
-export function isUserInLeadFlow(jid: string): boolean {
-  const session = leadSessions.get(jid);
-  return session !== undefined && session.state !== LeadState.IDLE;
+export async function isUserInLeadFlow(jid: string): Promise<boolean> {
+  return sessionStateService.hasSession(jid, 'lead');
+}
+
+/**
+ * Get lead session
+ */
+async function getLeadSession(jid: string): Promise<UserLeadSession | null> {
+  const session = await sessionStateService.getSession(jid, 'lead');
+  if (!session) return null;
+
+  return {
+    state: session.state.state as LeadState,
+    data: session.data.leadData || {},
+    jobTypes: session.data.jobTypes,
+    countries: session.data.countries,
+    experienceLevels: session.data.experienceLevels,
+  };
+}
+
+/**
+ * Save lead session
+ */
+async function saveLeadSession(
+  jid: string,
+  session: UserLeadSession,
+): Promise<void> {
+  await sessionStateService.setSession(
+    jid,
+    'lead',
+    { state: session.state },
+    {
+      leadData: session.data,
+      jobTypes: session.jobTypes,
+      countries: session.countries,
+      experienceLevels: session.experienceLevels,
+    },
+    SESSION_TTL_MS,
+  );
 }
 
 /**
@@ -145,7 +182,8 @@ export async function startLeadRegistration(
     countries,
     experienceLevels,
   };
-  leadSessions.set(jid, session);
+
+  await saveLeadSession(jid, session);
 
   await sendTyping(jid, sessionId);
   await sendMessage(
@@ -167,7 +205,7 @@ export async function handleLeadMessage(
   text: string,
   sessionId: string,
 ): Promise<boolean> {
-  const session = leadSessions.get(jid);
+  const session = await getLeadSession(jid);
   if (!session || session.state === LeadState.IDLE) return false;
 
   const cleanText = text.trim();
@@ -191,6 +229,7 @@ export async function handleLeadMessage(
       }
       session.data.fullName = cleanText;
       session.state = LeadState.AWAITING_AGE;
+      await saveLeadSession(jid, session);
 
       await sendTyping(jid, sessionId);
       await sendMessage(
@@ -206,16 +245,18 @@ export async function handleLeadMessage(
     // Step 2: Age
     case LeadState.AWAITING_AGE:
       const age = parseInt(cleanText);
-      if (isNaN(age) || age < 18 || age > 65) {
+      // Extended age range: 18-70 (was 18-65)
+      if (isNaN(age) || age < 18 || age > 70) {
         await sendMessage(
           jid,
-          `⚠️ Please enter a valid age between 18 and 65.`,
+          `⚠️ Please enter a valid age between 18 and 70.`,
           sessionId,
         );
         return true;
       }
       session.data.age = age;
       session.state = LeadState.AWAITING_PHONE;
+      await saveLeadSession(jid, session);
 
       await sendTyping(jid, sessionId);
       await sendMessage(
@@ -237,6 +278,7 @@ export async function handleLeadMessage(
       }
       session.data.phoneNumber = phone;
       session.state = LeadState.AWAITING_COUNTRY;
+      await saveLeadSession(jid, session);
 
       const countryMenu = getCountryMenu(countries);
       await sendTyping(jid, sessionId);
@@ -264,6 +306,7 @@ export async function handleLeadMessage(
       }
       const selectedCountry = countries[countrySelection - 1];
       session.data.interestedCountry = selectedCountry.name;
+      await saveLeadSession(jid, session);
 
       const expMenu = getExperienceMenu(experienceLevels);
       await sendTyping(jid, sessionId);
@@ -277,6 +320,7 @@ export async function handleLeadMessage(
         sessionId,
       );
       session.state = LeadState.AWAITING_EXPERIENCE;
+      await saveLeadSession(jid, session);
       break;
 
     // Step 5: Experience
@@ -292,6 +336,7 @@ export async function handleLeadMessage(
       }
       const selectedExp = experienceLevels[expSelection - 1];
       session.data.experienceYears = selectedExp.value;
+      await saveLeadSession(jid, session);
 
       const jobMenu = getJobTypeMenu(jobTypes);
       await sendTyping(jid, sessionId);
@@ -305,6 +350,7 @@ export async function handleLeadMessage(
         sessionId,
       );
       session.state = LeadState.AWAITING_JOB_TYPE;
+      await saveLeadSession(jid, session);
       break;
 
     // Step 6: Job Type
@@ -319,6 +365,8 @@ export async function handleLeadMessage(
         return true;
       }
       session.data.jobVacancyType = jobTypes[jobSelection - 1];
+      session.state = LeadState.AWAITING_CV;
+      await saveLeadSession(jid, session);
 
       await sendTyping(jid, sessionId);
       await sendMessage(
@@ -331,21 +379,22 @@ export async function handleLeadMessage(
           `Reply with 1 or 2`,
         sessionId,
       );
-      session.state = LeadState.AWAITING_CV;
       break;
 
     // Step 7: CV Upload
     case LeadState.AWAITING_CV:
       const cvChoice = parseInt(cleanText);
       if (cvChoice === 1) {
-        // User has CV - send upload link
-        const cvConfig = await configurationManager.getCompanyInfo();
+        // User has CV - send upload link (configurable via admin panel)
+        const companyInfo = await configurationManager.getCompanyInfo();
+        const cvUploadUrl = process.env.CV_UPLOAD_URL || 'https://forms.gle/your-cv-upload-form';
+
         await sendTyping(jid, sessionId);
         await sendMessage(
           jid,
           `📄 *CV Upload*\n\n` +
             `Please upload your CV using this link:\n` +
-            `https://forms.gle/your-cv-upload-form\n\n` +
+            `${cvUploadUrl}\n\n` +
             `After uploading, type "done" to complete registration.\n` +
             `Or type "skip" to skip for now.`,
           sessionId,
@@ -353,12 +402,14 @@ export async function handleLeadMessage(
         return true;
       } else if (cvChoice === 2 || cleanText.toLowerCase() === 'skip' || cleanText.toLowerCase() === 'no' || cleanText.toLowerCase().includes('no cv') || cleanText.toLowerCase().includes("don't have")) {
         // No CV or skip - proceed to save with empty cvUrl
-        session.data.cvUrl = ''; // Explicitly set empty string
+        session.data.cvUrl = '';
+        await saveLeadSession(jid, session);
         await saveLeadRegistration(jid, session, sessionId);
         return true;
       } else if (cleanText.toLowerCase() === 'done') {
         // CV uploaded - proceed to save
         session.data.cvUrl = 'uploaded';
+        await saveLeadSession(jid, session);
         await saveLeadRegistration(jid, session, sessionId);
         return true;
       } else {
@@ -462,7 +513,7 @@ async function saveLeadRegistration(
     );
 
     // Clear session
-    leadSessions.delete(jid);
+    await sessionStateService.deleteSession(jid, 'lead');
   } catch (error: any) {
     console.error('❌ Lead registration error:', error);
     console.error('❌ Error details:', error.message);
@@ -474,7 +525,7 @@ async function saveLeadRegistration(
         `Type \`!register\` to restart.`,
       sessionId,
     );
-    leadSessions.delete(jid);
+    await sessionStateService.deleteSession(jid, 'lead');
   }
 }
 
@@ -506,4 +557,11 @@ export async function getLeadStats() {
     console.error('Error fetching lead stats:', error);
     return { total: 0, byStatus: {}, byCountry: {}, recent: [] };
   }
+}
+
+/**
+ * Get active lead session count
+ */
+export async function getActiveSessionCount(): Promise<number> {
+  return sessionStateService.getSessionCount('lead');
 }

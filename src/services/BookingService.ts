@@ -1,4 +1,4 @@
-import { sendMessage, sendTyping, getSenderJid, getSocket } from './whatsapp';
+import { sendMessage, sendTyping, getSocket } from './whatsapp';
 import { generateIcsFile } from './CalendarService';
 import {
   getRealAvailability,
@@ -6,6 +6,7 @@ import {
 } from './GoogleCalendarService';
 import { addDays, setHours, setMinutes, format } from 'date-fns';
 import { configurationManager } from './ConfigurationManagerService';
+import sessionStateService from './SessionStateService';
 
 // Define the stages of the booking conversation
 export enum BookingInitState {
@@ -17,19 +18,54 @@ export enum BookingInitState {
 interface UserSession {
   state: BookingInitState;
   selectedDate?: Date;
-  availableSlots?: number[]; // Store the slots we offered
-  bookingConfig?: any; // Cache booking config for this session
+  availableSlots?: number[];
+  bookingConfig?: any;
 }
 
-// In-memory session store (Map<Jid, Session>)
-const sessions = new Map<string, UserSession>();
+// Session TTL: 30 minutes
+const SESSION_TTL_MS = 30 * 60 * 1000;
 
 /**
  * Check if user is currently in a booking flow
  */
-export function isUserInBookingSession(jid: string): boolean {
-  const session = sessions.get(jid);
-  return session !== undefined && session.state !== BookingInitState.IDLE;
+export async function isUserInBookingSession(jid: string): Promise<boolean> {
+  const session = await sessionStateService.getSession(jid, 'booking');
+  return session !== null && session.state.state !== BookingInitState.IDLE;
+}
+
+/**
+ * Get booking session
+ */
+async function getBookingSession(jid: string): Promise<UserSession | null> {
+  const session = await sessionStateService.getSession(jid, 'booking');
+  if (!session) return null;
+
+  return {
+    state: session.state.state as BookingInitState,
+    selectedDate: session.data.selectedDate ? new Date(session.data.selectedDate) : undefined,
+    availableSlots: session.data.availableSlots,
+    bookingConfig: session.data.bookingConfig,
+  };
+}
+
+/**
+ * Save booking session
+ */
+async function saveBookingSession(
+  jid: string,
+  session: UserSession,
+): Promise<void> {
+  await sessionStateService.setSession(
+    jid,
+    'booking',
+    { state: session.state },
+    {
+      selectedDate: session.selectedDate?.toISOString(),
+      availableSlots: session.availableSlots,
+      bookingConfig: session.bookingConfig,
+    },
+    SESSION_TTL_MS,
+  );
 }
 
 /**
@@ -42,9 +78,10 @@ export async function startBookingFlow(
   const bookingConfig = await configurationManager.getBookingConfig();
   const session: UserSession = {
     state: BookingInitState.AWAITING_RESPONSE,
-    bookingConfig
+    bookingConfig,
   };
-  sessions.set(jid, session);
+
+  await saveBookingSession(jid, session);
 
   await sendTyping(jid, sessionId);
   await sendMessage(
@@ -66,7 +103,7 @@ export async function handleBookingMessage(
   text: string,
   sessionId: string,
 ): Promise<boolean> {
-  const session = sessions.get(jid);
+  const session = await getBookingSession(jid);
   if (!session || session.state === BookingInitState.IDLE) return false;
 
   const cleanText = text.trim().toLowerCase();
@@ -80,18 +117,18 @@ export async function handleBookingMessage(
     if (acceptanceKeywords.includes(cleanText)) {
       // User accepted, show slots
       session.state = BookingInitState.SELECTING_TIME;
-      session.bookingConfig = bookingConfig; // Cache for later use
+      session.bookingConfig = bookingConfig;
 
       // For MVP, offer slots for "Tomorrow"
-      // Ensure we don't offer Sat/Sun if closed, but for now simple +1 day
       const tomorrow = addDays(new Date(), 1);
       session.selectedDate = tomorrow;
 
+      await saveBookingSession(jid, session);
       await sendTimeSlotMenu(jid, tomorrow, session, sessionId);
       return true;
     } else {
       // User rejected or said something else
-      sessions.delete(jid);
+      await sessionStateService.deleteSession(jid, 'booking');
       await sendMessage(
         jid,
         `👍 No problem. You can schedule a visit later using \`!visit\`.`,
@@ -104,7 +141,7 @@ export async function handleBookingMessage(
   // 2. Selecting Time Slot
   if (session.state === BookingInitState.SELECTING_TIME) {
     if (!session.availableSlots) {
-      sessions.delete(jid);
+      await sessionStateService.deleteSession(jid, 'booking');
       return false;
     }
 
@@ -158,9 +195,12 @@ async function sendTimeSlotMenu(
       `📅 Sorry, we have no available slots for ${dateStr}.`,
       sessionId,
     );
-    sessions.delete(jid);
+    await sessionStateService.deleteSession(jid, 'booking');
     return;
   }
+
+  // Save updated session with available slots
+  await saveBookingSession(jid, session);
 
   // Build menu string
   let menu = `🗓️ *Select a Time*\nAvailable slots for ${dateStr}:\n\n`;
@@ -237,7 +277,7 @@ async function finalizeBooking(
     });
 
     // Reset session
-    sessions.delete(jid);
+    await sessionStateService.deleteSession(jid, 'booking');
   } catch (err) {
     console.error('Error booking appointment:', err);
     await sendMessage(
@@ -245,6 +285,8 @@ async function finalizeBooking(
       `❌ Sorry, there was an error reserving your slot.`,
       sessionId,
     );
+    // Clear session on error to prevent stuck state
+    await sessionStateService.deleteSession(jid, 'booking');
   }
 }
 
@@ -300,4 +342,11 @@ export async function handleSpecificDateRequest(
     console.error('Error handling specific date:', e);
     return false;
   }
+}
+
+/**
+ * Get active booking session count
+ */
+export async function getActiveSessionCount(): Promise<number> {
+  return sessionStateService.getSessionCount('booking');
 }

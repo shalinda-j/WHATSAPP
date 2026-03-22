@@ -1,5 +1,6 @@
 import FormTemplate, { FormField } from '../models/FormTemplate';
 import FormSubmission from '../models/FormSubmission';
+import sessionStateService from './SessionStateService';
 
 interface UserFormState {
   formId: string;
@@ -11,21 +12,24 @@ interface UserFormState {
   lastActivityAt: Date;
 }
 
-// In-memory store for active form sessions
-const activeFormSessions = new Map<string, UserFormState>();
-
 /**
  * FormService - Handles dynamic registration forms for WhatsApp bot
+ * Now uses persistent storage via SessionStateService
  */
 export class FormService {
+  // Session TTL: 30 minutes
+  private static SESSION_TTL_MS = 30 * 60 * 1000;
+
   /**
    * Get the active/default form template
    */
   static async getActiveFormTemplate(): Promise<typeof FormTemplate.prototype | null> {
     try {
+      // First try to get the default active template
       let template = await FormTemplate.findOne({ isActive: true, isDefault: true });
       if (!template) {
-        template = await FormTemplate.findOne({ isActive: true });
+        // Fallback to any active template, but sort by createdAt to ensure consistency
+        template = await FormTemplate.findOne({ isActive: true }).sort({ createdAt: 1 });
       }
       return template;
     } catch (error) {
@@ -37,15 +41,26 @@ export class FormService {
   /**
    * Check if user has an active form session
    */
-  static hasActiveFormSession(phoneNumber: string): boolean {
-    return activeFormSessions.has(phoneNumber);
+  static async hasActiveFormSession(phoneNumber: string): Promise<boolean> {
+    return sessionStateService.hasSession(phoneNumber, 'form');
   }
 
   /**
    * Get user's current form state
    */
-  static getFormSession(phoneNumber: string): UserFormState | undefined {
-    return activeFormSessions.get(phoneNumber);
+  static async getFormSession(phoneNumber: string): Promise<UserFormState | null> {
+    const session = await sessionStateService.getSession(phoneNumber, 'form');
+    if (!session) return null;
+
+    return {
+      formId: session.data.formId,
+      phoneNumber: session.data.phoneNumber,
+      whatsappJid: session.data.whatsappJid,
+      currentFieldIndex: session.state.currentFieldIndex,
+      data: session.data.formData || {},
+      startedAt: session.data.startedAt,
+      lastActivityAt: session.updatedAt,
+    };
   }
 
   /**
@@ -57,14 +72,15 @@ export class FormService {
   ): Promise<{ success: boolean; message?: string; field?: FormField; welcomeMessage?: string }> {
     try {
       // Check if user already has an active session
-      if (activeFormSessions.has(phoneNumber)) {
-        const existing = activeFormSessions.get(phoneNumber)!;
-        const template = await FormTemplate.findById(existing.formId);
-        if (template && existing.currentFieldIndex < template.fields.length) {
+      const existingSession = await this.getFormSession(phoneNumber);
+      if (existingSession) {
+        const template = await FormTemplate.findById(existingSession.formId);
+        if (template && existingSession.currentFieldIndex < template.fields.length) {
+          const sortedFields = [...template.fields].sort((a, b) => a.order - b.order);
           return {
             success: true,
             message: 'You already have a form in progress. Let\'s continue.',
-            field: template.fields[existing.currentFieldIndex],
+            field: sortedFields[existingSession.currentFieldIndex],
           };
         }
       }
@@ -82,8 +98,8 @@ export class FormService {
       // Sort fields by order
       const sortedFields = [...template.fields].sort((a, b) => a.order - b.order);
 
-      // Create new session
-      const session: UserFormState = {
+      // Create new session with persistent storage
+      const sessionData: UserFormState = {
         formId: (template._id as any).toString(),
         phoneNumber,
         whatsappJid,
@@ -93,7 +109,19 @@ export class FormService {
         lastActivityAt: new Date(),
       };
 
-      activeFormSessions.set(phoneNumber, session);
+      await sessionStateService.setSession(
+        phoneNumber,
+        'form',
+        { currentFieldIndex: 0 },
+        {
+          formId: sessionData.formId,
+          phoneNumber,
+          whatsappJid,
+          formData: {},
+          startedAt: sessionData.startedAt,
+        },
+        this.SESSION_TTL_MS,
+      );
 
       return {
         success: true,
@@ -120,21 +148,22 @@ export class FormService {
     completionMessage?: string;
   }> {
     try {
-      const session = activeFormSessions.get(phoneNumber);
-      if (!session) {
+      const sessionData = await sessionStateService.getSession(phoneNumber, 'form');
+      if (!sessionData) {
         return { success: false, message: 'No active form session. Type "register" to start.' };
       }
 
       // Get form template
-      const template = await FormTemplate.findById(session.formId);
+      const template = await FormTemplate.findById(sessionData.data.formId);
       if (!template) {
-        activeFormSessions.delete(phoneNumber);
+        await sessionStateService.deleteSession(phoneNumber, 'form');
         return { success: false, message: 'Form template no longer exists.' };
       }
 
       // Sort fields by order
       const sortedFields = [...template.fields].sort((a, b) => a.order - b.order);
-      const currentField = sortedFields[session.currentFieldIndex];
+      const currentFieldIndex = sessionData.state.currentFieldIndex;
+      const currentField = sortedFields[currentFieldIndex];
 
       if (!currentField) {
         return { success: false, message: 'No current field to process.' };
@@ -151,19 +180,24 @@ export class FormService {
       }
 
       // Store answer
-      session.data[currentField.id] = validationResult.value;
-      session.lastActivityAt = new Date();
+      const formData = sessionData.data.formData || {};
+      formData[currentField.id] = validationResult.value;
 
-      // Move to next field
-      session.currentFieldIndex++;
+      // Update session with new data
+      const newIndex = currentFieldIndex + 1;
+      await sessionStateService.updateSessionState(phoneNumber, 'form', { currentFieldIndex: newIndex });
+      await sessionStateService.updateSessionData(phoneNumber, 'form', { formData });
+
+      // Extend session expiry
+      await sessionStateService.extendSession(phoneNumber, 'form', this.SESSION_TTL_MS);
 
       // Check if form is complete
-      if (session.currentFieldIndex >= sortedFields.length) {
+      if (newIndex >= sortedFields.length) {
         // Submit form
-        const submission = await this.submitForm(session);
+        const submission = await this.submitForm(phoneNumber, sessionData.data.formId, formData, sessionData.data.whatsappJid);
 
         // Clear session
-        activeFormSessions.delete(phoneNumber);
+        await sessionStateService.deleteSession(phoneNumber, 'form');
 
         return {
           success: true,
@@ -178,7 +212,7 @@ export class FormService {
       // Return next field
       return {
         success: true,
-        field: sortedFields[session.currentFieldIndex],
+        field: sortedFields[newIndex],
       };
     } catch (error) {
       console.error('❌ [FormService] Error processing field answer:', error);
@@ -290,18 +324,23 @@ export class FormService {
   /**
    * Submit completed form
    */
-  static async submitForm(session: UserFormState): Promise<{ success: boolean; submissionId?: string }> {
+  static async submitForm(
+    phoneNumber: string,
+    formId: string,
+    data: Record<string, any>,
+    whatsappJid: string,
+  ): Promise<{ success: boolean; submissionId?: string }> {
     try {
       const submission = new FormSubmission({
-        formId: session.formId,
-        phoneNumber: session.phoneNumber,
-        whatsappJid: session.whatsappJid,
-        data: session.data,
+        formId,
+        phoneNumber,
+        whatsappJid,
+        data,
         status: 'new',
       });
 
       await submission.save();
-      console.log(`✅ [FormService] Form submitted for ${session.phoneNumber}`);
+      console.log(`✅ [FormService] Form submitted for ${phoneNumber}`);
 
       return { success: true, submissionId: (submission._id as any).toString() };
     } catch (error) {
@@ -313,8 +352,8 @@ export class FormService {
   /**
    * Cancel a form session
    */
-  static cancelFormSession(phoneNumber: string): boolean {
-    return activeFormSessions.delete(phoneNumber);
+  static async cancelFormSession(phoneNumber: string): Promise<boolean> {
+    return sessionStateService.deleteSession(phoneNumber, 'form');
   }
 
   /**
@@ -342,25 +381,10 @@ export class FormService {
   }
 
   /**
-   * Clean up expired form sessions (older than 30 minutes)
+   * Clean up expired form sessions (now handled by MongoDB TTL index)
    */
-  static cleanupExpiredSessions(): number {
-    const expireThreshold = 30 * 60 * 1000; // 30 minutes
-    const now = Date.now();
-    let cleaned = 0;
-
-    activeFormSessions.forEach((session, phoneNumber) => {
-      if (now - session.lastActivityAt.getTime() > expireThreshold) {
-        activeFormSessions.delete(phoneNumber);
-        cleaned++;
-      }
-    });
-
-    if (cleaned > 0) {
-      console.log(`🧹 [FormService] Cleaned up ${cleaned} expired form sessions`);
-    }
-
-    return cleaned;
+  static async cleanupExpiredSessions(): Promise<number> {
+    return sessionStateService.cleanupExpiredSessions();
   }
 
   /**
@@ -371,7 +395,7 @@ export class FormService {
     triggerMode: 'manual' | 'auto' | 'both',
   ): Promise<boolean> {
     // Don't trigger if user has active session
-    if (activeFormSessions.has(phoneNumber)) {
+    if (await this.hasActiveFormSession(phoneNumber)) {
       return false;
     }
 
@@ -381,6 +405,7 @@ export class FormService {
     }
 
     // Check if user has already submitted a form recently
+    const FormSubmission = (await import('../models/FormSubmission')).default;
     const recentSubmission = await FormSubmission.findOne({
       phoneNumber,
       submittedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Last 24 hours
@@ -392,11 +417,13 @@ export class FormService {
 
     return true;
   }
-}
 
-// Run cleanup every 5 minutes
-setInterval(() => {
-  FormService.cleanupExpiredSessions();
-}, 5 * 60 * 1000);
+  /**
+   * Get session count for monitoring
+   */
+  static async getActiveSessionCount(): Promise<number> {
+    return sessionStateService.getSessionCount('form');
+  }
+}
 
 export default FormService;

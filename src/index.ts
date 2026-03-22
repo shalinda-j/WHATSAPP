@@ -136,6 +136,59 @@ startServer();
 // Track last message time per user for auto-registration trigger
 const lastMessageTime = new Map<string, number>();
 const AUTO_REG_DELAY_MS = 10 * 1000; // 10 seconds after last message
+const AUTO_REG_CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // Cleanup every hour
+const AUTO_REG_ENTRY_MAX_AGE_MS = 24 * 60 * 60 * 1000; // Remove entries older than 24 hours
+
+// Track users who have opted out of auto-registration
+const autoRegOptOut = new Set<string>();
+
+// Rate limiting: Track last processed message time per user
+const rateLimitMap = new Map<string, number>();
+const RATE_LIMIT_MS = 1000; // Minimum 1 second between messages per user
+const RATE_LIMIT_CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // Cleanup every hour
+
+// Check if user is rate limited
+function isRateLimited(jid: string): boolean {
+  const now = Date.now();
+  const lastTime = rateLimitMap.get(jid);
+
+  if (lastTime && now - lastTime < RATE_LIMIT_MS) {
+    return true;
+  }
+
+  rateLimitMap.set(jid, now);
+  return false;
+}
+
+// Cleanup rate limit entries periodically
+setInterval(() => {
+  const now = Date.now();
+  let cleaned = 0;
+  for (const [jid, time] of rateLimitMap.entries()) {
+    if (now - time > AUTO_REG_ENTRY_MAX_AGE_MS) {
+      rateLimitMap.delete(jid);
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) {
+    console.log(`🧹 Cleaned up ${cleaned} rate limit entries`);
+  }
+}, RATE_LIMIT_CLEANUP_INTERVAL_MS);
+
+// Cleanup old entries periodically to prevent memory leak
+setInterval(() => {
+  const now = Date.now();
+  let cleaned = 0;
+  for (const [jid, time] of lastMessageTime.entries()) {
+    if (now - time > AUTO_REG_ENTRY_MAX_AGE_MS) {
+      lastMessageTime.delete(jid);
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) {
+    console.log(`🧹 Cleaned up ${cleaned} old auto-registration tracking entries`);
+  }
+}, AUTO_REG_CLEANUP_INTERVAL_MS);
 
 /**
  * Schedule auto-registration check after conversation ends
@@ -155,6 +208,11 @@ async function scheduleAutoRegistration(jid: string, sessionId: string): Promise
     return;
   }
 
+  // Check if user has opted out of auto-registration
+  if (autoRegOptOut.has(jid)) {
+    return;
+  }
+
   // Check if we should trigger auto-registration
   try {
     const template = await FormService.getActiveFormTemplate();
@@ -169,8 +227,8 @@ async function scheduleAutoRegistration(jid: string, sessionId: string): Promise
       return;
     }
 
-    // Check if user already has an active session
-    if (FormService.hasActiveFormSession(jid)) {
+    // Check if user already has an active session (AWAIT is required now)
+    if (await FormService.hasActiveFormSession(jid)) {
       return;
     }
 
@@ -221,6 +279,12 @@ onMessage(async (message, sock, sessionId) => {
 
     // Debug: Log incoming messages
     console.log(`📩 Message: "${text.substring(0, 50)}..." from ${jid}`);
+
+    // Rate limiting check - skip if user is sending messages too quickly
+    if (isRateLimited(jid)) {
+      console.log('   ⚡ Rate limited - skipping duplicate message');
+      return;
+    }
 
     // Update last message time for auto-registration
     lastMessageTime.set(jid, Date.now());
@@ -306,6 +370,7 @@ onMessage(async (message, sock, sessionId) => {
         role: 'user',
         type: messageType,
         content: text,
+        read: false, // User messages start as unread by admin
         metadata: {
           sessionId,
           isBooking: false,
@@ -352,7 +417,7 @@ onMessage(async (message, sock, sessionId) => {
     }
 
     // 2.5. Check if user is in dynamic form flow
-    if (FormService.hasActiveFormSession(jid)) {
+    if (await FormService.hasActiveFormSession(jid)) {
       console.log('   📋 Processing form field answer...');
       const result = await FormService.processFieldAnswer(jid, text);
       if (result.success) {
@@ -563,6 +628,7 @@ onMessage(async (message, sock, sessionId) => {
           role: 'assistant',
           type: 'text',
           content: response,
+          read: true, // Bot messages are always considered "read" (from system)
           metadata: {
             sessionId,
             intent: intentAnalysis?.intent || 'General',
@@ -703,6 +769,8 @@ async function handleCommand(
 • \`!payment\` - ගෙවීම් විස්තර ලබාගන්න
 • \`!cv\` - CV submit කරන්න
 • \`!clear\` - කතාබහ අලුතින් අරඹන්න
+• \`!stop\` - Stop auto-registration prompts
+• \`!start\` - Re-enable auto-registration prompts
 
 *ඔබට අවශ්‍ය දේ පණිවුඩයක් ලෙස එවන්න.*`,
         sessionId,
@@ -718,6 +786,28 @@ async function handleCommand(
       await sendMessage(
         jid,
         '🗑️ කතාබහ ඉතිහාසය මකා දැමුවා!\nදැන් අලුතින් ආරම්භ කරමු! 🏗️',
+        sessionId,
+      );
+      break;
+
+    case '!stop':
+    case '!unsubscribe':
+      // Opt out of auto-registration
+      autoRegOptOut.add(jid);
+      await sendMessage(
+        jid,
+        '✅ You will no longer receive automatic registration prompts.\n\nUse `!start` to re-enable them.',
+        sessionId,
+      );
+      break;
+
+    case '!start':
+    case '!subscribe':
+      // Opt back in to auto-registration
+      autoRegOptOut.delete(jid);
+      await sendMessage(
+        jid,
+        '✅ You will now receive automatic registration prompts after conversations.\n\nUse `!stop` to disable them.',
         sessionId,
       );
       break;
