@@ -62,8 +62,9 @@ export interface ExperienceOption {
 }
 
 // ============================================
-// EMPTY DEFAULTS - Configure via Admin Panel
-// All values must be set through Datasets section
+// NO DEFAULT CONTENT VALUES - Configure via Admin Panel
+// All content values must be set through Datasets section
+// Technical defaults (like timeouts) are acceptable
 // ============================================
 
 const DEFAULT_HUMANIZER_CONFIG: HumanizerConfig = {
@@ -103,27 +104,11 @@ const DEFAULT_COMPANY_INFO: CompanyInfo = {
   email: '',
 };
 
-// Default countries for job placement
-const DEFAULT_COUNTRIES: CountryOption[] = [
-  { code: 'IL', name: 'Israel', flag: '🇮🇱' },
-  { code: 'AE', name: 'UAE (Dubai)', flag: '🇦🇪' },
-  { code: 'SA', name: 'Saudi Arabia', flag: '🇸🇦' },
-  { code: 'QA', name: 'Qatar', flag: '🇶🇦' },
-  { code: 'KW', name: 'Kuwait', flag: '🇰🇼' },
-  { code: 'MY', name: 'Malaysia', flag: '🇲🇾' },
-  { code: 'SG', name: 'Singapore', flag: '🇸🇬' },
-  { code: 'LK', name: 'Sri Lanka', flag: '🇱🇰' },
-  { code: 'OTHER', name: 'Other', flag: '🌍' },
-];
+// NO DEFAULT COUNTRIES - Must be configured via Admin Panel
+const DEFAULT_COUNTRIES: CountryOption[] = [];
 
-// Default experience levels
-const DEFAULT_EXPERIENCE_LEVELS: ExperienceOption[] = [
-  { value: '0-1', label: '0-1 years (Fresher)' },
-  { value: '1-3', label: '1-3 years' },
-  { value: '3-5', label: '3-5 years' },
-  { value: '5-10', label: '5-10 years' },
-  { value: '10+', label: '10+ years (Expert)' },
-];
+// NO DEFAULT EXPERIENCE LEVELS - Must be configured via Admin Panel
+const DEFAULT_EXPERIENCE_LEVELS: ExperienceOption[] = [];
 
 export class ConfigService {
   private static instance: ConfigService;
@@ -416,6 +401,85 @@ export class ConfigService {
       return levels;
     }
     return DEFAULT_EXPERIENCE_LEVELS;
+  }
+
+  // ============================================
+  // MESSAGE TEMPLATES (All from Datasets)
+  // ============================================
+
+  /**
+   * Get Help Message Template
+   * Configure via Admin Panel > Datasets > HELP_MESSAGE
+   */
+  public async getHelpMessage(): Promise<{ title: string; subtitle: string; commands: string[]; footer: string }> {
+    const template = await this.get('HELP_MESSAGE', { title: '', subtitle: '', commands: [], footer: '' });
+    return template;
+  }
+
+  /**
+   * Get Jobs Message Template
+   * Configure via Admin Panel > Datasets > JOBS_MESSAGE
+   */
+  public async getJobsMessage(): Promise<{ title: string; jobs: Array<{ emoji: string; title: string; count: string }>; footer: string }> {
+    const template = await this.get('JOBS_MESSAGE', { title: '', jobs: [], footer: '' });
+    return template;
+  }
+
+  /**
+   * Get Clear Message
+   * Configure via Admin Panel > Datasets > CLEAR_MESSAGE
+   */
+  public async getClearMessage(): Promise<string> {
+    const config = await this.get('CLEAR_MESSAGE', { message: '' });
+    return config.message || '⚠️ Clear message not configured. Configure via Admin Panel > Datasets > CLEAR_MESSAGE';
+  }
+
+  /**
+   * Get Ping Message
+   * Configure via Admin Panel > Datasets > PING_MESSAGE
+   */
+  public async getPingMessage(): Promise<string> {
+    const config = await this.get('PING_MESSAGE', { message: '' });
+    return config.message || '⚠️ Ping message not configured. Configure via Admin Panel > Datasets > PING_MESSAGE';
+  }
+
+  /**
+   * Get Unknown Command Message
+   * Configure via Admin Panel > Datasets > UNKNOWN_COMMAND_MESSAGE
+   */
+  public async getUnknownCommandMessage(command: string): Promise<string> {
+    const config = await this.get('UNKNOWN_COMMAND_MESSAGE', { message: '' });
+    if (config.message) {
+      return config.message.replace('{command}', command);
+    }
+    return `⚠️ Unknown command: \`${command}\`\n\nConfigure via Admin Panel > Datasets > UNKNOWN_COMMAND_MESSAGE`;
+  }
+
+  /**
+   * Get Welcome Message
+   * Configure via Admin Panel > Datasets > WELCOME_MESSAGE
+   */
+  public async getWelcomeMessage(): Promise<string> {
+    const config = await this.get('WELCOME_MESSAGE', { message: '' });
+    return config.message || '';
+  }
+
+  /**
+   * Get Stop Auto-Registration Message
+   * Configure via Admin Panel > Datasets > STOP_MESSAGE
+   */
+  public async getStopMessage(): Promise<string> {
+    const config = await this.get('STOP_MESSAGE', { message: '' });
+    return config.message || '⚠️ Stop message not configured. Configure via Admin Panel > Datasets > STOP_MESSAGE';
+  }
+
+  /**
+   * Get Start Auto-Registration Message
+   * Configure via Admin Panel > Datasets > START_MESSAGE
+   */
+  public async getStartMessage(): Promise<string> {
+    const config = await this.get('START_MESSAGE', { message: '' });
+    return config.message || '⚠️ Start message not configured. Configure via Admin Panel > Datasets > START_MESSAGE';
   }
 }
 

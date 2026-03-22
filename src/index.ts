@@ -26,6 +26,7 @@ import { autoresearchNLP, classifyMessage } from './services/autoresearchNLP';
 import { analyzeLeadIntent } from './services/gemini';
 import { WebhookService } from './services/WebhookService';
 import { configService } from './services/ConfigService';
+import { configurationManager } from './services/ConfigurationManagerService';
 import {
   handleBookingMessage,
   startBookingFlow,
@@ -766,62 +767,65 @@ async function handleCommand(
 
   // 2. Fallback to manual switch (legacy/script commands)
   switch (command) {
-    case '!help':
-      await sendMessage(
-        jid,
-        `🏗️ *Jayalath Global AI (ජයලත් ග්ලොබල් AI)*
+    case '!help': {
+      // Build help message from dataset configuration
+      const helpTemplate = await configurationManager.getHelpMessage();
+      let helpMessage = '';
 
-*ඊශ්‍රායල ඉදිකිරීම් රැකියා විශේෂඥයා*
+      if (helpTemplate.title) {
+        helpMessage += `*${helpTemplate.title}*\n\n`;
+      }
+      if (helpTemplate.subtitle) {
+        helpMessage += `${helpTemplate.subtitle}\n\n`;
+      }
+      if (helpTemplate.commands && helpTemplate.commands.length > 0) {
+        helpMessage += '*Available Commands:*\n';
+        helpTemplate.commands.forEach((cmd: { command?: string; description?: string } | string) => {
+          // Handle both object format {command, description} and string format
+          if (typeof cmd === 'string') {
+            helpMessage += `• ${cmd}\n`;
+          } else if (cmd.command && cmd.description) {
+            helpMessage += `• \`${cmd.command}\` - ${cmd.description}\n`;
+          } else if (cmd.command) {
+            helpMessage += `• ${cmd.command}\n`;
+          }
+        });
+        helpMessage += '\n';
+      }
+      if (helpTemplate.footer) {
+        helpMessage += helpTemplate.footer;
+      }
 
-*Available Commands:*
-• \`!help\` - උදව් ලබාගන්න
-• \`!jobs\` - පවතින රැකියා ඇබෑර්තු
-• \`!visit\` - පැමිණීමට වේලාවක් වෙන්කරගන්න
-• \`!register\` - ලියාපදිංචි වන්න
-• \`!payment\` - ගෙවීම් විස්තර ලබාගන්න
-• \`!cv\` - CV submit කරන්න
-• \`!clear\` - කතාබහ අලුතින් අරඹන්න
-• \`!stop\` - Stop auto-registration prompts
-• \`!start\` - Re-enable auto-registration prompts
+      // If nothing is configured, show warning
+      if (!helpMessage.trim()) {
+        helpMessage = '⚠️ Help message not configured. Please configure via Admin Panel > Datasets > HELP_MESSAGE';
+      }
 
-*ඔබට අවශ්‍ය දේ පණිවුඩයක් ලෙස එවන්න.*`,
-        sessionId,
-      );
+      await sendMessage(jid, helpMessage, sessionId);
       break;
+    }
 
     case '!ping':
-      await sendMessage(jid, '🏓 Pong! Bot is online and ready.', sessionId);
+      await sendMessage(jid, await configurationManager.getPingMessage(), sessionId);
       break;
 
     case '!clear':
-      await aiLoadBalancer.clearConversation(jid);
-      await sendMessage(
-        jid,
-        '🗑️ කතාබහ ඉතිහාසය මකා දැමුවා!\nදැන් අලුතින් ආරම්භ කරමු! 🏗️',
-        sessionId,
-      );
+      aiLoadBalancer.clearConversation(jid);
+      await sendMessage(jid, await configurationManager.getClearMessage(), sessionId);
       break;
 
     case '!stop':
     case '!unsubscribe':
       // Opt out of auto-registration
       autoRegOptOut.add(jid);
-      await sendMessage(
-        jid,
-        '✅ You will no longer receive automatic registration prompts.\n\nUse `!start` to re-enable them.',
-        sessionId,
-      );
+      await sendMessage(jid, await configurationManager.getStopMessage(), sessionId);
       break;
 
     case '!start':
     case '!subscribe':
       // Opt back in to auto-registration
       autoRegOptOut.delete(jid);
-      await sendMessage(
-        jid,
-        '✅ You will now receive automatic registration prompts after conversations.\n\nUse `!stop` to disable them.',
-        sessionId,
-      );
+      await sendMessage(jid, await configurationManager.getStartMessage(), sessionId);
       break;
 
     case '!register':
@@ -862,23 +866,36 @@ async function handleCommand(
       await sendMessage(jid, await configService.getCVMessage(), sessionId);
       break;
 
-    case '!jobs':
-      await sendMessage(
-        jid,
-        `📋 *පවතින රැකියා ඇබෑර්තු:*
+    case '!jobs': {
+      const jobsTemplate = await configurationManager.getJobsMessage();
+      let jobsMessage = '';
 
-⚡ *Electricians* - 10 ක්
-🛣️ *Asphalt Teams* - 2 Teams
-🔧 *Plumbers* - 40 ක්
-🚛 *Concrete Pump Drivers* - 30 ක්
-🚜 *Excavator/JCB Operators*
-🧹 *Heavy Duty Cleaners* - 15 ක්
-🏠 *Gypsum/Tile Fixers* - 100 බැගින්
+      if (jobsTemplate.title) {
+        jobsMessage += `*${jobsTemplate.title}*\n\n`;
+      }
 
-📝 ලියාපදිංචි වීමට \`!register\` භාවිතා කරන්න.`,
-        sessionId,
-      );
+      if (jobsTemplate.jobs && jobsTemplate.jobs.length > 0) {
+        jobsTemplate.jobs.forEach((job: { emoji?: string; title: string; count?: string }) => {
+          jobsMessage += `${job.emoji || '•'} *${job.title}*`;
+          if (job.count) {
+            jobsMessage += ` - ${job.count}`;
+          }
+          jobsMessage += '\n';
+        });
+        jobsMessage += '\n';
+      } else {
+        jobsMessage += '⚠️ Jobs listing not configured.\n\n';
+      }
+
+      if (jobsTemplate.footer) {
+        jobsMessage += jobsTemplate.footer;
+      } else {
+        jobsMessage += '📝 Type `!register` to apply.';
+      }
+
+      await sendMessage(jid, jobsMessage, sessionId);
       break;
+    }
 
     case '!visit':
     case '!schedule':
@@ -891,7 +908,7 @@ async function handleCommand(
     default:
       await sendMessage(
         jid,
-        `❓ Unknown command: \`${command}\`\n\nUse \`!help\` to see available commands.`,
+        await configurationManager.getUnknownCommandMessage(command),
         sessionId,
       );
   }

@@ -4,6 +4,7 @@ import axios from 'axios';
 import Webhook from '../../models/Webhook';
 import { sendMessage, getSocket } from '../../services/whatsapp';
 import { WebhookService } from '../../services/WebhookService';
+import { configurationManager } from '../../services/ConfigurationManagerService';
 
 const router = express.Router();
 
@@ -156,6 +157,10 @@ router.post('/:id/test', async (req, res) => {
     };
 
     try {
+      // Get company name from configuration
+      const companyInfo = await configurationManager.getCompanyInfo();
+      const companyName = companyInfo.name || 'Bot';
+
       const data = {
         event: 'test.ping',
         timestamp: new Date().toISOString(),
@@ -164,7 +169,7 @@ router.post('/:id/test', async (req, res) => {
 
       const headers: any = {
         'Content-Type': 'application/json',
-        'User-Agent': 'Jayalath-Bot/1.0',
+        'User-Agent': `${companyName}-Bot/1.0`,
         'X-Webhook-Event': 'test.ping',
       };
 

@@ -12,40 +12,127 @@ export const seedDatasets = async () => {
     // Configure values via Admin Panel > Datasets
 
     const seeds = [
+      // === MESSAGE TEMPLATES (No Hardcoded Messages) ===
+      {
+        key: 'HELP_MESSAGE',
+        name: 'Help Message Template',
+        category: 'messages',
+        content: {
+          title: '',
+          subtitle: '',
+          commands: [],
+          footer: '',
+        },
+        description: 'Help message template - MUST CONFIGURE IN ADMIN PANEL',
+      },
+      {
+        key: 'JOBS_MESSAGE',
+        name: 'Jobs Message Template',
+        category: 'messages',
+        content: {
+          title: '',
+          jobs: [],
+          footer: '',
+        },
+        description: 'Jobs listing message - MUST CONFIGURE IN ADMIN PANEL',
+      },
+      {
+        key: 'CLEAR_MESSAGE',
+        name: 'Clear Conversation Message',
+        category: 'messages',
+        content: {
+          message: '',
+        },
+        description: 'Message shown when conversation is cleared - CONFIGURE IN ADMIN PANEL',
+      },
+      {
+        key: 'STOP_MESSAGE',
+        name: 'Stop Auto-Registration Message',
+        category: 'messages',
+        content: {
+          message: '',
+        },
+        description: 'Message shown when user opts out of auto-registration - CONFIGURE IN ADMIN PANEL',
+      },
+      {
+        key: 'START_MESSAGE',
+        name: 'Start Auto-Registration Message',
+        category: 'messages',
+        content: {
+          message: '',
+        },
+        description: 'Message shown when user opts back in to auto-registration - CONFIGURE IN ADMIN PANEL',
+      },
+      {
+        key: 'PING_MESSAGE',
+        name: 'Ping Message',
+        category: 'messages',
+        content: {
+          message: '',
+        },
+        description: 'Message shown for !ping command - CONFIGURE IN ADMIN PANEL',
+      },
+      {
+        key: 'WELCOME_MESSAGE',
+        name: 'Welcome Message',
+        category: 'messages',
+        content: {
+          message: '',
+        },
+        description: 'Welcome message for new users - CONFIGURE IN ADMIN PANEL',
+      },
+      {
+        key: 'UNKNOWN_COMMAND_MESSAGE',
+        name: 'Unknown Command Message',
+        category: 'messages',
+        content: {
+          message: '',
+        },
+        description: 'Message template for unknown commands. Use {command} placeholder - CONFIGURE IN ADMIN PANEL',
+      },
+
+      // === CONFIGURATION ===
       {
         key: 'REGISTRATION_CONFIG',
         name: 'Registration Links',
         category: 'config',
-        content: defaultConfig.links.registration,
-        description: 'Links and messages for course registration - CONFIGURE IN ADMIN PANEL',
+        content: {},  // Empty - must be configured
+        description: 'Links and messages for registration - MUST CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'PAYMENT_CONFIG',
         name: 'Payment Instructions',
         category: 'config',
-        content: defaultConfig.links.payment,
-        description: 'General payment instructions and messages - CONFIGURE IN ADMIN PANEL',
+        content: {},  // Empty - must be configured
+        description: 'Payment instructions and messages - MUST CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'CV_CONFIG',
         name: 'CV Submission',
         category: 'config',
-        content: defaultConfig.links.cv,
-        description: 'Settings for CV upload workflow - CONFIGURE IN ADMIN PANEL',
+        content: {},  // Empty - must be configured
+        description: 'Settings for CV upload workflow - MUST CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'BANK_ACCOUNTS',
         name: 'Bank Accounts',
         category: 'finance',
-        content: defaultConfig.links.payment.categories,
-        description: 'Bank account details by category - CONFIGURE IN ADMIN PANEL',
+        content: [],  // Empty - must be configured
+        description: 'Bank account details - MUST CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'AI_PERSONALITY',
         name: 'AI Personality',
         category: 'ai',
-        content: AI_PERSONALITY(defaultConfig),
-        description: 'System prompt and personality settings - CONFIGURE IN ADMIN PANEL',
+        content: '',  // Empty - must be configured
+        description: 'System prompt and personality settings - MUST CONFIGURE IN ADMIN PANEL',
+      },
+      {
+        key: 'AI_KNOWLEDGE_BASE',
+        name: 'AI Knowledge Base',
+        category: 'ai',
+        content: '',  // Empty - must be configured
+        description: 'Knowledge base content for AI - MUST CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'COMPANY_INFO',
@@ -63,35 +150,15 @@ export const seedDatasets = async () => {
         key: 'JOB_TYPES',
         name: 'Job Vacancy Types',
         category: 'config',
-        content: [
-          'Electrician',
-          'Plumber',
-          'Asphalt Worker',
-          'Concrete Pump Driver',
-          'Excavator Operator',
-          'JCB Operator',
-          'Heavy Duty Cleaner',
-          'Gypsum Fixer',
-          'Tile Fixer',
-          'General Worker',
-          'Welder',
-          'Carpenter',
-          'Mason',
-          'Painter',
-          'AC Technician',
-          'Driver',
-          'Security Guard',
-          'Cook',
-          'Cleaner',
-        ],
-        description: 'Available job types for lead registration - CONFIGURE IN ADMIN PANEL',
+        content: [],  // Empty - must be configured
+        description: 'Available job types for registration - MUST CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'BOOKING_KEYWORDS',
         name: 'Booking Keywords',
         category: 'config',
-        content: [],  // Empty - must be configured via admin panel
-        description: 'Keywords that trigger booking intent detection (English, Sinhala, etc.) - MUST CONFIGURE IN ADMIN PANEL',
+        content: [],  // Empty - must be configured
+        description: 'Keywords that trigger booking intent - MUST CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'BOOKING_CONFIG',
@@ -131,38 +198,22 @@ export const seedDatasets = async () => {
         key: 'CONVERSATION_EXAMPLES',
         name: 'Conversation Examples',
         category: 'ai',
-        content: [],  // Empty - must be configured via admin panel
+        content: [],  // Empty - must be configured
         description: 'Training examples for AI conversation context - CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'COUNTRIES',
         name: 'Job Placement Countries',
         category: 'config',
-        content: [
-          { code: 'IL', name: 'Israel', flag: '🇮🇱' },
-          { code: 'AE', name: 'UAE (Dubai)', flag: '🇦🇪' },
-          { code: 'SA', name: 'Saudi Arabia', flag: '🇸🇦' },
-          { code: 'QA', name: 'Qatar', flag: '🇶🇦' },
-          { code: 'KW', name: 'Kuwait', flag: '🇰🇼' },
-          { code: 'MY', name: 'Malaysia', flag: '🇲🇾' },
-          { code: 'SG', name: 'Singapore', flag: '🇸🇬' },
-          { code: 'LK', name: 'Sri Lanka', flag: '🇱🇰' },
-          { code: 'OTHER', name: 'Other', flag: '🌍' },
-        ],
-        description: 'Countries available for job placement - CONFIGURE IN ADMIN PANEL',
+        content: [],  // Empty - must be configured
+        description: 'Countries available for job placement - MUST CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'EXPERIENCE_LEVELS',
         name: 'Experience Levels',
         category: 'config',
-        content: [
-          { value: '0-1', label: '0-1 years (Fresher)' },
-          { value: '1-3', label: '1-3 years' },
-          { value: '3-5', label: '3-5 years' },
-          { value: '5-10', label: '5-10 years' },
-          { value: '10+', label: '10+ years (Expert)' },
-        ],
-        description: 'Experience level options for lead registration - CONFIGURE IN ADMIN PANEL',
+        content: [],  // Empty - must be configured
+        description: 'Experience level options for registration - MUST CONFIGURE IN ADMIN PANEL',
       },
     ];
 
@@ -175,7 +226,8 @@ export const seedDatasets = async () => {
     }
 
     console.log('🌱 Dataset seeding complete.');
-    console.log('   ⚠️ IMPORTANT: Configure all datasets via Admin Panel > Datasets');
+    console.log('   ⚠️ IMPORTANT: ALL datasets are EMPTY by default!');
+    console.log('   ⚠️ You MUST configure all datasets via Admin Panel > Datasets');
   } catch (error) {
     console.error('❌ Error Seeding Datasets:', error);
   }

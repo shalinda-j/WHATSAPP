@@ -127,20 +127,27 @@ export class ConfigurationManagerService {
 
     try {
       const info = await configService.getCompanyInfo();
+
+      // Check if company info is properly configured
+      if (!info.name && !info.contact && !info.address) {
+        console.warn('⚠️ COMPANY_INFO not configured in Admin Panel');
+      }
+
       this.setCache(cacheKey, info);
       return info;
     } catch (error) {
       console.error('Error fetching company info:', error);
 
-      const defaultInfo = {
-        name: 'Jayalath Global',
-        contact: '077 123 4567',
-        address: 'Main St, Colombo',
-        email: 'info@jayalath.com',
+      // Return empty object - must be configured
+      const emptyInfo = {
+        name: '',
+        contact: '',
+        address: '',
+        email: '',
       };
 
-      this.setCache(cacheKey, defaultInfo);
-      return defaultInfo;
+      this.setCache(cacheKey, emptyInfo);
+      return emptyInfo;
     }
   }
 
@@ -156,25 +163,32 @@ export class ConfigurationManagerService {
 
     try {
       const config = await configService.getBookingConfig();
+
+      // Check if booking config is properly configured
+      if (!config.campusLocation || !config.organizerName) {
+        console.warn('⚠️ BOOKING_CONFIG not configured in Admin Panel');
+      }
+
       this.setCache(cacheKey, config);
       return config;
     } catch (error) {
       console.error('Error fetching booking config:', error);
 
-      const defaultConfig = {
-        campusLocation: 'JCETI Campus, No 33, Main Street, Colombo',
-        organizerName: 'Jayalath Institute',
-        organizerEmail: 'info@jayalath.com',
-        eventTitle: 'Campus Visit - Jayalath Institute',
-        eventDescription: 'Introduction and Skill Assessment',
+      // Return empty config - must be configured
+      const emptyConfig = {
+        campusLocation: '',
+        organizerName: '',
+        organizerEmail: '',
+        eventTitle: '',
+        eventDescription: '',
         workHoursStart: 8,
         workHoursEnd: 17,
         eventDurationHours: 1,
-        acceptanceKeywords: ['yes', 'ow', 'y', 'ok'],
+        acceptanceKeywords: [],
       };
 
-      this.setCache(cacheKey, defaultConfig);
-      return defaultConfig;
+      this.setCache(cacheKey, emptyConfig);
+      return emptyConfig;
     }
   }
 
@@ -190,31 +204,20 @@ export class ConfigurationManagerService {
 
     try {
       const jobTypes = await configService.getJobTypes();
-      this.setCache(cacheKey, jobTypes);
-      return jobTypes;
+
+      // Check if job types are configured
+      if (!jobTypes || jobTypes.length === 0) {
+        console.warn('⚠️ JOB_TYPES not configured in Admin Panel');
+      }
+
+      this.setCache(cacheKey, jobTypes || []);
+      return jobTypes || [];
     } catch (error) {
       console.error('Error fetching job types:', error);
 
-      const defaultJobTypes = [
-        'Electrician',
-        'Plumber',
-        'Asphalt Worker',
-        'Concrete Pump Driver',
-        'Excavator Operator',
-        'JCB Operator',
-        'Heavy Duty Cleaner',
-        'Gypsum Fixer',
-        'Tile Fixer',
-        'General Worker',
-        'Welder',
-        'Carpenter',
-        'Mason',
-        'Painter',
-        'AC Technician',
-      ];
-
-      this.setCache(cacheKey, defaultJobTypes);
-      return defaultJobTypes;
+      // Return empty array - must be configured
+      this.setCache(cacheKey, []);
+      return [];
     }
   }
 
@@ -440,16 +443,17 @@ export class ConfigurationManagerService {
 
     try {
       const countries = await configService.getCountries();
-      this.setCache(cacheKey, countries);
-      return countries;
+
+      // Check if countries are configured
+      if (!countries || countries.length === 0) {
+        console.warn('⚠️ COUNTRIES not configured in Admin Panel');
+      }
+
+      this.setCache(cacheKey, countries || []);
+      return countries || [];
     } catch (error) {
       console.error('Error fetching countries:', error);
-      return [
-        { code: 'IL', name: 'Israel', flag: '🇮🇱' },
-        { code: 'AE', name: 'UAE (Dubai)', flag: '🇦🇪' },
-        { code: 'SA', name: 'Saudi Arabia', flag: '🇸🇦' },
-        { code: 'OTHER', name: 'Other', flag: '🌍' },
-      ];
+      return [];
     }
   }
 
@@ -465,17 +469,104 @@ export class ConfigurationManagerService {
 
     try {
       const levels = await configService.getExperienceLevels();
-      this.setCache(cacheKey, levels);
-      return levels;
+
+      // Check if experience levels are configured
+      if (!levels || levels.length === 0) {
+        console.warn('⚠️ EXPERIENCE_LEVELS not configured in Admin Panel');
+      }
+
+      this.setCache(cacheKey, levels || []);
+      return levels || [];
     } catch (error) {
       console.error('Error fetching experience levels:', error);
-      return [
-        { value: '0-1', label: '0-1 years (Fresher)' },
-        { value: '1-3', label: '1-3 years' },
-        { value: '3-5', label: '3-5 years' },
-        { value: '5+', label: '5+ years' },
-      ];
+      return [];
     }
+  }
+
+  // ============================================
+  // MESSAGE TEMPLATES (All from Datasets)
+  // ============================================
+
+  /**
+   * Get Help Message Template
+   */
+  async getHelpMessage(): Promise<{ title: string; subtitle: string; commands: string[]; footer: string }> {
+    const cacheKey = 'helpMessage';
+
+    if (this.isCacheValid(cacheKey)) {
+      return this.cache.get(cacheKey);
+    }
+
+    try {
+      const template = await configService.getHelpMessage();
+      this.setCache(cacheKey, template);
+      return template;
+    } catch (error) {
+      console.error('Error fetching help message:', error);
+      return { title: 'Help', subtitle: '', commands: [], footer: '' };
+    }
+  }
+
+  /**
+   * Get Jobs Message Template
+   */
+  async getJobsMessage(): Promise<{ title: string; jobs: Array<{ emoji: string; title: string; count: string }>; footer: string }> {
+    const cacheKey = 'jobsMessage';
+
+    if (this.isCacheValid(cacheKey)) {
+      return this.cache.get(cacheKey);
+    }
+
+    try {
+      const template = await configService.getJobsMessage();
+      this.setCache(cacheKey, template);
+      return template;
+    } catch (error) {
+      console.error('Error fetching jobs message:', error);
+      return { title: 'Available Jobs', jobs: [], footer: '' };
+    }
+  }
+
+  /**
+   * Get Clear Message
+   */
+  async getClearMessage(): Promise<string> {
+    return await configService.getClearMessage();
+  }
+
+  /**
+   * Get Ping Message
+   */
+  async getPingMessage(): Promise<string> {
+    return await configService.getPingMessage();
+  }
+
+  /**
+   * Get Unknown Command Message
+   */
+  async getUnknownCommandMessage(command: string): Promise<string> {
+    return await configService.getUnknownCommandMessage(command);
+  }
+
+  /**
+   * Get Welcome Message
+   */
+  async getWelcomeMessage(): Promise<string> {
+    return await configService.getWelcomeMessage();
+  }
+
+  /**
+   * Get Stop Auto-Registration Message
+   */
+  async getStopMessage(): Promise<string> {
+    return await configService.getStopMessage();
+  }
+
+  /**
+   * Get Start Auto-Registration Message
+   */
+  async getStartMessage(): Promise<string> {
+    return await configService.getStartMessage();
   }
 }
 
