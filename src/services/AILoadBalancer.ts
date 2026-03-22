@@ -15,6 +15,7 @@ import Config from '../models/Config';
 import { createCompanyConfig } from '../config/companies';
 import { configurationManager } from './ConfigurationManagerService';
 import { conversationHistoryService } from './ConversationHistoryService';
+import { knowledgeTrainingService } from './KnowledgeTrainingService';
 
 // Default company for load balancer if not specified (legacy support)
 const defaultConfig = createCompanyConfig('default');
@@ -180,7 +181,8 @@ export class AILoadBalancer {
   }
 
   private async getInitialHistory(): Promise<AIChatMessage[]> {
-    const knowledgeBase = await configurationManager.getAIKnowledgeBase();
+    // Get knowledge base from training service (includes learned knowledge)
+    const knowledgeBase = await knowledgeTrainingService.getKnowledgeBaseForAI();
     const aiPersonality = await configurationManager.getAIPersonality();
     const conversationExamples = await getConversationExamples();
 
@@ -259,6 +261,14 @@ export class AILoadBalancer {
         conversationHistoryService.addMessage(userId, 'assistant', response).catch(err => {
           console.error('Failed to persist assistant message:', err);
         });
+
+        // AUTO-LEARN from successful conversation (fire and forget)
+        // Only learn if response is substantial (> 50 chars)
+        if (response.length > 50 && message.length > 10) {
+          knowledgeTrainingService.learnFromConversation(message, response, 0.7).catch(err => {
+            // Silent fail - learning is optional
+          });
+        }
 
         // Update cache
         this.historyCache.set(userId, history);
