@@ -5,7 +5,7 @@ import LanguageSwitcher, { type Language } from '../components/datasets/Language
 import KnowledgeTab from '../components/datasets/KnowledgeTab';
 import CommandsTab from '../components/datasets/CommandsTab';
 import LinksTab from '../components/datasets/LinksTab';
-import MarketingTab from '../components/datasets/MarketingTab';
+// Marketing tab removed
 import MegaTextTab from '../components/datasets/MegaTextTab';
 import AIPersonalityTab from '../components/datasets/AIPersonalityTab';
 
@@ -21,7 +21,7 @@ const tabs: Tab[] = [
   { id: 'knowledge', label: 'Knowledge Base', icon: Database },
   { id: 'commands', label: 'Commands', icon: Terminal },
   { id: 'links', label: 'Links', icon: Link },
-  { id: 'marketing', label: 'Marketing Agent', icon: Megaphone },
+// Marketing tab removed
   { id: 'megatext', label: 'Mega Text', icon: FileText },
   { id: 'personality', label: 'AI Personality', icon: Bot },
 ];
@@ -33,7 +33,6 @@ export default function Datasets() {
     knowledge: 0,
     commands: 0,
     links: 0,
-    marketing: 0,
     megatext: 0,
     personality: 0,
   });
@@ -48,7 +47,6 @@ export default function Datasets() {
         knowledge: 0,
         commands: 0,
         links: 0,
-        marketing: 0,
         megatext: 0,
         personality: 0,
       };
@@ -86,8 +84,6 @@ export default function Datasets() {
         return <CommandsTab language={currentLanguage} onDataChange={handleDataChange} />;
       case 'links':
         return <LinksTab language={currentLanguage} onDataChange={handleDataChange} />;
-      case 'marketing':
-        return <MarketingTab language={currentLanguage} onDataChange={handleDataChange} />;
       case 'megatext':
         return <MegaTextTab language={currentLanguage} onDataChange={handleDataChange} />;
       case 'personality':

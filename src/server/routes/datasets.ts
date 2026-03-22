@@ -25,7 +25,13 @@ router.get('/', async (req, res) => {
     const { type, scope, category } = req.query;
 
     const filter: Record<string, unknown> = {};
-    if (type) filter.type = type;
+    if (type) {
+      if (type === 'knowledge') {
+        filter.$or = [{ type: 'knowledge' }, { type: { $exists: false } }, { type: null }];
+      } else {
+        filter.type = type;
+      }
+    }
     if (scope) filter.scope = scope;
     if (category) filter.category = category;
 
