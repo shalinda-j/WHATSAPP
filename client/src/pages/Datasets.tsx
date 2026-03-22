@@ -9,7 +9,7 @@ import LinksTab from '../components/datasets/LinksTab';
 import MegaTextTab from '../components/datasets/MegaTextTab';
 import AIPersonalityTab from '../components/datasets/AIPersonalityTab';
 
-type TabType = 'knowledge' | 'commands' | 'links' | 'marketing' | 'megatext' | 'personality';
+type TabType = 'knowledge' | 'commands' | 'links' | 'megatext' | 'personality';
 
 interface Tab {
   id: TabType;
