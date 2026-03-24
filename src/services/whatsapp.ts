@@ -76,8 +76,10 @@ export class WhatsAppSessionManager {
           this.deletedSessions.add(sessionId);
           return;
         }
-      } catch (dbErr) {
-        console.error(`   ⚠️ Error checking session deleted status:`, dbErr);
+      } catch (dbErr: any) {
+        if (!dbErr?.message?.includes('buffering timed out')) {
+          console.warn(`   ⚠️ Error checking session deleted status:`, dbErr?.message);
+        }
       }
     }
 
@@ -405,8 +407,10 @@ export class WhatsAppSessionManager {
         },
         { upsert: true },
       );
-    } catch (err) {
-      console.error('Failed to update session status in DB', err);
+    } catch (err: any) {
+      if (!err?.message?.includes('buffering timed out')) {
+        console.warn('Failed to update session status in DB', err?.message);
+      }
     }
   }
 
@@ -437,9 +441,9 @@ export class WhatsAppSessionManager {
       );
       console.log(`   ✅ Marked session as deleted in database: ${sessionId}`);
     } catch (dbErr: any) {
-      console.error(
-        `   ⚠️ Failed to mark session as deleted in DB: ${dbErr.message}`,
-      );
+      if (!dbErr?.message?.includes('buffering timed out')) {
+        console.warn(`   ⚠️ Failed to mark session as deleted in DB: ${dbErr.message}`);
+      }
       // Continue with deletion anyway
     }
 
@@ -488,7 +492,9 @@ export class WhatsAppSessionManager {
       await Session.deleteOne({ sessionId });
       console.log(`   ✅ Deleted session document from DB: ${sessionId}`);
     } catch (dbErr: any) {
-      console.error(`   ⚠️ Failed to delete session from DB: ${dbErr.message}`);
+      if (!dbErr?.message?.includes('buffering timed out')) {
+        console.warn(`   ⚠️ Failed to delete session from DB: ${dbErr.message}`);
+      }
     }
 
     console.log(`✅ Session ${sessionId} fully deleted and logged out`);

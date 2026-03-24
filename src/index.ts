@@ -117,9 +117,11 @@ const gracefulShutdown = async (signal: string) => {
 
     console.log('✅ Shutdown complete. Exiting.');
     process.exit(0);
-  } catch (err) {
-    console.error('❌ Error during shutdown:', err);
-    process.exit(1);
+  } catch (err: any) {
+    if (!err?.message?.includes('buffering timed out')) {
+      console.error('❌ Error during shutdown:', err?.message || err);
+    }
+    process.exit(0);
   }
 };
 
