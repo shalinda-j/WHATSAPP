@@ -325,10 +325,14 @@ export class WhatsAppSessionManager {
                 // Voice Call Agent mode: log the call and send AI audio response
                 console.log(`📞 Voice Call Agent handling call from ${call.from}`);
                 
+                // Use the configured primary language from agent settings
+                const agentSettings = voiceCallAgent.getSettings();
+                const agentLanguage = (agentSettings.language as 'en' | 'si' | 'ta') || 'en';
+
                 const result = await voiceCallAgent.handleIncomingCall({
                   callerId: call.from,
                   sessionId,
-                  language: 'en', // Default; can be auto-detected later
+                  language: agentLanguage,
                 });
 
                 if (result.responseText) {

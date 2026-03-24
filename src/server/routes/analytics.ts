@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import ChatMessage from '../../models/ChatMessage';
 import Lead from '../../models/Lead';
+import Booking from '../../models/Booking';
 import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
@@ -282,6 +283,91 @@ router.get('/top-questions', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ── Bookings ───────────────────────────────────────────────────────────────
+
+router.get('/bookings', async (req, res) => {
+  try {
+    const { year, month } = req.query as { year?: string; month?: string };
+
+    let query: Record<string, any> = {};
+    if (year && month) {
+      const y = parseInt(year, 10);
+      const m = parseInt(month, 10) - 1; // 0-indexed
+      const start = new Date(y, m, 1);
+      const end = new Date(y, m + 1, 0, 23, 59, 59, 999);
+      query = { date: { $gte: start, $lte: end } };
+    }
+
+    const bookings = await Booking.find(query).sort({ date: 1 }).lean();
+    res.json({ bookings });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/bookings', async (req, res) => {
+  try {
+    const { clientName, clientPhone, clientEmail, date, time, duration, type, notes, sessionId, location } = req.body;
+
+    if (!clientName || !clientPhone || !date) {
+      return res.status(400).json({ error: 'clientName, clientPhone, and date are required' });
+    }
+
+    const dateObj = new Date(date);
+    if (time) {
+      const [h, m] = time.split(':').map(Number);
+      dateObj.setHours(h, m, 0, 0);
+    }
+
+    const booking = await Booking.create({
+      clientName,
+      clientPhone,
+      clientEmail,
+      date: dateObj,
+      time,
+      duration: duration || 60,
+      type: type || 'Consultation',
+      notes,
+      sessionId,
+      location,
+      status: 'confirmed',
+    });
+
+    res.status(201).json(booking);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/bookings/:id', async (req, res) => {
+  try {
+    const { status, notes, type, time, location } = req.body;
+    const booking = await Booking.findByIdAndUpdate(
+      req.params.id,
+      { ...(status && { status }), ...(notes !== undefined && { notes }), ...(type && { type }), ...(time && { time }), ...(location && { location }) },
+      { new: true },
+    ).lean();
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+    res.json(booking);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/bookings/:id', async (req, res) => {
+  try {
+    await Booking.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Recent Replies ──────────────────────────────────────────────────────────
 
 router.get('/recent-replies', async (req, res) => {
   try {

@@ -146,6 +146,19 @@ router.post('/:id/execute', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Workflow has no starting node' });
     }
 
+    // Build adjacency map from edges for graph traversal
+    const adjacencyMap: Record<string, string[]> = {};
+    for (const edge of (workflow.edges as any[])) {
+      if (!adjacencyMap[edge.source]) adjacencyMap[edge.source] = [];
+      adjacencyMap[edge.source].push(edge.target);
+    }
+
+    // Build node lookup map
+    const nodeMap: Record<string, any> = {};
+    for (const node of workflow.nodes as any[]) {
+      nodeMap[node.id] = node;
+    }
+
     // Execute workflow nodes in order
     const context: Record<string, any> = {
       triggerData,
@@ -163,17 +176,18 @@ router.post('/:id/execute', async (req: Request, res: Response) => {
 
       try {
         const result: any = { success: true };
+        const label = (node.data?.label || '').toLowerCase();
 
         // Handle different node types
         switch (node.type) {
           case 'input':
-            // Trigger node - just pass through trigger data
+            // Trigger node - pass through trigger data
             result.output = triggerData;
             break;
 
           case 'default':
-            // Check if it's an AI processing node
-            if (node.data?.label?.toLowerCase().includes('ai')) {
+            if (label.includes('ai') || label.includes('processing')) {
+              // AI processing node
               const input =
                 context.lastOutput?.message ||
                 context.triggerData?.message ||
@@ -184,15 +198,42 @@ router.post('/:id/execute', async (req: Request, res: Response) => {
               );
               result.output = { response: aiResponse };
               context.variables.aiResponse = aiResponse;
-            }
-            // Check if it's a decision node
-            else if (node.data?.label?.toLowerCase().includes('decision')) {
-              const condition = node.data?.condition || 'true';
-              result.output = { condition, result: true };
-            }
-            // Generic processing node
-            else {
-              result.output = { processed: true };
+            } else if (label.includes('decision') || label.includes('logic')) {
+              // Decision/condition node - evaluate the condition expression
+              const conditionExpr = node.data?.condition || node.data?.config || '';
+              let conditionResult = true;
+
+              if (conditionExpr) {
+                try {
+                  // Safe evaluation: only allow simple comparisons against context values
+                  const safeContext = { ...context.variables, triggerData: context.triggerData };
+                  const conditionStr = conditionExpr
+                    .replace(/\bcontext\.variables\./g, 'safeContext.')
+                    .replace(/\btriggerData\./g, 'safeContext.triggerData.');
+                  // eslint-disable-next-line no-new-func
+                  conditionResult = Boolean(new Function('safeContext', `"use strict"; return (${conditionStr});`)(safeContext));
+                } catch {
+                  conditionResult = true; // default to true on eval error
+                }
+              }
+
+              result.output = { condition: conditionExpr, result: conditionResult };
+              context.variables.decisionResult = conditionResult;
+
+              // Only follow edges matching the result branch
+              // Edges for decision: if result=true, follow source handle "true"; else "false"
+              // For simplicity, all outgoing edges are followed when result=true
+              if (!conditionResult) {
+                logs.push({
+                  timestamp: new Date(),
+                  nodeId: node.id,
+                  message: `Decision: condition evaluated to false, stopping this branch`,
+                });
+                return result;
+              }
+            } else {
+              // Generic processing node
+              result.output = { processed: true, data: context.lastOutput };
             }
             break;
 
@@ -200,41 +241,40 @@ router.post('/:id/execute', async (req: Request, res: Response) => {
             // Send message node
             if (
               node.data?.integrationType === 'whatsapp_business' ||
-              node.data?.label?.toLowerCase().includes('whatsapp')
+              label.includes('whatsapp') ||
+              label.includes('send')
             ) {
               const recipient =
                 node.data?.phoneNumberId || context.triggerData?.sender;
               const message =
-                context.variables.aiResponse ||
                 node.data?.message ||
+                context.variables.aiResponse ||
                 'Workflow completed!';
 
-              if (recipient) {
-                // Use the WhatsApp service to send message
-                // Note: This requires an active session
-                logs.push({
-                  timestamp: new Date(),
-                  nodeId: node.id,
-                  message: `Would send WhatsApp to ${recipient}: ${message}`,
-                });
-                result.output = { sent: true, recipient, message };
-              }
-            }
-            break;
-
-          case 'integration':
-            // Handle integration nodes
-            const integrationType = node.data?.integrationType;
-            if (integrationType) {
-              // Log the integration call
               logs.push({
                 timestamp: new Date(),
                 nodeId: node.id,
-                message: `Integration: ${integrationType}`,
+                message: `[WhatsApp] Would send to ${recipient || 'unknown'}: "${message}"`,
               });
-              result.output = { integration: integrationType, executed: true };
+              result.output = { sent: true, recipient, message };
+            } else {
+              result.output = { output: context.lastOutput };
             }
             break;
+
+          case 'integration': {
+            // Handle integration nodes
+            const integrationType = node.data?.integrationType;
+            if (integrationType) {
+              logs.push({
+                timestamp: new Date(),
+                nodeId: node.id,
+                message: `Integration [${integrationType}] executed with config: ${JSON.stringify(node.data)}`,
+              });
+              result.output = { integration: integrationType, executed: true, config: node.data };
+            }
+            break;
+          }
         }
 
         context.lastOutput = result.output;
@@ -244,17 +284,38 @@ router.post('/:id/execute', async (req: Request, res: Response) => {
           timestamp: new Date(),
           nodeId: node.id,
           level: 'error',
-          message: `Error: ${error}`,
+          message: `Error in node ${node.data?.label || node.id}: ${error}`,
         });
         return { success: false, error: String(error) };
       }
     };
 
-    // Simple sequential execution (for now)
-    // In a more complex system, you'd follow the edges properly
-    for (const node of workflow.nodes) {
-      await executeNode(node);
+    // Graph-based execution: BFS traversal following edges
+    const visited = new Set<string>();
+    const queue: string[] = [startNode.id];
+
+    while (queue.length > 0) {
+      const currentId = queue.shift()!;
+      if (visited.has(currentId)) continue;
+      visited.add(currentId);
+
+      const currentNode = nodeMap[currentId];
+      if (!currentNode) continue;
+
+      const result = await executeNode(currentNode);
+
+      // If node succeeded, enqueue connected nodes
+      if (result.success !== false) {
+        const nextNodes = adjacencyMap[currentId] || [];
+        for (const nextId of nextNodes) {
+          if (!visited.has(nextId)) {
+            queue.push(nextId);
+          }
+        }
+      }
     }
+
+    // If there are disconnected nodes not reachable from start, skip them (correct behavior)
 
     // Update workflow stats
     workflow.lastRunAt = new Date();

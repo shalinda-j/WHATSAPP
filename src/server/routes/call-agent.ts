@@ -48,20 +48,23 @@ router.get('/settings', async (req, res) => {
       enabled,
       language: settings.language || 'en',
       greeting: settings.greeting || '',
+      personality: settings.personality || '',
     });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch settings', enabled: false, language: 'en', greeting: '' });
+    res.status(500).json({ error: 'Failed to fetch settings', enabled: false, language: 'en', greeting: '', personality: '' });
   }
 });
 
 // POST /api/call-agent/settings (save all settings at once)
 router.post('/settings', async (req, res) => {
   try {
-    const { enabled, language, greeting } = req.body;
+    const { enabled, language, greeting, personality } = req.body;
     await voiceCallAgent.enableCallAgent(!!enabled);
     if (language) voiceCallAgent.setPrimaryLanguage(language);
     if (greeting !== undefined) voiceCallAgent.setCallGreeting(language || 'en', greeting);
-    res.json({ success: true, enabled: !!enabled, language, greeting });
+    if (personality !== undefined) voiceCallAgent.setAgentPersonality(personality);
+    const settings = voiceCallAgent.getSettings();
+    res.json({ success: true, enabled: !!enabled, language: settings.language, greeting: settings.greeting, personality: settings.personality });
   } catch (err) {
     res.status(500).json({ error: 'Failed to save settings' });
   }

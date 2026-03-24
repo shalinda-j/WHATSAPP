@@ -35,6 +35,22 @@ const initialNodes: Node[] = [
 let id = 0;
 const getId = () => `dndnode_${id++}`;
 
+/**
+ * Sync the ID counter to be higher than any existing node ID
+ * to prevent collisions when loading saved workflows.
+ */
+const syncIdCounter = (nodes: Node[]) => {
+    for (const node of nodes) {
+        const match = node.id.match(/dndnode_(\d+)/);
+        if (match) {
+            const num = parseInt(match[1], 10);
+            if (num >= id) {
+                id = num + 1;
+            }
+        }
+    }
+};
+
 const WorkflowBuilder = () => {
     const reactFlowWrapper = useRef<HTMLDivElement>(null);
     const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -59,6 +75,8 @@ const WorkflowBuilder = () => {
     useEffect(() => {
         if (workflowState.nodes.length > 0) {
             setNodes(workflowState.nodes);
+            // Sync ID counter to prevent collisions with loaded node IDs
+            syncIdCounter(workflowState.nodes);
         }
         if (workflowState.edges.length > 0) {
             setEdges(workflowState.edges);

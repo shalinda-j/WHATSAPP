@@ -7,6 +7,7 @@ import {
 import { addDays, setHours, setMinutes, format } from 'date-fns';
 import { configurationManager } from './ConfigurationManagerService';
 import sessionStateService from './SessionStateService';
+import Booking from '../models/Booking';
 
 // Define the stages of the booking conversation
 export enum BookingInitState {
@@ -220,6 +221,7 @@ async function finalizeBooking(
   jid: string,
   appointmentDate: Date,
   sessionId: string,
+  callerName?: string,
 ): Promise<void> {
   const sock = getSocket(sessionId);
   if (!sock) return;
@@ -233,14 +235,18 @@ async function finalizeBooking(
   const eventDescription = bookingConfig.eventDescription || 'Introduction and Assessment';
   const eventDuration = bookingConfig.eventDurationHours || 1;
 
+  // Extract phone number from jid
+  const callerPhone = jid.replace('@s.whatsapp.net', '').replace('@c.us', '');
+
   await sendMessage(jid, `✅ *Confirming your appointment...*`, sessionId);
 
   try {
     // 1. Create Google Calendar Event (if credentials exist)
+    const fullDescription = `${eventDescription}\n\nClient: ${callerName || callerPhone}\nPhone: ${callerPhone}\nLocation: ${campusLocation}`;
     const gcalLink = await createGoogleCalendarEvent(
       appointmentDate,
       eventTitle,
-      eventDescription,
+      fullDescription,
     );
 
     // 2. Generate ICS file (Backup/Personal Calendar)
@@ -248,32 +254,51 @@ async function finalizeBooking(
       start: appointmentDate,
       durationHours: eventDuration,
       title: eventTitle,
-      description: eventDescription,
+      description: fullDescription,
       location: campusLocation,
       organizer: { name: organizerName, email: organizerEmail },
     });
 
-    // Send confirmation text
+    // 3. Save booking to MongoDB
+    const timeStr24 = format(appointmentDate, 'HH:mm');
+    await Booking.create({
+      clientName: callerName || callerPhone,
+      clientPhone: callerPhone,
+      date: appointmentDate,
+      time: timeStr24,
+      duration: eventDuration * 60,
+      type: eventTitle,
+      notes: eventDescription,
+      status: 'confirmed',
+      sessionId,
+      location: campusLocation,
+      gcalLink: gcalLink || undefined,
+    }).catch((err) => console.error('Failed to save booking to DB:', err));
+
+    // 4. Send confirmation text with full details
     const timeStr = format(appointmentDate, 'PPpp');
     let msg =
       `🎉 *Appointment Confirmed!*\n\n` +
-      `📅 Time: ${timeStr}\n` +
-      `📍 Location: ${campusLocation}\n\n`;
+      `📅 *Date & Time:* ${timeStr}\n` +
+      `📍 *Location:* ${campusLocation}\n` +
+      `🏷️ *Type:* ${eventTitle}\n` +
+      `⏱️ *Duration:* ${eventDuration} hour(s)\n` +
+      `📞 *Contact:* ${callerPhone}\n`;
 
     if (gcalLink) {
-      // Keep it simple for WhatsApp, maybe don't flood with links if we send the ICS
+      msg += `\n🔗 *Calendar Link:* ${gcalLink}\n`;
     }
 
-    msg += `Please download the attached file to add this to your calendar.`;
+    msg += `\nPlease download the attached file to add this event to your personal calendar.`;
 
     await sendMessage(jid, msg, sessionId);
 
-    // Send ICS file
+    // 5. Send ICS file
     await sock.sendMessage(jid, {
       document: Buffer.from(icsContent),
       mimetype: 'text/calendar',
       fileName: `${organizerName.replace(/\s+/g, '-')}-Invite.ics`,
-      caption: '📅 Add to Calendar',
+      caption: `📅 ${eventTitle} – Add to Calendar`,
     });
 
     // Reset session
@@ -282,7 +307,7 @@ async function finalizeBooking(
     console.error('Error booking appointment:', err);
     await sendMessage(
       jid,
-      `❌ Sorry, there was an error reserving your slot.`,
+      `❌ Sorry, there was an error reserving your slot. Please try again.`,
       sessionId,
     );
     // Clear session on error to prevent stuck state

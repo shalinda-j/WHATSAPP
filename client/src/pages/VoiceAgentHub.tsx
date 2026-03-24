@@ -141,6 +141,7 @@ export default function VoiceAgentHub() {
     const [callAgentEnabled, setCallAgentEnabled] = useState(false);
     const [callAgentLanguage, setCallAgentLanguage] = useState<'en' | 'si' | 'ta'>('en');
     const [callAgentGreeting, setCallAgentGreeting] = useState('');
+    const [callAgentPersonality, setCallAgentPersonality] = useState('');
     const [callLogs, setCallLogs] = useState<Array<{ callerId: string; createdAt: string; status: string; language: string }>>([]);
     const [savingCallAgent, setSavingCallAgent] = useState(false);
     const [testingLang, setTestingLang] = useState<string | null>(null);
@@ -205,6 +206,7 @@ export default function VoiceAgentHub() {
             setCallAgentEnabled(caSettings.enabled || false);
             setCallAgentLanguage(caSettings.language || 'en');
             setCallAgentGreeting(caSettings.greeting || '');
+            setCallAgentPersonality(caSettings.personality || '');
             setCallLogs(callLogsRes.data?.logs || []);
 
         } catch (error) {
@@ -224,6 +226,7 @@ export default function VoiceAgentHub() {
                 enabled: callAgentEnabled,
                 language: callAgentLanguage,
                 greeting: callAgentGreeting,
+                personality: callAgentPersonality,
             });
             setMessage({ type: 'success', text: 'Call Agent settings saved!' });
             fetchAllData(true);
@@ -928,10 +931,25 @@ export default function VoiceAgentHub() {
                                         </p>
                                     </div>
 
+                                    {/* AI Personality */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                                            AI Personality <span className="text-gray-400 font-normal">(optional — enables dynamic AI responses)</span>
+                                        </label>
+                                        <textarea
+                                            value={callAgentPersonality}
+                                            onChange={(e) => setCallAgentPersonality(e.target.value)}
+                                            placeholder="e.g. You are a friendly receptionist for Jayalath Global. Speak warmly and professionally. Always offer to schedule a callback..."
+                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 outline-none"
+                                            rows={3}
+                                        />
+                                        <p className="text-xs text-gray-400 mt-1">When set, the AI generates a unique greeting for each call based on this personality.</p>
+                                    </div>
+
                                     {/* Custom greeting */}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                                            Custom Call Response Message <span className="text-gray-400 font-normal">(optional)</span>
+                                            Static Call Response Message <span className="text-gray-400 font-normal">(used when AI Personality is empty)</span>
                                         </label>
                                         <textarea
                                             value={callAgentGreeting}
