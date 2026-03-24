@@ -120,7 +120,7 @@ export class VoiceCallAgentService {
       return await CallLog.find(query)
         .sort({ createdAt: -1 })
         .limit(limit)
-        .lean();
+        .lean<ICallLog[]>();
     } catch {
       return [];
     }
@@ -138,7 +138,7 @@ export class VoiceCallAgentService {
   }> {
     try {
       const query: Record<string, any> = sessionId ? { sessionId } : {};
-      const logs = await CallLog.find(query).lean();
+      const logs = await CallLog.find(query).lean<ICallLog[]>();
 
       const total = logs.length;
       const answered = logs.filter(l => l.status === 'answered').length;
