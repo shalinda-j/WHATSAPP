@@ -81,8 +81,9 @@ const PROVIDER_INFO = {
         buttonColor: 'bg-green-600 hover:bg-green-700',
         requiresApiKey: false,
         voices: [
-            { id: 'en', name: 'English' },
-            { id: 'si', name: 'Sinhala' }
+            { id: 'en', name: 'English 🇬🇧' },
+            { id: 'si', name: 'Sinhala 🇱🇰' },
+            { id: 'ta', name: 'Tamil 🇮🇳' }
         ]
     },
     'openai': {
@@ -136,6 +137,14 @@ export default function VoiceAgentHub() {
     const [showConfirmToggle, setShowConfirmToggle] = useState(false);
     const [pendingToggleState, setPendingToggleState] = useState<boolean | null>(null);
 
+    // Call Agent state
+    const [callAgentEnabled, setCallAgentEnabled] = useState(false);
+    const [callAgentLanguage, setCallAgentLanguage] = useState<'en' | 'si' | 'ta'>('en');
+    const [callAgentGreeting, setCallAgentGreeting] = useState('');
+    const [callLogs, setCallLogs] = useState<Array<{ callerId: string; createdAt: string; status: string; language: string }>>([]);
+    const [savingCallAgent, setSavingCallAgent] = useState(false);
+    const [testingLang, setTestingLang] = useState<string | null>(null);
+
     useEffect(() => {
         fetchAllData();
     }, []);
@@ -158,13 +167,17 @@ export default function VoiceAgentHub() {
                 configRes,
                 datasetRes,
                 analyticsRes,
-                leadsRes
+                leadsRes,
+                callAgentRes,
+                callLogsRes,
             ] = await Promise.all([
                 api.get('/api/voice-config').catch(() => ({ data: [] })),
                 api.get('/api/config').catch(() => ({ data: [] })),
                 api.get('/api/datasets').catch(() => ({ data: [] })),
                 api.get('/api/analytics/overview').catch(() => ({ data: {} })),
-                api.get('/api/leads?limit=5').catch(() => ({ data: { leads: [] } }))
+                api.get('/api/leads?limit=5').catch(() => ({ data: { leads: [] } })),
+                api.get('/api/call-agent/settings').catch(() => ({ data: { enabled: false, language: 'en', greeting: '' } })),
+                api.get('/api/call-agent/logs?limit=10').catch(() => ({ data: { logs: [] } })),
             ]);
 
             const vData = Array.isArray(voiceRes.data) ? voiceRes.data : [voiceRes.data];
@@ -187,6 +200,13 @@ export default function VoiceAgentHub() {
             setAnalytics(analyticsRes.data || { totalVoiceNotes: 0, totalCallsRejected: 0 });
             setRecentLeads(leadsRes.data?.leads || []);
 
+            // Call Agent data
+            const caSettings = callAgentRes.data || {};
+            setCallAgentEnabled(caSettings.enabled || false);
+            setCallAgentLanguage(caSettings.language || 'en');
+            setCallAgentGreeting(caSettings.greeting || '');
+            setCallLogs(callLogsRes.data?.logs || []);
+
         } catch (error) {
             console.error("Failed to load Hub data", error);
             setMessage({ type: 'error', text: 'Failed to load data. Please try again.' });
@@ -194,6 +214,36 @@ export default function VoiceAgentHub() {
             setLoading(false);
             setRefreshing(false);
         }
+    };
+
+    // Save Call Agent settings
+    const saveCallAgentSettings = async () => {
+        setSavingCallAgent(true);
+        try {
+            await api.post('/api/call-agent/settings', {
+                enabled: callAgentEnabled,
+                language: callAgentLanguage,
+                greeting: callAgentGreeting,
+            });
+            setMessage({ type: 'success', text: 'Call Agent settings saved!' });
+            fetchAllData(true);
+        } catch {
+            setMessage({ type: 'error', text: 'Failed to save Call Agent settings.' });
+        } finally {
+            setSavingCallAgent(false);
+        }
+    };
+
+    // Test language greeting
+    const testLanguageGreeting = async (lang: 'en' | 'si' | 'ta') => {
+        setTestingLang(lang);
+        const greetings = {
+            en: "📞 Missed Call\n\nI'm your AI assistant. I cannot answer live calls.\nPlease send me a Voice Note 🎤 and I'll reply!",
+            si: "📞 මග හැරුණු ඇමතුම\n\nමම AI සහකාරයෙකු. ජීවම ඇමතුම් ලබා ගත නොහැක.\nVoice Note 🎤 ලෙස යොමු කරන්න!",
+            ta: "📞 தவறிய அழைப்பு\n\nநான் AI உதவியாளர். நேரடி அழைப்புகளுக்கு பதிலளிக்க முடியாது.\nVoice Note 🎤 அனுப்புங்கள்!",
+        };
+        alert(`[${lang.toUpperCase()} Preview]\n\n${greetings[lang]}`);
+        setTimeout(() => setTestingLang(null), 1000);
     };
 
     // Toggle voice agent on/off globally (with confirmation for disable)
@@ -798,6 +848,159 @@ export default function VoiceAgentHub() {
                                     <span className={`mt-2 text-xs sm:text-sm font-medium text-center ${isVoiceActive ? 'text-gray-700' : 'text-gray-400'}`}>Voice Reply</span>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    {/* Call Agent Section */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div className="bg-gradient-to-r from-orange-50 to-red-50 px-6 py-4 border-b border-gray-200">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-orange-100 rounded-lg">
+                                        <Phone className="h-5 w-5 text-orange-600" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-base font-bold text-gray-800">Voice Call Agent</h3>
+                                        <p className="text-xs text-gray-500">Auto-respond to incoming WhatsApp calls</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className={`text-xs font-medium px-3 py-1 rounded-full border ${
+                                        callAgentEnabled
+                                            ? 'bg-green-100 text-green-700 border-green-300'
+                                            : 'bg-gray-100 text-gray-500 border-gray-300'
+                                    }`}>
+                                        {callAgentEnabled ? '● Active' : '○ Inactive'}
+                                    </span>
+                                    <button
+                                        onClick={() => { setCallAgentEnabled(!callAgentEnabled); }}
+                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                                            callAgentEnabled ? 'bg-green-500' : 'bg-gray-300'
+                                        }`}
+                                    >
+                                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                                            callAgentEnabled ? 'translate-x-6' : 'translate-x-1'
+                                        }`} />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-6">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                {/* Configuration */}
+                                <div className="md:col-span-2 space-y-4">
+                                    {/* Language test buttons */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Response Language & Test
+                                        </label>
+                                        <div className="flex gap-2 flex-wrap">
+                                            {[
+                                                { id: 'en', label: '🇬🇧 English', color: 'blue' },
+                                                { id: 'si', label: '🇱🇰 Sinhala', color: 'green' },
+                                                { id: 'ta', label: '🇮🇳 Tamil', color: 'orange' },
+                                            ].map((lang) => (
+                                                <div key={lang.id} className="flex items-center gap-1">
+                                                    <button
+                                                        onClick={() => setCallAgentLanguage(lang.id as 'en' | 'si' | 'ta')}
+                                                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                                                            callAgentLanguage === lang.id
+                                                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                                                : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-300'
+                                                        }`}
+                                                    >
+                                                        {lang.label}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => testLanguageGreeting(lang.id as 'en' | 'si' | 'ta')}
+                                                        disabled={testingLang === lang.id}
+                                                        title="Preview message"
+                                                        className="p-1.5 text-gray-400 hover:text-indigo-600 transition-colors"
+                                                    >
+                                                        <Play className="h-3.5 w-3.5" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <p className="text-xs text-gray-400 mt-1.5">
+                                            All 3 languages are always sent. Select primary language for AI-generated responses.
+                                        </p>
+                                    </div>
+
+                                    {/* Custom greeting */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                                            Custom Call Response Message <span className="text-gray-400 font-normal">(optional)</span>
+                                        </label>
+                                        <textarea
+                                            value={callAgentGreeting}
+                                            onChange={(e) => setCallAgentGreeting(e.target.value)}
+                                            placeholder="Leave empty to use the default trilingual message (EN/SI/TA)..."
+                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 outline-none"
+                                            rows={3}
+                                        />
+                                    </div>
+
+                                    <button
+                                        onClick={saveCallAgentSettings}
+                                        disabled={savingCallAgent}
+                                        className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                                    >
+                                        {savingCallAgent ? 'Saving...' : 'Save Call Agent Settings'}
+                                    </button>
+                                </div>
+
+                                {/* Stats */}
+                                <div className="space-y-3">
+                                    <div className="bg-orange-50 rounded-xl p-4 text-center border border-orange-100">
+                                        <p className="text-3xl font-bold text-orange-600">{analytics.totalCallsRejected || 0}</p>
+                                        <p className="text-xs text-gray-500 mt-1">Calls Handled</p>
+                                    </div>
+                                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                                        <p className="text-xs font-medium text-gray-600 mb-2">How it works:</p>
+                                        <ol className="space-y-1.5 text-xs text-gray-500">
+                                            <li className="flex gap-2"><span className="text-orange-500 font-bold">1.</span> Call comes in → Auto-rejected</li>
+                                            <li className="flex gap-2"><span className="text-orange-500 font-bold">2.</span> Response message sent instantly</li>
+                                            <li className="flex gap-2"><span className="text-orange-500 font-bold">3.</span> Call logged in system</li>
+                                            <li className="flex gap-2"><span className="text-orange-500 font-bold">4.</span> Caller becomes CRM contact</li>
+                                        </ol>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Recent call logs */}
+                            {callLogs.length > 0 && (
+                                <div className="mt-5 border-t pt-4">
+                                    <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                                        <Activity className="h-4 w-4 text-gray-400" />
+                                        Recent Call Logs
+                                    </h4>
+                                    <div className="space-y-2">
+                                        {callLogs.slice(0, 5).map((log, idx) => (
+                                            <div key={idx} className="flex items-center justify-between text-sm bg-gray-50 rounded-lg px-3 py-2">
+                                                <div className="flex items-center gap-2">
+                                                    <Phone className="h-3.5 w-3.5 text-gray-400" />
+                                                    <span className="font-mono text-gray-700">{log.callerId?.replace('@s.whatsapp.net', '') || 'Unknown'}</span>
+                                                    {log.language && (
+                                                        <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                                                            {log.language.toUpperCase()}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                                        log.status === 'handled' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                                                    }`}>{log.status}</span>
+                                                    <span className="text-xs text-gray-400">
+                                                        {new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 

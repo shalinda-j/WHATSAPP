@@ -1,0 +1,126 @@
+import { Router } from 'express';
+import { voiceCallAgent } from '../../services/VoiceCallAgentService';
+import CallLog from '../../models/CallLog';
+import { authenticateToken } from '../middleware/auth';
+
+const router = Router();
+
+// All routes protected
+router.use(authenticateToken);
+
+// GET /api/call-agent/logs
+router.get('/logs', async (req, res) => {
+  try {
+    const { sessionId, limit = '50', page = '1' } = req.query as Record<string, string>;
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+    const skip = (pageNum - 1) * limitNum;
+
+    const query = sessionId ? { sessionId } : {};
+    const [logs, total] = await Promise.all([
+      CallLog.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum).lean(),
+      CallLog.countDocuments(query),
+    ]);
+
+    res.json({ logs, total, page: pageNum, limit: limitNum });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch call logs' });
+  }
+});
+
+// GET /api/call-agent/stats
+router.get('/stats', async (req, res) => {
+  try {
+    const { sessionId } = req.query as { sessionId?: string };
+    const stats = await voiceCallAgent.getCallStats(sessionId);
+    res.json(stats);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch call stats' });
+  }
+});
+
+// GET /api/call-agent/settings (combined settings endpoint for frontend)
+router.get('/settings', async (req, res) => {
+  try {
+    const enabled = await voiceCallAgent.isCallAgentEnabled();
+    const settings = voiceCallAgent.getSettings();
+    res.json({
+      enabled,
+      language: settings.language || 'en',
+      greeting: settings.greeting || '',
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch settings', enabled: false, language: 'en', greeting: '' });
+  }
+});
+
+// POST /api/call-agent/settings (save all settings at once)
+router.post('/settings', async (req, res) => {
+  try {
+    const { enabled, language, greeting } = req.body;
+    await voiceCallAgent.enableCallAgent(!!enabled);
+    if (language) voiceCallAgent.setPrimaryLanguage(language);
+    if (greeting !== undefined) voiceCallAgent.setCallGreeting(language || 'en', greeting);
+    res.json({ success: true, enabled: !!enabled, language, greeting });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save settings' });
+  }
+});
+
+// GET /api/call-agent/status
+router.get('/status', async (req, res) => {
+  try {
+    const enabled = await voiceCallAgent.isCallAgentEnabled();
+    res.json({ enabled });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch status' });
+  }
+});
+
+// POST /api/call-agent/toggle
+router.post('/toggle', async (req, res) => {
+  try {
+    const { enabled } = req.body;
+    await voiceCallAgent.enableCallAgent(!!enabled);
+    res.json({ success: true, enabled: !!enabled });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to toggle call agent' });
+  }
+});
+
+// POST /api/call-agent/greeting
+router.post('/greeting', async (req, res) => {
+  try {
+    const { language, text } = req.body;
+    if (!language || !text) {
+      return res.status(400).json({ error: 'language and text required' });
+    }
+    voiceCallAgent.setCallGreeting(language, text);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update greeting' });
+  }
+});
+
+// POST /api/call-agent/personality
+router.post('/personality', async (req, res) => {
+  try {
+    const { personality } = req.body;
+    voiceCallAgent.setAgentPersonality(personality || '');
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update personality' });
+  }
+});
+
+// DELETE /api/call-agent/logs/:id
+router.delete('/logs/:id', async (req, res) => {
+  try {
+    await CallLog.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete log' });
+  }
+});
+
+export default router;

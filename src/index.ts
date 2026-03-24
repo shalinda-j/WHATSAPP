@@ -45,6 +45,7 @@ import './app/commands';
 import ChatMessage from './models/ChatMessage';
 import VoiceConfig from './models/VoiceConfig';
 import { initSocket, getIO } from './server/socket';
+import { autoRegistrationService } from './services/AutoRegistrationService';
 
 const PORT = process.env.PORT || 8080;
 let server: any;
@@ -301,6 +302,10 @@ onMessage(async (message, sock, sessionId) => {
       console.log('   (Ignoring own message)');
       return;
     }
+
+    // Auto-register new users in CRM (fire and forget - don't block message processing)
+    const pushName = (message as any).pushName || (message.key as any)?.pushName;
+    autoRegistrationService.checkAndRegister(jid, pushName, sessionId).catch(() => {});
 
     // Helper to extract audio message from various wrappers
     const getAudioMessage = (msg: any) => {

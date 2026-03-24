@@ -63,7 +63,24 @@ The `Start application` workflow runs both services concurrently:
 - Lead capture and CRM
 - Marketing campaign management
 - Webhook integrations
-- Voice message transcription and TTS
+- Voice message transcription and TTS (English, Sinhala, Tamil)
 - Booking system
-- Form builder
+- Form builder with live WhatsApp preview panel
 - Knowledge base management
+- Calendar page for booking/appointment management
+- Follow-up Manager for CRM follow-up tracking
+- Multi-language chat (EN/SI/TA) with auto-detection
+- Voice Call Agent: auto-handles incoming calls with trilingual response
+- Auto-registration: new WhatsApp users auto-added to CRM on first message
+
+## New Pages
+
+- `/calendar` — Full month-view calendar with booking management
+- `/follow-up` — Client follow-up tracker with WhatsApp send integration
+
+## Key Services
+
+- `src/services/AutoRegistrationService.ts` — Auto-registers new WhatsApp users as CRM contacts
+- `src/services/VoiceCallAgentService.ts` — AI-powered call handling (auto-reject + response)
+- `src/models/CallLog.ts` — Call event logging model
+- `src/server/routes/call-agent.ts` — REST API for call agent settings and logs

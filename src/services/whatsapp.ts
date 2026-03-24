@@ -307,32 +307,66 @@ export class WhatsAppSessionManager {
         );
       });
 
-      // Handle Incoming Calls (Auto-Responder)
+      // Handle Incoming Calls (Auto-Responder + Voice Call Agent)
       sock.ev.on('call', async (calls) => {
         for (const call of calls) {
           if (call.status === 'offer') {
             try {
-              // Reject the call
+              // Always reject (WhatsApp API doesn't support true answering)
               await sock.rejectCall(call.id, call.from);
 
-              // Send automated bilingual message (Sinhala first - default language)
-              const message = [
-                '⚠️ *ස්වයංක්‍රීය පිළිතුර*',
-                '',
-                'මම AI සහකාරයෙකු. ජීවම ඇමතුම් ලබා ගැනීමට මට හැකියාවක් නොමැත.',
-                'කරුණාකර *Voice Note* (හඬ පණිවිඩය) ලෙස ඔබේ ප්‍රශ්නය ලෑවිල්ලා යෑවෙොතොත්, මම ඔබට ත්‍රිත්ව ලෙස ප්‍රතිඋත්තර දෙන්නෙමු.',
-                '',
-                '_I am an AI assistant. Please send me a *Voice Note* instead, and I will reply to you!_',
-              ].join('\n');
-              await sock.sendMessage(call.from, { text: message });
-              console.log(
-                `📞 Rejected call from ${call.from} on session ${sessionId} and sent auto-responder message.`,
-              );
+              // Import VoiceCallAgent dynamically to avoid circular deps
+              const { voiceCallAgent } = await import('./VoiceCallAgentService');
+              const callAgentEnabled = await voiceCallAgent.isCallAgentEnabled();
+
+              if (callAgentEnabled) {
+                // Voice Call Agent mode: log the call and send AI audio response
+                console.log(`📞 Voice Call Agent handling call from ${call.from}`);
+                
+                const result = await voiceCallAgent.handleIncomingCall({
+                  callerId: call.from,
+                  sessionId,
+                  language: 'en', // Default; can be auto-detected later
+                });
+
+                if (result.responseText) {
+                  // Send voice response as audio + text
+                  if (result.responseAudioBuffer) {
+                    try {
+                      await sock.sendMessage(call.from, {
+                        audio: result.responseAudioBuffer,
+                        mimetype: 'audio/mp4',
+                        ptt: true, // Send as voice note
+                      });
+                    } catch {
+                      // Fallback to text if audio fails
+                      await sock.sendMessage(call.from, { text: result.responseText });
+                    }
+                  } else {
+                    await sock.sendMessage(call.from, { text: result.responseText });
+                  }
+                }
+              } else {
+                // Default mode: Send bilingual info message
+                const message = [
+                  '📞 *Missed Call / මග හැරුණු ඇමතුම*',
+                  '',
+                  '🇬🇧 _I\'m an AI assistant. I cannot answer live calls._',
+                  '_Please send me a *Voice Note* 🎤 with your question, and I\'ll reply!_',
+                  '',
+                  '🇱🇰 _මම AI සහකාරයෙකු. ජීවම ඇමතුම් ලබා ගත නොහැක._',
+                  '_ඔබේ ප්‍රශ්නය *Voice Note* 🎤 ලෙස යොමු කරන්න, මම ප්‍රතිඋත්තර දෙන්නෙමි!_',
+                  '',
+                  '🇮🇳 _நான் AI உதவியாளர். நேரடி அழைப்புகளுக்கு பதிலளிக்க முடியாது._',
+                  '_உங்கள் கேள்வியை *Voice Note* 🎤 ஆக அனுப்புங்கள்!_',
+                ].join('\n');
+                await sock.sendMessage(call.from, { text: message });
+                await voiceCallAgent.logMissedCall(call.from, sessionId);
+              }
+
+              console.log(`📞 Handled call from ${call.from} on session ${sessionId}`);
             } catch (err) {
-              console.error(
-                `❌ Error handling incoming call from ${call.from}:`,
-                err,
-              );
+              console.error(`❌ Error handling incoming call from ${call.from}:`, err);
             }
           }
         }

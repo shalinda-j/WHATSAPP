@@ -1,4 +1,3 @@
-
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -13,14 +12,19 @@ import MarketingManager from './pages/MarketingManager';
 import VoiceAgentHub from './pages/VoiceAgentHub';
 import CRM from './pages/CRM';
 import ChatInterface from './pages/ChatInterface';
-
 import Sessions from './pages/Sessions';
 import FormBuilder from './pages/FormBuilder';
+import Calendar from './pages/Calendar';
+import FollowUp from './pages/FollowUp';
 import Layout from './components/Layout';
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   const { token, loading } = useAuth();
-  if (loading) return <div>Loading...</div>;
+  if (loading) return (
+    <div className="flex items-center justify-center min-h-screen bg-gray-100">
+      <div className="animate-spin rounded-full h-10 w-10 border-4 border-green-200 border-t-green-600"></div>
+    </div>
+  );
   if (!token) return <Navigate to="/login" />;
   return children;
 };
@@ -33,6 +37,10 @@ function AppRoutes() {
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Navigate to="/dashboard" />} />
         <Route path="dashboard" element={<Dashboard />} />
+        <Route path="crm" element={<CRM />} />
+        <Route path="chat" element={<ChatInterface />} />
+        <Route path="calendar" element={<Calendar />} />
+        <Route path="follow-up" element={<FollowUp />} />
         <Route path="datasets" element={<Datasets />} />
         <Route path="webhooks" element={<Webhooks />} />
         <Route path="config" element={<Config />} />
@@ -40,11 +48,9 @@ function AppRoutes() {
         <Route path="system" element={<SystemMaintenance />} />
         <Route path="marketing" element={<MarketingManager />} />
         <Route path="voice-agent-hub" element={<VoiceAgentHub />} />
-        <Route path="crm" element={<CRM />} />
-        <Route path="chat" element={<ChatInterface />} />
         <Route path="sessions" element={<Sessions />} />
         <Route path="form-builder" element={<FormBuilder />} />
-        {/* Redirect old routes to CRM */}
+        {/* Legacy redirects */}
         <Route path="analytics" element={<Navigate to="/crm" replace />} />
         <Route path="leads" element={<Navigate to="/crm" replace />} />
       </Route>

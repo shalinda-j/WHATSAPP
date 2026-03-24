@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Copy, Star, Settings, FileText, Users, Download, Eye, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, Edit2, Trash2, Copy, Star, FileText, Users, Download, Smartphone, CheckCircle } from 'lucide-react';
 
 interface FormField {
   id: string;
@@ -331,200 +331,350 @@ export default function FormBuilder() {
 
       {activeTab === 'templates' && showEditor && (
         <div className="bg-white rounded-lg shadow">
-          <div className="p-4 border-b">
+          <div className="p-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
             <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold">
-                {editingTemplate ? 'Edit Form' : 'Create New Form'}
-              </h2>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800">
+                  {editingTemplate ? 'Edit Form' : 'Create New Form'}
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">Live preview updates as you type</p>
+              </div>
               <button
                 onClick={resetForm}
-                className="text-gray-500 hover:text-gray-700"
+                className="text-gray-500 hover:text-gray-700 px-3 py-1 border rounded text-sm"
               >
                 Cancel
               </button>
             </div>
           </div>
 
-          <div className="p-4 space-y-6">
-            {/* Basic Info */}
-            <div className="grid gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Form Name *</label>
-                <input
-                  type="text"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  className="w-full border rounded px-3 py-2"
-                  placeholder="e.g., Job Registration Form"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Description</label>
-                <textarea
-                  value={formDescription}
-                  onChange={(e) => setFormDescription(e.target.value)}
-                  className="w-full border rounded px-3 py-2"
-                  rows={2}
-                  placeholder="Form description..."
-                />
-              </div>
-            </div>
-
-            {/* Trigger Settings */}
-            <div className="border-t pt-4">
-              <h3 className="font-medium mb-3">Trigger Settings</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 divide-y lg:divide-y-0 lg:divide-x">
+            {/* LEFT: Editor */}
+            <div className="p-4 space-y-5 overflow-y-auto max-h-[80vh]">
+              {/* Basic Info */}
               <div className="grid gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Trigger Mode</label>
-                  <select
-                    value={triggerMode}
-                    onChange={(e) => setTriggerMode(e.target.value as any)}
-                    className="w-full border rounded px-3 py-2"
-                  >
-                    <option value="manual">Manual Only (!register command)</option>
-                    <option value="auto">Auto (After conversation ends)</option>
-                    <option value="both">Both Manual & Auto</option>
-                  </select>
+                  <label className="block text-sm font-medium mb-1">Form Name *</label>
+                  <input
+                    type="text"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    className="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-blue-300 focus:border-blue-400 outline-none"
+                    placeholder="e.g., Job Registration Form"
+                  />
                 </div>
-                {triggerMode !== 'manual' && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Description</label>
+                  <textarea
+                    value={formDescription}
+                    onChange={(e) => setFormDescription(e.target.value)}
+                    className="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-blue-300 outline-none"
+                    rows={2}
+                    placeholder="Form description..."
+                  />
+                </div>
+              </div>
+
+              {/* Trigger Settings */}
+              <div className="border-t pt-4">
+                <h3 className="font-medium mb-3 text-gray-700">⚙️ Trigger Settings</h3>
+                <div className="grid gap-4">
                   <div>
-                    <label className="block text-sm font-medium mb-1">
-                      Auto-trigger delay (seconds)
-                    </label>
-                    <input
-                      type="number"
-                      value={triggerDelay}
-                      onChange={(e) => setTriggerDelay(Number(e.target.value))}
-                      className="w-full border rounded px-3 py-2"
-                      min={5}
-                      max={300}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Time to wait after last message before showing form
-                    </p>
+                    <label className="block text-sm font-medium mb-1">Trigger Mode</label>
+                    <select
+                      value={triggerMode}
+                      onChange={(e) => setTriggerMode(e.target.value as any)}
+                      className="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-blue-300 outline-none"
+                    >
+                      <option value="manual">Manual Only (!register command)</option>
+                      <option value="auto">Auto (After conversation ends)</option>
+                      <option value="both">Both Manual & Auto</option>
+                    </select>
                   </div>
-                )}
-              </div>
-            </div>
-
-            {/* Messages */}
-            <div className="border-t pt-4">
-              <h3 className="font-medium mb-3">Messages</h3>
-              <div className="grid gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Welcome Message</label>
-                  <textarea
-                    value={welcomeMessage}
-                    onChange={(e) => setWelcomeMessage(e.target.value)}
-                    className="w-full border rounded px-3 py-2"
-                    rows={2}
-                    placeholder="Welcome! Let's get you registered..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Completion Message</label>
-                  <textarea
-                    value={completionMessage}
-                    onChange={(e) => setCompletionMessage(e.target.value)}
-                    className="w-full border rounded px-3 py-2"
-                    rows={2}
-                    placeholder="Thank you for registering!"
-                  />
+                  {triggerMode !== 'manual' && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1">
+                        Auto-trigger delay (seconds)
+                      </label>
+                      <input
+                        type="number"
+                        value={triggerDelay}
+                        onChange={(e) => setTriggerDelay(Number(e.target.value))}
+                        className="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-blue-300 outline-none"
+                        min={5}
+                        max={300}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Time to wait after last message before showing form
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
 
-            {/* Fields */}
-            <div className="border-t pt-4">
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="font-medium">Form Fields</h3>
+              {/* Messages */}
+              <div className="border-t pt-4">
+                <h3 className="font-medium mb-3 text-gray-700">💬 Messages</h3>
+                <div className="grid gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Welcome Message</label>
+                    <textarea
+                      value={welcomeMessage}
+                      onChange={(e) => setWelcomeMessage(e.target.value)}
+                      className="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-blue-300 outline-none"
+                      rows={2}
+                      placeholder="Welcome! Let's get you registered..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Completion Message</label>
+                    <textarea
+                      value={completionMessage}
+                      onChange={(e) => setCompletionMessage(e.target.value)}
+                      className="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-blue-300 outline-none"
+                      rows={2}
+                      placeholder="Thank you for registering! 🎉"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Fields */}
+              <div className="border-t pt-4">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="font-medium text-gray-700">📋 Form Fields</h3>
+                  <button
+                    onClick={addField}
+                    className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 flex items-center gap-1"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Field
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {formFields.map((field, index) => (
+                    <div key={field.id} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                      <div className="grid grid-cols-4 gap-3">
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Type</label>
+                          <select
+                            value={field.type}
+                            onChange={(e) => updateField(index, { type: e.target.value as any })}
+                            className="w-full border rounded px-2 py-1 text-sm"
+                          >
+                            {fieldTypes.map((t) => (
+                              <option key={t.value} value={t.value}>{t.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-xs text-gray-500 mb-1">Label</label>
+                          <input
+                            type="text"
+                            value={field.label}
+                            onChange={(e) => updateField(index, { label: e.target.value })}
+                            className="w-full border rounded px-2 py-1 text-sm"
+                            placeholder="Field label"
+                          />
+                        </div>
+                        <div className="flex items-end gap-2">
+                          <label className="flex items-center gap-1 text-sm cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={field.required}
+                              onChange={(e) => updateField(index, { required: e.target.checked })}
+                              className="rounded"
+                            />
+                            Req.
+                          </label>
+                          <button
+                            onClick={() => removeField(index)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                      {(field.type === 'select' || field.type === 'multiselect') && (
+                        <div className="mt-2">
+                          <label className="block text-xs text-gray-500 mb-1">Options (comma-separated)</label>
+                          <input
+                            type="text"
+                            value={field.options?.join(', ') || ''}
+                            onChange={(e) => updateField(index, { options: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                            className="w-full border rounded px-2 py-1 text-sm"
+                            placeholder="Option 1, Option 2, Option 3"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {formFields.length === 0 && (
+                    <div className="text-center py-6 text-gray-400 border-2 border-dashed rounded-lg">
+                      <Plus className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                      <p className="text-sm">Click "Add Field" to start building your form</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="border-t pt-4 flex justify-end gap-3">
                 <button
-                  onClick={addField}
-                  className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"
+                  onClick={resetForm}
+                  className="px-4 py-2 border rounded hover:bg-gray-50 text-gray-700"
                 >
-                  <Plus className="inline h-4 w-4 mr-1" />
-                  Add Field
+                  Cancel
+                </button>
+                <button
+                  onClick={saveTemplate}
+                  className="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700 font-medium flex items-center gap-2"
+                >
+                  <CheckCircle className="h-4 w-4" />
+                  {editingTemplate ? 'Update Form' : 'Create Form'}
                 </button>
               </div>
+            </div>
 
-              <div className="space-y-3">
-                {formFields.map((field, index) => (
-                  <div key={field.id} className="bg-gray-50 rounded p-3">
-                    <div className="grid grid-cols-4 gap-3">
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Type</label>
-                        <select
-                          value={field.type}
-                          onChange={(e) => updateField(index, { type: e.target.value as any })}
-                          className="w-full border rounded px-2 py-1 text-sm"
-                        >
-                          {fieldTypes.map((t) => (
-                            <option key={t.value} value={t.value}>{t.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="col-span-2">
-                        <label className="block text-xs text-gray-500 mb-1">Label</label>
-                        <input
-                          type="text"
-                          value={field.label}
-                          onChange={(e) => updateField(index, { label: e.target.value })}
-                          className="w-full border rounded px-2 py-1 text-sm"
-                          placeholder="Field label"
-                        />
-                      </div>
-                      <div className="flex items-end gap-2">
-                        <label className="flex items-center gap-1 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={field.required}
-                            onChange={(e) => updateField(index, { required: e.target.checked })}
-                          />
-                          Required
-                        </label>
-                        <button
-                          onClick={() => removeField(index)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
+            {/* RIGHT: WhatsApp Live Preview */}
+            <div className="p-4 bg-gray-50">
+              <div className="flex items-center gap-2 mb-3">
+                <Smartphone className="h-4 w-4 text-gray-500" />
+                <span className="text-sm font-medium text-gray-600">WhatsApp Preview</span>
+                <span className="ml-auto text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full">Live</span>
+              </div>
+
+              {/* Phone frame */}
+              <div className="mx-auto max-w-xs">
+                <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200" style={{ maxHeight: '520px' }}>
+                  {/* WhatsApp header */}
+                  <div className="bg-[#075E54] px-4 py-3 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-green-300 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                      AI
                     </div>
-                    {(field.type === 'select' || field.type === 'multiselect') && (
-                      <div className="mt-2">
-                        <label className="block text-xs text-gray-500 mb-1">Options (comma-separated)</label>
-                        <input
-                          type="text"
-                          value={field.options?.join(', ') || ''}
-                          onChange={(e) => updateField(index, { options: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
-                          className="w-full border rounded px-2 py-1 text-sm"
-                          placeholder="Option 1, Option 2, Option 3"
-                        />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-semibold truncate">360ai Bot</p>
+                      <p className="text-green-200 text-xs">online</p>
+                    </div>
+                  </div>
+
+                  {/* Chat area */}
+                  <div
+                    className="overflow-y-auto p-3 space-y-2"
+                    style={{
+                      minHeight: '380px',
+                      maxHeight: '400px',
+                      backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23d1d5db\' fill-opacity=\'0.15\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")',
+                      backgroundColor: '#ECE5DD',
+                    }}
+                  >
+                    {/* Welcome message */}
+                    {welcomeMessage ? (
+                      <div className="flex justify-start">
+                        <div className="bg-white rounded-lg rounded-tl-none p-2.5 max-w-[85%] shadow-sm">
+                          <p className="text-sm text-gray-800 whitespace-pre-wrap">{welcomeMessage}</p>
+                          <p className="text-right text-xs text-gray-400 mt-1">10:00 AM</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex justify-start">
+                        <div className="bg-white rounded-lg rounded-tl-none p-2.5 max-w-[85%] shadow-sm opacity-50">
+                          <p className="text-sm text-gray-400 italic">Welcome message will appear here...</p>
+                          <p className="text-right text-xs text-gray-300 mt-1">10:00 AM</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Each field as a bot question + fake user reply */}
+                    {formFields.map((field, idx) => {
+                      const time = `10:0${idx + 1} AM`;
+                      const placeholder = field.type === 'email' ? 'john@example.com' :
+                        field.type === 'phone' ? '+94 77 123 4567' :
+                        field.type === 'date' ? '1990-01-15' :
+                        field.type === 'number' ? '25' :
+                        field.type === 'select' && field.options?.length ? field.options[0] :
+                        field.type === 'textarea' ? 'I have 3 years of experience...' :
+                        'Your answer here';
+
+                      return (
+                        <div key={field.id} className="space-y-1.5">
+                          {/* Bot asks */}
+                          <div className="flex justify-start">
+                            <div className="bg-white rounded-lg rounded-tl-none p-2.5 max-w-[85%] shadow-sm">
+                              <p className="text-xs text-[#075E54] font-semibold mb-0.5">360ai Bot</p>
+                              <p className="text-sm text-gray-800">
+                                {field.label || `Field ${idx + 1}`}
+                                {field.required && <span className="text-red-500 ml-1">*</span>}
+                              </p>
+                              {field.type === 'select' && field.options && field.options.length > 0 && (
+                                <div className="mt-1.5 space-y-1">
+                                  {field.options.slice(0, 4).map((opt, oi) => (
+                                    <div key={oi} className="text-xs bg-gray-100 rounded px-2 py-1 text-gray-600">
+                                      {oi + 1}. {opt}
+                                    </div>
+                                  ))}
+                                  {field.options.length > 4 && (
+                                    <div className="text-xs text-gray-400">+{field.options.length - 4} more...</div>
+                                  )}
+                                </div>
+                              )}
+                              <p className="text-right text-xs text-gray-400 mt-1">{time} ✓</p>
+                            </div>
+                          </div>
+                          {/* Simulated user reply */}
+                          <div className="flex justify-end">
+                            <div className="bg-[#DCF8C6] rounded-lg rounded-tr-none p-2.5 max-w-[75%] shadow-sm">
+                              <p className="text-sm text-gray-700 italic">{placeholder}</p>
+                              <p className="text-right text-xs text-gray-400 mt-1">{time} ✓✓</p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Empty state */}
+                    {formFields.length === 0 && !welcomeMessage && (
+                      <div className="flex items-center justify-center h-32">
+                        <div className="text-center text-gray-400">
+                          <Smartphone className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                          <p className="text-xs">Add fields to see preview</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Completion message */}
+                    {completionMessage && (
+                      <div className="flex justify-start">
+                        <div className="bg-white rounded-lg rounded-tl-none p-2.5 max-w-[85%] shadow-sm border-l-4 border-green-400">
+                          <p className="text-xs text-green-600 font-semibold mb-0.5">✅ Complete</p>
+                          <p className="text-sm text-gray-800 whitespace-pre-wrap">{completionMessage}</p>
+                          <p className="text-right text-xs text-gray-400 mt-1">10:{String(formFields.length + 1).padStart(2, '0')} AM</p>
+                        </div>
                       </div>
                     )}
                   </div>
-                ))}
 
-                {formFields.length === 0 && (
-                  <p className="text-gray-500 text-center py-4">No fields added yet</p>
-                )}
+                  {/* Input bar (decorative) */}
+                  <div className="bg-gray-100 px-3 py-2 flex items-center gap-2 border-t">
+                    <div className="flex-1 bg-white rounded-full px-3 py-1.5 text-xs text-gray-400">
+                      Type a message...
+                    </div>
+                    <div className="w-7 h-7 rounded-full bg-[#075E54] flex items-center justify-center">
+                      <span className="text-white text-xs">▶</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Preview info */}
+                <div className="mt-3 text-center">
+                  <p className="text-xs text-gray-400">
+                    {formFields.length} field{formFields.length !== 1 ? 's' : ''} · {triggerMode} trigger
+                    {triggerMode !== 'manual' ? ` · ${triggerDelay}s delay` : ''}
+                  </p>
+                </div>
               </div>
-            </div>
-
-            {/* Actions */}
-            <div className="border-t pt-4 flex justify-end gap-3">
-              <button
-                onClick={resetForm}
-                className="px-4 py-2 border rounded hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={saveTemplate}
-                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-              >
-                {editingTemplate ? 'Update Form' : 'Create Form'}
-              </button>
             </div>
           </div>
         </div>
