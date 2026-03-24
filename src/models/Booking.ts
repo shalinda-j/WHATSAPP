@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
-export interface IBooking extends Document {
+export interface IBooking {
   clientName: string;
   clientPhone: string;
   clientEmail?: string;
@@ -16,6 +16,8 @@ export interface IBooking extends Document {
   createdAt: Date;
   updatedAt: Date;
 }
+
+export type BookingDocument = IBooking & Document;
 
 const BookingSchema = new Schema(
   {
