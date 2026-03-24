@@ -18,7 +18,7 @@ export interface ICallLog extends Document {
   createdAt: Date;
 }
 
-const CallLogSchema = new Schema<ICallLog>(
+const CallLogSchema = new Schema(
   {
     sessionId: { type: String, required: true, index: true },
     callerId: { type: String, required: true, index: true },

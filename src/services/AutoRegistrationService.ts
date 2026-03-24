@@ -85,7 +85,7 @@ export class AutoRegistrationService {
       console.log(`✅ Auto-registered CRM contact: ${fullName} (${phone})`);
       return isFirstMessage; // Return true only for truly new users (to send welcome msg)
     } catch (err: any) {
-      if (!err?.message?.includes('duplicate') && !err?.code === 11000) {
+      if (!err?.message?.includes('duplicate') && err?.code !== 11000) {
         console.error('⚠️ Auto-registration error:', err?.message || err);
       }
       this.registeredNumbers.add(userId);

@@ -1,0 +1,26 @@
+Mar 24 20:17:25 [whatsapp] [34m│[0m        src/models/CallLog.ts(21,23): error TS2589: Type instantiation is excessively deep and possibly infinite.
+Mar 24 20:17:25 [whatsapp] [34m│[0m        src/services/AutoRegistrationService.ts(88,51): error TS2367: This condition will always return 'false' since the types 'boolean' and 'number' have no overlap.
+Mar 24 20:17:25 [whatsapp] [34m│[0m        src/services/VoiceCallAgentService.ts(23,42): error TS2551: Property 'getConfig' does not exist on type 'ConfigService'. Did you mean 'getCVConfig'?
+Mar 24 20:17:25 [whatsapp] [34m│[0m        src/services/VoiceCallAgentService.ts(33,27): error TS2339: Property 'updateConfig' does not exist on type 'ConfigService'.
+Mar 24 20:17:25 [whatsapp] [34m│[0m        src/services/VoiceCallAgentService.ts(94,47): error TS2339: Property 'chat' does not exist on type 'AILoadBalancer'.
+Mar 24 20:17:25 [whatsapp] [34m│[0m        src/services/VoiceCallAgentService.ts(130,9): error TS2393: Duplicate function implementation.
+Mar 24 20:17:25 [whatsapp] [34m│[0m        src/services/VoiceCallAgentService.ts(150,70): error TS2304: Cannot find name 'ICallLog'.
+Mar 24 20:17:25 [whatsapp] [34m│[0m        src/services/VoiceCallAgentService.ts(150,70): error TS4055: Return type of public method from exported class has or is using private name 'ICallLog'.
+Mar 24 20:17:25 [whatsapp] [34m│[0m        src/services/VoiceCallAgentService.ts(210,9): error TS2393: Duplicate function implementation.
+Mar 24 20:17:25 [whatsapp] [34m│[0m 
+Mar 24 20:17:25 [whatsapp] [34m│[0m -----> Build failed
+Mar 24 20:17:25 [whatsapp] [34m│[0m        
+Mar 24 20:17:25 [whatsapp] [34m│[0m        We're sorry this build is failing! You can troubleshoot common issues here:
+Mar 24 20:17:25 [whatsapp] [34m│[0m        https://devcenter.heroku.com/articles/troubleshooting-node-deploys
+Mar 24 20:17:25 [whatsapp] [34m│[0m        
+Mar 24 20:17:25 [whatsapp] [34m│[0m        If you're stuck, please submit a ticket so we can help:
+Mar 24 20:17:25 [whatsapp] [34m│[0m        https://help.heroku.com/
+Mar 24 20:17:25 [whatsapp] [34m│[0m        
+Mar 24 20:17:25 [whatsapp] [34m│[0m        Love,
+Mar 24 20:17:25 [whatsapp] [34m│[0m        Heroku
+Mar 24 20:17:25 [whatsapp] [34m│[0m        
+Mar 24 20:17:25 [whatsapp] [34m│[0m Timer: Builder ran for 1m14.862482155s and ended at 2026-03-24T20:17:25Z
+Mar 24 20:17:25 [whatsapp] [34m│[0m [31;1mERROR: [0mfailed to build: exit status 1
+Mar 24 20:17:25 [whatsapp] [34m│[0m 
+Mar 24 20:17:25 [whatsapp] [34m│[0m 
+Mar 24 20:17:25 [whatsapp] [34m│[0m [31m ✘ build failed[0m

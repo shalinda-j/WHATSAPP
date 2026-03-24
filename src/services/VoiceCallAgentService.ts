@@ -1,7 +1,5 @@
-import { aiLoadBalancer } from './AILoadBalancer';
 import { generateSpeech } from './voice';
-import CallLog from '../models/CallLog';
-import { configService } from './ConfigService';
+import CallLog, { ICallLog } from '../models/CallLog';
 
 /**
  * Voice Call Agent Service
@@ -19,21 +17,11 @@ export class VoiceCallAgentService {
   };
 
   async isCallAgentEnabled(): Promise<boolean> {
-    try {
-      const config = await configService.getConfig();
-      return (config as any)?.callAgentEnabled ?? false;
-    } catch {
-      return this.isEnabled;
-    }
+    return this.isEnabled;
   }
 
   async enableCallAgent(enabled: boolean): Promise<void> {
     this.isEnabled = enabled;
-    try {
-      await configService.updateConfig({ callAgentEnabled: enabled });
-    } catch (err) {
-      console.error('Failed to persist call agent setting:', err);
-    }
   }
 
   /**
@@ -65,10 +53,7 @@ export class VoiceCallAgentService {
       language,
     });
 
-    const enabled = await this.isCallAgentEnabled();
-
-    if (!enabled) {
-      // Auto-reject: log and return
+    if (!this.isEnabled) {
       callLog.status = 'rejected';
       callLog.endTime = new Date();
       callLog.duration = 0;
@@ -81,27 +66,7 @@ export class VoiceCallAgentService {
     callLog.endTime = new Date();
     callLog.duration = 0;
 
-    const greeting = this.callGreeting[language] || this.callGreeting.en;
-
-    // Generate AI greeting
-    let responseText = greeting;
-    try {
-      const systemPrompt = this.agentPersonality ||
-        `You are a professional WhatsApp voice call assistant. 
-        Keep responses SHORT (2-3 sentences max) for voice calls. 
-        Be friendly and helpful. Speak naturally.`;
-
-      const aiResponse = await aiLoadBalancer.chat(
-        [{ role: 'user', content: `A caller just connected. Generate a brief, warm greeting for a voice call. Language: ${language}` }],
-        systemPrompt,
-      );
-
-      if (aiResponse) responseText = aiResponse;
-    } catch {
-      // Use default greeting on AI failure
-    }
-
-    callLog.aiResponseText = responseText;
+    const responseText = this.callGreeting[language] || this.callGreeting.en;
 
     // Generate TTS audio
     let audioBuffer: Buffer | undefined;
@@ -114,6 +79,7 @@ export class VoiceCallAgentService {
       console.error('TTS generation failed for call:', err);
     }
 
+    callLog.aiResponseText = responseText;
     await callLog.save().catch(() => {});
 
     return {
@@ -125,31 +91,32 @@ export class VoiceCallAgentService {
   }
 
   /**
-   * Log a missed call
+   * Log a missed/rejected call (for default non-agent mode)
    */
   async logMissedCall(callerId: string, sessionId: string): Promise<void> {
     try {
-      await new CallLog({
+      await CallLog.create({
         sessionId,
         callerId,
         callerPhone: callerId.replace('@s.whatsapp.net', '').replace('@c.us', ''),
         startTime: new Date(),
         endTime: new Date(),
-        duration: 0,
         status: 'missed',
         direction: 'incoming',
-      }).save();
+        duration: 0,
+        language: this.primaryLanguage || 'en',
+      });
     } catch {
-      // Silently handle
+      // Non-critical, ignore
     }
   }
 
   /**
    * Get call logs for a session
    */
-  async getCallLogs(sessionId?: string, limit: number = 50): Promise<ICallLog[]> {
+  async getCallLogs(sessionId?: string, limit: number = 50): Promise<any[]> {
     try {
-      const query = sessionId ? { sessionId } : {};
+      const query: Record<string, any> = sessionId ? { sessionId } : {};
       return await CallLog.find(query)
         .sort({ createdAt: -1 })
         .limit(limit)
@@ -170,7 +137,7 @@ export class VoiceCallAgentService {
     avgDuration: number;
   }> {
     try {
-      const query = sessionId ? { sessionId } : {};
+      const query: Record<string, any> = sessionId ? { sessionId } : {};
       const logs = await CallLog.find(query).lean();
 
       const total = logs.length;
@@ -205,24 +172,6 @@ export class VoiceCallAgentService {
       language: this.primaryLanguage || 'en',
       greeting: this.callGreeting[this.primaryLanguage || 'en'] || '',
     };
-  }
-
-  async logMissedCall(callerId: string, sessionId: string): Promise<void> {
-    try {
-      await CallLog.create({
-        sessionId,
-        callerId,
-        callerPhone: callerId.replace('@s.whatsapp.net', '').replace('@c.us', ''),
-        startTime: new Date(),
-        endTime: new Date(),
-        status: 'missed',
-        direction: 'incoming',
-        duration: 0,
-        language: this.primaryLanguage || 'en',
-      });
-    } catch (err) {
-      // Non-critical, ignore
-    }
   }
 }
 
