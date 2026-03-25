@@ -187,25 +187,41 @@ export async function transcribeAudio(
         },
       },
       {
-        text: `Transcribe this audio message accurately.
+        text: `You are a professional multilingual audio transcription system. Transcribe this audio message EXACTLY as spoken.
 
-IMPORTANT LANGUAGE RULES:
-1. If the audio is in Sinhala, transcribe using Sinhala Unicode characters (සිංහල අකුරු)
-2. If the audio is in English, transcribe in English
-3. If the audio is in Tamil, transcribe using Tamil Unicode characters
-4. If the audio is in Hindi, transcribe using Hindi (Devanagari) Unicode characters
-5. Detect the language automatically and transcribe in the SAME language
+CRITICAL LANGUAGE RULES — READ CAREFULLY:
+1. SINHALA: If you hear Sinhala language (Sri Lanka), transcribe using Sinhala Unicode script (e.g., "ආයුබෝවන්", "ඔබට කොහොමද"). Do NOT transliterate to Latin/English letters. Use proper Sinhala Unicode characters (\u0D80-\u0DFF).
+2. SINHALA ROMANIZED: If someone speaks Sinhala using English letters (e.g., "ayubowewan", "kohomada", "mama", "oba"), transcribe what they actually say in those letters — do not convert to Sinhala script.
+3. ENGLISH: Transcribe in English if the audio is in English.
+4. TAMIL: Transcribe in Tamil Unicode script (e.g., "வணக்கம்", "நன்றி") if the audio is in Tamil.
+5. HINDI: Transcribe in Devanagari Unicode if the audio is in Hindi.
+6. MIXED: If the speaker mixes languages (e.g., Sinhala + English), transcribe naturally as mixed.
 
-Return ONLY the transcription text, nothing else. No language labels or explanations.`,
+RULES:
+- Return ONLY the transcription. No labels like "Transcription:", no explanations.
+- Preserve natural speech patterns, filler words, and the speaker's exact words.
+- If the audio is very short (less than 1 second), or completely silent, return the empty string "".
+- Do NOT add punctuation that wasn't implied by the speaker's tone/pauses.`,
       },
     ]);
-    return result.response.text();
+
+    const transcribed = result.response.text().trim();
+    // If Gemini returns meta-commentary instead of transcription, return empty
+    if (
+      transcribed.toLowerCase().includes('transcription:') ||
+      transcribed.toLowerCase().startsWith('the audio') ||
+      transcribed.toLowerCase().startsWith('this audio') ||
+      transcribed.toLowerCase().startsWith('i cannot')
+    ) {
+      return '';
+    }
+    return transcribed;
   } catch (error: any) {
     if (error.message === 'MISSING_API_KEY') {
-      return ''; // Missing API key, skip transcription
+      return ''; // Missing API key — return empty, caller will try other providers
     }
-    console.error('Audio transcription error:', error);
-    throw error;
+    console.error('Gemini STT error:', error.message || error);
+    throw error; // Let caller handle (voice.ts catches all STT errors)
   }
 }
 

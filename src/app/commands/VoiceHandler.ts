@@ -101,8 +101,18 @@ export class VoiceHandler {
         return;
       }
 
-      // ── Generate AI response for ALL voice messages (not just questions) ───
-      const aiResponse = await aiLoadBalancer.sendMessage(jid, transcription);
+      // ── Build language-aware prompt ────────────────────────────────────────
+      const langInstructions: Record<string, string> = {
+        si: '\n\n(SYSTEM: මෙය VOICE (හඬ) පණිවිඩයකි. **සිංහල** භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න. ඉතා කෙටිව, ස්වාභාවිකව කතා කරන ශෛලියෙන් යෙදුම් 1-2කින් ලිවිය යුතුය.)',
+        en: '\n\n(SYSTEM: This is a VOICE message. Reply ONLY in English, short and natural — 1-2 sentences max.)',
+        ta: '\n\n(SYSTEM: இது ஒலி செய்தி. தமிழில் மட்டும் பதிலளிக்கவும். 1-2 வாக்கியங்களில் இயல்பான பேச்சு வழக்கில் பதிலளிக்கவும்.)',
+        hi: '\n\n(SYSTEM: यह एक VOICE संदेश है। हिंदी में ही जवाब दें। 1-2 वाक्यों में स्वाभाविक तरीके से।)',
+      };
+      const langInstruction = langInstructions[detectedLang] || langInstructions.si;
+      const finalPrompt = transcription + langInstruction;
+
+      // ── Generate AI response for ALL voice messages ────────────────────────
+      const aiResponse = await aiLoadBalancer.sendMessage(jid, finalPrompt);
 
       const shouldSendText  = voiceMode === 'text-only'  || voiceMode === 'voice-and-text';
       const shouldSendVoice = voiceMode === 'voice-only' || voiceMode === 'voice-and-text';

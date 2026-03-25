@@ -111,35 +111,64 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
 }
 
 export async function transcribeAudioWithLanguage(audioBuffer: Buffer): Promise<TranscriptionResult> {
-  try {
-    let config = null;
-    try { config = await VoiceConfig.findOne({ isActive: true }).sort({ updatedAt: -1 }); } catch {}
-    const provider = config?.provider || 'google-free';
+  let config = null;
+  try { config = await VoiceConfig.findOne({ isActive: true }).sort({ updatedAt: -1 }); } catch {}
 
-    let text = '';
+  const provider = config?.provider || 'google-free';
+  const apiKey = config?.apiKey || process.env.OPENAI_API_KEY || '';
 
-    if ((provider === 'openai' || provider === 'google-cloud') && config?.apiKey) {
-      try {
-        console.log('   🎙️ Transcribing with OpenAI Whisper...');
-        text = await openaiTranscribeAudio(audioBuffer, config.apiKey);
-      } catch (err: any) {
-        console.warn(`   ⚠️ OpenAI STT failed: ${err.message}. Falling back to Gemini...`);
-      }
+  let text = '';
+
+  // ── Step 1: Try OpenAI Whisper (if API key is configured) ─────────────────
+  // Whisper supports: flac, mp3, mp4, mpeg, mpga, m4a, ogg, opus, wav, webm
+  if (apiKey && (provider === 'openai' || provider === 'google-cloud')) {
+    try {
+      console.log('   🎙️ Trying OpenAI Whisper STT...');
+      text = await openaiTranscribeAudio(audioBuffer, apiKey);
+      if (text) console.log(`   ✅ OpenAI Whisper: "${text.substring(0, 60)}..."`);
+    } catch (err: any) {
+      console.warn(`   ⚠️ OpenAI Whisper failed: ${err.message}`);
     }
-
-    if (!text) {
-      console.log('   🎙️ Transcribing with Gemini...');
-      text = await geminiTranscribeAudio(audioBuffer.toString('base64'), 'audio/ogg');
-    }
-
-    const langResult = detectLanguage(text);
-    console.log(`   🌐 Detected language: ${langResult.lang} (confidence: ${langResult.confidence.toFixed(2)})`);
-
-    return { text, detectedLanguage: langResult.lang, languageConfidence: langResult.confidence };
-  } catch (err: any) {
-    console.error('❌ Transcription error:', err.message || err);
-    throw new Error('Failed to transcribe audio');
   }
+
+  // ── Step 2: Try Gemini audio transcription (primary free option) ───────────
+  // Gemini 1.5 Flash supports audio/ogg natively (WhatsApp PTT format)
+  if (!text) {
+    try {
+      console.log('   🎙️ Trying Gemini STT...');
+
+      // Try with the audio/ogg MIME type (WhatsApp PTT format)
+      text = await geminiTranscribeAudio(audioBuffer.toString('base64'), 'audio/ogg');
+
+      if (text) console.log(`   ✅ Gemini: "${text.substring(0, 60)}..."`);
+    } catch (err: any) {
+      console.warn(`   ⚠️ Gemini STT failed: ${err.message}`);
+      text = '';
+    }
+  }
+
+  // ── Step 3: Try Gemini with alternative MIME type ─────────────────────────
+  if (!text) {
+    try {
+      console.log('   🎙️ Trying Gemini STT with audio/webm...');
+      text = await geminiTranscribeAudio(audioBuffer.toString('base64'), 'audio/webm');
+      if (text) console.log(`   ✅ Gemini (webm): "${text.substring(0, 60)}..."`);
+    } catch (err: any) {
+      console.warn(`   ⚠️ Gemini STT (webm fallback) failed: ${err.message}`);
+      text = '';
+    }
+  }
+
+  // ── Step 4: If all STT failed, return empty (caller will handle gracefully) ─
+  if (!text || text.trim().length < 2) {
+    console.error('   ❌ All STT providers failed — returning empty transcription');
+    return { text: '', detectedLanguage: 'si', languageConfidence: 0 };
+  }
+
+  const langResult = detectLanguage(text);
+  console.log(`   🌐 Language: ${langResult.lang} (confidence: ${langResult.confidence.toFixed(2)})`);
+
+  return { text, detectedLanguage: langResult.lang, languageConfidence: langResult.confidence };
 }
 
 // ═════════════════════════════════════════════════════════════════════════════

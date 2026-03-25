@@ -352,29 +352,27 @@ onMessage(async (message, sock, sessionId) => {
       const audioBuffer = await downloadWhatsAppAudio(message);
 
       if (audioBuffer) {
-        try {
-          // 1. Transcribe with language detection
-          const transcriptionResult = await transcribeAudioWithLanguage(
-            audioBuffer,
-          );
-          console.log(`   📝 Transcription: "${transcriptionResult.text}"`);
-          console.log(
-            `   🌐 Detected language: ${
-              transcriptionResult.detectedLanguage
-            } (${(transcriptionResult.languageConfidence * 100).toFixed(0)}%)`,
-          );
-          text = transcriptionResult.text;
-          detectedVoiceLanguage = transcriptionResult.detectedLanguage;
-          isVoiceMessage = true;
-        } catch (err: any) {
-          console.error('   ❌ Transcription failed:', err);
-          await sendMessage(
-            jid,
-            '⚠️ Voice transcription failed. Please try text.',
-            sessionId,
-          );
+        // Transcription — NEVER throws (voice.ts handles all failures gracefully)
+        const transcriptionResult = await transcribeAudioWithLanguage(audioBuffer);
+
+        if (!transcriptionResult.text || transcriptionResult.text.trim().length < 2) {
+          console.warn('   ⚠️ Transcription returned empty result — all STT providers failed');
+          // Language-aware "try again" messages
+          const retryMessages: Record<string, string> = {
+            si: '🎤 ඔබේ හඬ පණිවිඩය තේරුම් ගත නොහැකි විය. කරුණාකර නැවත උත්සාහ කරන්න.',
+            ta: '🎤 உங்கள் குரல் செய்தி புரியவில்லை. மீண்டும் முயற்சிக்கவும்.',
+            en: '🎤 Could not understand your voice message. Please speak clearly and try again.',
+          };
+          // Use Sinhala as default since most users are Sinhala
+          await sendMessage(jid, retryMessages.si, sessionId);
           return;
         }
+
+        console.log(`   📝 Transcription: "${transcriptionResult.text.substring(0, 80)}"`);
+        console.log(`   🌐 Language: ${transcriptionResult.detectedLanguage} (${(transcriptionResult.languageConfidence * 100).toFixed(0)}%)`);
+        text = transcriptionResult.text;
+        detectedVoiceLanguage = transcriptionResult.detectedLanguage;
+        isVoiceMessage = true;
       } else {
         console.error('   ❌ Failed to download audio');
         return;
