@@ -31,7 +31,7 @@ interface UsageCycle {
 }
 
 interface VoiceConfigData {
-    provider: 'google-free' | 'google-cloud' | 'openai' | 'elevenlabs';
+    provider: 'google-free' | 'google-cloud' | 'gemini-tts' | 'openai' | 'elevenlabs';
     apiKey?: string;
     googleApiKey?: string;
     voiceId?: string;
@@ -279,6 +279,7 @@ export default function Config() {
             const label: Record<string, string> = {
                 'google-free': 'Google Free TTS',
                 'google-cloud': 'Google Cloud TTS',
+                'gemini-tts': 'Gemini TTS',
                 'openai': 'OpenAI TTS',
                 'elevenlabs': 'ElevenLabs',
             };
@@ -313,7 +314,7 @@ export default function Config() {
             apiKey: '',
             googleApiKey: '',
             ttsModel: providerName === 'elevenlabs' ? 'eleven_multilingual_v2' : 'tts-1',
-            voiceId: providerName === 'google-cloud' ? 'en-US-Neural2-F' : providerName === 'elevenlabs' ? '' : 'nova',
+            voiceId: providerName === 'google-cloud' ? 'en-US-Neural2-F' : providerName === 'gemini-tts' ? 'Kore' : providerName === 'elevenlabs' ? '' : 'nova',
         };
     };
 
@@ -845,9 +846,9 @@ export default function Config() {
                             )}
 
                             {/* Waterfall routing info banner */}
-                            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800">
+                            <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-xl text-sm text-indigo-900">
                                 <p className="font-semibold mb-1">📡 Smart Waterfall Routing</p>
-                                <p>The system automatically falls back to the next available provider if the active one fails. For <strong>Sinhala</strong>, Google Free TTS is always used (the only engine with native Sinhala support).</p>
+                                <p>The system auto-falls back to the next provider if the active one fails. Recommended order: <strong>Gemini TTS → Google Cloud TTS → OpenAI TTS → ElevenLabs → Google Free TTS</strong>. <strong>Gemini TTS</strong> is the only AI-powered engine that natively supports <strong>Sinhala, Tamil, Hindi, and English</strong> using the same Gemini API Key — no extra setup needed.</p>
                             </div>
 
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -954,6 +955,68 @@ export default function Config() {
                                         onClick={() => handleSaveVoiceProvider('google-cloud')}
                                         disabled={voiceSaving}
                                         className="mt-6 w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition disabled:opacity-50"
+                                    >
+                                        <Save className="h-4 w-4 mr-2" /> Save & Activate
+                                    </button>
+                                </div>
+
+                                {/* Gemini TTS Card */}
+                                <div className={`bg-white shadow-lg rounded-xl border-2 transition-all p-6 flex flex-col ${activeVoiceProvider === 'gemini-tts' ? 'border-indigo-500 shadow-indigo-100' : 'border-gray-200'}`}>
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                            <h3 className="font-bold text-lg text-gray-800">Gemini TTS</h3>
+                                            <p className="text-xs text-gray-500">AI-Powered · 100+ Languages · Sinhala Native</p>
+                                        </div>
+                                        {activeVoiceProvider === 'gemini-tts' && (
+                                            <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-1 rounded-full uppercase flex items-center">
+                                                <Activity className="w-3 h-3 mr-1" /> Active
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex-1 space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Response Mode</label>
+                                            <select
+                                                value={getProviderConfig('gemini-tts').mode}
+                                                onChange={(e) => updateProviderConfig('gemini-tts', { mode: e.target.value as VoiceConfigData['mode'] })}
+                                                className="w-full p-2 border border-indigo-200 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                            >
+                                                <option value="voice-and-text">Voice & Text</option>
+                                                <option value="voice-only">Voice Only</option>
+                                                <option value="text-only">Text Only</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-indigo-900 mb-1">Voice</label>
+                                            <select
+                                                value={getProviderConfig('gemini-tts').voiceId || 'Kore'}
+                                                onChange={(e) => updateProviderConfig('gemini-tts', { voiceId: e.target.value })}
+                                                className="w-full p-2 border border-indigo-200 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm"
+                                            >
+                                                <option value="Kore">Kore — Firm (English)</option>
+                                                <option value="Puck">Puck — Upbeat</option>
+                                                <option value="Charon">Charon — Informative</option>
+                                                <option value="Fenrir">Fenrir — Excitable</option>
+                                                <option value="Aoede">Aoede — Breezy</option>
+                                                <option value="Leda">Leda — Youthful (Tamil)</option>
+                                                <option value="Achird">Achird — Friendly (Hindi)</option>
+                                                <option value="Sulafat">Sulafat — Warm (Sinhala/Tamil/Hindi)</option>
+                                                <option value="Zephyr">Zephyr — Bright</option>
+                                                <option value="Umbriel">Umbriel — Easy-going</option>
+                                                <option value="Iapetus">Iapetus — Clear</option>
+                                                <option value="Gacrux">Gacrux — Mature</option>
+                                                <option value="Achernar">Achernar — Soft</option>
+                                                <option value="Alnilam">Alnilam — Firm</option>
+                                            </select>
+                                        </div>
+                                        <div className="bg-indigo-50 p-3 rounded text-xs text-indigo-800 border border-indigo-100">
+                                            🤖 Uses <strong>model gemini-2.5-flash-preview-tts</strong> — powered by your existing <strong>Gemini API Key</strong> (no extra setup). Natively speaks Sinhala, Tamil, Hindi, English and 100+ languages. Recommended: <em>Sulafat (Warm)</em> for multilingual use.
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => handleSaveVoiceProvider('gemini-tts')}
+                                        disabled={voiceSaving}
+                                        className="mt-6 w-full flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition disabled:opacity-50"
                                     >
                                         <Save className="h-4 w-4 mr-2" /> Save & Activate
                                     </button>

@@ -3,16 +3,16 @@
  *
  * TTS Waterfall routing per language:
  *
- * English / Tamil:
- *   1. Google Cloud TTS  (official, Neural2 voices, requires API key)
- *   2. OpenAI TTS        (tts-1/tts-1-hd, requires API key)
- *   3. ElevenLabs        (premium, requires API key)
- *   4. Google Free TTS   (unofficial Google Translate, no API key, always last resort)
+ * All languages (en / ta / hi / si):
+ *   1. Gemini TTS        (gemini-2.5-flash-preview-tts — uses GEMINI_API_KEY, 30 voices,
+ *                         natively supports Sinhala/Tamil/Hindi/English + 100+ languages)
+ *   2. Google Cloud TTS  (official Neural2 voices, separate googleApiKey, NO Sinhala)
+ *   3. OpenAI TTS        (tts-1/tts-1-hd, requires apiKey)
+ *   4. ElevenLabs        (premium, requires apiKey)
+ *   5. Google Free TTS   (unofficial Google Translate, no API key, always last resort)
  *
- * Sinhala:
- *   1. Google Free TTS   (ONLY engine with native Sinhala support)
- *   2. OpenAI TTS        (accent but understands Sinhala text, fallback)
- *   — Google Cloud TTS is intentionally skipped for Sinhala (no native voice)
+ * Sinhala note: Gemini TTS now handles Sinhala natively (si BCP-47).
+ * Google Cloud TTS is still skipped for Sinhala (no native voice).
  */
 
 import { transcribeAudio as openaiTranscribeAudio } from './openai';
@@ -213,6 +213,94 @@ function wrapSSML(text: string): string {
 // ─── Individual provider functions ────────────────────────────────────────────
 
 /**
+ * Convert raw PCM (s16le) to a WAV file buffer.
+ * Gemini TTS returns 24000Hz, 16-bit, mono PCM.
+ */
+function pcmToWav(pcmData: Buffer, sampleRate = 24000, channels = 1, bitsPerSample = 16): Buffer {
+  const byteRate = sampleRate * channels * (bitsPerSample / 8);
+  const blockAlign = channels * (bitsPerSample / 8);
+  const dataSize = pcmData.length;
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0, 'ascii');
+  header.writeUInt32LE(36 + dataSize, 4);
+  header.write('WAVE', 8, 'ascii');
+  header.write('fmt ', 12, 'ascii');
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write('data', 36, 'ascii');
+  header.writeUInt32LE(dataSize, 40);
+  return Buffer.concat([header, pcmData]);
+}
+
+/**
+ * Gemini TTS (gemini-2.5-flash-preview-tts).
+ * Uses the same GEMINI_API_KEY that drives the AI assistant — no separate key needed.
+ * Natively supports 100+ languages including Sinhala, Tamil, Hindi, English.
+ * Returns a WAV buffer (PCM converted to WAV in-memory — no ffmpeg required).
+ * Docs: https://ai.google.dev/gemini-api/docs/speech-generation
+ */
+async function ttsGemini(text: string, lang: string, voiceName: string): Promise<Buffer> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'your_gemini_api_key_here') {
+    throw new Error('GEMINI_API_KEY not configured');
+  }
+
+  // Map per-language default voices for natural accent/style
+  const GEMINI_VOICE_DEFAULTS: Record<string, string> = {
+    si: 'Sulafat',   // Warm — closest to natural Sinhala cadence
+    ta: 'Leda',      // Youthful — good for Tamil
+    hi: 'Achird',    // Friendly — good for Hindi
+    en: 'Kore',      // Firm — clear English
+  };
+  const voice = voiceName || GEMINI_VOICE_DEFAULTS[lang] || 'Kore';
+
+  console.log(`   🤖 Gemini TTS — model: gemini-2.5-flash-preview-tts, voice: ${voice}, lang: ${lang}`);
+
+  const payload = {
+    contents: [{ parts: [{ text }] }],
+    generationConfig: {
+      responseModalities: ['AUDIO'],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: { voiceName: voice },
+        },
+      },
+    },
+  };
+
+  const response = await axios.post(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent`,
+    payload,
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      timeout: 30000,
+    },
+  );
+
+  const pcmBase64: string | undefined =
+    response.data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+
+  if (!pcmBase64) {
+    throw new Error('Gemini TTS returned no audio data');
+  }
+
+  // Convert raw PCM → WAV so WhatsApp can play it
+  const pcmBuffer = Buffer.from(pcmBase64, 'base64');
+  const wavBuffer = pcmToWav(pcmBuffer, 24000, 1, 16);
+
+  console.log(`   ✅ Gemini TTS: ${pcmBuffer.length} PCM bytes → ${wavBuffer.length} WAV bytes`);
+  return wavBuffer;
+}
+
+/**
  * Google Cloud Text-to-Speech (official REST API).
  * Requires a Google Cloud API key with "Cloud Text-to-Speech API" enabled.
  * Does NOT support Sinhala — call will throw for 'si'.
@@ -388,49 +476,59 @@ export async function generateSpeech(text: string, targetLanguage?: string): Pro
   const primaryProvider = config?.provider || 'google-free';
   const googleApiKey = config?.googleApiKey || process.env.GOOGLE_TTS_API_KEY || '';
   const apiKey = config?.apiKey || process.env.OPENAI_API_KEY || '';
+  const geminiApiKey = process.env.GEMINI_API_KEY || '';
   const voiceId = config?.voiceId || '';
   const model = config?.ttsModel || 'tts-1';
 
   console.log(`   🔊 TTS request — primary: ${primaryProvider}, lang: ${lang}, text length: ${text.length}`);
 
   // ── Build provider waterfall ─────────────────────────────────────────────────
-  // For Sinhala: Google Free MUST be first (only native Sinhala engine)
-  // For other languages: respect the user's primary provider, then cascade down
+  // Gemini TTS is the preferred first-choice for ALL languages (including Sinhala)
+  // because it natively supports 100+ languages using the same GEMINI_API_KEY.
+  // Sinhala-only note: Google Cloud TTS is still skipped for si (no native voice).
 
   const waterfall: Array<{ name: string; fn: () => Promise<Buffer> }> = [];
 
-  if (lang === 'si') {
-    // Sinhala: Google Free first (only native support)
-    waterfall.push({ name: 'Google Free (Sinhala)', fn: () => ttsGoogleFree(text, lang) });
-    if (apiKey) {
-      waterfall.push({ name: 'OpenAI (Sinhala fallback)', fn: () => ttsOpenAI(text, lang, apiKey, voiceId, model) });
-    }
-  } else {
-    // Other languages: respect configured primary provider, then cascade
-    if (primaryProvider === 'google-cloud' && googleApiKey) {
-      waterfall.push({ name: 'Google Cloud TTS', fn: () => ttsGoogleCloud(text, lang, googleApiKey) });
-    }
-    if (primaryProvider === 'openai' && apiKey) {
-      waterfall.push({ name: 'OpenAI TTS', fn: () => ttsOpenAI(text, lang, apiKey, voiceId, model) });
-    }
-    if (primaryProvider === 'elevenlabs' && apiKey) {
-      waterfall.push({ name: 'ElevenLabs TTS', fn: () => ttsElevenLabs(text, apiKey, voiceId, model) });
-    }
-
-    // Add alternates not yet in the list (graceful fallbacks)
-    if (primaryProvider !== 'google-cloud' && googleApiKey) {
-      waterfall.push({ name: 'Google Cloud TTS (fallback)', fn: () => ttsGoogleCloud(text, lang, googleApiKey) });
-    }
-    if (primaryProvider !== 'openai' && apiKey && primaryProvider !== 'elevenlabs') {
-      waterfall.push({ name: 'OpenAI TTS (fallback)', fn: () => ttsOpenAI(text, lang, apiKey, voiceId, model) });
-    }
-    if (primaryProvider !== 'elevenlabs' && apiKey && primaryProvider === 'openai') {
-      // Skip ElevenLabs if OpenAI is primary (not configured for ElevenLabs)
-    }
-
-    // Google Free is always the last-resort fallback
-    waterfall.push({ name: 'Google Free TTS (last resort)', fn: () => ttsGoogleFree(text, lang) });
+  // 1. Gemini TTS — primary if explicitly chosen, or as first fallback for all langs
+  if (primaryProvider === 'gemini-tts' && geminiApiKey) {
+    waterfall.push({ name: 'Gemini TTS (primary)', fn: () => ttsGemini(text, lang, voiceId) });
   }
+
+  // 2. Google Cloud TTS — primary or fallback (NOT for Sinhala)
+  if (lang !== 'si') {
+    if (primaryProvider === 'google-cloud' && googleApiKey) {
+      waterfall.push({ name: 'Google Cloud TTS (primary)', fn: () => ttsGoogleCloud(text, lang, googleApiKey) });
+    }
+  }
+
+  // 3. OpenAI TTS — primary or fallback
+  if (primaryProvider === 'openai' && apiKey) {
+    waterfall.push({ name: 'OpenAI TTS (primary)', fn: () => ttsOpenAI(text, lang, apiKey, voiceId, model) });
+  }
+
+  // 4. ElevenLabs TTS — primary
+  if (primaryProvider === 'elevenlabs' && apiKey) {
+    waterfall.push({ name: 'ElevenLabs TTS (primary)', fn: () => ttsElevenLabs(text, apiKey, voiceId, model) });
+  }
+
+  // ── Cascade fallbacks (providers not already in list) ─────────────────────────
+  // Gemini TTS fallback — for all langs including Sinhala (most important fallback)
+  if (primaryProvider !== 'gemini-tts' && geminiApiKey) {
+    waterfall.push({ name: 'Gemini TTS (fallback)', fn: () => ttsGemini(text, lang, voiceId) });
+  }
+
+  // Google Cloud fallback — skip Sinhala
+  if (primaryProvider !== 'google-cloud' && lang !== 'si' && googleApiKey) {
+    waterfall.push({ name: 'Google Cloud TTS (fallback)', fn: () => ttsGoogleCloud(text, lang, googleApiKey) });
+  }
+
+  // OpenAI fallback
+  if (primaryProvider !== 'openai' && primaryProvider !== 'elevenlabs' && apiKey) {
+    waterfall.push({ name: 'OpenAI TTS (fallback)', fn: () => ttsOpenAI(text, lang, apiKey, voiceId, model) });
+  }
+
+  // Google Free TTS is always the last-resort (works for Sinhala, no API key needed)
+  waterfall.push({ name: 'Google Free TTS (last resort)', fn: () => ttsGoogleFree(text, lang) });
 
   // ── Execute waterfall ────────────────────────────────────────────────────────
   let lastError: Error | null = null;

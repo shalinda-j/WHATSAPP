@@ -1,6 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
 
-export type VoiceProvider = 'google-free' | 'google-cloud' | 'openai' | 'elevenlabs';
+export type VoiceProvider = 'google-free' | 'google-cloud' | 'gemini-tts' | 'openai' | 'elevenlabs';
 export type VoiceMode = 'voice-only' | 'text-only' | 'voice-and-text';
 
 export interface IVoiceConfig {
@@ -17,7 +17,7 @@ export interface IVoiceConfig {
 const VoiceConfigSchema = new Schema<IVoiceConfig>({
   provider: {
     type: String,
-    enum: ['google-free', 'google-cloud', 'openai', 'elevenlabs'],
+    enum: ['google-free', 'google-cloud', 'gemini-tts', 'openai', 'elevenlabs'],
     default: 'google-free',
   },
   apiKey: { type: String, required: false },

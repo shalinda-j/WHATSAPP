@@ -28,7 +28,7 @@ import {
 // Types
 interface VoiceConfigData {
     _id?: string;
-    provider: 'google-free' | 'google-cloud' | 'openai' | 'elevenlabs';
+    provider: 'google-free' | 'google-cloud' | 'gemini-tts' | 'openai' | 'elevenlabs';
     apiKey?: string;
     googleApiKey?: string;
     voiceId?: string;
@@ -107,6 +107,34 @@ const PROVIDER_INFO = {
             { id: 'hi-IN-Neural2-A', name: 'Hindi — Neural2 Female 🇮🇳' },
         ],
         note: 'Official Google Cloud TTS. High quality Neural2 voices for English & Tamil. Sinhala auto-routes to Google Free (Google Cloud has no Sinhala voice).',
+    },
+    'gemini-tts': {
+        name: 'Gemini TTS',
+        description: 'AI-Powered · 100+ Languages · Uses Gemini API Key',
+        color: 'indigo',
+        bgColor: 'bg-indigo-50',
+        borderColor: 'border-indigo-500',
+        textColor: 'text-indigo-600',
+        buttonColor: 'bg-indigo-600 hover:bg-indigo-700',
+        requiresApiKey: false,
+        requiresGoogleApiKey: false,
+        voices: [
+            { id: 'Kore', name: 'Kore — Firm (EN)' },
+            { id: 'Puck', name: 'Puck — Upbeat' },
+            { id: 'Charon', name: 'Charon — Informative' },
+            { id: 'Fenrir', name: 'Fenrir — Excitable' },
+            { id: 'Aoede', name: 'Aoede — Breezy' },
+            { id: 'Leda', name: 'Leda — Youthful' },
+            { id: 'Achird', name: 'Achird — Friendly' },
+            { id: 'Sulafat', name: 'Sulafat — Warm (SI/TA/HI)' },
+            { id: 'Zephyr', name: 'Zephyr — Bright' },
+            { id: 'Umbriel', name: 'Umbriel — Easy-going' },
+            { id: 'Iapetus', name: 'Iapetus — Clear' },
+            { id: 'Gacrux', name: 'Gacrux — Mature' },
+            { id: 'Achernar', name: 'Achernar — Soft' },
+            { id: 'Alnilam', name: 'Alnilam — Firm' },
+        ],
+        note: 'Gemini 2.5 Flash TTS. Uses your existing Gemini API Key — no extra setup needed. Natively supports Sinhala, Tamil, Hindi, English and 100+ more languages. Returns WAV audio.',
     },
     'openai': {
         name: 'OpenAI TTS',
@@ -358,7 +386,7 @@ export default function VoiceAgentHub() {
             mode: 'voice-and-text',
             apiKey: '',
             googleApiKey: '',
-            voiceId: provider === 'google-cloud' ? 'en-US-Neural2-F' : provider === 'elevenlabs' ? '' : 'nova',
+            voiceId: provider === 'google-cloud' ? 'en-US-Neural2-F' : provider === 'gemini-tts' ? 'Kore' : provider === 'elevenlabs' ? '' : 'nova',
             ttsModel: provider === 'elevenlabs' ? 'eleven_multilingual_v2' : 'tts-1'
         });
         setEditingProvider(provider);
@@ -373,7 +401,7 @@ export default function VoiceAgentHub() {
             mode: 'voice-and-text',
             apiKey: '',
             googleApiKey: '',
-            voiceId: providerName === 'google-cloud' ? 'en-US-Neural2-F' : providerName === 'elevenlabs' ? '' : 'nova',
+            voiceId: providerName === 'google-cloud' ? 'en-US-Neural2-F' : providerName === 'gemini-tts' ? 'Kore' : providerName === 'elevenlabs' ? '' : 'nova',
             ttsModel: providerName === 'elevenlabs' ? 'eleven_multilingual_v2' : 'tts-1',
             isActive: false
         };
@@ -624,7 +652,7 @@ export default function VoiceAgentHub() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-4">
                         {/* Provider Cards */}
-                        {(['google-free', 'google-cloud', 'openai', 'elevenlabs'] as const).map((provider) => {
+                        {(['google-free', 'google-cloud', 'gemini-tts', 'openai', 'elevenlabs'] as const).map((provider) => {
                             const info = PROVIDER_INFO[provider];
                             const config = getProviderConfig(provider);
                             const isActiveProvider = activeVoiceProvider === provider;
@@ -711,11 +739,11 @@ export default function VoiceAgentHub() {
                                                 </div>
                                             )}
 
-                                            {/* Voice Selection — Google Cloud & OpenAI */}
-                                            {(provider === 'google-cloud' || provider === 'openai') && info.voices.length > 0 && (
+                                            {/* Voice Selection — Google Cloud, Gemini TTS & OpenAI */}
+                                            {(provider === 'google-cloud' || provider === 'gemini-tts' || provider === 'openai') && info.voices.length > 0 && (
                                                 <div>
                                                     <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                                                        Voice {provider === 'google-cloud' ? '(English & Tamil — Sinhala auto-uses Google Free)' : ''}
+                                                        Voice {provider === 'google-cloud' ? '(EN & Tamil — Sinhala auto-routes to Google Free)' : provider === 'gemini-tts' ? '(Sinhala: use Sulafat — Warm)' : ''}
                                                     </label>
                                                     <select
                                                         value={editFormData.voiceId || info.voices[0]?.id}
