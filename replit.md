@@ -81,6 +81,26 @@ The `Start application` workflow runs both services concurrently:
 ## Key Services
 
 - `src/services/AutoRegistrationService.ts` — Auto-registers new WhatsApp users as CRM contacts
-- `src/services/VoiceCallAgentService.ts` — AI-powered call handling (auto-reject + response)
+- `src/services/VoiceCallAgentService.ts` — AI-powered call handling (auto-reject + response). Settings stored in MongoDB + `data/call_agent_settings.json` (file-system fallback when no DB).
 - `src/models/CallLog.ts` — Call event logging model
 - `src/server/routes/call-agent.ts` — REST API for call agent settings and logs
+- `src/services/UsageResetService.ts` — Monthly AI token usage auto-reset (1st of each month)
+
+## DB Bypass List (works without MongoDB)
+
+Routes in `src/server/app.ts` that bypass the MongoDB connectivity check:
+- `/api/auth` — login/token
+- `/api/marketing` — WhatsApp marketing
+- `/api/webhooks/inbound` — external webhook entry points
+- `/api/bulk` — Bulk sender (WhatsApp socket, not DB)
+- `/api/call-agent` — Call agent settings (file-system fallback)
+- `/api/voice-config` — Voice/TTS config
+- `/health` — health check
+
+## Voice Call AI System
+
+Full pipeline: WhatsApp `call` event → `sock.rejectCall()` → `VoiceCallAgentService.handleIncomingCall()` → `generateSpeech()` → `sendVoiceMessage()` (ffmpeg MP3→OGG/Opus conversion).
+
+Voice notes (PTT): detected by `audioMessage.ptt === true` → `downloadWhatsAppAudio()` → `transcribeAudioWithLanguage()` (OpenAI Whisper → Gemini fallback) → `aiLoadBalancer.sendMessage()` → `generateSpeech()` → `sendVoiceMessage()`.
+
+TTS providers: `google-free` (default, no API key needed), `openai` (tts-1), `elevenlabs`. All provider lookups are DB-resilient (fall back to Google Free if MongoDB unavailable).

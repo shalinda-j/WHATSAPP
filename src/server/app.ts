@@ -42,6 +42,8 @@ app.use(async (req, res, next) => {
     '/api/marketing',
     '/api/webhooks/inbound', // External systems need to send webhooks even without DB
     '/api/bulk',             // Bulk sender uses WhatsApp socket directly, not MongoDB
+    '/api/call-agent',       // Call agent settings now use file-system fallback
+    '/api/voice-config',     // Voice TTS config (graceful error if no DB)
     '/health', // Health check should always work
   ];
 

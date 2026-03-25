@@ -2,8 +2,11 @@ import { generateSpeech } from './voice';
 import CallLog, { ICallLog } from '../models/CallLog';
 import Config from '../models/Config';
 import { aiLoadBalancer } from './AILoadBalancer';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { join } from 'path';
 
 const CONFIG_KEY = 'call_agent_settings';
+const FALLBACK_PATH = join(process.cwd(), 'data', 'call_agent_settings.json');
 
 /**
  * Voice Call Agent Service
@@ -23,45 +26,69 @@ export class VoiceCallAgentService {
   private settingsLoaded: boolean = false;
 
   /**
-   * Load settings from MongoDB (called lazily)
+   * Load settings — tries MongoDB first, then falls back to local file.
    */
   private async loadSettings(): Promise<void> {
     if (this.settingsLoaded) return;
+
+    let saved: any = null;
+
+    // 1. Try MongoDB
     try {
       const config = await Config.findOne({ key: CONFIG_KEY }).lean();
-      if (config && config.value) {
-        const saved = JSON.parse(config.value);
-        this.isEnabled = saved.isEnabled ?? false;
-        this.primaryLanguage = saved.primaryLanguage ?? 'en';
-        this.agentPersonality = saved.agentPersonality ?? '';
-        if (saved.callGreeting) {
-          this.callGreeting = { ...this.callGreeting, ...saved.callGreeting };
-        }
+      if (config?.value) {
+        saved = JSON.parse(config.value);
       }
-    } catch {
-      // Non-critical: use in-memory defaults
+    } catch { /* MongoDB unavailable */ }
+
+    // 2. Fall back to file system
+    if (!saved && existsSync(FALLBACK_PATH)) {
+      try {
+        saved = JSON.parse(readFileSync(FALLBACK_PATH, 'utf-8'));
+      } catch { /* corrupt file — ignore */ }
     }
+
+    if (saved) {
+      this.isEnabled = saved.isEnabled ?? false;
+      this.primaryLanguage = saved.primaryLanguage ?? 'en';
+      this.agentPersonality = saved.agentPersonality ?? '';
+      if (saved.callGreeting) {
+        this.callGreeting = { ...this.callGreeting, ...saved.callGreeting };
+      }
+    }
+
     this.settingsLoaded = true;
   }
 
   /**
-   * Persist settings to MongoDB
+   * Persist settings — saves to MongoDB AND local file (dual-write for resilience).
    */
   private async saveSettings(): Promise<void> {
+    const data = {
+      isEnabled: this.isEnabled,
+      primaryLanguage: this.primaryLanguage,
+      agentPersonality: this.agentPersonality,
+      callGreeting: this.callGreeting,
+    };
+
+    // Save to MongoDB (best-effort)
     try {
-      const value = JSON.stringify({
-        isEnabled: this.isEnabled,
-        primaryLanguage: this.primaryLanguage,
-        agentPersonality: this.agentPersonality,
-        callGreeting: this.callGreeting,
-      });
+      const value = JSON.stringify(data);
       await Config.findOneAndUpdate(
         { key: CONFIG_KEY },
         { key: CONFIG_KEY, value, description: 'Voice Call Agent Settings' },
         { upsert: true, new: true },
       );
+    } catch { /* MongoDB unavailable — file fallback below */ }
+
+    // Always save to local file as fallback
+    try {
+      const { mkdirSync } = await import('fs');
+      const { dirname } = await import('path');
+      mkdirSync(dirname(FALLBACK_PATH), { recursive: true });
+      writeFileSync(FALLBACK_PATH, JSON.stringify(data, null, 2), 'utf-8');
     } catch (err) {
-      console.error('Failed to persist call agent settings:', err);
+      console.error('Failed to persist call agent settings to file:', err);
     }
   }
 

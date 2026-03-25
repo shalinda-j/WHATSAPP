@@ -336,19 +336,20 @@ export class WhatsAppSessionManager {
                 });
 
                 if (result.responseText) {
-                  // Send voice response as audio + text
+                  // Send voice response — use sendVoiceMessage so ffmpeg converts to OGG/Opus
                   if (result.responseAudioBuffer) {
                     try {
-                      await sock.sendMessage(call.from, {
-                        audio: result.responseAudioBuffer,
-                        mimetype: 'audio/mp4',
-                        ptt: true, // Send as voice note
-                      });
+                      const sent = await sendVoiceMessage(call.from, result.responseAudioBuffer, sessionId);
+                      if (!sent) {
+                        // Queue was used or send failed — also send text so user gets something immediately
+                        await sock.sendMessage(call.from, { text: result.responseText });
+                      }
                     } catch {
-                      // Fallback to text if audio fails
+                      // Fallback to text if voice fails
                       await sock.sendMessage(call.from, { text: result.responseText });
                     }
                   } else {
+                    // No audio generated — send text response
                     await sock.sendMessage(call.from, { text: result.responseText });
                   }
                 }

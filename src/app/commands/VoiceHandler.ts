@@ -1,26 +1,29 @@
 import { proto } from '@whiskeysockets/baileys';
-import { transcribeAudio } from '../../services/gemini';
 import { aiLoadBalancer } from '../../services/AILoadBalancer';
 import {
   sendMessage,
   downloadWhatsAppAudio,
   sendTyping,
+  sendVoiceMessage,
 } from '../../services/whatsapp';
+import {
+  transcribeAudioWithLanguage,
+  generateSpeech,
+  getVoiceMode,
+  isVoiceAgentEnabled,
+} from '../../services/voice';
 
 /**
  * Voice Message Handler
- * Handles voice messages (PTT - Push To Talk) and processes them with AI
+ * Handles voice notes (PTT) sent to WhatsApp and processes them with AI.
  */
 export class VoiceHandler {
   /**
-   * Check if a message is a voice message
+   * Check if a message is a voice note (PTT only — excludes audio files, lists, buttons).
    */
   static isVoiceMessage(message: proto.IWebMessageInfo): boolean {
-    // In Baileys, audioMessage implies voice note if ptt is true, but generic check is usually enough
     const msg = message.message;
-    return !!(msg?.audioMessage || msg?.listMessage || msg?.buttonsMessage);
-    // Strict voice check:
-    // return !!msg?.audioMessage?.ptt;
+    return !!msg?.audioMessage?.ptt;
   }
 
   /**
@@ -31,156 +34,115 @@ export class VoiceHandler {
   }
 
   /**
-   * Handle incoming voice messages
+   * Handle an incoming WhatsApp voice note end-to-end:
+   *  1. Download audio
+   *  2. Transcribe (provider chain: OpenAI Whisper → Gemini, per VoiceConfig)
+   *  3. Get AI response via load balancer
+   *  4. Send back text + voice note (per mode setting)
    */
   static async handleVoiceMessage(
     _sock: any,
     message: proto.IWebMessageInfo,
     sessionId: string,
   ) {
-    const msg = message.message?.audioMessage;
-    if (!msg) return;
-
-    // Only handle PTT (voice notes)
-    if (!msg.ptt) {
-      return;
-    }
+    // Only handle genuine PTT voice notes
+    const audioMsg = message.message?.audioMessage;
+    if (!audioMsg?.ptt) return;
 
     const jid = message.key?.remoteJid;
     if (!jid) return;
 
     try {
-      // Show typing indicator
-      try {
-        await sendTyping(jid, sessionId);
-      } catch (e) {
-        // Continue even if typing fails
-      }
+      // ── Show typing indicator ──────────────────────────────────────────────
+      try { await sendTyping(jid, sessionId); } catch { /* non-critical */ }
 
-      // Download the voice message
+      // ── Download voice note from WhatsApp ──────────────────────────────────
       const buffer = await downloadWhatsAppAudio(message);
-
-      if (!buffer) {
-        await sendMessage(
-          jid,
-          '⚠️ Could not download voice message.',
-          sessionId,
-        );
+      if (!buffer || buffer.length < 100) {
+        await sendMessage(jid, '⚠️ Could not download your voice message. Please try again.', sessionId);
         return;
       }
 
-      console.log('🎤 Processing voice message...');
-      // mimetype is essential
-      const mimetype = msg.mimetype || 'audio/ogg; codecs=opus';
-      console.log(`   MIME Type: ${mimetype}`);
-      console.log(`   Data length: ${buffer.length} chars`);
+      console.log(`🎤 Voice note received from ${jid}: ${buffer.length} bytes`);
 
-      // Transcribe the audio using Zhipu (via existing service)
-      const transcription = await transcribeAudio(
-        buffer.toString('base64'),
-        mimetype,
-      );
-      console.log(`   Transcription: ${transcription}`);
+      // ── Transcribe using configured provider (OpenAI Whisper → Gemini) ─────
+      let transcription = '';
+      let detectedLang = 'en';
 
-      // Get voice mode and agent status
-      const { getVoiceMode, isVoiceAgentEnabled } = await import(
-        '../../services/voice'
-      );
+      try {
+        const result = await transcribeAudioWithLanguage(buffer);
+        transcription = result.text;
+        detectedLang = result.detectedLanguage;
+        console.log(`   ✅ Transcribed (${detectedLang}): "${transcription.substring(0, 100)}..."`);
+      } catch (sttErr: any) {
+        console.error('   ❌ Transcription failed:', sttErr.message);
+        await sendMessage(jid, '⚠️ Could not transcribe your voice message. Please try again.', sessionId);
+        return;
+      }
+
+      if (!transcription || transcription.trim().length < 2) {
+        await sendMessage(jid, '⚠️ Voice message was too short or silent. Please try again.', sessionId);
+        return;
+      }
+
+      // ── Check voice agent config ───────────────────────────────────────────
       const voiceMode = await getVoiceMode();
-      const isAgentEnabled = await isVoiceAgentEnabled();
+      const agentEnabled = await isVoiceAgentEnabled();
 
-      console.log(
-        `   Voice Mode: ${voiceMode}, Agent Enabled: ${isAgentEnabled}`,
-      );
+      console.log(`   Voice Mode: ${voiceMode}, Agent Enabled: ${agentEnabled}`);
 
-      // If voice agent is disabled, just send transcription
-      if (!isAgentEnabled) {
+      if (!agentEnabled) {
+        // Agent disabled — just echo the transcription
         await sendMessage(
           jid,
-          `🎤 *Voice Transcription:*\n\n"${transcription}"\n\n_Voice AI is currently disabled._`,
+          `🎤 *Voice Transcription:*\n\n"${transcription}"\n\n_Voice AI is currently disabled in settings._`,
           sessionId,
         );
         return;
       }
 
-      // Check if transcription looks like a question or command
-      const lowerText = transcription.toLowerCase().trim();
-      const isQuestion =
-        lowerText.includes('?') ||
-        lowerText.startsWith('what') ||
-        lowerText.startsWith('how') ||
-        lowerText.startsWith('why') ||
-        lowerText.startsWith('when') ||
-        lowerText.startsWith('where') ||
-        lowerText.startsWith('who') ||
-        lowerText.startsWith('can') ||
-        lowerText.startsWith('please') ||
-        lowerText.startsWith('tell me');
+      // ── Generate AI response for ALL voice messages (not just questions) ───
+      const aiResponse = await aiLoadBalancer.sendMessage(jid, transcription);
 
-      if (isQuestion && transcription.length > 10) {
-        // If it's a question, get an AI response via Load Balancer
-        const aiResponse = await aiLoadBalancer.sendMessage(jid, transcription);
+      const shouldSendText  = voiceMode === 'text-only'  || voiceMode === 'voice-and-text';
+      const shouldSendVoice = voiceMode === 'voice-only' || voiceMode === 'voice-and-text';
 
-        // Determine response format based on mode
-        const shouldSendText =
-          voiceMode === 'text-only' || voiceMode === 'voice-and-text';
-        const shouldSendVoice =
-          voiceMode === 'voice-only' || voiceMode === 'voice-and-text';
+      // Send text response (includes transcription so user can read what was heard)
+      if (shouldSendText) {
+        await sendMessage(
+          jid,
+          `🎤 *You said:*\n"${transcription}"\n\n🤖 *AI Response:*\n${aiResponse}`,
+          sessionId,
+        );
+      }
 
-        if (shouldSendText) {
-          await sendMessage(
-            jid,
-            `🎤 *Voice Transcription:*\n"${transcription}"\n\n` +
-              `🤖 *AI Response:*\n${aiResponse}`,
-            sessionId,
-          );
-        }
-
-        // Generate and send voice reply if mode allows
-        if (shouldSendVoice) {
-          try {
-            const { generateSpeech } = await import('../../services/voice');
-            const { sendVoiceMessage } = await import(
-              '../../services/whatsapp'
+      // Generate and send TTS voice reply
+      if (shouldSendVoice) {
+        try {
+          const audioBuffer = await generateSpeech(aiResponse, detectedLang);
+          await sendVoiceMessage(jid, audioBuffer, sessionId);
+          console.log(`   ✅ Voice reply sent to ${jid}`);
+        } catch (ttsErr: any) {
+          console.error('   ❌ TTS failed:', ttsErr.message);
+          // If we haven't sent text yet, fall back to text
+          if (!shouldSendText) {
+            await sendMessage(
+              jid,
+              `🎤 *You said:*\n"${transcription}"\n\n🤖 *AI Response:*\n${aiResponse}\n\n_Voice reply unavailable: ${ttsErr.message}_`,
+              sessionId,
             );
-
-            const audioBuffer = await generateSpeech(aiResponse);
-            await sendVoiceMessage(jid, audioBuffer, sessionId);
-          } catch (ttsError) {
-            console.error('TTS Error:', ttsError);
-            // If voice fails and we didn't send text, send text as fallback
-            if (!shouldSendText) {
-              await sendMessage(
-                jid,
-                `🤖 *AI Response:*\n${aiResponse}\n\n_Voice synthesis failed._`,
-                sessionId,
-              );
-            }
           }
         }
-      } else {
-        // Just return the transcription
-        await sendMessage(
-          jid,
-          `🎤 *Voice Transcription:*\n\n"${transcription}"`,
-          sessionId,
-        );
       }
+
     } catch (error: any) {
-      console.error('Voice processing error:', error);
-      if (error.message?.includes('429') || error.message?.includes('quota')) {
-        await sendMessage(
-          jid,
-          '⚠️ API quota exceeded. Please try again in a minute.',
-          sessionId,
-        );
-      } else {
-        await sendMessage(
-          jid,
-          '⚠️ Could not process voice message. Please try again.',
-          sessionId,
-        );
-      }
+      console.error('❌ Voice processing error:', error);
+
+      const userMsg = (error.message?.includes('429') || error.message?.includes('quota'))
+        ? '⚠️ AI quota exceeded. Please wait a moment and try again.'
+        : '⚠️ Could not process your voice message. Please try again.';
+
+      try { await sendMessage(jid, userMsg, sessionId); } catch { /* ignore secondary error */ }
     }
   }
 }

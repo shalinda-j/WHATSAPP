@@ -306,9 +306,8 @@ export interface TranscriptionResult {
  */
 export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
   try {
-    const config = await VoiceConfig.findOne({ isActive: true }).sort({
-      updatedAt: -1,
-    });
+    let config = null;
+    try { config = await VoiceConfig.findOne({ isActive: true }).sort({ updatedAt: -1 }); } catch { /* no DB, default provider */ }
     const provider = config?.provider || 'google-free';
 
     let transcription = '';
@@ -357,9 +356,8 @@ export async function transcribeAudioWithLanguage(
   audioBuffer: Buffer,
 ): Promise<TranscriptionResult> {
   try {
-    const config = await VoiceConfig.findOne({ isActive: true }).sort({
-      updatedAt: -1,
-    });
+    let config = null;
+    try { config = await VoiceConfig.findOne({ isActive: true }).sort({ updatedAt: -1 }); } catch { /* no DB */ }
     const provider = config?.provider || 'google-free';
 
     let transcription = '';
@@ -409,10 +407,15 @@ export async function generateSpeech(
   text: string,
   targetLanguage?: string,
 ): Promise<Buffer> {
-  // Fetch config from DB
-  const config = await VoiceConfig.findOne().sort({ updatedAt: -1 });
+  // Fetch config from DB — gracefully fall back to google-free if MongoDB unavailable
+  let config: import('../models/VoiceConfig').IVoiceConfig | null = null;
+  try {
+    config = await VoiceConfig.findOne().sort({ updatedAt: -1 });
+  } catch {
+    console.warn('   ⚠️ VoiceConfig DB fetch failed (MongoDB down?). Defaulting to Google TTS.');
+  }
 
-  // If voice is disabled in config, return empty buffer or throw generic error to be handled by caller
+  // If voice is disabled in config, throw so caller can fall back to text
   if (config && !config.isActive) {
     console.log('   🔇 Voice Agent is disabled in Admin Config.');
     throw new Error('Voice Agent Disabled');
