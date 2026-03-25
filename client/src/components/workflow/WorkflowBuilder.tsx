@@ -15,12 +15,13 @@ import 'reactflow/dist/style.css';
 
 import Sidebar from './Sidebar';
 import IntegrationNode from './CustomNodes/IntegrationNode';
+import DecisionNode from './CustomNodes/DecisionNode';
 import SettingsPanel from './SettingsPanel';
 import { useWorkflow } from './WorkflowContext';
 
-// Define nodeTypes outside the component to prevent recreation on every render
 const nodeTypes = {
     integration: IntegrationNode,
+    decisionNode: DecisionNode,
 };
 
 const initialNodes: Node[] = [
@@ -35,10 +36,6 @@ const initialNodes: Node[] = [
 let id = 0;
 const getId = () => `dndnode_${id++}`;
 
-/**
- * Sync the ID counter to be higher than any existing node ID
- * to prevent collisions when loading saved workflows.
- */
 const syncIdCounter = (nodes: Node[]) => {
     for (const node of nodes) {
         const match = node.id.match(/dndnode_(\d+)/);
@@ -58,31 +55,27 @@ const WorkflowBuilder = () => {
     const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
     const [selectedNode, setSelectedNode] = useState<Node | null>(null);
 
-    // Get workflow context for syncing state
     const { actions: workflowActions, state: workflowState } = useWorkflow();
 
-    // Sync local nodes state to context when nodes change
+    // Watch for pendingLoad — this is how external loads (import, saved workflow, undo/redo) reach the canvas
+    useEffect(() => {
+        if (workflowState.pendingLoad) {
+            setNodes(workflowState.pendingLoad.nodes);
+            setEdges(workflowState.pendingLoad.edges);
+            syncIdCounter(workflowState.pendingLoad.nodes);
+            setSelectedNode(null);
+            workflowActions.clearPendingLoad();
+        }
+    }, [workflowState.pendingLoad, workflowActions, setNodes, setEdges]);
+
+    // Sync local nodes/edges state UP to context on change
     useEffect(() => {
         workflowActions.setNodes(nodes);
     }, [nodes, workflowActions]);
 
-    // Sync local edges state to context when edges change
     useEffect(() => {
         workflowActions.setEdges(edges);
     }, [edges, workflowActions]);
-
-    // Load initial state from context if available (only on mount)
-    useEffect(() => {
-        if (workflowState.nodes.length > 0) {
-            setNodes(workflowState.nodes);
-            // Sync ID counter to prevent collisions with loaded node IDs
-            syncIdCounter(workflowState.nodes);
-        }
-        if (workflowState.edges.length > 0) {
-            setEdges(workflowState.edges);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
 
     const onConnect = useCallback(
         (params: Connection | Edge) => {
@@ -105,12 +98,7 @@ const WorkflowBuilder = () => {
             const label = event.dataTransfer.getData('application/reactflow/label');
             const integrationType = event.dataTransfer.getData('application/reactflow/integrationType');
 
-            // check if the dropped element is valid
-            if (typeof type === 'undefined' || !type) {
-                return;
-            }
-
-            // Check if instance is ready
+            if (typeof type === 'undefined' || !type) return;
             if (!reactFlowInstance) return;
 
             const position = reactFlowInstance.screenToFlowPosition({
@@ -120,11 +108,11 @@ const WorkflowBuilder = () => {
 
             const newNode: Node = {
                 id: getId(),
-                type, // Use the mapped type (input, default, output)
+                type,
                 position,
                 data: {
                     label: label || `${type} node`,
-                    integrationType // Pass this to the custom node
+                    ...(integrationType ? { integrationType } : {}),
                 },
             };
 
@@ -146,7 +134,6 @@ const WorkflowBuilder = () => {
 
     const handleNodesChange = useCallback((changes: NodeChange[]) => {
         onNodesChange(changes);
-        // Save to history on significant changes
         if (changes.some((c) => c.type === 'remove' || c.type === 'add')) {
             workflowActions.saveToHistory();
         }
@@ -154,11 +141,16 @@ const WorkflowBuilder = () => {
 
     const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
         onEdgesChange(changes);
-        // Save to history on significant changes
         if (changes.some((c) => c.type === 'remove' || c.type === 'add')) {
             workflowActions.saveToHistory();
         }
     }, [onEdgesChange, workflowActions]);
+
+    // When settings panel saves a node, update the selected node reference too
+    const handleNodeSaved = useCallback((updatedNode: Node) => {
+        setSelectedNode(updatedNode);
+        workflowActions.setSelectedNode(updatedNode);
+    }, [workflowActions]);
 
     return (
         <div className="flex flex-row h-full w-full bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200 relative">
@@ -190,7 +182,11 @@ const WorkflowBuilder = () => {
                     <SettingsPanel
                         selectedNode={selectedNode}
                         setNodes={setNodes}
-                        onClose={() => setSelectedNode(null)}
+                        onClose={() => {
+                            setSelectedNode(null);
+                            workflowActions.setSelectedNode(null);
+                        }}
+                        onSaved={handleNodeSaved}
                     />
                 )}
             </ReactFlowProvider>
