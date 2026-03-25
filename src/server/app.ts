@@ -41,6 +41,7 @@ app.use(async (req, res, next) => {
     '/api/auth',
     '/api/marketing',
     '/api/webhooks/inbound', // External systems need to send webhooks even without DB
+    '/api/bulk',             // Bulk sender uses WhatsApp socket directly, not MongoDB
     '/health', // Health check should always work
   ];
 

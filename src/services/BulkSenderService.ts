@@ -46,23 +46,28 @@ export const bulkSenderService = {
         const jid = number.includes('@') ? number : `${number}@s.whatsapp.net`;
 
         if (mediaFile) {
-          // Send Media
-          // sendMediaMessage usually takes (jid, buffer, type, caption, sessionId)
-          // We need to determine type from mimetype
           let type: 'image' | 'document' | 'audio' | 'video' = 'document';
           if (mediaFile.mimetype.startsWith('image/')) type = 'image';
           else if (mediaFile.mimetype.startsWith('audio/')) type = 'audio';
           else if (mediaFile.mimetype.startsWith('video/')) type = 'video';
 
-          await sendMediaMessage(
+          const sent = await sendMediaMessage(
             jid,
             mediaFile.buffer,
             type,
-            { caption: message },
+            {
+              caption: message || undefined,
+              mimetype: mediaFile.mimetype,
+              fileName: mediaFile.originalname,
+            },
             sessionId,
           );
+
+          if (!sent) {
+            throw new Error('WhatsApp is not connected. Please scan the QR code first.');
+          }
         } else {
-          // Send Text
+          // Send Text only
           await sendMessage(jid, message, sessionId);
         }
 
