@@ -31,8 +31,9 @@ interface UsageCycle {
 }
 
 interface VoiceConfigData {
-    provider: 'google-free' | 'openai' | 'elevenlabs';
+    provider: 'google-free' | 'google-cloud' | 'openai' | 'elevenlabs';
     apiKey?: string;
+    googleApiKey?: string;
     voiceId?: string;
     isActive?: boolean;
     mode: 'voice-only' | 'text-only' | 'voice-and-text';
@@ -270,10 +271,19 @@ export default function Config() {
         setVoiceSaving(true);
         setVoiceMessage(null);
         try {
-            const configToSave = voiceConfigs.find((c) => c.provider === providerName) || { provider: providerName as VoiceConfigData['provider'], mode: 'voice-and-text' as const };
-            await api.post('/api/voice-config', configToSave);
-            setVoiceMessage({ type: 'success', text: `${providerName} voice configuration activated successfully!` });
-            fetchVoiceConfig(); // Refresh to update sorting and active status
+            const base = voiceConfigs.find((c) => c.provider === providerName) || {
+                provider: providerName as VoiceConfigData['provider'],
+                mode: 'voice-and-text' as const,
+            };
+            await api.post('/api/voice-config', base);
+            const label: Record<string, string> = {
+                'google-free': 'Google Free TTS',
+                'google-cloud': 'Google Cloud TTS',
+                'openai': 'OpenAI TTS',
+                'elevenlabs': 'ElevenLabs',
+            };
+            setVoiceMessage({ type: 'success', text: `✅ ${label[providerName] || providerName} activated! The system will auto-fallback to the next provider if this one is unavailable.` });
+            fetchVoiceConfig();
         } catch (error) {
             console.error('Failed to save config', error);
             setVoiceMessage({ type: 'error', text: `Failed to save ${providerName} configuration.` });
@@ -301,8 +311,9 @@ export default function Config() {
             provider: providerName as VoiceConfigData['provider'],
             mode: 'voice-and-text',
             apiKey: '',
+            googleApiKey: '',
             ttsModel: providerName === 'elevenlabs' ? 'eleven_multilingual_v2' : 'tts-1',
-            voiceId: providerName === 'elevenlabs' ? '' : 'alloy'
+            voiceId: providerName === 'google-cloud' ? 'en-US-Neural2-F' : providerName === 'elevenlabs' ? '' : 'nova',
         };
     };
 
@@ -833,13 +844,20 @@ export default function Config() {
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                {/* Google TTS Card */}
-                                <div className={`bg-white shadow-lg rounded-xl border-2 transition-all p-6 flex flex-col ${activeVoiceProvider === 'google-free' ? 'border-green-500 shadow-green-100' : 'border-transparent'}`}>
+                            {/* Waterfall routing info banner */}
+                            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800">
+                                <p className="font-semibold mb-1">📡 Smart Waterfall Routing</p>
+                                <p>The system automatically falls back to the next available provider if the active one fails. For <strong>Sinhala</strong>, Google Free TTS is always used (the only engine with native Sinhala support).</p>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                                {/* Google Free TTS Card */}
+                                <div className={`bg-white shadow-lg rounded-xl border-2 transition-all p-6 flex flex-col ${activeVoiceProvider === 'google-free' ? 'border-green-500 shadow-green-100' : 'border-gray-200'}`}>
                                     <div className="flex justify-between items-start mb-4">
                                         <div>
-                                            <h3 className="font-bold text-lg text-gray-800">Google TTS</h3>
-                                            <p className="text-xs text-gray-500">Free, Standard Voice</p>
+                                            <h3 className="font-bold text-lg text-gray-800">Google Free TTS</h3>
+                                            <p className="text-xs text-gray-500">Free · Sinhala / Tamil / English</p>
                                         </div>
                                         {activeVoiceProvider === 'google-free' && (
                                             <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded-full uppercase flex items-center">
@@ -847,25 +865,23 @@ export default function Config() {
                                             </span>
                                         )}
                                     </div>
-
                                     <div className="flex-1 space-y-4">
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-2">Response Mode</label>
                                             <select
                                                 value={getProviderConfig('google-free').mode}
                                                 onChange={(e) => updateProviderConfig('google-free', { mode: e.target.value as VoiceConfigData['mode'] })}
-                                                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:outline-none"
                                             >
                                                 <option value="voice-and-text">Voice & Text</option>
                                                 <option value="voice-only">Voice Only</option>
                                                 <option value="text-only">Text Only</option>
                                             </select>
                                         </div>
-                                        <div className="bg-gray-50 p-3 rounded text-sm text-gray-600 border border-gray-100 italic">
-                                            No API Key required. This uses the default free Google Text-to-Speech package.
+                                        <div className="bg-green-50 p-3 rounded text-sm text-green-800 border border-green-100">
+                                            ✅ No API Key required. Uses the free Google TTS package. The <strong>only</strong> engine that supports Sinhala — automatically selected for Sinhala voice replies.
                                         </div>
                                     </div>
-
                                     <button
                                         onClick={() => handleSaveVoiceProvider('google-free')}
                                         disabled={voiceSaving}
@@ -875,26 +891,25 @@ export default function Config() {
                                     </button>
                                 </div>
 
-                                {/* OpenAI TTS Card */}
-                                <div className={`bg-white shadow-lg rounded-xl border-2 transition-all p-6 flex flex-col ${activeVoiceProvider === 'openai' ? 'border-green-500 shadow-green-100' : 'border-transparent'}`}>
+                                {/* Google Cloud TTS Card */}
+                                <div className={`bg-white shadow-lg rounded-xl border-2 transition-all p-6 flex flex-col ${activeVoiceProvider === 'google-cloud' ? 'border-blue-500 shadow-blue-100' : 'border-gray-200'}`}>
                                     <div className="flex justify-between items-start mb-4">
                                         <div>
-                                            <h3 className="font-bold text-lg text-gray-800">OpenAI Voice</h3>
-                                            <p className="text-xs text-gray-500">High Quality, Lifelike Speech</p>
+                                            <h3 className="font-bold text-lg text-gray-800">Google Cloud TTS</h3>
+                                            <p className="text-xs text-gray-500">Neural2 Voices · English, Tamil, Hindi</p>
                                         </div>
-                                        {activeVoiceProvider === 'openai' && (
-                                            <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded-full uppercase flex items-center">
+                                        {activeVoiceProvider === 'google-cloud' && (
+                                            <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded-full uppercase flex items-center">
                                                 <Activity className="w-3 h-3 mr-1" /> Active
                                             </span>
                                         )}
                                     </div>
-
                                     <div className="flex-1 space-y-4">
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-2">Response Mode</label>
                                             <select
-                                                value={getProviderConfig('openai').mode}
-                                                onChange={(e) => updateProviderConfig('openai', { mode: e.target.value as VoiceConfigData['mode'] })}
+                                                value={getProviderConfig('google-cloud').mode}
+                                                onChange={(e) => updateProviderConfig('google-cloud', { mode: e.target.value as VoiceConfigData['mode'] })}
                                                 className="w-full p-2 border border-blue-200 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
                                             >
                                                 <option value="voice-and-text">Voice & Text</option>
@@ -902,36 +917,102 @@ export default function Config() {
                                                 <option value="text-only">Text Only</option>
                                             </select>
                                         </div>
-
                                         <div>
-                                            <label className="block text-sm font-medium text-blue-900 mb-2">API Key</label>
+                                            <label className="block text-sm font-medium text-blue-900 mb-1">Google Cloud API Key</label>
+                                            <p className="text-xs text-gray-500 mb-2">
+                                                Create at <strong>console.cloud.google.com</strong> → APIs &amp; Services → Credentials → Create API Key. Enable <em>Cloud Text-to-Speech API</em> in your project.
+                                            </p>
+                                            <input
+                                                type="password"
+                                                value={getProviderConfig('google-cloud').googleApiKey || ''}
+                                                onChange={(e) => updateProviderConfig('google-cloud', { googleApiKey: e.target.value })}
+                                                placeholder="AIza..."
+                                                className="w-full p-2 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono text-sm"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-blue-900 mb-1">Neural2 Voice</label>
+                                            <select
+                                                value={getProviderConfig('google-cloud').voiceId || 'en-US-Neural2-F'}
+                                                onChange={(e) => updateProviderConfig('google-cloud', { voiceId: e.target.value })}
+                                                className="w-full p-2 text-sm border border-blue-200 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                            >
+                                                <option value="en-US-Neural2-F">English — Neural2-F (Female)</option>
+                                                <option value="en-US-Neural2-D">English — Neural2-D (Male)</option>
+                                                <option value="en-US-Neural2-A">English — Neural2-A (Male)</option>
+                                                <option value="ta-IN-Neural2-B">Tamil — Neural2-B (Female)</option>
+                                                <option value="ta-IN-Neural2-A">Tamil — Neural2-A (Male)</option>
+                                                <option value="hi-IN-Neural2-A">Hindi — Neural2-A (Female)</option>
+                                                <option value="hi-IN-Neural2-B">Hindi — Neural2-B (Male)</option>
+                                            </select>
+                                        </div>
+                                        <div className="bg-blue-50 p-3 rounded text-xs text-blue-700 border border-blue-100">
+                                            ⚠️ Sinhala is <strong>not supported</strong> by Google Cloud TTS — Sinhala replies automatically use Google Free TTS regardless of this setting.
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => handleSaveVoiceProvider('google-cloud')}
+                                        disabled={voiceSaving}
+                                        className="mt-6 w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition disabled:opacity-50"
+                                    >
+                                        <Save className="h-4 w-4 mr-2" /> Save & Activate
+                                    </button>
+                                </div>
+
+                                {/* OpenAI TTS Card */}
+                                <div className={`bg-white shadow-lg rounded-xl border-2 transition-all p-6 flex flex-col ${activeVoiceProvider === 'openai' ? 'border-green-500 shadow-green-100' : 'border-gray-200'}`}>
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                            <h3 className="font-bold text-lg text-gray-800">OpenAI Voice</h3>
+                                            <p className="text-xs text-gray-500">High Quality · Lifelike Speech</p>
+                                        </div>
+                                        {activeVoiceProvider === 'openai' && (
+                                            <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded-full uppercase flex items-center">
+                                                <Activity className="w-3 h-3 mr-1" /> Active
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex-1 space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Response Mode</label>
+                                            <select
+                                                value={getProviderConfig('openai').mode}
+                                                onChange={(e) => updateProviderConfig('openai', { mode: e.target.value as VoiceConfigData['mode'] })}
+                                                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:outline-none"
+                                            >
+                                                <option value="voice-and-text">Voice & Text</option>
+                                                <option value="voice-only">Voice Only</option>
+                                                <option value="text-only">Text Only</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">API Key</label>
                                             <input
                                                 type="password"
                                                 value={getProviderConfig('openai').apiKey || ''}
                                                 onChange={(e) => updateProviderConfig('openai', { apiKey: e.target.value })}
                                                 placeholder="sk-..."
-                                                className="w-full p-2 border border-blue-200 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:outline-none"
                                             />
                                         </div>
-
                                         <div className="grid grid-cols-2 gap-2">
                                             <div>
-                                                <label className="block text-xs font-medium text-blue-900 mb-1">Quality</label>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Quality</label>
                                                 <select
                                                     value={getProviderConfig('openai').ttsModel || 'tts-1'}
                                                     onChange={(e) => updateProviderConfig('openai', { ttsModel: e.target.value as VoiceConfigData['ttsModel'] })}
-                                                    className="w-full p-1.5 text-sm border border-blue-200 rounded"
+                                                    className="w-full p-1.5 text-sm border border-gray-300 rounded"
                                                 >
                                                     <option value="tts-1">Standard</option>
                                                     <option value="tts-1-hd">HD</option>
                                                 </select>
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-medium text-blue-900 mb-1">Persona</label>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Persona</label>
                                                 <select
-                                                    value={getProviderConfig('openai').voiceId || 'alloy'}
+                                                    value={getProviderConfig('openai').voiceId || 'nova'}
                                                     onChange={(e) => updateProviderConfig('openai', { voiceId: e.target.value })}
-                                                    className="w-full p-1.5 text-sm border border-blue-200 rounded"
+                                                    className="w-full p-1.5 text-sm border border-gray-300 rounded"
                                                 >
                                                     <option value="alloy">Alloy (Neutral)</option>
                                                     <option value="echo">Echo (Male)</option>
@@ -943,30 +1024,28 @@ export default function Config() {
                                             </div>
                                         </div>
                                     </div>
-
                                     <button
                                         onClick={() => handleSaveVoiceProvider('openai')}
                                         disabled={voiceSaving}
-                                        className="mt-6 w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition disabled:opacity-50"
+                                        className="mt-6 w-full flex items-center justify-center px-4 py-2 bg-gray-800 text-white rounded hover:bg-black transition disabled:opacity-50"
                                     >
                                         <Save className="h-4 w-4 mr-2" /> Save & Activate
                                     </button>
                                 </div>
 
                                 {/* ElevenLabs Card */}
-                                <div className={`bg-white shadow-lg rounded-xl border-2 transition-all p-6 flex flex-col ${activeVoiceProvider === 'elevenlabs' ? 'border-green-500 shadow-green-100' : 'border-transparent'}`}>
+                                <div className={`bg-white shadow-lg rounded-xl border-2 transition-all p-6 flex flex-col ${activeVoiceProvider === 'elevenlabs' ? 'border-purple-500 shadow-purple-100' : 'border-gray-200'}`}>
                                     <div className="flex justify-between items-start mb-4">
                                         <div>
                                             <h3 className="font-bold text-lg text-gray-800">ElevenLabs</h3>
-                                            <p className="text-xs text-gray-500">Premium Voice Cloning</p>
+                                            <p className="text-xs text-gray-500">Premium · Voice Cloning</p>
                                         </div>
                                         {activeVoiceProvider === 'elevenlabs' && (
-                                            <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded-full uppercase flex items-center">
+                                            <span className="bg-purple-100 text-purple-700 text-xs font-bold px-2 py-1 rounded-full uppercase flex items-center">
                                                 <Activity className="w-3 h-3 mr-1" /> Active
                                             </span>
                                         )}
                                     </div>
-
                                     <div className="flex-1 space-y-4">
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-2">Response Mode</label>
@@ -980,7 +1059,6 @@ export default function Config() {
                                                 <option value="text-only">Text Only</option>
                                             </select>
                                         </div>
-
                                         <div>
                                             <label className="block text-sm font-medium text-purple-900 mb-2">API Key</label>
                                             <input
@@ -991,7 +1069,6 @@ export default function Config() {
                                                 className="w-full p-2 border border-purple-200 rounded focus:ring-2 focus:ring-purple-500 focus:outline-none"
                                             />
                                         </div>
-
                                         <div>
                                             <label className="block text-sm font-medium text-purple-900 mb-2">Engine Model</label>
                                             <select
@@ -1004,7 +1081,6 @@ export default function Config() {
                                                 <option value="eleven_turbo_v2">Turbo v2</option>
                                             </select>
                                         </div>
-
                                         <div>
                                             <label className="block text-sm font-medium text-purple-900 mb-2">Voice Clone ID</label>
                                             <input
@@ -1015,7 +1091,6 @@ export default function Config() {
                                             />
                                         </div>
                                     </div>
-
                                     <button
                                         onClick={() => handleSaveVoiceProvider('elevenlabs')}
                                         disabled={voiceSaving}
@@ -1024,6 +1099,7 @@ export default function Config() {
                                         <Save className="h-4 w-4 mr-2" /> Save & Activate
                                     </button>
                                 </div>
+
                             </div>
                         </>
                     )}
