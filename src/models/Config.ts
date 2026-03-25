@@ -11,7 +11,11 @@ export interface IConfig extends Document {
   usageLimit?: number;
   usageUsed?: number;
   costPerToken?: number;
+  monthlyBudget?: number;
   isActive?: boolean;
+  // Monthly cycle tracking
+  usagePeriodStart?: Date;
+  lastResetAt?: Date;
 }
 
 import { CryptoService } from '../services/CryptoService';
@@ -32,7 +36,10 @@ const ConfigSchema = new Schema(
     usageLimit: { type: Number, default: 0 },
     usageUsed: { type: Number, default: 0 },
     costPerToken: { type: Number, default: 0 },
+    monthlyBudget: { type: Number, default: 0 },
     isActive: { type: Boolean, default: false },
+    usagePeriodStart: { type: Date, default: null },
+    lastResetAt: { type: Date, default: null },
   } as any,
   {
     timestamps: true,

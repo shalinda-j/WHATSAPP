@@ -46,6 +46,7 @@ import ChatMessage from './models/ChatMessage';
 import VoiceConfig from './models/VoiceConfig';
 import { initSocket, getIO } from './server/socket';
 import { autoRegistrationService } from './services/AutoRegistrationService';
+import { usageResetService } from './services/UsageResetService';
 
 const PORT = process.env.PORT || 8080;
 let server: any;
@@ -66,6 +67,9 @@ async function startServer() {
       const SessionState = (await import('./models/SessionState')).default;
       const result = await SessionState.deleteMany({});
       console.log(`🧹 Cleaned up ${result.deletedCount} old sessions on startup`);
+
+      // Start monthly usage reset scheduler
+      usageResetService.start();
     } catch (dbErr) {
       console.error(
         '❌ MongoDB Connection Failed. Server starting in LIMITED MODE.',

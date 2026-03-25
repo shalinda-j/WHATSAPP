@@ -4,6 +4,7 @@ import Dataset from '../../models/Dataset';
 import { authenticateToken } from '../middleware/auth';
 import { HumanizerService } from '../../services/HumanizerService';
 import { configService, HumanizerConfig, ConversationExample, CountryOption, ExperienceOption } from '../../services/ConfigService';
+import { usageResetService } from '../../services/UsageResetService';
 
 const router = Router();
 
@@ -516,4 +517,57 @@ router.put('/experience-levels', async (req, res) => {
   }
 });
 
+// ============================================
+// Usage Cycle & Monthly Reset Endpoints
+// ============================================
+
+/**
+ * GET /api/config/usage-cycle
+ * Get current billing cycle information (dates, days remaining, etc.)
+ */
+router.get('/usage-cycle', async (req, res) => {
+  try {
+    const cycle = usageResetService.getCycleInfo();
+    res.json({
+      periodStart: cycle.periodStart,
+      periodEnd: cycle.periodEnd,
+      nextReset: cycle.nextReset,
+      daysRemaining: cycle.daysRemaining,
+      daysElapsed: cycle.daysElapsed,
+      totalDays: cycle.totalDays,
+      progressPct: cycle.progressPct,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/config/reset-usage
+ * Manually reset ALL AI provider usage counters for the current month
+ */
+router.post('/reset-usage', async (req, res) => {
+  try {
+    const result = await usageResetService.performReset('manual');
+    res.json({ success: true, resetCount: result.resetCount, resetAt: new Date() });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/config/:id/reset-usage
+ * Manually reset a single AI provider's usage counter
+ */
+router.post('/:id/reset-usage', async (req, res) => {
+  try {
+    const success = await usageResetService.resetProvider(req.params.id);
+    if (!success) return res.status(404).json({ error: 'Provider not found' });
+    res.json({ success: true, providerId: req.params.id, resetAt: new Date() });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
+
