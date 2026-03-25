@@ -3,13 +3,10 @@ import VoiceConfig from '../../models/VoiceConfig';
 
 const router = Router();
 
-// GET all configurations
+// GET all voice configs
 router.get('/', async (req: Request, res: Response) => {
   try {
-    // Return all stored voice configs, sorted by latest updated
     const configs = await VoiceConfig.find().sort({ updatedAt: -1 });
-
-    // If DB is completely empty, provide a default array structure
     if (!configs || configs.length === 0) {
       const defaultConfig = await VoiceConfig.create({
         provider: 'google-free',
@@ -18,60 +15,44 @@ router.get('/', async (req: Request, res: Response) => {
       });
       return res.json([defaultConfig]);
     }
-
     res.json(configs);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch voice config' });
   }
 });
 
-// GET active configuration
+// GET active config
 router.get('/active', async (req: Request, res: Response) => {
   try {
-    // Find the currently active provider
-    const activeConfig = await VoiceConfig.findOne({ isActive: true }).sort({
-      updatedAt: -1,
-    });
-
+    const activeConfig = await VoiceConfig.findOne({ isActive: true }).sort({ updatedAt: -1 });
     if (!activeConfig) {
-      // If no active config, return the most recently updated one
       const latestConfig = await VoiceConfig.findOne().sort({ updatedAt: -1 });
-      return res.json(
-        latestConfig || {
-          provider: 'google-free',
-          isActive: true,
-          mode: 'voice-and-text',
-        },
-      );
+      return res.json(latestConfig || { provider: 'google-free', isActive: true, mode: 'voice-and-text' });
     }
-
     res.json(activeConfig);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch active voice config' });
   }
 });
 
-// UPDATE configuration (activates this provider and deactivates others)
+// POST — save / activate a provider config
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { provider, apiKey, voiceId, isActive, mode, ttsModel } = req.body;
+    const { provider, apiKey, googleApiKey, voiceId, isActive, mode, ttsModel } = req.body;
 
-    // If activating this provider, deactivate all others first
+    // Activate this provider → deactivate all others
     if (isActive !== false) {
-      await VoiceConfig.updateMany(
-        { provider: { $ne: provider } },
-        { $set: { isActive: false } },
-      );
+      await VoiceConfig.updateMany({ provider: { $ne: provider } }, { $set: { isActive: false } });
     }
 
-    // Upsert the configuration per provider type
     const config = await VoiceConfig.findOneAndUpdate(
       { provider },
       {
         provider,
         apiKey,
+        googleApiKey,
         voiceId,
-        isActive: isActive !== false, // Default to true unless explicitly false
+        isActive: isActive !== false,
         mode,
         ttsModel,
         updatedAt: new Date(),
@@ -85,19 +66,37 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// Toggle voice agent on/off globally
+// POST /toggle — enable/disable voice agent globally
 router.post('/toggle', async (req: Request, res: Response) => {
   try {
     const { isActive } = req.body;
-
-    // Update all voice configs to the new isActive state
     await VoiceConfig.updateMany({}, { $set: { isActive } });
-
-    // Return the updated state
     const configs = await VoiceConfig.find().sort({ updatedAt: -1 });
     res.json({ success: true, isActive, configs });
   } catch (error) {
     res.status(500).json({ error: 'Failed to toggle voice agent' });
+  }
+});
+
+// POST /test — test TTS generation for a given provider
+router.post('/test', async (req: Request, res: Response) => {
+  try {
+    const { text, language, provider } = req.body;
+    const { generateSpeech } = await import('../../services/voice');
+
+    const testText = text || (
+      language === 'si' ? 'ආයුබෝවන්! ඔබේ ඇමතුම ගැන ස්තූතියි.' :
+      language === 'ta' ? 'வணக்கம்! அழைத்ததற்கு நன்றி.' :
+      'Hello! Thank you for calling. How can I help you today?'
+    );
+
+    const audioBuffer = await generateSpeech(testText, language || 'en');
+
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Content-Disposition', `attachment; filename="tts-test-${language || 'en'}.mp3"`);
+    res.send(audioBuffer);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'TTS test failed' });
   }
 });
 

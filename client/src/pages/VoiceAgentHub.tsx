@@ -28,8 +28,9 @@ import {
 // Types
 interface VoiceConfigData {
     _id?: string;
-    provider: 'google-free' | 'openai' | 'elevenlabs';
+    provider: 'google-free' | 'google-cloud' | 'openai' | 'elevenlabs';
     apiKey?: string;
+    googleApiKey?: string;
     voiceId?: string;
     isActive: boolean;
     mode: 'voice-only' | 'text-only' | 'voice-and-text';
@@ -72,48 +73,73 @@ interface AnalyticsData {
 // Provider configuration metadata
 const PROVIDER_INFO = {
     'google-free': {
-        name: 'Google TTS',
-        description: 'Free, Standard Quality',
+        name: 'Google Free TTS',
+        description: 'Unofficial · Sinhala / Tamil / English · No API key',
         color: 'green',
         bgColor: 'bg-green-50',
         borderColor: 'border-green-500',
         textColor: 'text-green-600',
         buttonColor: 'bg-green-600 hover:bg-green-700',
         requiresApiKey: false,
+        requiresGoogleApiKey: false,
         voices: [
             { id: 'en', name: 'English 🇬🇧' },
             { id: 'si', name: 'Sinhala 🇱🇰' },
             { id: 'ta', name: 'Tamil 🇮🇳' }
-        ]
+        ],
+        note: 'Uses Google Translate TTS. Best for Sinhala (only engine with native si support). Free but rate-limited.',
+    },
+    'google-cloud': {
+        name: 'Google Cloud TTS',
+        description: 'Official Neural2 · EN & Tamil · Requires API Key',
+        color: 'sky',
+        bgColor: 'bg-sky-50',
+        borderColor: 'border-sky-500',
+        textColor: 'text-sky-600',
+        buttonColor: 'bg-sky-600 hover:bg-sky-700',
+        requiresApiKey: false,
+        requiresGoogleApiKey: true,
+        voices: [
+            { id: 'en-US-Neural2-F', name: 'English — Neural2 Female 🇺🇸' },
+            { id: 'en-US-Neural2-J', name: 'English — Neural2 Male 🇺🇸' },
+            { id: 'ta-IN-Neural2-B', name: 'Tamil — Neural2 Female 🇮🇳' },
+            { id: 'ta-IN-Wavenet-A', name: 'Tamil — WaveNet Female 🇮🇳' },
+            { id: 'hi-IN-Neural2-A', name: 'Hindi — Neural2 Female 🇮🇳' },
+        ],
+        note: 'Official Google Cloud TTS. High quality Neural2 voices for English & Tamil. Sinhala auto-routes to Google Free (Google Cloud has no Sinhala voice).',
     },
     'openai': {
-        name: 'OpenAI Voice',
-        description: 'High Quality, Natural',
+        name: 'OpenAI TTS',
+        description: 'tts-1 / tts-1-hd · High Quality · Requires API Key',
         color: 'blue',
         bgColor: 'bg-blue-50',
         borderColor: 'border-blue-500',
         textColor: 'text-blue-600',
         buttonColor: 'bg-blue-600 hover:bg-blue-700',
         requiresApiKey: true,
+        requiresGoogleApiKey: false,
         voices: [
+            { id: 'nova', name: 'Nova (Warm Female)' },
+            { id: 'shimmer', name: 'Shimmer (Gentle Female)' },
             { id: 'alloy', name: 'Alloy (Neutral)' },
             { id: 'echo', name: 'Echo (Male)' },
             { id: 'fable', name: 'Fable (British)' },
-            { id: 'onyx', name: 'Onyx (Deep)' },
-            { id: 'nova', name: 'Nova (Female)' },
-            { id: 'shimmer', name: 'Shimmer (Warm)' }
-        ]
+            { id: 'onyx', name: 'Onyx (Deep Male)' }
+        ],
+        note: 'Natural-sounding voices. Can speak English, Tamil, and Sinhala (with accent). Good fallback for Sinhala.',
     },
     'elevenlabs': {
         name: 'ElevenLabs',
-        description: 'Premium, Voice Cloning',
+        description: 'Premium Voice Cloning · Multilingual · Requires API Key',
         color: 'purple',
         bgColor: 'bg-purple-50',
         borderColor: 'border-purple-500',
         textColor: 'text-purple-600',
         buttonColor: 'bg-purple-600 hover:bg-purple-700',
         requiresApiKey: true,
-        voices: []
+        requiresGoogleApiKey: false,
+        voices: [],
+        note: 'Best quality for multilingual voice. Supports voice cloning. Enter your ElevenLabs Voice ID.',
     }
 };
 
@@ -290,10 +316,13 @@ export default function VoiceAgentHub() {
 
     // Save voice provider configuration
     const saveProviderConfig = async (providerName: string) => {
-        // Validate API key for paid providers
         const providerInfo = PROVIDER_INFO[providerName as keyof typeof PROVIDER_INFO];
         if (providerInfo.requiresApiKey && !editFormData.apiKey) {
             setMessage({ type: 'error', text: `API Key is required for ${providerInfo.name}` });
+            return;
+        }
+        if (providerInfo.requiresGoogleApiKey && !editFormData.googleApiKey) {
+            setMessage({ type: 'error', text: `Google Cloud API Key is required for ${providerInfo.name}` });
             return;
         }
 
@@ -304,18 +333,16 @@ export default function VoiceAgentHub() {
                 provider: providerName as VoiceConfigData['provider'],
                 mode: editFormData.mode || 'voice-and-text',
                 apiKey: editFormData.apiKey,
+                googleApiKey: editFormData.googleApiKey,
                 voiceId: editFormData.voiceId,
                 ttsModel: editFormData.ttsModel,
                 isActive: true
             };
 
             await api.post('/api/voice-config', configToSave);
-
-            // Refresh all data to get the updated state
             await fetchAllData();
-
             setEditingProvider(null);
-            setMessage({ type: 'success', text: `${PROVIDER_INFO[providerName as keyof typeof PROVIDER_INFO].name} activated successfully!` });
+            setMessage({ type: 'success', text: `${providerInfo.name} activated successfully! The system will auto-route to next available provider if this one fails.` });
         } catch {
             setMessage({ type: 'error', text: `Failed to save ${providerName} configuration` });
         } finally {
@@ -330,7 +357,8 @@ export default function VoiceAgentHub() {
             provider: provider as VoiceConfigData['provider'],
             mode: 'voice-and-text',
             apiKey: '',
-            voiceId: provider === 'elevenlabs' ? '' : 'alloy',
+            googleApiKey: '',
+            voiceId: provider === 'google-cloud' ? 'en-US-Neural2-F' : provider === 'elevenlabs' ? '' : 'nova',
             ttsModel: provider === 'elevenlabs' ? 'eleven_multilingual_v2' : 'tts-1'
         });
         setEditingProvider(provider);
@@ -344,7 +372,8 @@ export default function VoiceAgentHub() {
             provider: providerName as VoiceConfigData['provider'],
             mode: 'voice-and-text',
             apiKey: '',
-            voiceId: providerName === 'elevenlabs' ? '' : 'alloy',
+            googleApiKey: '',
+            voiceId: providerName === 'google-cloud' ? 'en-US-Neural2-F' : providerName === 'elevenlabs' ? '' : 'nova',
             ttsModel: providerName === 'elevenlabs' ? 'eleven_multilingual_v2' : 'tts-1',
             isActive: false
         };
@@ -593,14 +622,15 @@ export default function VoiceAgentHub() {
                         )}
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-4">
                         {/* Provider Cards */}
-                        {(['google-free', 'openai', 'elevenlabs'] as const).map((provider) => {
+                        {(['google-free', 'google-cloud', 'openai', 'elevenlabs'] as const).map((provider) => {
                             const info = PROVIDER_INFO[provider];
                             const config = getProviderConfig(provider);
                             const isActiveProvider = activeVoiceProvider === provider;
                             const isEditing = editingProvider === provider;
                             const hasApiKey = !!config.apiKey;
+                            const hasGoogleApiKey = !!config.googleApiKey;
 
                             return (
                                 <div
@@ -629,21 +659,43 @@ export default function VoiceAgentHub() {
                                     {/* Provider Content */}
                                     {isEditing ? (
                                         <div className="p-4 space-y-3">
+                                            {/* Info note */}
+                                            <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg p-2.5 leading-relaxed">
+                                                {info.note}
+                                            </p>
+
                                             {/* Response Mode */}
                                             <div>
                                                 <label className="block text-xs font-medium text-gray-600 mb-1.5">Response Mode</label>
                                                 <select
                                                     value={editFormData.mode || 'voice-and-text'}
                                                     onChange={(e) => setEditFormData({ ...editFormData, mode: e.target.value as VoiceConfigData['mode'] })}
-                                                    className="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                                    className="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                                                 >
-                                                    <option value="voice-and-text">Voice & Text</option>
+                                                    <option value="voice-and-text">Voice & Text (Recommended)</option>
                                                     <option value="voice-only">Voice Only</option>
                                                     <option value="text-only">Text Only</option>
                                                 </select>
                                             </div>
 
-                                            {/* API Key for paid providers */}
+                                            {/* Google Cloud API Key */}
+                                            {info.requiresGoogleApiKey && (
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                                                        Google Cloud API Key <span className="text-red-500">*</span>
+                                                    </label>
+                                                    <input
+                                                        type="password"
+                                                        value={editFormData.googleApiKey || ''}
+                                                        onChange={(e) => setEditFormData({ ...editFormData, googleApiKey: e.target.value })}
+                                                        placeholder="AIza..."
+                                                        className="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                                                    />
+                                                    <p className="text-xs text-gray-400 mt-1">Enable "Cloud Text-to-Speech API" in Google Cloud Console → APIs & Services</p>
+                                                </div>
+                                            )}
+
+                                            {/* OpenAI / ElevenLabs API Key */}
                                             {info.requiresApiKey && (
                                                 <div>
                                                     <label className="block text-xs font-medium text-gray-600 mb-1.5">
@@ -653,29 +705,31 @@ export default function VoiceAgentHub() {
                                                         type="password"
                                                         value={editFormData.apiKey || ''}
                                                         onChange={(e) => setEditFormData({ ...editFormData, apiKey: e.target.value })}
-                                                        placeholder={`Enter ${info.name} API Key`}
-                                                        className="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                                        placeholder={provider === 'openai' ? 'sk-...' : 'ElevenLabs API key'}
+                                                        className="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                                                     />
                                                 </div>
                                             )}
 
-                                            {/* Voice Selection for OpenAI */}
-                                            {provider === 'openai' && (
+                                            {/* Voice Selection — Google Cloud & OpenAI */}
+                                            {(provider === 'google-cloud' || provider === 'openai') && info.voices.length > 0 && (
                                                 <div>
-                                                    <label className="block text-xs font-medium text-gray-600 mb-1.5">Voice</label>
+                                                    <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                                                        Voice {provider === 'google-cloud' ? '(English & Tamil — Sinhala auto-uses Google Free)' : ''}
+                                                    </label>
                                                     <select
-                                                        value={editFormData.voiceId || 'alloy'}
+                                                        value={editFormData.voiceId || info.voices[0]?.id}
                                                         onChange={(e) => setEditFormData({ ...editFormData, voiceId: e.target.value })}
-                                                        className="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                                        className="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                                                     >
-                                                        {info.voices.map(voice => (
-                                                            <option key={voice.id} value={voice.id}>{voice.name}</option>
+                                                        {info.voices.map(v => (
+                                                            <option key={v.id} value={v.id}>{v.name}</option>
                                                         ))}
                                                     </select>
                                                 </div>
                                             )}
 
-                                            {/* Voice ID for ElevenLabs */}
+                                            {/* ElevenLabs: Voice ID + Model */}
                                             {provider === 'elevenlabs' && (
                                                 <>
                                                     <div>
@@ -684,7 +738,7 @@ export default function VoiceAgentHub() {
                                                             value={editFormData.voiceId || ''}
                                                             onChange={(e) => setEditFormData({ ...editFormData, voiceId: e.target.value })}
                                                             placeholder="e.g. pNInz6obpgDQGcFmaJcg"
-                                                            className="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                                            className="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                                                         />
                                                     </div>
                                                     <div>
@@ -692,52 +746,42 @@ export default function VoiceAgentHub() {
                                                         <select
                                                             value={editFormData.ttsModel || 'eleven_multilingual_v2'}
                                                             onChange={(e) => setEditFormData({ ...editFormData, ttsModel: e.target.value })}
-                                                            className="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                                            className="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                                                         >
-                                                            <option value="eleven_multilingual_v2">Multilingual v2</option>
-                                                            <option value="eleven_turbo_v2">Turbo v2</option>
+                                                            <option value="eleven_multilingual_v2">Multilingual v2 (Best)</option>
+                                                            <option value="eleven_turbo_v2">Turbo v2 (Faster)</option>
                                                             <option value="eleven_monolingual_v1">Monolingual v1</option>
                                                         </select>
                                                     </div>
                                                 </>
                                             )}
 
-                                            {/* Quality for OpenAI */}
+                                            {/* OpenAI quality model */}
                                             {provider === 'openai' && (
                                                 <div>
                                                     <label className="block text-xs font-medium text-gray-600 mb-1.5">Quality</label>
                                                     <select
                                                         value={editFormData.ttsModel || 'tts-1'}
                                                         onChange={(e) => setEditFormData({ ...editFormData, ttsModel: e.target.value })}
-                                                        className="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                                        className="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                                                     >
-                                                        <option value="tts-1">Standard</option>
+                                                        <option value="tts-1">Standard (Faster)</option>
                                                         <option value="tts-1-hd">HD (Higher Quality)</option>
                                                     </select>
                                                 </div>
                                             )}
 
-                                            {/* Free tier note */}
-                                            {!info.requiresApiKey && (
-                                                <p className="text-xs text-gray-500 italic bg-gray-50 p-2 rounded">
-                                                    No API key required - uses free Google TTS
-                                                </p>
-                                            )}
-
                                             {/* Action Buttons */}
                                             <div className="flex gap-2 pt-2">
-                                                <button
-                                                    onClick={() => setEditingProvider(null)}
-                                                    className="flex-1 py-2.5 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                                                >
+                                                <button onClick={() => setEditingProvider(null)} className="flex-1 py-2.5 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
                                                     Cancel
                                                 </button>
                                                 <button
                                                     onClick={() => saveProviderConfig(provider)}
                                                     disabled={saving}
-                                                    className={`flex-1 py-2.5 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${info.buttonColor}`}
+                                                    className={`flex-1 py-2.5 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 ${info.buttonColor}`}
                                                 >
-                                                    {saving ? 'Saving...' : 'Activate'}
+                                                    {saving ? 'Saving...' : 'Activate & Save'}
                                                 </button>
                                             </div>
                                         </div>
@@ -749,6 +793,18 @@ export default function VoiceAgentHub() {
                                                     <span className="text-gray-500">Mode:</span>
                                                     <span className="font-medium text-gray-800 capitalize">{config.mode.replace(/-/g, ' ')}</span>
                                                 </div>
+                                                {info.requiresGoogleApiKey && (
+                                                    <div className="flex justify-between text-sm">
+                                                        <span className="text-gray-500">GCloud Key:</span>
+                                                        <span className={`font-medium flex items-center gap-1 ${hasGoogleApiKey ? 'text-green-600' : 'text-amber-600'}`}>
+                                                            {hasGoogleApiKey ? (
+                                                                <><CheckCircle2 className="h-3.5 w-3.5" />Set</>
+                                                            ) : (
+                                                                <><AlertCircle className="h-3.5 w-3.5" />Required</>
+                                                            )}
+                                                        </span>
+                                                    </div>
+                                                )}
                                                 {info.requiresApiKey && (
                                                     <div className="flex justify-between text-sm">
                                                         <span className="text-gray-500">API Key:</span>
