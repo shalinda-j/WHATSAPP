@@ -273,7 +273,7 @@ async function finalizeBooking(
       sessionId,
       location: campusLocation,
       gcalLink: gcalLink || undefined,
-    }).catch((err) => console.error('Failed to save booking to DB:', err));
+    }).catch((err: Error) => console.error('Failed to save booking to DB:', err));
 
     // 4. Send confirmation text with full details
     const timeStr = format(appointmentDate, 'PPpp');
