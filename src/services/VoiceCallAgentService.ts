@@ -4,6 +4,7 @@ import Config from '../models/Config';
 import { aiLoadBalancer } from './AILoadBalancer';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import axios from 'axios';
 
 const CONFIG_KEY = 'call_agent_settings';
 const FALLBACK_PATH = join(process.cwd(), 'data', 'call_agent_settings.json');
@@ -104,20 +105,48 @@ export class VoiceCallAgentService {
   }
 
   /**
-   * Generate a dynamic AI response for the call greeting
+   * Generate a dynamic AI response for the call greeting.
+   * Tries Gemini API directly first (using GEMINI_API_KEY), then falls back to AI load balancer.
    */
   private async generateDynamicGreeting(language: string): Promise<string> {
     if (!this.agentPersonality) {
       return this.callGreeting[language] || this.callGreeting.en;
     }
 
-    try {
-      const langNames: Record<string, string> = { en: 'English', si: 'Sinhala', ta: 'Tamil' };
-      const langName = langNames[language] || 'English';
-      const prompt = `You are a voice call agent with the following personality: "${this.agentPersonality}". 
+    const langNames: Record<string, string> = { en: 'English', si: 'Sinhala', ta: 'Tamil' };
+    const langName = langNames[language] || 'English';
+    const prompt = `You are a voice call agent with the following personality: "${this.agentPersonality}". 
 A customer is calling on WhatsApp. Since live calls cannot be answered, generate a warm, professional greeting message to send back as a voice note in ${langName}. 
 Keep it under 3 sentences. Be friendly and helpful. Do not mention you are an AI unless directly asked.`;
 
+    // 1. Try Gemini API directly — uses GEMINI_API_KEY, bypasses load balancer config issues
+    const geminiKey = process.env.GEMINI_API_KEY;
+    if (geminiKey && geminiKey.length > 10) {
+      try {
+        console.log('📞 Generating call greeting via Gemini API...');
+        const res = await axios.post(
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent',
+          {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { maxOutputTokens: 200, temperature: 0.8 },
+          },
+          {
+            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
+            timeout: 15000,
+          },
+        );
+        const text = res.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text?.trim()) {
+          console.log('✅ Gemini API greeting generated successfully');
+          return text.trim();
+        }
+      } catch (err: any) {
+        console.warn('⚠️ Gemini API greeting failed, falling back to AI load balancer:', err.message);
+      }
+    }
+
+    // 2. Fall back to AI load balancer (OpenAI, Groq, etc.)
+    try {
       const response = await aiLoadBalancer.sendMessage('call_agent_greeting', prompt);
       return response || this.callGreeting[language] || this.callGreeting.en;
     } catch {

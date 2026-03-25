@@ -489,19 +489,17 @@ export async function generateSpeech(text: string, targetLanguage?: string): Pro
 
   const waterfall: Array<{ name: string; fn: () => Promise<Buffer> }> = [];
 
-  // 1. Gemini TTS — primary if explicitly chosen, or as first fallback for all langs
+  // 1. Gemini TTS — primary if explicitly chosen (highest quality, all languages incl. Sinhala)
   if (primaryProvider === 'gemini-tts' && geminiApiKey) {
     waterfall.push({ name: 'Gemini TTS (primary)', fn: () => ttsGemini(text, lang, voiceId) });
   }
 
-  // 2. Google Cloud TTS — primary or fallback (NOT for Sinhala)
-  if (lang !== 'si') {
-    if (primaryProvider === 'google-cloud' && googleApiKey) {
-      waterfall.push({ name: 'Google Cloud TTS (primary)', fn: () => ttsGoogleCloud(text, lang, googleApiKey) });
-    }
+  // 2. Google Cloud TTS — primary (NOT for Sinhala — no native voice)
+  if (primaryProvider === 'google-cloud' && lang !== 'si' && googleApiKey) {
+    waterfall.push({ name: 'Google Cloud TTS (primary)', fn: () => ttsGoogleCloud(text, lang, googleApiKey) });
   }
 
-  // 3. OpenAI TTS — primary or fallback
+  // 3. OpenAI TTS — primary
   if (primaryProvider === 'openai' && apiKey) {
     waterfall.push({ name: 'OpenAI TTS (primary)', fn: () => ttsOpenAI(text, lang, apiKey, voiceId, model) });
   }
@@ -511,8 +509,13 @@ export async function generateSpeech(text: string, targetLanguage?: string): Pro
     waterfall.push({ name: 'ElevenLabs TTS (primary)', fn: () => ttsElevenLabs(text, apiKey, voiceId, model) });
   }
 
+  // 5. Google Free TTS — primary (when explicitly selected)
+  if (primaryProvider === 'google-free') {
+    waterfall.push({ name: 'Google Free TTS (primary)', fn: () => ttsGoogleFree(text, lang) });
+  }
+
   // ── Cascade fallbacks (providers not already in list) ─────────────────────────
-  // Gemini TTS fallback — for all langs including Sinhala (most important fallback)
+  // Gemini TTS fallback — for ALL languages including Sinhala (most reliable, no per-lang limits)
   if (primaryProvider !== 'gemini-tts' && geminiApiKey) {
     waterfall.push({ name: 'Gemini TTS (fallback)', fn: () => ttsGemini(text, lang, voiceId) });
   }
@@ -527,8 +530,10 @@ export async function generateSpeech(text: string, targetLanguage?: string): Pro
     waterfall.push({ name: 'OpenAI TTS (fallback)', fn: () => ttsOpenAI(text, lang, apiKey, voiceId, model) });
   }
 
-  // Google Free TTS is always the last-resort (works for Sinhala, no API key needed)
-  waterfall.push({ name: 'Google Free TTS (last resort)', fn: () => ttsGoogleFree(text, lang) });
+  // Google Free TTS — last resort when not already primary
+  if (primaryProvider !== 'google-free') {
+    waterfall.push({ name: 'Google Free TTS (last resort)', fn: () => ttsGoogleFree(text, lang) });
+  }
 
   // ── Execute waterfall ────────────────────────────────────────────────────────
   let lastError: Error | null = null;

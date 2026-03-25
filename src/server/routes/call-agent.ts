@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { voiceCallAgent } from '../../services/VoiceCallAgentService';
 import CallLog from '../../models/CallLog';
 import { authenticateToken } from '../middleware/auth';
+import { generateSpeech } from '../../services/voice';
 
 const router = Router();
 
@@ -123,6 +124,41 @@ router.delete('/logs/:id', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete log' });
+  }
+});
+
+// POST /api/call-agent/test-voice
+// Generates a TTS voice reply using the active provider (Gemini TTS preferred) and returns base64 WAV
+router.post('/test-voice', async (req, res) => {
+  try {
+    const { language = 'en', text } = req.body as { language?: string; text?: string };
+
+    const defaultGreetings: Record<string, string> = {
+      en: "Hello! Thank you for calling. I'm your AI voice assistant. How can I help you today?",
+      si: "ආයුබෝවන්! ඔබේ ඇමතුම ගැන ස්තූතියි. මම ඔබේ AI සහකාරයෙකි.",
+      ta: "வணக்கம்! அழைத்ததற்கு நன்றி. நான் உங்கள் AI உதவியாளர்.",
+    };
+
+    const greetingText = text?.trim() || defaultGreetings[language] || defaultGreetings.en;
+
+    console.log(`🔊 Test voice TTS requested: lang=${language}, text="${greetingText.slice(0, 60)}..."`);
+
+    const audioBuffer = await generateSpeech(greetingText, language as 'en' | 'si' | 'ta');
+
+    if (!audioBuffer || audioBuffer.length < 100) {
+      return res.status(500).json({ error: 'TTS generation failed — audio buffer empty. Check your Gemini API key.' });
+    }
+
+    res.json({
+      success: true,
+      audio: audioBuffer.toString('base64'),
+      format: 'wav',
+      size: audioBuffer.length,
+      text: greetingText,
+    });
+  } catch (err: any) {
+    console.error('❌ test-voice error:', err.message || err);
+    res.status(500).json({ error: err.message || 'TTS generation failed' });
   }
 });
 
