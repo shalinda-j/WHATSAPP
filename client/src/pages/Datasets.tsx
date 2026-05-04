@@ -51,12 +51,24 @@ export default function Datasets() {
         personality: 0,
       };
 
-      datasets.forEach((ds: any) => {
-        const type = ds.type || 'knowledge';
-        if (newCounts[type as TabType] !== undefined) {
-          newCounts[type as TabType]++;
-        }
-      });
+      // Filter out 'config' type (internal configuration items, not displayed in tabs)
+      datasets
+        .filter((ds: any) => ds.type !== 'config')
+        .forEach((ds: any) => {
+          const type = ds.type || 'knowledge';
+          // Map backend type names to frontend tab types
+          const typeMap: Record<string, TabType> = {
+            'knowledge': 'knowledge',
+            'command': 'commands',
+            'link': 'links',
+            'megatext': 'megatext',
+            'personality': 'personality',
+          };
+          const tabType = typeMap[type];
+          if (tabType) {
+            newCounts[tabType]++;
+          }
+        });
 
       setCounts(newCounts);
     } catch (error) {

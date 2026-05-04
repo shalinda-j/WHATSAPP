@@ -88,9 +88,9 @@ export default function FollowUp() {
 
   const filteredContacts = contacts.filter(c => {
     const matchSearch = !searchQuery ||
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.phone.includes(searchQuery) ||
-      c.company?.toLowerCase().includes(searchQuery.toLowerCase());
+      (c.company || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchStatus = statusFilter === 'all' || c.status === statusFilter;
     const matchPriority = priorityFilter === 'all' || c.priority === priorityFilter;
     return matchSearch && matchStatus && matchPriority;
@@ -163,12 +163,12 @@ export default function FollowUp() {
     if (!contact.whatsappId && !contact.phone) return;
     setSendingWA(contact._id);
     try {
-      const msg = `Hi ${contact.name.split(' ')[0]}! 👋 Just following up with you. How are you doing? Is there anything I can help you with?`;
+      const msg = `Hi ${(contact.name || 'Friend').split(' ')[0]}! 👋 Just following up with you. How are you doing? Is there anything I can help you with?`;
       await api.post('/api/chat/send', {
         userId: contact.whatsappId || `${contact.phone.replace('+', '')}@s.whatsapp.net`,
         message: msg,
       });
-      setMessage({ type: 'success', text: `Message sent to ${contact.name}` });
+      setMessage({ type: 'success', text: `Message sent to ${contact.name || 'Unknown'}` });
       // Mark as contacted
       handleUpdateStatus(contact._id, 'contacted');
     } catch {
@@ -246,7 +246,7 @@ export default function FollowUp() {
                 onClick={() => setSelectedContact(c)}
                 className="text-xs bg-white border border-red-200 text-red-700 px-3 py-1 rounded-full hover:bg-red-50"
               >
-                {c.name}
+                {c.name || 'Unknown'}
               </button>
             ))}
             {overdueFollowUps.length > 3 && (
@@ -325,11 +325,11 @@ export default function FollowUp() {
                       onClick={() => setSelectedContact(c)}
                     >
                       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                        {c.name.charAt(0).toUpperCase()}
+                        {(c.name || 'U').charAt(0).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold text-gray-900 truncate">{c.name}</p>
+                          <p className="text-sm font-semibold text-gray-900 truncate">{c.name || 'Unknown'}</p>
                           <Star className={`h-3 w-3 flex-shrink-0 ${PRIORITY_COLORS[c.priority]}`} fill="currentColor" />
                         </div>
                         <p className="text-xs text-gray-500 truncate">{c.phone}{c.company ? ` · ${c.company}` : ''}</p>
@@ -370,7 +370,7 @@ export default function FollowUp() {
           {selectedContact ? (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 sticky top-4">
               <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                <h3 className="font-bold text-gray-900">{selectedContact.name}</h3>
+                <h3 className="font-bold text-gray-900">{selectedContact.name || 'Unknown'}</h3>
                 <button onClick={() => setSelectedContact(null)} className="p-1 hover:bg-gray-100 rounded">
                   <X className="h-4 w-4 text-gray-400" />
                 </button>

@@ -1,7 +1,7 @@
 import mongoose, { Schema, Model } from 'mongoose';
 
 // Dataset types for different sections
-export type DatasetType = 'knowledge' | 'command' | 'link' | 'marketing' | 'megatext' | 'personality';
+export type DatasetType = 'knowledge' | 'command' | 'link' | 'marketing' | 'megatext' | 'personality' | 'config';
 
 // Supported languages
 export type Language = 'en' | 'si' | 'ta';
@@ -50,7 +50,7 @@ const DatasetSchema = new Schema(
     description: { type: String },
     type: {
       type: String,
-      enum: ['knowledge', 'command', 'link', 'marketing', 'megatext', 'personality'],
+      enum: ['knowledge', 'command', 'link', 'marketing', 'megatext', 'personality', 'config'],
       default: 'knowledge',
       index: true,
     },

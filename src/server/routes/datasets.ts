@@ -24,11 +24,29 @@ router.get('/', async (req, res) => {
   try {
     const { type, scope, category } = req.query;
 
-    const filter: Record<string, unknown> = {};
+    // Build filter - always exclude 'config' type (internal configuration items)
+    const filter: Record<string, unknown> = {
+      type: { $ne: 'config' },
+    };
+
     if (type) {
+      // For specific type filter, override the default
       if (type === 'knowledge') {
-        filter.$or = [{ type: 'knowledge' }, { type: { $exists: false } }, { type: null }];
+        // Knowledge type filter: include documents without type field (legacy) but exclude config
+        filter.$or = [
+          { type: 'knowledge' },
+          { type: { $exists: false } },
+          { type: null },
+        ];
+        delete filter.type; // Remove $ne since $or handles it
+        // Add explicit exclusion of config
+        filter.$and = [
+          { $or: [{ type: 'knowledge' }, { type: { $exists: false } }, { type: null }] },
+          { type: { $ne: 'config' } },
+        ];
+        delete filter.$or;
       } else {
+        // Other types: simple type filter (config is already excluded)
         filter.type = type;
       }
     }
@@ -52,6 +70,7 @@ router.get('/type/:type', async (req, res) => {
       return res.status(400).json({ error: 'Invalid dataset type' });
     }
 
+    // 'config' type is for internal configuration items, not displayed in Datasets page
     const datasets = await Dataset.find({ type, isActive: true }).sort({ createdAt: -1 });
     res.json(datasets);
   } catch (err: any) {
