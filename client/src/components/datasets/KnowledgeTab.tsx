@@ -49,7 +49,7 @@ export default function KnowledgeTab({ language, onDataChange }: KnowledgeTabPro
   const fetchItems = async () => {
     try {
       const res = await api.get('/api/datasets?type=knowledge');
-      setItems(res.data);
+      setItems(Array.isArray(res.data) ? res.data : (res.data?.datasets || res.data?.data || []));
     } catch (error) {
       console.error('Failed to fetch knowledge items:', error);
     }

@@ -48,7 +48,7 @@ export default function CommandsTab({ language, onDataChange }: CommandsTabProps
     setLoading(true);
     try {
       const res = await api.get('/api/datasets?type=command');
-      setCommands(res.data);
+      setCommands(Array.isArray(res.data) ? res.data : (res.data?.datasets || res.data?.data || []));
     } catch (error) {
       console.error('Failed to fetch commands:', error);
     } finally {

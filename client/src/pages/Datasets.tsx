@@ -41,7 +41,7 @@ export default function Datasets() {
   const fetchCounts = async () => {
     try {
       const res = await api.get('/api/datasets');
-      const datasets = res.data;
+      const datasets = Array.isArray(res.data) ? res.data : (res.data?.datasets || res.data?.data || []);
 
       const newCounts: Record<TabType, number> = {
         knowledge: 0,

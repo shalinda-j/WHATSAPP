@@ -40,7 +40,7 @@ export default function MegaTextTab({ language, onDataChange }: MegaTextTabProps
     setLoading(true);
     try {
       const res = await api.get('/api/datasets?type=megatext');
-      setItems(res.data);
+      setItems(Array.isArray(res.data) ? res.data : (res.data?.datasets || res.data?.data || []));
     } catch (error) {
       console.error('Failed to fetch mega text items:', error);
     } finally {

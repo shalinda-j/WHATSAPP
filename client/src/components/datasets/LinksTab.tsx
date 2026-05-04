@@ -43,7 +43,7 @@ export default function LinksTab({ language, onDataChange }: LinksTabProps) {
     setLoading(true);
     try {
       const res = await api.get('/api/datasets?type=link');
-      setLinks(res.data);
+      setLinks(Array.isArray(res.data) ? res.data : (res.data?.datasets || res.data?.data || []));
     } catch (error) {
       console.error('Failed to fetch links:', error);
     } finally {

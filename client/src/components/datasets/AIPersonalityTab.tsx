@@ -36,8 +36,9 @@ export default function AIPersonalityTab({ language, onDataChange }: AIPersonali
     try {
       // Fetch AI Personality
       const personalityRes = await api.get('/api/datasets?key=AI_PERSONALITY');
-      if (personalityRes.data && personalityRes.data.length > 0) {
-        setPersonality(personalityRes.data[0]);
+      const personalityData = Array.isArray(personalityRes.data) ? personalityRes.data : (personalityRes.data?.datasets || personalityRes.data?.data || []);
+      if (personalityData && personalityData.length > 0) {
+        setPersonality(personalityData[0]);
       } else {
         // Create default personality
         setPersonality({
@@ -54,8 +55,9 @@ export default function AIPersonalityTab({ language, onDataChange }: AIPersonali
 
       // Fetch conversation examples
       const examplesRes = await api.get('/api/datasets?key=CONVERSATION_EXAMPLES');
-      if (examplesRes.data && examplesRes.data.length > 0) {
-        setExamples(examplesRes.data[0].content || []);
+      const examplesData = Array.isArray(examplesRes.data) ? examplesRes.data : (examplesRes.data?.datasets || examplesRes.data?.data || []);
+      if (examplesData && examplesData.length > 0) {
+        setExamples(Array.isArray(examplesData[0].content) ? examplesData[0].content : []);
       }
     } catch (error) {
       console.error('Failed to fetch AI personality:', error);
