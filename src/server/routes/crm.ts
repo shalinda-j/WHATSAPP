@@ -120,6 +120,43 @@ router.post('/contacts', async (req, res) => {
 
 router.put('/contacts/:id', async (req, res) => {
   try {
+    // Auto-populate name from firstName/lastName if not provided
+    if (!req.body.name && (req.body.firstName || req.body.lastName)) {
+      req.body.name = `${req.body.firstName || ''} ${req.body.lastName || ''}`.trim();
+    }
+    // Sync whatsappId with whatsappNumber
+    if (req.body.whatsappId && !req.body.whatsappNumber) {
+      req.body.whatsappNumber = req.body.whatsappId;
+    }
+    if (req.body.whatsappNumber && !req.body.whatsappId) {
+      req.body.whatsappId = req.body.whatsappNumber;
+    }
+
+    const contact = await CRMService.updateContact(req.params.id, req.body);
+    if (!contact) {
+      return res.status(404).json({ error: 'Contact not found' });
+    }
+    res.json(contact);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH endpoint for partial updates (used by FollowUp page)
+router.patch('/contacts/:id', async (req, res) => {
+  try {
+    // Auto-populate name from firstName/lastName if not provided
+    if (!req.body.name && (req.body.firstName || req.body.lastName)) {
+      req.body.name = `${req.body.firstName || ''} ${req.body.lastName || ''}`.trim();
+    }
+    // Sync whatsappId with whatsappNumber
+    if (req.body.whatsappId && !req.body.whatsappNumber) {
+      req.body.whatsappNumber = req.body.whatsappId;
+    }
+    if (req.body.whatsappNumber && !req.body.whatsappId) {
+      req.body.whatsappId = req.body.whatsappNumber;
+    }
+
     const contact = await CRMService.updateContact(req.params.id, req.body);
     if (!contact) {
       return res.status(404).json({ error: 'Contact not found' });

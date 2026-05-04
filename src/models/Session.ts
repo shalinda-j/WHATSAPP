@@ -9,7 +9,8 @@ interface ISession {
     | 'disconnected'
     | 'scan_qr'
     | 'reconnecting'
-    | 'deleted';
+    | 'deleted'
+    | 'loggedOut';
   qr?: string;
   phoneNumber?: string;
   deleted?: boolean; // Flag to prevent auto-restart after deletion
@@ -29,6 +30,7 @@ const SessionSchema = new Schema<ISession>({
       'scan_qr',
       'reconnecting',
       'deleted',
+      'loggedOut',
     ],
     default: 'disconnected',
   },

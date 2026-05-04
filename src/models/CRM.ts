@@ -2,8 +2,11 @@ import mongoose from 'mongoose';
 
 // Contact Schema - CRM Contact Management
 const ContactSchema = new mongoose.Schema({
-  firstName: { type: String, required: true },
-  lastName: { type: String, required: true },
+  // Combined name field for simpler frontend access
+  name: { type: String, required: true },
+  // Separate name fields for detailed views
+  firstName: { type: String },
+  lastName: { type: String },
   email: { type: String },
   phone: { type: String },
   company: { type: String },
@@ -22,17 +25,30 @@ const ContactSchema = new mongoose.Schema({
       'social_media',
       'cold_call',
       'event',
+      'manual',
       'other',
     ],
     default: 'other',
   },
+  // Updated status enum to match FollowUp frontend expectations
   status: {
     type: String,
-    enum: ['active', 'inactive', 'churned'],
-    default: 'active',
+    enum: ['new', 'contacted', 'interested', 'not_interested', 'converted', 'follow_up', 'active', 'inactive', 'churned'],
+    default: 'new',
   },
+  // Priority for follow-up management
+  priority: {
+    type: String,
+    enum: ['low', 'medium', 'high'],
+    default: 'medium',
+  },
+  // Follow-up scheduling
+  nextFollowUp: { type: Date },
+  lastContact: { type: Date },
   whatsappOptIn: { type: Boolean, default: true },
   whatsappNumber: { type: String },
+  // Alias for whatsappNumber (frontend uses whatsappId)
+  whatsappId: { type: String },
   address: {
     street: String,
     city: String,
@@ -50,6 +66,7 @@ const ContactSchema = new mongoose.Schema({
 } as any);
 
 ContactSchema.index({
+  name: 'text',
   firstName: 'text',
   lastName: 'text',
   email: 'text',
@@ -57,6 +74,33 @@ ContactSchema.index({
   company: 'text',
 });
 ContactSchema.index({ type: 1, status: 1 });
+ContactSchema.index({ nextFollowUp: 1 });
+ContactSchema.index({ priority: 1 });
+
+// Pre-save hook to auto-sync fields
+ContactSchema.pre('save', function() {
+  // Auto-populate name from firstName/lastName if not provided
+  if (!this.name && (this.firstName || this.lastName)) {
+    this.name = `${this.firstName || ''} ${this.lastName || ''}`.trim();
+  }
+  // Auto-populate firstName/lastName from name if not provided
+  if (this.name && !this.firstName) {
+    const parts = this.name.split(' ');
+    this.firstName = parts[0];
+    if (parts.length > 1) {
+      this.lastName = parts.slice(1).join(' ');
+    }
+  }
+  // Sync whatsappId and whatsappNumber
+  if (this.whatsappId && !this.whatsappNumber) {
+    this.whatsappNumber = this.whatsappId;
+  }
+  if (this.whatsappNumber && !this.whatsappId) {
+    this.whatsappId = this.whatsappNumber;
+  }
+  // Update updatedAt timestamp
+  this.updatedAt = new Date();
+});
 
 // Deal Schema - Sales Pipeline Management
 const DealSchema = new mongoose.Schema({

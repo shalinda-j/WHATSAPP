@@ -38,6 +38,7 @@ export class CRMService {
     // Search
     if (search) {
       query.$or = [
+        { name: { $regex: search, $options: 'i' } },
         { firstName: { $regex: search, $options: 'i' } },
         { lastName: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } },
@@ -72,6 +73,24 @@ export class CRMService {
    * Create a new contact
    */
   static async createContact(data: any) {
+    // Auto-populate name from firstName/lastName if not provided
+    if (!data.name && (data.firstName || data.lastName)) {
+      data.name = `${data.firstName || ''} ${data.lastName || ''}`.trim();
+    }
+    // Auto-populate firstName/lastName from name if not provided
+    if (data.name && !data.firstName && !data.lastName) {
+      const parts = data.name.split(' ');
+      data.firstName = parts[0];
+      data.lastName = parts.slice(1).join(' ') || '';
+    }
+    // Sync whatsappId and whatsappNumber
+    if (data.whatsappId && !data.whatsappNumber) {
+      data.whatsappNumber = data.whatsappId;
+    }
+    if (data.whatsappNumber && !data.whatsappId) {
+      data.whatsappId = data.whatsappNumber;
+    }
+
     const contact = new Contact({
       ...data,
       createdAt: new Date(),
@@ -165,7 +184,7 @@ export class CRMService {
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
-      .populate('contact', 'firstName lastName email phone company')
+      .populate('contact', 'name firstName lastName email phone company')
       .populate('owner', 'username email');
 
     return {
@@ -182,7 +201,7 @@ export class CRMService {
   static async getDealsByStage() {
     const deals = await Deal.find()
       .sort({ createdAt: -1 })
-      .populate('contact', 'firstName lastName email phone company')
+      .populate('contact', 'name firstName lastName email phone company')
       .populate('owner', 'username email');
 
     const grouped: Record<string, any[]> = {
@@ -209,7 +228,7 @@ export class CRMService {
    */
   static async getDealById(id: string) {
     return Deal.findById(id)
-      .populate('contact', 'firstName lastName email phone company')
+      .populate('contact', 'name firstName lastName email phone company')
       .populate('owner', 'username email');
   }
 
@@ -475,6 +494,7 @@ export class CRMService {
     const [contacts, deals, activities] = await Promise.all([
       Contact.find({
         $or: [
+          { name: searchRegex },
           { firstName: searchRegex },
           { lastName: searchRegex },
           { email: searchRegex },

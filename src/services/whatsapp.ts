@@ -24,8 +24,8 @@ import { HumanizerService } from './HumanizerService';
 // Set FFmpeg path
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
-// Logger
-const logger = pino({ level: process.env.DEBUG === 'true' ? 'debug' : 'warn' });
+// Logger - using pino with any type for Baileys compatibility
+const logger = pino({ level: process.env.DEBUG === 'true' ? 'debug' : 'warn' }) as any;
 
 // Global message handlers (shared across sessions for now)
 const messageHandlers: Array<

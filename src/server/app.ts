@@ -30,7 +30,36 @@ import { authenticateToken } from './middleware/auth';
 const app = express();
 
 // Middleware
-app.use(cors());
+// CORS Configuration - Restrict to allowed origins
+const allowedOrigins = [
+  'http://localhost:5000',     // Vite dev server
+  'http://localhost:5173',     // Vite default port
+  'http://localhost:8080',     // Backend server (same origin)
+  'http://127.0.0.1:5000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:8080',
+  // Add production origins here when deploying
+  // 'https://your-domain.com',
+];
+
+const corsOptions = {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow: boolean) => void) => {
+    // Allow requests with no origin (mobile apps, webhooks, etc.)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`⚠️ CORS blocked request from: ${origin}`);
+      callback(null, false); // Don't throw error, just reject
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+};
+
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -180,8 +209,13 @@ app.get('/health', async (req, res) => {
 const CLIENT_BUILD_PATH = path.join(__dirname, '../../client/dist');
 app.use(express.static(CLIENT_BUILD_PATH));
 
-// SPA Fallback
-app.get(/(.*)/, (req, res) => {
+// SPA Fallback - Use middleware instead of route pattern for Express 5.x compatibility
+app.use((req, res, next) => {
+  // Skip API routes, static files, and health check
+  if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path === '/health') {
+    return next();
+  }
+  // Serve index.html for SPA routes
   res.sendFile(path.join(CLIENT_BUILD_PATH, 'index.html'));
 });
 
