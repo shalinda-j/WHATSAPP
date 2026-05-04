@@ -354,7 +354,7 @@ export default function Leads() {
                     <td className="px-8 py-5">
                       <div className="flex items-center gap-4">
                         <div className="h-12 w-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-lg shadow-sm group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300">
-                          {lead.fullName.charAt(0)}
+                          {(lead.fullName || 'U').charAt(0)}
                         </div>
                         <div>
                           <div className="font-bold text-gray-900 text-base">{lead.fullName}</div>
@@ -471,7 +471,7 @@ export default function Leads() {
             <div className="flex justify-between items-center px-8 py-6 border-b border-gray-100 bg-gray-50/50">
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 rounded-2xl bg-indigo-600 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-indigo-200">
-                  {selectedLead.fullName.charAt(0)}
+                  {(selectedLead.fullName || 'U').charAt(0)}
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">{selectedLead.fullName}</h2>

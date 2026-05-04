@@ -796,7 +796,7 @@ export default function CRM() {
               {dashboardStats?.recentContacts?.map((contact: Contact) => (
                 <div key={contact._id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
                   <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold">
-                    {contact.firstName.charAt(0)}
+                    {(contact.firstName || 'U').charAt(0)}
                   </div>
                   <div className="flex-1">
                     <p className="font-medium text-gray-800 text-sm">{contact.firstName} {contact.lastName}</p>
@@ -901,7 +901,7 @@ export default function CRM() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold">
-                          {contact.firstName.charAt(0)}
+                          {(contact.firstName || 'U').charAt(0)}
                         </div>
                         <div>
                           <p className="font-medium text-gray-800">{contact.firstName} {contact.lastName}</p>
@@ -1458,7 +1458,7 @@ export default function CRM() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="h-10 w-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold">
-                          {lead.fullName.charAt(0)}
+                          {(lead.fullName || 'U').charAt(0)}
                         </div>
                         <div>
                           <p className="font-medium text-gray-800">{lead.fullName}</p>
@@ -1582,7 +1582,7 @@ export default function CRM() {
             <div className="p-6 border-b border-gray-100 flex justify-between items-center">
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 bg-indigo-600 rounded-xl flex items-center justify-center text-white text-xl font-bold">
-                  {selectedRegistration.fullName.charAt(0)}
+                  {(selectedRegistration.fullName || 'U').charAt(0)}
                 </div>
                 <div>
                   <h3 className="text-xl font-bold">{selectedRegistration.fullName}</h3>
