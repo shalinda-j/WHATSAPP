@@ -258,9 +258,16 @@ router.get('/top-questions', async (req, res) => {
   try {
     const { limit = 50 } = req.query;
 
+    const limitNum = Number(limit);
+
+    // ⚡ Bolt: Use lean() and precise selection to minimize memory footprint
+    // Instead of instantiating full Mongoose documents which are memory heavy,
+    // we use lean() to get pure JS objects and only select the needed 'content' field.
     const userMessages = await ChatMessage.find({ role: 'user', type: 'text' })
+      .select('content -_id')
       .sort({ timestamp: -1 })
-      .limit(Number(limit) * 2);
+      .limit(limitNum * 2)
+      .lean();
 
     const messageCounts: Record<string, number> = {};
 
@@ -275,7 +282,7 @@ router.get('/top-questions', async (req, res) => {
     const topQuestions = Object.entries(messageCounts)
       .filter(([_, count]) => count >= 1)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, Number(limit))
+      .slice(0, limitNum)
       .map(([question, count]) => ({ question, count }));
 
     res.json(topQuestions);
@@ -308,10 +315,23 @@ router.get('/bookings', async (req, res) => {
 
 router.post('/bookings', async (req, res) => {
   try {
-    const { clientName, clientPhone, clientEmail, date, time, duration, type, notes, sessionId, location } = req.body;
+    const {
+      clientName,
+      clientPhone,
+      clientEmail,
+      date,
+      time,
+      duration,
+      type,
+      notes,
+      sessionId,
+      location,
+    } = req.body;
 
     if (!clientName || !clientPhone || !date) {
-      return res.status(400).json({ error: 'clientName, clientPhone, and date are required' });
+      return res
+        .status(400)
+        .json({ error: 'clientName, clientPhone, and date are required' });
     }
 
     const dateObj = new Date(date);
@@ -345,7 +365,13 @@ router.patch('/bookings/:id', async (req, res) => {
     const { status, notes, type, time, location } = req.body;
     const booking = await Booking.findByIdAndUpdate(
       req.params.id,
-      { ...(status && { status }), ...(notes !== undefined && { notes }), ...(type && { type }), ...(time && { time }), ...(location && { location }) },
+      {
+        ...(status && { status }),
+        ...(notes !== undefined && { notes }),
+        ...(type && { type }),
+        ...(time && { time }),
+        ...(location && { location }),
+      },
       { new: true },
     ).lean();
 
