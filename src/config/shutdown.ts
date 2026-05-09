@@ -125,7 +125,8 @@ export async function shutdownSocketIO(): Promise<void> {
  */
 export async function shutdownWhatsApp(): Promise<void> {
   try {
-    const { disconnectWhatsApp, HumanizerService } = await import('../services/whatsapp');
+    const { disconnectWhatsApp } = await import('../services/whatsapp');
+    const { HumanizerService } = await import('../services/HumanizerService');
     console.log('📱 Disconnecting WhatsApp sessions...');
     await disconnectWhatsApp();
     HumanizerService.shutdown();

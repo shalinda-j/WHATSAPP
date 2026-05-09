@@ -17,7 +17,8 @@ export function isValidObjectId(id: string): boolean {
  */
 export function validateObjectId(paramName: string = 'id') {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const id = req.params[paramName];
+    const rawId = req.params[paramName];
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
     if (!id) {
       res.status(400).json({
@@ -46,7 +47,8 @@ export function validateObjectId(paramName: string = 'id') {
 export function validateObjectIds(paramNames: string[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
     for (const paramName of paramNames) {
-      const id = req.params[paramName];
+      const rawId = req.params[paramName];
+      const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
       if (id && !isValidObjectId(id)) {
         res.status(400).json({

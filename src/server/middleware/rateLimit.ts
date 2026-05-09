@@ -64,7 +64,8 @@ export function rateLimit(options: {
     message = 'Too many requests, please try again later',
     keyGenerator = (req: Request) => {
       // Use IP address + path as key
-      const ip = req.ip || req.headers.get('x-forwarded-for') || 'unknown';
+      const forwarded = req.headers['x-forwarded-for'];
+      const ip = req.ip || (Array.isArray(forwarded) ? forwarded[0] : forwarded) || 'unknown';
       const path = req.path;
       return `${ip}:${path}`;
     }

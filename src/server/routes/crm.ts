@@ -100,7 +100,7 @@ router.get('/contacts/stats', async (req, res) => {
 
 router.get('/contacts/:id', validateObjectId(), async (req, res) => {
   try {
-    const contact = await CRMService.getContactById(req.params.id);
+    const contact = await CRMService.getContactById(req.params.id as string);
     if (!contact) {
       return res.status(404).json({ error: 'Contact not found' });
     }
@@ -133,7 +133,7 @@ router.put('/contacts/:id', validateObjectId(), async (req, res) => {
       req.body.whatsappId = req.body.whatsappNumber;
     }
 
-    const contact = await CRMService.updateContact(req.params.id, req.body);
+    const contact = await CRMService.updateContact(req.params.id as string, req.body);
     if (!contact) {
       return res.status(404).json({ error: 'Contact not found' });
     }
@@ -158,7 +158,7 @@ router.patch('/contacts/:id', validateObjectId(), async (req, res) => {
       req.body.whatsappId = req.body.whatsappNumber;
     }
 
-    const contact = await CRMService.updateContact(req.params.id, req.body);
+    const contact = await CRMService.updateContact(req.params.id as string, req.body);
     if (!contact) {
       return res.status(404).json({ error: 'Contact not found' });
     }
@@ -170,7 +170,7 @@ router.patch('/contacts/:id', validateObjectId(), async (req, res) => {
 
 router.delete('/contacts/:id', validateObjectId(), async (req, res) => {
   try {
-    const result = await CRMService.deleteContact(req.params.id);
+    const result = await CRMService.deleteContact(req.params.id as string);
     if (!result) {
       return res.status(404).json({ error: 'Contact not found' });
     }
@@ -219,7 +219,7 @@ router.get('/deals/stats', async (req, res) => {
 
 router.get('/deals/:id', validateObjectId(), async (req, res) => {
   try {
-    const deal = await CRMService.getDealById(req.params.id);
+    const deal = await CRMService.getDealById(req.params.id as string);
     if (!deal) {
       return res.status(404).json({ error: 'Deal not found' });
     }
@@ -240,7 +240,7 @@ router.post('/deals', async (req, res) => {
 
 router.put('/deals/:id', validateObjectId(), async (req, res) => {
   try {
-    const deal = await CRMService.updateDeal(req.params.id, req.body);
+    const deal = await CRMService.updateDeal(req.params.id as string, req.body);
     if (!deal) {
       return res.status(404).json({ error: 'Deal not found' });
     }
@@ -252,7 +252,7 @@ router.put('/deals/:id', validateObjectId(), async (req, res) => {
 
 router.delete('/deals/:id', validateObjectId(), async (req, res) => {
   try {
-    const result = await CRMService.deleteDeal(req.params.id);
+    const result = await CRMService.deleteDeal(req.params.id as string);
     if (!result) {
       return res.status(404).json({ error: 'Deal not found' });
     }
@@ -298,7 +298,7 @@ router.get('/activities/upcoming', async (req, res) => {
 
 router.get('/activities/:id', validateObjectId(), async (req, res) => {
   try {
-    const activity = await CRMService.getActivityById(req.params.id);
+    const activity = await CRMService.getActivityById(req.params.id as string);
     if (!activity) {
       return res.status(404).json({ error: 'Activity not found' });
     }
@@ -319,7 +319,7 @@ router.post('/activities', async (req, res) => {
 
 router.put('/activities/:id', validateObjectId(), async (req, res) => {
   try {
-    const activity = await CRMService.updateActivity(req.params.id, req.body);
+    const activity = await CRMService.updateActivity(req.params.id as string, req.body);
     if (!activity) {
       return res.status(404).json({ error: 'Activity not found' });
     }
@@ -331,7 +331,7 @@ router.put('/activities/:id', validateObjectId(), async (req, res) => {
 
 router.delete('/activities/:id', validateObjectId(), async (req, res) => {
   try {
-    const result = await CRMService.deleteActivity(req.params.id);
+    const result = await CRMService.deleteActivity(req.params.id as string);
     if (!result) {
       return res.status(404).json({ error: 'Activity not found' });
     }

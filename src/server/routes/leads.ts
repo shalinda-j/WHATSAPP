@@ -100,7 +100,7 @@ router.get('/', async (req, res) => {
     if (experienceYears) query.experienceYears = experienceYears;
     if (search) {
       // SECURITY FIX: Escape regex special characters to prevent regex injection
-      const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const escapedSearch = (search as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.$or = [
         { fullName: { $regex: escapedSearch, $options: 'i' } },
         { phoneNumber: { $regex: escapedSearch, $options: 'i' } },
