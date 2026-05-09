@@ -16,10 +16,6 @@ const router = express.Router();
 // Handle Inbound Webhook (External System -> Bot)
 // This endpoint is designed for external systems to trigger actions
 router.post('/inbound', async (req, res) => {
-
-// Handle Inbound Webhook (External System -> Bot)
-// This endpoint is designed for external systems to trigger actions
-router.post('/inbound', async (req, res) => {
   try {
     const { event, payload, secret, sessionId } = req.body;
 
