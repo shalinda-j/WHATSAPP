@@ -1,9 +1,13 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { bulkSenderService } from '../../services/BulkSenderService';
+import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+
+// SECURITY FIX: All bulk routes require authentication
+router.use(authenticateToken);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/bulk/send

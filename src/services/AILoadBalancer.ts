@@ -35,9 +35,57 @@ export class AILoadBalancer {
   private lastServiceLoad: number = 0;
   private serviceLoadPromise: Promise<void> | null = null;
 
+  // MEMORY LEAK FIX: Add limits and cleanup for caches
+  private readonly MAX_HISTORY_CACHE_SIZE = 1000;
+  private readonly MAX_USER_ASSIGNMENTS_SIZE = 5000;
+  private cleanupInterval: NodeJS.Timeout | null = null;
+
   constructor() {
     this.userAssignments = new Map();
     this.historyCache = new Map();
+
+    // MEMORY LEAK FIX: Start periodic cleanup every 10 minutes
+    this.cleanupInterval = setInterval(() => this.cleanupCaches(), 10 * 60 * 1000);
+  }
+
+  /**
+   * MEMORY LEAK FIX: Periodic cleanup of oversized caches
+   */
+  private cleanupCaches(): void {
+    // Cleanup historyCache if over limit
+    if (this.historyCache.size > this.MAX_HISTORY_CACHE_SIZE) {
+      // Remove oldest entries (first half of the limit)
+      const keysToDelete = Array.from(this.historyCache.keys())
+        .slice(0, this.historyCache.size - this.MAX_HISTORY_CACHE_SIZE / 2);
+      for (const key of keysToDelete) {
+        this.historyCache.delete(key);
+      }
+      console.log(`🧹 AILoadBalancer: Cleaned ${keysToDelete.length} history cache entries`);
+    }
+
+    // Cleanup userAssignments if over limit
+    if (this.userAssignments.size > this.MAX_USER_ASSIGNMENTS_SIZE) {
+      const keysToDelete = Array.from(this.userAssignments.keys())
+        .slice(0, this.userAssignments.size - this.MAX_USER_ASSIGNMENTS_SIZE / 2);
+      for (const key of keysToDelete) {
+        this.userAssignments.delete(key);
+      }
+      console.log(`🧹 AILoadBalancer: Cleaned ${keysToDelete.length} user assignment entries`);
+    }
+  }
+
+  /**
+   * MEMORY LEAK FIX: Cleanup on shutdown
+   */
+  public shutdown(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+    this.historyCache.clear();
+    this.userAssignments.clear();
+    this.services = [];
+    console.log('🧹 AILoadBalancer: Shutdown cleanup completed');
   }
 
   private async loadServices(): Promise<void> {

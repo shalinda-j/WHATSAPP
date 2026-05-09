@@ -1,7 +1,11 @@
 import express from 'express';
 import * as SystemController from '../controllers/SystemController';
+import { authenticateToken } from '../middleware/auth';
 
 const router = express.Router();
+
+// SECURITY FIX: All system routes require authentication
+router.use(authenticateToken);
 
 // GET /api/system/stats
 router.get('/stats', SystemController.getStats);

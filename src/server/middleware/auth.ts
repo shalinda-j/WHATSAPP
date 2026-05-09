@@ -1,12 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-// Warn if using default secret in production
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_key_change_in_prod';
-if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
-  console.warn(
-    '⚠️ WARNING: Using default JWT_SECRET in production is insecure!',
-  );
+// SECURITY FIX: Throw error if JWT_SECRET not configured
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('CRITICAL: JWT_SECRET environment variable must be set. Application cannot start without proper authentication secret.');
+}
+if (JWT_SECRET.length < 32) {
+  console.warn('⚠️ WARNING: JWT_SECRET should be at least 32 characters for security.');
 }
 
 export interface JwtPayload {

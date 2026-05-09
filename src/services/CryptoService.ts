@@ -1,18 +1,17 @@
 import crypto from 'crypto';
 
 const ALGORITHM = 'aes-256-cbc';
-// Ensure a 32-byte key
-const rawKey =
-  process.env.ENCRYPTION_KEY || 'default_secret_key_change_in_prod_now';
-const ENCRYPTION_KEY = Buffer.from(rawKey.padEnd(32, '0').slice(0, 32));
 const IV_LENGTH = 16;
 
-// Warn if using default encryption key in production
-if (!process.env.ENCRYPTION_KEY && process.env.NODE_ENV === 'production') {
-  console.warn(
-    '⚠️ WARNING: Using default ENCRYPTION_KEY in production is insecure!',
-  );
+// SECURITY FIX: Throw error if ENCRYPTION_KEY not configured
+const rawKey = process.env.ENCRYPTION_KEY;
+if (!rawKey) {
+  throw new Error('CRITICAL: ENCRYPTION_KEY environment variable must be set. Application cannot start without proper encryption key for API keys.');
 }
+if (rawKey.length < 32) {
+  console.warn('⚠️ WARNING: ENCRYPTION_KEY should be exactly 32 characters for AES-256.');
+}
+const ENCRYPTION_KEY = Buffer.from(rawKey.padEnd(32, '0').slice(0, 32));
 
 export class CryptoService {
   static encrypt(text: string | undefined): string | undefined {

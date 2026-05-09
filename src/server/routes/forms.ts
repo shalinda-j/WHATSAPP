@@ -2,6 +2,8 @@ import { Router } from 'express';
 import FormTemplate, { FormField } from '../../models/FormTemplate';
 import FormSubmission from '../../models/FormSubmission';
 import { authenticateToken } from '../middleware/auth';
+import { standardRateLimit } from '../middleware/rateLimit';
+import { validateObjectId } from '../middleware/validation';
 
 const router = Router();
 
@@ -20,7 +22,7 @@ router.get('/templates', authenticateToken, async (req, res) => {
 });
 
 // Get single form template
-router.get('/templates/:id', authenticateToken, async (req, res) => {
+router.get('/templates/:id', authenticateToken, validateObjectId(), async (req, res) => {
   try {
     const template = await FormTemplate.findById(req.params.id);
     if (!template) {
@@ -33,7 +35,8 @@ router.get('/templates/:id', authenticateToken, async (req, res) => {
 });
 
 // Get default/active form template (for bot)
-router.get('/default', async (req, res) => {
+// SECURITY FIX: Add rate limiting to prevent abuse
+router.get('/default', standardRateLimit, async (req, res) => {
   try {
     let template = await FormTemplate.findOne({ isActive: true, isDefault: true });
     if (!template) {
@@ -78,7 +81,7 @@ router.post('/templates', authenticateToken, async (req, res) => {
 });
 
 // Update form template
-router.put('/templates/:id', authenticateToken, async (req, res) => {
+router.put('/templates/:id', authenticateToken, validateObjectId(), async (req, res) => {
   try {
     const { name, description, fields, triggerMode, triggerDelay, welcomeMessage, completionMessage, isActive, isDefault } = req.body;
 
@@ -114,7 +117,7 @@ router.put('/templates/:id', authenticateToken, async (req, res) => {
 });
 
 // Delete form template
-router.delete('/templates/:id', authenticateToken, async (req, res) => {
+router.delete('/templates/:id', authenticateToken, validateObjectId(), async (req, res) => {
   try {
     const template = await FormTemplate.findByIdAndDelete(req.params.id);
     if (!template) {
@@ -127,7 +130,7 @@ router.delete('/templates/:id', authenticateToken, async (req, res) => {
 });
 
 // Set template as default
-router.post('/templates/:id/set-default', authenticateToken, async (req, res) => {
+router.post('/templates/:id/set-default', authenticateToken, validateObjectId(), async (req, res) => {
   try {
     await FormTemplate.updateMany({}, { isDefault: false });
     const template = await FormTemplate.findByIdAndUpdate(
@@ -145,7 +148,7 @@ router.post('/templates/:id/set-default', authenticateToken, async (req, res) =>
 });
 
 // Duplicate template
-router.post('/templates/:id/duplicate', authenticateToken, async (req, res) => {
+router.post('/templates/:id/duplicate', authenticateToken, validateObjectId(), async (req, res) => {
   try {
     const original = await FormTemplate.findById(req.params.id);
     if (!original) {
@@ -184,7 +187,9 @@ router.get('/submissions', authenticateToken, async (req, res) => {
     if (formId) query.formId = formId;
     if (status) query.status = status;
     if (search) {
-      query.phoneNumber = { $regex: search, $options: 'i' };
+      // SECURITY FIX: Escape regex to prevent injection
+      const escapedSearch = (search as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      query.phoneNumber = { $regex: escapedSearch, $options: 'i' };
     }
 
     const total = await FormSubmission.countDocuments(query);
@@ -213,7 +218,7 @@ router.get('/submissions', authenticateToken, async (req, res) => {
 });
 
 // Get single submission
-router.get('/submissions/:id', authenticateToken, async (req, res) => {
+router.get('/submissions/:id', authenticateToken, validateObjectId(), async (req, res) => {
   try {
     const submission = await FormSubmission.findById(req.params.id)
       .populate('formId', 'name fields')
@@ -234,7 +239,8 @@ router.get('/submissions/:id', authenticateToken, async (req, res) => {
 });
 
 // Create submission (from WhatsApp bot - no auth)
-router.post('/submissions', async (req, res) => {
+// SECURITY FIX: Add rate limiting to prevent abuse
+router.post('/submissions', standardRateLimit, async (req, res) => {
   try {
     const { formId, phoneNumber, whatsappJid, data } = req.body;
 
@@ -254,7 +260,7 @@ router.post('/submissions', async (req, res) => {
 });
 
 // Update submission status
-router.put('/submissions/:id/status', authenticateToken, async (req, res) => {
+router.put('/submissions/:id/status', authenticateToken, validateObjectId(), async (req, res) => {
   try {
     const { status, notes } = req.body;
 

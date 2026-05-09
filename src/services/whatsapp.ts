@@ -28,6 +28,8 @@ ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 const logger = pino({ level: process.env.DEBUG === 'true' ? 'debug' : 'warn' }) as any;
 
 // Global message handlers (shared across sessions for now)
+// MEMORY LEAK FIX: Add limit to prevent unbounded growth
+const MAX_MESSAGE_HANDLERS = 50;
 const messageHandlers: Array<
   (
     message: proto.IWebMessageInfo,
@@ -35,6 +37,9 @@ const messageHandlers: Array<
     sessionId: string,
   ) => Promise<void>
 > = [];
+
+// MEMORY LEAK FIX: Track reconnect timers for cleanup
+const reconnectTimers: Map<string, NodeJS.Timeout> = new Map();
 
 export class WhatsAppSessionManager {
   private sessions: Map<string, WASocket> = new Map();
@@ -50,6 +55,36 @@ export class WhatsAppSessionManager {
     // Ensure auth dir exists for file-based fallback
     const AUTH_DIR = resolve(__dirname, '..', 'auth_info');
     if (!existsSync(AUTH_DIR)) mkdirSync(AUTH_DIR, { recursive: true });
+  }
+
+  /**
+   * MEMORY LEAK FIX: Helper to schedule reconnect with cleanup tracking
+   */
+  private scheduleReconnect(sessionId: string, delay: number): void {
+    // Clear any existing timer for this session
+    const existingTimer = reconnectTimers.get(sessionId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    // Schedule new reconnect
+    const timer = setTimeout(() => {
+      reconnectTimers.delete(sessionId);
+      this.startSession(sessionId);
+    }, delay);
+
+    reconnectTimers.set(sessionId, timer);
+  }
+
+  /**
+   * MEMORY LEAK FIX: Clear reconnect timer for a session
+   */
+  private clearReconnectTimer(sessionId: string): void {
+    const timer = reconnectTimers.get(sessionId);
+    if (timer) {
+      clearTimeout(timer);
+      reconnectTimers.delete(sessionId);
+    }
   }
 
   /**
@@ -205,7 +240,8 @@ export class WhatsAppSessionManager {
             this.retryCounters.delete(sessionId);
             this.connectionStates.delete(sessionId);
 
-            setTimeout(() => this.startSession(sessionId), 2000);
+            // MEMORY LEAK FIX: Use tracked timer
+            this.scheduleReconnect(sessionId, 2000);
             return;
           }
 
@@ -228,7 +264,8 @@ export class WhatsAppSessionManager {
 
             this.sessions.delete(sessionId);
             this.connectionStates.delete(sessionId);
-            setTimeout(() => this.startSession(sessionId), delay);
+            // MEMORY LEAK FIX: Use tracked timer
+            this.scheduleReconnect(sessionId, delay);
             return;
           }
 
@@ -242,7 +279,8 @@ export class WhatsAppSessionManager {
               `   Reconnecting session ${sessionId} in ${delay}ms... (attempt ${retries})`,
             );
             this.sessions.delete(sessionId); // Clean up old socket ref
-            setTimeout(() => this.startSession(sessionId), delay);
+            // MEMORY LEAK FIX: Use tracked timer
+            this.scheduleReconnect(sessionId, delay);
           } else {
             console.error(`❌ Session ${sessionId}: Max retries reached.`);
             this.connectionStates.set(sessionId, 'disconnected');
@@ -476,6 +514,8 @@ export class WhatsAppSessionManager {
     this.sessions.delete(sessionId);
     this.connectionStates.delete(sessionId);
     this.retryCounters.delete(sessionId);
+    // MEMORY LEAK FIX: Clear reconnect timer
+    this.clearReconnectTimer(sessionId);
     console.log(`   ✅ Cleared internal state for session: ${sessionId}`);
 
     // 3. Clear auth data from MongoDB
@@ -592,6 +632,7 @@ export async function disconnectWhatsApp() {
 }
 
 // Forward compatible message registry
+// MEMORY LEAK FIX: Limit handler count
 export function onMessage(
   handler: (
     message: proto.IWebMessageInfo,
@@ -599,6 +640,10 @@ export function onMessage(
     sessionId: string,
   ) => Promise<void>,
 ) {
+  if (messageHandlers.length >= MAX_MESSAGE_HANDLERS) {
+    console.warn(`⚠️ Message handler limit reached (${MAX_MESSAGE_HANDLERS}). Handler not registered.`);
+    return;
+  }
   messageHandlers.push(handler);
 }
 
@@ -640,6 +685,36 @@ let isProcessingVoiceQueue = false;
 const MAX_VOICE_QUEUE_SIZE = 50;
 const MAX_VOICE_RETRIES = 3;
 const VOICE_RETRY_DELAY_MS = 5000;
+// MEMORY LEAK FIX: Add max age for queued voice messages
+const MAX_VOICE_QUEUE_AGE_MS = 30 * 60 * 1000; // 30 minutes
+let voiceCleanupInterval: NodeJS.Timeout | null = null;
+
+/**
+ * MEMORY LEAK FIX: Initialize voice queue cleanup
+ */
+function initializeVoiceCleanup(): void {
+  if (voiceCleanupInterval) return;
+
+  voiceCleanupInterval = setInterval(() => {
+    const now = Date.now();
+    const cutoff = now - MAX_VOICE_QUEUE_AGE_MS;
+
+    const oldCount = voiceMessageQueue.length;
+    // Filter out old messages and clear buffers to free memory
+    for (let i = voiceMessageQueue.length - 1; i >= 0; i--) {
+      if (voiceMessageQueue[i].timestamp.getTime() < cutoff) {
+        voiceMessageQueue.splice(i, 1);
+      }
+    }
+
+    if (voiceMessageQueue.length < oldCount) {
+      console.log(`🧹 VoiceQueue: Removed ${oldCount - voiceMessageQueue.length} old voice messages`);
+    }
+  }, 5 * 60 * 1000); // Clean every 5 minutes
+}
+
+// Initialize cleanup on module load
+initializeVoiceCleanup();
 
 /**
  * Process queued voice messages when connection is restored

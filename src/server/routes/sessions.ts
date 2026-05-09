@@ -1,9 +1,13 @@
 import express from 'express';
 import { WhatsAppSessionManager } from '../../services/whatsapp';
 import Session from '../../models/Session';
+import { authenticateToken } from '../middleware/auth';
 
 const router = express.Router();
 const manager = WhatsAppSessionManager.instance;
+
+// SECURITY FIX: All session routes require authentication
+router.use(authenticateToken);
 
 // Get all sessions
 router.get('/', async (req, res) => {

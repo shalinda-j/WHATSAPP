@@ -17,6 +17,58 @@ export class HumanizerService {
   private static configCacheTime = 0;
   private static readonly CONFIG_CACHE_TTL = 60000; // 1 minute cache
 
+  // MEMORY LEAK FIX: Add cleanup interval and max age for queued messages
+  private static cleanupInterval: NodeJS.Timeout | null = null;
+  private static readonly MAX_QUEUE_AGE_MS = 30 * 60 * 1000; // 30 minutes max age
+
+  /**
+   * MEMORY LEAK FIX: Initialize cleanup interval
+   */
+  public static initializeCleanup(): void {
+    if (this.cleanupInterval) return;
+
+    this.cleanupInterval = setInterval(() => {
+      this.cleanupOldMessages();
+    }, 5 * 60 * 1000); // Clean every 5 minutes
+  }
+
+  /**
+   * MEMORY LEAK FIX: Remove old queued messages
+   */
+  private static cleanupOldMessages(): void {
+    const now = Date.now();
+    const cutoff = now - this.MAX_QUEUE_AGE_MS;
+
+    const oldCount = this.messageQueue.length;
+    this.messageQueue = this.messageQueue.filter(msg =>
+      msg.timestamp.getTime() > cutoff
+    );
+
+    if (this.messageQueue.length < oldCount) {
+      console.log(`🧹 HumanizerService: Removed ${oldCount - this.messageQueue.length} old queued messages`);
+    }
+
+    // Also clear stale config cache
+    if (this.cachedConfig && now - this.configCacheTime > this.CONFIG_CACHE_TTL) {
+      this.cachedConfig = null;
+      this.configCacheTime = 0;
+    }
+  }
+
+  /**
+   * MEMORY LEAK FIX: Shutdown cleanup
+   */
+  public static shutdown(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+    this.messageQueue = [];
+    this.cachedConfig = null;
+    this.configCacheTime = 0;
+    console.log('🧹 HumanizerService: Shutdown cleanup completed');
+  }
+
   /**
    * Helper function to wait for a specific amount of time
    */

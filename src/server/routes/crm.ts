@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { CRMService } from '../../services/CRMService';
 import { authenticateToken } from '../middleware/auth';
+import { validateObjectId } from '../middleware/validation';
 import Lead from '../../models/Lead';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -97,7 +98,7 @@ router.get('/contacts/stats', async (req, res) => {
   }
 });
 
-router.get('/contacts/:id', async (req, res) => {
+router.get('/contacts/:id', validateObjectId(), async (req, res) => {
   try {
     const contact = await CRMService.getContactById(req.params.id);
     if (!contact) {
@@ -118,7 +119,7 @@ router.post('/contacts', async (req, res) => {
   }
 });
 
-router.put('/contacts/:id', async (req, res) => {
+router.put('/contacts/:id', validateObjectId(), async (req, res) => {
   try {
     // Auto-populate name from firstName/lastName if not provided
     if (!req.body.name && (req.body.firstName || req.body.lastName)) {
@@ -143,7 +144,7 @@ router.put('/contacts/:id', async (req, res) => {
 });
 
 // PATCH endpoint for partial updates (used by FollowUp page)
-router.patch('/contacts/:id', async (req, res) => {
+router.patch('/contacts/:id', validateObjectId(), async (req, res) => {
   try {
     // Auto-populate name from firstName/lastName if not provided
     if (!req.body.name && (req.body.firstName || req.body.lastName)) {
@@ -167,7 +168,7 @@ router.patch('/contacts/:id', async (req, res) => {
   }
 });
 
-router.delete('/contacts/:id', async (req, res) => {
+router.delete('/contacts/:id', validateObjectId(), async (req, res) => {
   try {
     const result = await CRMService.deleteContact(req.params.id);
     if (!result) {
@@ -216,7 +217,7 @@ router.get('/deals/stats', async (req, res) => {
   }
 });
 
-router.get('/deals/:id', async (req, res) => {
+router.get('/deals/:id', validateObjectId(), async (req, res) => {
   try {
     const deal = await CRMService.getDealById(req.params.id);
     if (!deal) {
@@ -237,7 +238,7 @@ router.post('/deals', async (req, res) => {
   }
 });
 
-router.put('/deals/:id', async (req, res) => {
+router.put('/deals/:id', validateObjectId(), async (req, res) => {
   try {
     const deal = await CRMService.updateDeal(req.params.id, req.body);
     if (!deal) {
@@ -249,7 +250,7 @@ router.put('/deals/:id', async (req, res) => {
   }
 });
 
-router.delete('/deals/:id', async (req, res) => {
+router.delete('/deals/:id', validateObjectId(), async (req, res) => {
   try {
     const result = await CRMService.deleteDeal(req.params.id);
     if (!result) {
@@ -295,7 +296,7 @@ router.get('/activities/upcoming', async (req, res) => {
   }
 });
 
-router.get('/activities/:id', async (req, res) => {
+router.get('/activities/:id', validateObjectId(), async (req, res) => {
   try {
     const activity = await CRMService.getActivityById(req.params.id);
     if (!activity) {
@@ -316,7 +317,7 @@ router.post('/activities', async (req, res) => {
   }
 });
 
-router.put('/activities/:id', async (req, res) => {
+router.put('/activities/:id', validateObjectId(), async (req, res) => {
   try {
     const activity = await CRMService.updateActivity(req.params.id, req.body);
     if (!activity) {
@@ -328,7 +329,7 @@ router.put('/activities/:id', async (req, res) => {
   }
 });
 
-router.delete('/activities/:id', async (req, res) => {
+router.delete('/activities/:id', validateObjectId(), async (req, res) => {
   try {
     const result = await CRMService.deleteActivity(req.params.id);
     if (!result) {
@@ -396,9 +397,11 @@ router.get('/registrations', async (req, res) => {
     if (country) query.interestedCountry = country;
     if (jobType) query.jobVacancyType = jobType;
     if (search) {
+      // SECURITY FIX: Escape regex special characters
+      const escapedSearch = (search as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.$or = [
-        { fullName: { $regex: search, $options: 'i' } },
-        { phoneNumber: { $regex: search, $options: 'i' } },
+        { fullName: { $regex: escapedSearch, $options: 'i' } },
+        { phoneNumber: { $regex: escapedSearch, $options: 'i' } },
       ];
     }
 

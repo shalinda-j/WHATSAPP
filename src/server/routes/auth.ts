@@ -4,17 +4,15 @@ import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import Admin from '../../models/Admin';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { strictRateLimit } from '../middleware/rateLimit';
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_key_change_in_prod';
+const JWT_SECRET = process.env.JWT_SECRET;
 
-// Simple in-memory admin for testing when MongoDB is not available
-const TEST_ADMIN = {
-  username: 'admin',
-  passwordHash: '$2b$10$rQZ8kHWKQGYXkYQjQZz7/.yJ9rJjGKjQJ9rJjGKjQJ9rJjGKjQJ9', // 'admin123'
-  role: 'superadmin',
-  _id: 'test_admin_id',
-};
+// SECURITY FIX: No hardcoded test admin - application requires proper MongoDB setup
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET must be configured in environment');
+}
 
 // Check if MongoDB is available
 const isMongoDBAvailable = () => {
@@ -29,20 +27,23 @@ const isMongoDBAvailable = () => {
 router.get('/setup-check', async (req, res) => {
   try {
     if (!isMongoDBAvailable()) {
-      // Use test admin when MongoDB is not available
-      return res.json({ needsSetup: false });
+      // SECURITY FIX: Return error instead of fallback to test admin
+      return res.status(503).json({
+        needsSetup: false,
+        error: 'Database unavailable. Please ensure MongoDB is connected before using authentication.'
+      });
     }
     const adminCount = await Admin.countDocuments();
     res.json({ needsSetup: adminCount === 0 });
   } catch (err: any) {
     console.error('Error in /setup-check:', err);
-    // Fallback to test admin
-    res.json({ needsSetup: false });
+    res.status(500).json({ error: 'Failed to check setup status' });
   }
 });
 
 // Setup first admin
-router.post('/setup', async (req, res) => {
+// SECURITY FIX: Add rate limiting to prevent brute force
+router.post('/setup', strictRateLimit, async (req, res) => {
   try {
     const adminCount = await Admin.countDocuments();
     if (adminCount > 0) {
@@ -65,26 +66,17 @@ router.post('/setup', async (req, res) => {
   }
 });
 
-router.post('/login', async (req, res) => {
+// SECURITY FIX: Add rate limiting to prevent brute force attacks
+router.post('/login', strictRateLimit, async (req, res) => {
   try {
     const { username, password } = req.body;
 
+    // SECURITY FIX: Require MongoDB for authentication
     if (!isMongoDBAvailable()) {
-      // Use test admin when MongoDB is not available
-      if (username === TEST_ADMIN.username && password === 'admin123') {
-        const token = jwt.sign(
-          {
-            id: TEST_ADMIN._id,
-            username: TEST_ADMIN.username,
-            role: TEST_ADMIN.role,
-          },
-          JWT_SECRET,
-          { expiresIn: '24h' },
-        );
-        return res.json({ token });
-      } else {
-        return res.status(400).json({ message: 'Invalid credentials' });
-      }
+      return res.status(503).json({
+        message: 'Authentication service unavailable. Database connection required.',
+        error: 'MONGODB_UNAVAILABLE'
+      });
     }
 
     const admin = await Admin.findOne({ username });
@@ -100,7 +92,7 @@ router.post('/login', async (req, res) => {
 
     const token = jwt.sign(
       { id: admin._id, username: admin.username, role: admin.role },
-      JWT_SECRET,
+      JWT_SECRET!,
       { expiresIn: '24h' },
     );
     res.json({ token });

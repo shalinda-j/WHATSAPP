@@ -5,10 +5,17 @@ import Webhook from '../../models/Webhook';
 import { sendMessage, getSocket } from '../../services/whatsapp';
 import { WebhookService } from '../../services/WebhookService';
 import { configurationManager } from '../../services/ConfigurationManagerService';
+import { authenticateToken } from '../middleware/auth';
 
 const router = express.Router();
 
 // --- INBOUND ---
+// Note: /inbound endpoint remains public for external systems to trigger actions
+// but requires WEBHOOK_SECRET validation for security
+
+// Handle Inbound Webhook (External System -> Bot)
+// This endpoint is designed for external systems to trigger actions
+router.post('/inbound', async (req, res) => {
 
 // Handle Inbound Webhook (External System -> Bot)
 // This endpoint is designed for external systems to trigger actions
@@ -89,6 +96,8 @@ router.post('/inbound', async (req, res) => {
 });
 
 // --- CRUD for Admin Panel ---
+// SECURITY FIX: All CRUD routes require authentication
+router.use(authenticateToken);
 
 // Get all webhooks
 router.get('/', async (req, res) => {

@@ -1,7 +1,11 @@
 import { Router, Request, Response } from 'express';
 import VoiceConfig from '../../models/VoiceConfig';
+import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
+
+// SECURITY FIX: All voice config routes require authentication
+router.use(authenticateToken);
 
 // GET all voice configs
 router.get('/', async (req: Request, res: Response) => {

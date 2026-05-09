@@ -3,14 +3,18 @@ import ChatMessage from '../../models/ChatMessage';
 import Session from '../../models/Session';
 import { sendMessage, getSocket } from '../../services/whatsapp';
 import { getIO } from '../socket';
+import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = Router();
+
+// SECURITY FIX: All chat routes require authentication
+router.use(authenticateToken);
 
 /**
  * GET /api/chat/conversations
  * Get list of unique conversations with last message and unread count
  */
-router.get('/conversations', async (req: Request, res: Response) => {
+router.get('/conversations', async (req: AuthRequest, res: Response) => {
   try {
     // Aggregate to get unique users with their last message
     const conversations = await ChatMessage.aggregate([
