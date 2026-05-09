@@ -5,6 +5,7 @@ const pdf = require('pdf-parse');
 import * as xlsx from 'xlsx';
 import Dataset, { DatasetType, Language } from '../../models/Dataset';
 import { authenticateToken } from '../middleware/auth';
+import { validateObjectId } from '../middleware/validation';
 import { extractTextFromImage } from '../../services/gemini';
 
 const router = Router();
@@ -78,12 +79,13 @@ router.get('/type/:type', async (req, res) => {
   }
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', validateObjectId(), async (req, res) => {
   try {
     const dataset = await Dataset.findById(req.params.id);
     if (!dataset) return res.status(404).json({ message: 'Dataset not found' });
     res.json(dataset);
   } catch (err: any) {
+    console.error('Error fetching dataset:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -91,7 +93,7 @@ router.get('/:id', async (req, res) => {
 /**
  * Update language-specific content
  */
-router.put('/:id/language/:lang', async (req, res) => {
+router.put('/:id/language/:lang', validateObjectId(), async (req, res) => {
   try {
     const { id, lang } = req.params as { id: string; lang: Language };
     const { content } = req.body;
@@ -114,6 +116,7 @@ router.put('/:id/language/:lang', async (req, res) => {
 
     res.json(updatedDataset);
   } catch (err: any) {
+    console.error('Error updating language content:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -191,7 +194,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', validateObjectId(), async (req, res) => {
   try {
     const { name, description, type, content, scope, category, key, isActive, metadata } = req.body;
 
@@ -210,17 +213,27 @@ router.put('/:id', async (req, res) => {
       },
       { new: true },
     );
+
+    if (!updatedDataset) {
+      return res.status(404).json({ error: 'Dataset not found' });
+    }
+
     res.json(updatedDataset);
   } catch (err: any) {
+    console.error('Error updating dataset:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', validateObjectId(), async (req, res) => {
   try {
-    await Dataset.findByIdAndDelete(req.params.id);
+    const deleted = await Dataset.findByIdAndDelete(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Dataset not found' });
+    }
     res.json({ message: 'Dataset deleted' });
   } catch (err: any) {
+    console.error('Error deleting dataset:', err);
     res.status(500).json({ error: err.message });
   }
 });

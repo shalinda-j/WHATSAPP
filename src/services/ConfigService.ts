@@ -144,9 +144,14 @@ export class ConfigService {
     try {
       const dataset = await Dataset.findOne({ key, isActive: true });
       if (dataset) {
-        this.cache[key] = dataset.content;
+        // Handle both formats: legacy (content is data) and new (content.en is data)
+        let content = dataset.content;
+        if (content && typeof content === 'object' && content.en !== undefined) {
+          content = content.en;
+        }
+        this.cache[key] = content;
         this.lastFetch[key] = now;
-        return dataset.content;
+        return content;
       }
     } catch (error) {
       console.error(`Error fetching config ${key}:`, error);
