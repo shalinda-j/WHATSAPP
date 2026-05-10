@@ -1,0 +1,88 @@
+name: Issue Management
+
+on:
+  issues:
+    types: [opened, edited, labeled, unlabeled, closed]
+  pull_request:
+    types: [opened, edited, labeled, unlabeled, closed]
+
+jobs:
+  auto-label:
+    name: Auto Label Issues
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issues' && github.event.action == 'opened'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Auto Label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const title = issue.title.toLowerCase();
+            const body = (issue.body || '').toLowerCase();
+
+            const labels = [];
+
+            // Priority labels
+            if (title.includes('urgent') || title.includes('critical')) {
+              labels.push('priority: critical');
+            } else if (title.includes('high') || title.includes('important')) {
+              labels.push('priority: high');
+            } else if (title.includes('low')) {
+              labels.push('priority: low');
+            }
+
+            // Type labels
+            if (title.includes('bug') || body.includes('bug')) {
+              labels.push('type: bug');
+            } else if (title.includes('feature') || title.includes('add')) {
+              labels.push('type: feature');
+            } else if (title.includes('refactor') || title.includes('cleanup')) {
+              labels.push('type: refactor');
+            } else if (title.includes('doc') || title.includes('documentation')) {
+              labels.push('type: documentation');
+            } else if (title.includes('test')) {
+              labels.push('type: test');
+            }
+
+            // Component labels
+            if (body.includes('whatsapp')) labels.push('component: whatsapp');
+            if (body.includes('database') || body.includes('mongo')) labels.push('component: database');
+            if (body.includes('api') || body.includes('endpoint')) labels.push('component: api');
+            if (body.includes('frontend') || body.includes('ui') || body.includes('react')) {
+              labels.push('component: frontend');
+            }
+            if (body.includes('ai') || body.includes('gemini') || body.includes('openai')) {
+              labels.push('component: ai');
+            }
+
+            // Add labels if any
+            if (labels.length > 0) {
+              github.rest.issues.addLabels({
+                issue_number: issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: labels
+              });
+            }
+
+  stale-cleanup:
+    name: Mark Stale Issues
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+
+    steps:
+      - name: Mark Stale
+        uses: actions/stale@v9
+        with:
+          stale-issue-label: 'stale'
+          stale-pr-label: 'stale'
+          days-before-stale: 30
+          days-before-close: 7
+          stale-issue-message: 'This issue has been inactive for 30 days. Please update or close it.'
+          stale-pr-message: 'This PR has been inactive for 30 days. Please update or close it.'
+          close-issue-message: 'Closing stale issue.'
+          close-pr-message: 'Closing stale PR.'
