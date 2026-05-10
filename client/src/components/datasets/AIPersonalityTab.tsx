@@ -81,10 +81,12 @@ export default function AIPersonalityTab({ language, onDataChange }: AIPersonali
         key: 'AI_PERSONALITY',
       };
 
-      if (personality._id) {
+      if (personality._id && personality._id.trim() !== '') {
         await api.put(`/api/datasets/${personality._id}`, payload);
       } else {
-        const res = await api.post('/api/datasets', payload);
+        // Don't send _id when creating new - let backend/MongoDB generate it
+        const { _id: _unused, ...createPayload } = payload;
+        const res = await api.post('/api/datasets', createPayload);
         setPersonality({ ...personality, _id: res.data._id });
       }
 

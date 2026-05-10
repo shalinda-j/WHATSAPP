@@ -177,7 +177,14 @@ router.post('/extract', upload.single('file'), async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { name, description, type, content, scope, category, key, isActive, metadata } = req.body;
+    // Strip invalid _id from payload (frontend may send empty string)
+    const { _id, name, description, type, content, scope, category, key, isActive, metadata } = req.body;
+
+    // Ignore empty or invalid _id values - let MongoDB auto-generate
+    if (_id && _id.trim() !== '' && /^[a-fA-F0-9]{24}$/.test(_id)) {
+      // Valid ObjectId provided - would be an update case, not create
+      return res.status(400).json({ error: 'Dataset already exists. Use PUT to update.' });
+    }
 
     if (!name) {
       return res.status(400).json({ error: 'Name is required' });
