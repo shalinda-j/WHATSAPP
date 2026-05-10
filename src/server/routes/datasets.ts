@@ -46,7 +46,13 @@ router.get('/', async (req, res) => {
         delete filter.type; // Remove $ne since $or handles it
         // Add explicit exclusion of config
         filter.$and = [
-          { $or: [{ type: 'knowledge' }, { type: { $exists: false } }, { type: null }] },
+          {
+            $or: [
+              { type: 'knowledge' },
+              { type: { $exists: false } },
+              { type: null },
+            ],
+          },
           { type: { $ne: 'config' } },
         ];
         delete filter.$or;
@@ -69,14 +75,23 @@ router.get('/', async (req, res) => {
 router.get('/type/:type', async (req, res) => {
   try {
     const { type } = req.params as { type: DatasetType };
-    const validTypes = ['knowledge', 'command', 'link', 'marketing', 'megatext', 'personality'];
+    const validTypes = [
+      'knowledge',
+      'command',
+      'link',
+      'marketing',
+      'megatext',
+      'personality',
+    ];
 
     if (!validTypes.includes(type)) {
       return res.status(400).json({ error: 'Invalid dataset type' });
     }
 
     // 'config' type is for internal configuration items, not displayed in Datasets page
-    const datasets = await Dataset.find({ type, isActive: true }).sort({ createdAt: -1 });
+    const datasets = await Dataset.find({ type, isActive: true }).sort({
+      createdAt: -1,
+    });
     res.json(datasets);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -104,14 +119,16 @@ router.put('/:id/language/:lang', validateObjectId(), async (req, res) => {
 
     const validLanguages = ['en', 'si', 'ta'];
     if (!validLanguages.includes(lang)) {
-      return res.status(400).json({ error: 'Invalid language. Use: en, si, or ta' });
+      return res
+        .status(400)
+        .json({ error: 'Invalid language. Use: en, si, or ta' });
     }
 
     const updatePath = `content.${lang}`;
     const updatedDataset = await Dataset.findByIdAndUpdate(
       id,
       { $set: { [updatePath]: content } },
-      { new: true }
+      { new: true },
     );
 
     if (!updatedDataset) {
@@ -178,12 +195,25 @@ router.post('/extract', upload.single('file'), async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     // Strip invalid _id from payload (frontend may send empty string)
-    const { _id, name, description, type, content, scope, category, key, isActive, metadata } = req.body;
+    const {
+      _id,
+      name,
+      description,
+      type,
+      content,
+      scope,
+      category,
+      key,
+      isActive,
+      metadata,
+    } = req.body;
 
     // Ignore empty or invalid _id values - let MongoDB auto-generate
     if (_id && _id.trim() !== '' && /^[a-fA-F0-9]{24}$/.test(_id)) {
       // Valid ObjectId provided - would be an update case, not create
-      return res.status(400).json({ error: 'Dataset already exists. Use PUT to update.' });
+      return res
+        .status(400)
+        .json({ error: 'Dataset already exists. Use PUT to update.' });
     }
 
     if (!name) {
@@ -215,7 +245,17 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', validateObjectId(), async (req, res) => {
   try {
-    const { name, description, type, content, scope, category, key, isActive, metadata } = req.body;
+    const {
+      name,
+      description,
+      type,
+      content,
+      scope,
+      category,
+      key,
+      isActive,
+      metadata,
+    } = req.body;
 
     console.log('Updating dataset:', {
       id: req.params.id,
