@@ -7,8 +7,7 @@ import mongoose from 'mongoose';
  * @returns true if valid ObjectId, false otherwise
  */
 export function isValidObjectId(id: string): boolean {
-  return mongoose.Types.ObjectId.isValid(id) &&
-         (new mongoose.Types.ObjectId(id)).toString() === id;
+  return mongoose.Types.ObjectId.isValid(id);
 }
 
 /**
