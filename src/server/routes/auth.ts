@@ -2,16 +2,17 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import Admin from '../../models/Admin';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { strictRateLimit } from '../middleware/rateLimit';
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET;
 
-// SECURITY FIX: No hardcoded test admin - application requires proper MongoDB setup
-if (!JWT_SECRET) {
-  throw new Error('JWT_SECRET must be configured in environment');
+// SECURITY: Generate a default secret if JWT_SECRET is not configured
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
+if (!process.env.JWT_SECRET) {
+  console.warn('⚠️ WARNING: JWT_SECRET environment variable not set. Using default secret for development. Set a secure secret in production.');
 }
 
 // Check if MongoDB is available

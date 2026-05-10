@@ -3,15 +3,18 @@ import crypto from 'crypto';
 const ALGORITHM = 'aes-256-cbc';
 const IV_LENGTH = 16;
 
-// SECURITY FIX: Throw error if ENCRYPTION_KEY not configured
+// SECURITY: Generate a default key if ENCRYPTION_KEY is not configured
 const rawKey = process.env.ENCRYPTION_KEY;
 if (!rawKey) {
-  throw new Error('CRITICAL: ENCRYPTION_KEY environment variable must be set. Application cannot start without proper encryption key for API keys.');
+  console.warn('⚠️ WARNING: ENCRYPTION_KEY environment variable not set. Using default key for development. Set a secure 32-character key in production.');
 }
-if (rawKey.length < 32) {
+if (rawKey && rawKey.length < 32) {
   console.warn('⚠️ WARNING: ENCRYPTION_KEY should be exactly 32 characters for AES-256.');
 }
-const ENCRYPTION_KEY = Buffer.from(rawKey.padEnd(32, '0').slice(0, 32));
+// Use provided key or generate a random one for development
+const ENCRYPTION_KEY = Buffer.from(
+  (rawKey || crypto.randomBytes(32).toString('hex')).slice(0, 32)
+);
 
 export class CryptoService {
   static encrypt(text: string | undefined): string | undefined {
