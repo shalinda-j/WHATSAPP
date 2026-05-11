@@ -8,9 +8,18 @@ import fetch from 'node-fetch';
 
 // Configuration - All configurable via environment variables
 const NLP_SERVER_URL = process.env.NLP_SERVER_URL || 'http://localhost:8001';
-const INFERENCE_TIMEOUT_MS = parseInt(process.env.NLP_INFERENCE_TIMEOUT_MS || '500', 10); // 500ms default
-const HEALTH_CHECK_INTERVAL_MS = parseInt(process.env.NLP_HEALTH_CHECK_INTERVAL_MS || '30000', 10); // 30 seconds
-const HEALTH_CHECK_TIMEOUT_MS = parseInt(process.env.NLP_HEALTH_CHECK_TIMEOUT_MS || '3000', 10); // 3 seconds
+const INFERENCE_TIMEOUT_MS = parseInt(
+  process.env.NLP_INFERENCE_TIMEOUT_MS || '500',
+  10,
+); // 500ms default
+const HEALTH_CHECK_INTERVAL_MS = parseInt(
+  process.env.NLP_HEALTH_CHECK_INTERVAL_MS || '30000',
+  10,
+); // 30 seconds
+const HEALTH_CHECK_TIMEOUT_MS = parseInt(
+  process.env.NLP_HEALTH_CHECK_TIMEOUT_MS || '3000',
+  10,
+); // 3 seconds
 
 // Intent types
 export type Intent =
@@ -55,29 +64,29 @@ export interface BatchPredictResponse {
 // Fallback intents for when server is unavailable
 const FALLBACK_INTENTS: Record<string, Intent> = {
   // Greetings
-  'hello': 'greeting',
-  'hi': 'greeting',
-  'hey': 'greeting',
+  hello: 'greeting',
+  hi: 'greeting',
+  hey: 'greeting',
   'good morning': 'greeting',
   'good evening': 'greeting',
-  'ayubowan': 'greeting', // Sinhala
-  'vanakkam': 'greeting', // Tamil
+  ayubowan: 'greeting', // Sinhala
+  vanakkam: 'greeting', // Tamil
 
   // Help
-  'help': 'help',
+  help: 'help',
   'help me': 'help',
-  'support': 'help',
-  'madatha': 'help', // Sinhala
+  support: 'help',
+  madatha: 'help', // Sinhala
 
   // Booking
-  'book': 'booking',
-  'appointment': 'booking',
-  'visit': 'booking',
-  'schedule': 'booking',
-  'tomorrow': 'booking',
-  'today': 'booking',
-  'පැමිණ': 'booking', // Sinhala - visit
-  'හමුවීම': 'booking', // Sinhala - meeting
+  book: 'booking',
+  appointment: 'booking',
+  visit: 'booking',
+  schedule: 'booking',
+  tomorrow: 'booking',
+  today: 'booking',
+  පැමිණ: 'booking', // Sinhala - visit
+  හමුවීම: 'booking', // Sinhala - meeting
 
   // Lead Registration - DISABLED for NLP routing
   // Forms should ONLY trigger via !register command in index.ts
@@ -100,7 +109,9 @@ const TAMIL_CHARS = /[\u0B80-\u0BFF]/;
 /**
  * Detect language from text
  */
-export function detectLanguage(text: string): 'sinhala' | 'tamil' | 'english' | 'unknown' {
+export function detectLanguage(
+  text: string,
+): 'sinhala' | 'tamil' | 'english' | 'unknown' {
   if (SINHALA_CHARS.test(text)) return 'sinhala';
   if (TAMIL_CHARS.test(text)) return 'tamil';
   if (/^[a-zA-Z0-9\s\p{P}]+$/u.test(text)) return 'english';
@@ -188,7 +199,10 @@ export class AutoresearchNLPService {
   public async checkHealth(): Promise<boolean> {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        HEALTH_CHECK_TIMEOUT_MS,
+      );
 
       const response = await fetch(`${NLP_SERVER_URL}/health`, {
         signal: controller.signal,
@@ -234,13 +248,18 @@ export class AutoresearchNLPService {
   ): Promise<PredictResponse> {
     // If server is not healthy, use fallback
     if (!this.serverHealthy) {
-      console.log('[AutoresearchNLP] Server unavailable, using fallback classification');
+      console.log(
+        '[AutoresearchNLP] Server unavailable, using fallback classification',
+      );
       return fallbackClassification(text);
     }
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), INFERENCE_TIMEOUT_MS);
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        INFERENCE_TIMEOUT_MS,
+      );
 
       const response = await fetch(`${NLP_SERVER_URL}/predict`, {
         method: 'POST',
@@ -263,7 +282,9 @@ export class AutoresearchNLPService {
       const result = (await response.json()) as PredictResponse;
 
       console.log(
-        `[AutoresearchNLP] Classified: "${text.substring(0, 30)}..." → ${result.intent} (${result.confidence.toFixed(2)}) in ${result.inference_time_ms}ms`,
+        `[AutoresearchNLP] Classified: "${text.substring(0, 30)}..." → ${
+          result.intent
+        } (${result.confidence.toFixed(2)}) in ${result.inference_time_ms}ms`,
       );
 
       return result;
@@ -283,7 +304,9 @@ export class AutoresearchNLPService {
    */
   public async batchClassify(texts: string[]): Promise<BatchPredictResult[]> {
     if (!this.serverHealthy) {
-      console.log('[AutoresearchNLP] Server unavailable, using fallback batch classification');
+      console.log(
+        '[AutoresearchNLP] Server unavailable, using fallback batch classification',
+      );
       return texts.map((text) => ({
         text,
         ...fallbackClassification(text),
@@ -292,7 +315,10 @@ export class AutoresearchNLPService {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), INFERENCE_TIMEOUT_MS * texts.length);
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        INFERENCE_TIMEOUT_MS * texts.length,
+      );
 
       const response = await fetch(`${NLP_SERVER_URL}/batch_predict`, {
         method: 'POST',
@@ -367,7 +393,15 @@ export class AutoresearchNLPService {
       const data = (await response.json()) as { intents: string[] };
       return data.intents;
     } catch (error) {
-      return ['booking', 'lead_register', 'greeting', 'help', 'query', 'command', 'unknown'];
+      return [
+        'booking',
+        'lead_register',
+        'greeting',
+        'help',
+        'query',
+        'command',
+        'unknown',
+      ];
     }
   }
 
@@ -377,7 +411,10 @@ export class AutoresearchNLPService {
   public async getServerHealth(): Promise<HealthResponse | null> {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        HEALTH_CHECK_TIMEOUT_MS,
+      );
 
       const response = await fetch(`${NLP_SERVER_URL}/health`, {
         signal: controller.signal,
@@ -407,7 +444,9 @@ export class AutoresearchNLPService {
     return {
       serverUrl: NLP_SERVER_URL,
       serverHealthy: this.serverHealthy,
-      lastHealthCheck: this.lastHealthCheck ? new Date(this.lastHealthCheck).toISOString() : null,
+      lastHealthCheck: this.lastHealthCheck
+        ? new Date(this.lastHealthCheck).toISOString()
+        : null,
       inferenceTimeoutMs: INFERENCE_TIMEOUT_MS,
     };
   }

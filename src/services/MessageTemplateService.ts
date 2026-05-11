@@ -30,8 +30,9 @@ export class MessageTemplateService {
   private static instance: MessageTemplateService;
   private cache: Map<string, any> = new Map();
   private cacheExpiry: Map<string, number> = new Map();
-  private cacheTTL: number = 60000; // 1 minute
+  private cacheTTL = 60000; // 1 minute
 
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
   private constructor() {}
 
   public static getInstance(): MessageTemplateService {
@@ -261,7 +262,10 @@ export class MessageTemplateService {
         return template.replace('{command}', command);
       }
     } catch (error) {
-      console.error('[MessageTemplate] Error getting unknown command message:', error);
+      console.error(
+        '[MessageTemplate] Error getting unknown command message:',
+        error,
+      );
     }
 
     return `❓ Unknown command: \`${command}\`\n\nUse \`!help\` to see available commands.`;

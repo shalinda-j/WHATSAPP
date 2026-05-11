@@ -18,13 +18,15 @@ const ENV_REQUIREMENTS: EnvRequirement[] = [
     name: 'JWT_SECRET',
     required: true,
     minLength: 32,
-    description: 'Secret key for JWT token signing. Must be at least 32 characters.',
+    description:
+      'Secret key for JWT token signing. Must be at least 32 characters.',
   },
   {
     name: 'ENCRYPTION_KEY',
     required: true,
     minLength: 32,
-    description: 'AES-256 encryption key for API key storage. Must be exactly 32 characters.',
+    description:
+      'AES-256 encryption key for API key storage. Must be exactly 32 characters.',
   },
   {
     name: 'MONGODB_URI',
@@ -108,18 +110,29 @@ export function validateEnvironment(): void {
     // Check minimum length
     if (value && req.minLength && value.length < req.minLength) {
       if (req.required) {
-        errors.push(`CRITICAL: ${req.name} must be at least ${req.minLength} characters. Current: ${value.length} characters.`);
+        errors.push(
+          `CRITICAL: ${req.name} must be at least ${req.minLength} characters. Current: ${value.length} characters.`,
+        );
       } else {
-        warnings.push(`WARNING: ${req.name} should be at least ${req.minLength} characters for security.`);
+        warnings.push(
+          `WARNING: ${req.name} should be at least ${req.minLength} characters for security.`,
+        );
       }
     }
   }
 
   // Check if at least one AI provider is configured
-  const aiProviders = ['GEMINI_API_KEY', 'OPENAI_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY'];
-  const hasAIProvider = aiProviders.some(key => process.env[key]);
+  const aiProviders = [
+    'GEMINI_API_KEY',
+    'OPENAI_API_KEY',
+    'GROQ_API_KEY',
+    'OPENROUTER_API_KEY',
+  ];
+  const hasAIProvider = aiProviders.some((key) => process.env[key]);
   if (!hasAIProvider) {
-    warnings.push('WARNING: No AI provider API keys configured. AI features will not work.');
+    warnings.push(
+      'WARNING: No AI provider API keys configured. AI features will not work.',
+    );
   }
 
   // Report warnings
@@ -133,8 +146,12 @@ export function validateEnvironment(): void {
     for (const error of errors) {
       console.error(`   ${error}`);
     }
-    console.error('\nPlease configure these variables in your .env file or environment.\n');
-    throw new Error('Missing required environment variables. Application cannot start.');
+    console.error(
+      '\nPlease configure these variables in your .env file or environment.\n',
+    );
+    throw new Error(
+      'Missing required environment variables. Application cannot start.',
+    );
   }
 
   console.log('✅ Environment validation passed');

@@ -1,17 +1,22 @@
 import mongoose, { Schema } from 'mongoose';
 
-export type VoiceProvider = 'google-free' | 'google-cloud' | 'gemini-tts' | 'openai' | 'elevenlabs';
+export type VoiceProvider =
+  | 'google-free'
+  | 'google-cloud'
+  | 'gemini-tts'
+  | 'openai'
+  | 'elevenlabs';
 export type VoiceMode = 'voice-only' | 'text-only' | 'voice-and-text';
 
 export interface IVoiceConfig {
   provider: VoiceProvider;
-  apiKey?: string;           // OpenAI / ElevenLabs API key
-  googleApiKey?: string;     // Google Cloud TTS API key (separate field)
-  voiceId?: string;          // Voice ID for the selected provider
+  apiKey?: string; // OpenAI / ElevenLabs API key
+  googleApiKey?: string; // Google Cloud TTS API key (separate field)
+  voiceId?: string; // Voice ID for the selected provider
   isActive: boolean;
   mode: VoiceMode;
   updatedAt: Date;
-  ttsModel?: string;         // Model name (e.g. tts-1, eleven_multilingual_v2)
+  ttsModel?: string; // Model name (e.g. tts-1, eleven_multilingual_v2)
 }
 
 const VoiceConfigSchema = new Schema<IVoiceConfig>({

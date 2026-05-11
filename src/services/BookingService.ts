@@ -43,7 +43,9 @@ async function getBookingSession(jid: string): Promise<UserSession | null> {
 
   return {
     state: session.state.state as BookingInitState,
-    selectedDate: session.data.selectedDate ? new Date(session.data.selectedDate) : undefined,
+    selectedDate: session.data.selectedDate
+      ? new Date(session.data.selectedDate)
+      : undefined,
     availableSlots: session.data.availableSlots,
     bookingConfig: session.data.bookingConfig,
   };
@@ -110,8 +112,14 @@ export async function handleBookingMessage(
   const cleanText = text.trim().toLowerCase();
 
   // Get booking config (from session cache or fetch new)
-  const bookingConfig = session.bookingConfig || await configurationManager.getBookingConfig();
-  const acceptanceKeywords = bookingConfig.acceptanceKeywords || ['yes', 'ow', 'y', 'ok'];
+  const bookingConfig =
+    session.bookingConfig || (await configurationManager.getBookingConfig());
+  const acceptanceKeywords = bookingConfig.acceptanceKeywords || [
+    'yes',
+    'ow',
+    'y',
+    'ok',
+  ];
 
   // 1. Awaiting "Yes" to invitation
   if (session.state === BookingInitState.AWAITING_RESPONSE) {
@@ -232,7 +240,8 @@ async function finalizeBooking(
   const organizerName = bookingConfig.organizerName || 'Organization';
   const organizerEmail = bookingConfig.organizerEmail || 'info@example.com';
   const eventTitle = bookingConfig.eventTitle || 'Campus Visit';
-  const eventDescription = bookingConfig.eventDescription || 'Introduction and Assessment';
+  const eventDescription =
+    bookingConfig.eventDescription || 'Introduction and Assessment';
   const eventDuration = bookingConfig.eventDurationHours || 1;
 
   // Extract phone number from jid
@@ -242,7 +251,9 @@ async function finalizeBooking(
 
   try {
     // 1. Create Google Calendar Event (if credentials exist)
-    const fullDescription = `${eventDescription}\n\nClient: ${callerName || callerPhone}\nPhone: ${callerPhone}\nLocation: ${campusLocation}`;
+    const fullDescription = `${eventDescription}\n\nClient: ${
+      callerName || callerPhone
+    }\nPhone: ${callerPhone}\nLocation: ${campusLocation}`;
     const gcalLink = await createGoogleCalendarEvent(
       appointmentDate,
       eventTitle,
@@ -273,7 +284,9 @@ async function finalizeBooking(
       sessionId,
       location: campusLocation,
       gcalLink: gcalLink || undefined,
-    }).catch((err: Error) => console.error('Failed to save booking to DB:', err));
+    }).catch((err: Error) =>
+      console.error('Failed to save booking to DB:', err),
+    );
 
     // 4. Send confirmation text with full details
     const timeStr = format(appointmentDate, 'PPpp');

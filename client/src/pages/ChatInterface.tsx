@@ -112,16 +112,6 @@ export default function ChatInterface() {
     return () => { newSocket.disconnect(); };
   }, [selectedUser]);
 
-  useEffect(() => { fetchConversations(); }, []);
-
-  useEffect(() => {
-    if (selectedUser) fetchMessages(selectedUser);
-  }, [selectedUser]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
   const fetchConversations = async () => {
     setLoading(true);
     try {
@@ -158,6 +148,16 @@ export default function ChatInterface() {
       setIsRefreshing(false);
     }
   };
+
+  useEffect(() => { fetchConversations(); }, []);
+
+  useEffect(() => {
+    if (selectedUser) fetchMessages(selectedUser);
+  }, [selectedUser]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedUser || sending) return;

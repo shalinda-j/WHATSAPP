@@ -26,7 +26,7 @@ export class ConfigMigrationGuide {
     console.log('🔧 Update src/services/LeadService.ts:');
     console.log('   Replace: await configService.getJobTypes()');
     console.log('   With:    await configurationManager.getJobTypes()');
-  }
+  };
 
   /**
    * In BookingService.ts, replace direct calls to configService with configurationManager
@@ -41,7 +41,7 @@ export class ConfigMigrationGuide {
     console.log('🔧 Update src/services/BookingService.ts:');
     console.log('   Replace: await configService.getBookingConfig()');
     console.log('   With:    await configurationManager.getBookingConfig()');
-  }
+  };
 
   /**
    * In AILoadBalancer.ts, update to use configurationManager for knowledge base
@@ -56,7 +56,7 @@ export class ConfigMigrationGuide {
     console.log('🔧 Update src/services/AILoadBalancer.ts:');
     console.log('   Replace: await configService.getDynamicKnowledgeBase()');
     console.log('   With:    await configurationManager.getAIKnowledgeBase()');
-  }
+  };
 
   /**
    * In HumanizerService.ts, update to use configurationManager for humanizer config
@@ -71,7 +71,7 @@ export class ConfigMigrationGuide {
     console.log('🔧 Update src/services/HumanizerService.ts:');
     console.log('   Replace: await configService.getHumanizerConfig()');
     console.log('   With:    await configurationManager.getHumanizerConfig()');
-  }
+  };
 
   static runAllUpdates = () => {
     console.log('\n📋 Configuration Migration Guide:');
@@ -81,9 +81,13 @@ export class ConfigMigrationGuide {
     this.updateHumanizerService();
 
     console.log('\n✅ Migration guide completed!');
-    console.log('💡 Remember to import the configurationManager in each service:');
-    console.log('   import { configurationManager } from \'./ConfigurationManagerService\';');
-  }
+    console.log(
+      '💡 Remember to import the configurationManager in each service:',
+    );
+    console.log(
+      "   import { configurationManager } from './ConfigurationManagerService';",
+    );
+  };
 }
 
 // Run the migration guide

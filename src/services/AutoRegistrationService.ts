@@ -96,10 +96,7 @@ export class AutoRegistrationService {
   /**
    * Get welcome message based on detected language
    */
-  getWelcomeMessage(
-    name: string,
-    language: 'en' | 'si' | 'ta' = 'en',
-  ): string {
+  getWelcomeMessage(name: string, language: 'en' | 'si' | 'ta' = 'en'): string {
     const firstName = name.split(/\s+/)[0];
 
     const messages: Record<string, string> = {

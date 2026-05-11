@@ -1,4 +1,7 @@
-import SessionState, { SessionType, ISessionState } from '../models/SessionState';
+import SessionState, {
+  SessionType,
+  ISessionState,
+} from '../models/SessionState';
 
 /**
  * SessionStateService
@@ -12,6 +15,7 @@ const DEFAULT_SESSION_TTL_MS = 30 * 60 * 1000;
 export class SessionStateService {
   private static instance: SessionStateService;
 
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
   private constructor() {}
 
   public static getInstance(): SessionStateService {
@@ -122,7 +126,10 @@ export class SessionStateService {
   /**
    * Delete a session
    */
-  async deleteSession(phoneNumber: string, type: SessionType): Promise<boolean> {
+  async deleteSession(
+    phoneNumber: string,
+    type: SessionType,
+  ): Promise<boolean> {
     const result = await SessionState.deleteOne({ phoneNumber, type });
     return result.deletedCount > 0;
   }

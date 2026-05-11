@@ -321,7 +321,7 @@ export default function KnowledgeTab({ language, onDataChange }: KnowledgeTabPro
         <div className="space-y-3">
           {items.map((item) => {
             const translated = getTranslatedLanguages(item);
-            const hasCurrentLang = translated.includes(language);
+            const _hasCurrentLang = translated.includes(language);
 
             return (
               <div

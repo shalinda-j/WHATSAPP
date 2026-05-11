@@ -14,7 +14,7 @@ export function isValidObjectId(id: string): boolean {
  * Middleware to validate MongoDB ObjectId in route params
  * @param paramName Name of the route parameter to validate (default: 'id')
  */
-export function validateObjectId(paramName: string = 'id') {
+export function validateObjectId(paramName = 'id') {
   return (req: Request, res: Response, next: NextFunction): void => {
     const rawId = req.params[paramName];
     const id = Array.isArray(rawId) ? rawId[0] : rawId;
@@ -22,7 +22,7 @@ export function validateObjectId(paramName: string = 'id') {
     if (!id) {
       res.status(400).json({
         error: 'Bad Request',
-        message: `Missing ${paramName} parameter`
+        message: `Missing ${paramName} parameter`,
       });
       return;
     }
@@ -30,7 +30,7 @@ export function validateObjectId(paramName: string = 'id') {
     if (!isValidObjectId(id)) {
       res.status(400).json({
         error: 'Bad Request',
-        message: `Invalid ${paramName}: must be a valid MongoDB ObjectId`
+        message: `Invalid ${paramName}: must be a valid MongoDB ObjectId`,
       });
       return;
     }
@@ -52,7 +52,7 @@ export function validateObjectIds(paramNames: string[]) {
       if (id && !isValidObjectId(id)) {
         res.status(400).json({
           error: 'Bad Request',
-          message: `Invalid ${paramName}: must be a valid MongoDB ObjectId`
+          message: `Invalid ${paramName}: must be a valid MongoDB ObjectId`,
         });
         return;
       }
@@ -68,7 +68,7 @@ export function validateObjectIds(paramNames: string[]) {
  * @param maxLength Maximum allowed length
  * @returns Sanitized string
  */
-export function sanitizeString(input: string, maxLength: number = 1000): string {
+export function sanitizeString(input: string, maxLength = 1000): string {
   if (!input || typeof input !== 'string') return '';
   return input.trim().substring(0, maxLength);
 }
@@ -106,7 +106,11 @@ export function sanitizePhone(phone: string): string | null {
  * @param max Maximum value
  * @returns Valid number or null
  */
-export function sanitizeNumber(value: any, min?: number, max?: number): number | null {
+export function sanitizeNumber(
+  value: any,
+  min?: number,
+  max?: number,
+): number | null {
   const num = Number(value);
   if (isNaN(num)) return null;
   if (min !== undefined && num < min) return null;

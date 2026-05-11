@@ -1,7 +1,16 @@
 import mongoose from 'mongoose';
 
 // Form Field Types
-export type FieldType = 'text' | 'number' | 'email' | 'phone' | 'select' | 'multiselect' | 'date' | 'textarea' | 'file';
+export type FieldType =
+  | 'text'
+  | 'number'
+  | 'email'
+  | 'phone'
+  | 'select'
+  | 'multiselect'
+  | 'date'
+  | 'textarea'
+  | 'file';
 
 // Form Field Schema
 export interface FormField {
@@ -37,30 +46,51 @@ export interface IFormTemplate {
   updatedAt: Date;
 }
 
-const FormFieldSchema = new mongoose.Schema({
-  id: { type: String, required: true },
-  type: { type: String, enum: ['text', 'number', 'email', 'phone', 'select', 'multiselect', 'date', 'textarea', 'file'], required: true },
-  label: { type: String, required: true },
-  placeholder: { type: String },
-  required: { type: Boolean, default: false },
-  order: { type: Number, default: 0 },
-  options: [{ type: String }],
-  validation: {
-    minLength: { type: Number },
-    maxLength: { type: Number },
-    min: { type: Number },
-    max: { type: Number },
-    pattern: { type: String },
+const FormFieldSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    type: {
+      type: String,
+      enum: [
+        'text',
+        'number',
+        'email',
+        'phone',
+        'select',
+        'multiselect',
+        'date',
+        'textarea',
+        'file',
+      ],
+      required: true,
+    },
+    label: { type: String, required: true },
+    placeholder: { type: String },
+    required: { type: Boolean, default: false },
+    order: { type: Number, default: 0 },
+    options: [{ type: String }],
+    validation: {
+      minLength: { type: Number },
+      maxLength: { type: Number },
+      min: { type: Number },
+      max: { type: Number },
+      pattern: { type: String },
+    },
+    defaultValue: { type: String },
   },
-  defaultValue: { type: String },
-}, { _id: false });
+  { _id: false },
+);
 
 const FormTemplateSchema = new (mongoose as any).Schema({
   name: { type: String, required: true },
   description: { type: String },
   isActive: { type: Boolean, default: true },
   isDefault: { type: Boolean, default: false },
-  triggerMode: { type: String, enum: ['manual', 'auto', 'both'], default: 'manual' },
+  triggerMode: {
+    type: String,
+    enum: ['manual', 'auto', 'both'],
+    default: 'manual',
+  },
   triggerDelay: { type: Number, default: 10 }, // 10 seconds default
   fields: [FormFieldSchema],
   welcomeMessage: { type: String },
@@ -72,6 +102,8 @@ const FormTemplateSchema = new (mongoose as any).Schema({
 // Index for quick lookup
 FormTemplateSchema.index({ isActive: 1, isDefault: 1 });
 
-const FormTemplate = mongoose.models.FormTemplate || (mongoose as any).model('FormTemplate', FormTemplateSchema);
+const FormTemplate =
+  mongoose.models.FormTemplate ||
+  (mongoose as any).model('FormTemplate', FormTemplateSchema);
 
 export default FormTemplate;

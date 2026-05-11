@@ -263,7 +263,7 @@ export default function Dashboard() {
                                             {evt.role === 'user' ? '👤 User:' : '🤖 Bot:'} {evt.content}
                                         </span>
                                         <span className="text-gray-400 ml-2 whitespace-nowrap">
-                                            {new Date(evt.timestamp || Date.now()).toLocaleTimeString()}
+                                            {evt.timestamp ? new Date(evt.timestamp).toLocaleTimeString() : ''}
                                         </span>
                                     </div>
                                 ))

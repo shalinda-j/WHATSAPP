@@ -6,14 +6,18 @@ const IV_LENGTH = 16;
 // SECURITY: Generate a default key if ENCRYPTION_KEY is not configured
 const rawKey = process.env.ENCRYPTION_KEY;
 if (!rawKey) {
-  console.warn('⚠️ WARNING: ENCRYPTION_KEY environment variable not set. Using default key for development. Set a secure 32-character key in production.');
+  console.warn(
+    '⚠️ WARNING: ENCRYPTION_KEY environment variable not set. Using default key for development. Set a secure 32-character key in production.',
+  );
 }
 if (rawKey && rawKey.length < 32) {
-  console.warn('⚠️ WARNING: ENCRYPTION_KEY should be exactly 32 characters for AES-256.');
+  console.warn(
+    '⚠️ WARNING: ENCRYPTION_KEY should be exactly 32 characters for AES-256.',
+  );
 }
 // Use provided key or generate a random one for development
 const ENCRYPTION_KEY = Buffer.from(
-  (rawKey || crypto.randomBytes(32).toString('hex')).slice(0, 32)
+  (rawKey || crypto.randomBytes(32).toString('hex')).slice(0, 32),
 );
 
 export class CryptoService {

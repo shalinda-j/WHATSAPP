@@ -138,7 +138,7 @@ export async function getChatSession(userId: string): Promise<ChatSession> {
     });
     chatSessions.set(userId, chat);
   }
-  return chatSessions.get(userId)!;
+  return chatSessions.get(userId) as ChatSession;
 }
 
 /**

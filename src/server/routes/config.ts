@@ -3,7 +3,13 @@ import Config from '../../models/Config';
 import Dataset from '../../models/Dataset';
 import { authenticateToken } from '../middleware/auth';
 import { HumanizerService } from '../../services/HumanizerService';
-import { configService, HumanizerConfig, ConversationExample, CountryOption, ExperienceOption } from '../../services/ConfigService';
+import {
+  configService,
+  HumanizerConfig,
+  ConversationExample,
+  CountryOption,
+  ExperienceOption,
+} from '../../services/ConfigService';
 import { usageResetService } from '../../services/UsageResetService';
 
 const router = Router();
@@ -142,7 +148,7 @@ router.put('/conversation-examples', async (req, res) => {
       const dataset = await Dataset.findOneAndUpdate(
         { key: 'CONVERSATION_EXAMPLES' },
         { content: { en: [] }, isActive: true, updatedAt: new Date() },
-        { new: true, upsert: true, setDefaultsOnInsert: true }
+        { new: true, upsert: true, setDefaultsOnInsert: true },
       );
       configService.clearCache();
       return res.json({ success: true, examples: [] });
@@ -151,7 +157,9 @@ router.put('/conversation-examples', async (req, res) => {
     // Validate each example has user and assistant fields
     for (const ex of examples) {
       if (!ex.user || !ex.assistant) {
-        return res.status(400).json({ error: 'Each example must have user and assistant fields' });
+        return res
+          .status(400)
+          .json({ error: 'Each example must have user and assistant fields' });
       }
     }
 
@@ -167,7 +175,7 @@ router.put('/conversation-examples', async (req, res) => {
         description: 'Training examples for AI conversation context',
         updatedAt: new Date(),
       },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
+      { new: true, upsert: true, setDefaultsOnInsert: true },
     );
 
     // Clear cache to apply changes immediately
@@ -207,7 +215,9 @@ router.put('/job-types', async (req, res) => {
 
     // Validate it's an array
     if (!Array.isArray(jobTypes)) {
-      return res.status(400).json({ error: 'Job types must be an array of strings' });
+      return res
+        .status(400)
+        .json({ error: 'Job types must be an array of strings' });
     }
 
     // Find or create the dataset
@@ -222,7 +232,7 @@ router.put('/job-types', async (req, res) => {
         description: 'Available job types for lead registration',
         updatedAt: new Date(),
       },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
+      { new: true, upsert: true, setDefaultsOnInsert: true },
     );
 
     // Clear cache to apply changes immediately
@@ -262,7 +272,9 @@ router.put('/booking-keywords', async (req, res) => {
 
     // Validate it's an array
     if (!Array.isArray(keywords)) {
-      return res.status(400).json({ error: 'Keywords must be an array of strings' });
+      return res
+        .status(400)
+        .json({ error: 'Keywords must be an array of strings' });
     }
 
     // Find or create the dataset
@@ -277,7 +289,7 @@ router.put('/booking-keywords', async (req, res) => {
         description: 'Keywords that trigger booking intent detection',
         updatedAt: new Date(),
       },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
+      { new: true, upsert: true, setDefaultsOnInsert: true },
     );
 
     // Clear cache to apply changes immediately
@@ -440,7 +452,7 @@ router.put('/countries', async (req, res) => {
         description: 'Countries available for job placement',
         updatedAt: new Date(),
       },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
+      { new: true, upsert: true, setDefaultsOnInsert: true },
     );
 
     // Clear cache to apply changes immediately
@@ -480,7 +492,9 @@ router.put('/experience-levels', async (req, res) => {
 
     // Validate it's an array
     if (!Array.isArray(levels)) {
-      return res.status(400).json({ error: 'Experience levels must be an array' });
+      return res
+        .status(400)
+        .json({ error: 'Experience levels must be an array' });
     }
 
     // Find or create the dataset
@@ -495,7 +509,7 @@ router.put('/experience-levels', async (req, res) => {
         description: 'Experience level options for lead registration',
         updatedAt: new Date(),
       },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
+      { new: true, upsert: true, setDefaultsOnInsert: true },
     );
 
     // Clear cache to apply changes immediately
@@ -540,7 +554,11 @@ router.get('/usage-cycle', async (req, res) => {
 router.post('/reset-usage', async (req, res) => {
   try {
     const result = await usageResetService.performReset('manual');
-    res.json({ success: true, resetCount: result.resetCount, resetAt: new Date() });
+    res.json({
+      success: true,
+      resetCount: result.resetCount,
+      resetAt: new Date(),
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -561,4 +579,3 @@ router.post('/:id/reset-usage', async (req, res) => {
 });
 
 export default router;
-
