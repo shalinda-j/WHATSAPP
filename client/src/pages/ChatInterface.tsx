@@ -80,7 +80,11 @@ export default function ChatInterface() {
 
   useEffect(() => {
     const API_URL = import.meta.env.VITE_API_URL || window.location.origin;
-    const newSocket = io(API_URL, { transports: ['websocket', 'polling'] });
+    const token = localStorage.getItem('token');
+    const newSocket = io(API_URL, {
+      transports: ['websocket', 'polling'],
+      auth: { token },
+    });
 
     newSocket.on('connect', () => console.log('WebSocket connected'));
 

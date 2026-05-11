@@ -74,7 +74,10 @@ export default function Dashboard() {
         fetchAIProviders();
 
         const API_URL = import.meta.env.VITE_API_URL || window.location.origin;
-        const socket = io(API_URL);
+        const token = localStorage.getItem('token');
+        const socket = io(API_URL, {
+            auth: { token },
+        });
 
         socket.on('new-message', (data) => {
             setRecentEvents(prev => [data, ...prev].slice(0, 5));

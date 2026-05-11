@@ -2,21 +2,12 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
-import crypto from 'crypto';
 import Admin from '../../models/Admin';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { strictRateLimit } from '../middleware/rateLimit';
+import { ACTUAL_JWT_SECRET } from '../jwt-secret';
 
 const router = Router();
-
-// SECURITY: Generate a default secret if JWT_SECRET is not configured
-const JWT_SECRET =
-  process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
-if (!process.env.JWT_SECRET) {
-  console.warn(
-    '⚠️ WARNING: JWT_SECRET environment variable not set. Using default secret for development. Set a secure secret in production.',
-  );
-}
 
 // Check if MongoDB is available
 const isMongoDBAvailable = () => {
@@ -98,7 +89,7 @@ router.post('/login', strictRateLimit, async (req, res) => {
 
     const token = jwt.sign(
       { id: admin._id, username: admin.username, role: admin.role },
-      JWT_SECRET,
+      ACTUAL_JWT_SECRET,
       { expiresIn: '24h' },
     );
     res.json({ token });

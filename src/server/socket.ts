@@ -1,18 +1,9 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
+import { ACTUAL_JWT_SECRET } from './jwt-secret';
 
 let io: Server;
-
-// JWT Secret — use environment variable or generate a random fallback for development
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  console.warn(
-    '⚠️ WARNING: JWT_SECRET environment variable not set. Using random secret for development. Set a secure secret in production.',
-  );
-}
-const ACTUAL_JWT_SECRET = JWT_SECRET || crypto.randomBytes(32).toString('hex');
 
 export const initSocket = (server: HttpServer) => {
   io = new Server(server, {
