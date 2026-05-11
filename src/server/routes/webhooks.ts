@@ -23,9 +23,19 @@ router.post('/inbound', async (req, res) => {
 
     // Basic Secret Validation (Optional but recommended)
     // Real implementation should verify signature if high security needed
-    // For now, we assume simple secret token match if provided
-    if (process.env.WEBHOOK_SECRET && secret !== process.env.WEBHOOK_SECRET) {
-      return res.status(401).json({ error: 'Invalid secret' });
+    // Using crypto.timingSafeEqual to prevent timing attacks when comparing secrets
+    if (process.env.WEBHOOK_SECRET) {
+      if (!secret || typeof secret !== 'string') {
+        return res.status(401).json({ error: 'Invalid secret' });
+      }
+
+      const expectedSecret = process.env.WEBHOOK_SECRET;
+      const expectedHash = crypto.createHash('sha256').update(expectedSecret).digest();
+      const providedHash = crypto.createHash('sha256').update(secret).digest();
+
+      if (!crypto.timingSafeEqual(expectedHash, providedHash)) {
+        return res.status(401).json({ error: 'Invalid secret' });
+      }
     }
 
     // Handle different event types
