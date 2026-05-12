@@ -25,10 +25,13 @@ router.get('/', async (req, res) => {
   try {
     const { type, scope, category, key } = req.query;
 
-    // Build filter - always exclude 'config' type (internal configuration items)
-    const filter: Record<string, unknown> = {
-      type: { $ne: 'config' },
-    };
+    // Build filter. When searching by a specific `key`, do NOT exclude
+    // `type: 'config'` — many seeded items (e.g. AI_PERSONALITY) live with
+    // type='config' and would otherwise be invisible to the UI, causing
+    // the frontend to attempt a CREATE that collides on the unique key index.
+    const filter: Record<string, unknown> = key
+      ? {}
+      : { type: { $ne: 'config' } };
 
     if (key) {
       filter.key = key;
@@ -220,14 +223,37 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Name is required' });
     }
 
+    // When a `key` is provided, treat POST as upsert. Several seeded items
+    // (AI_PERSONALITY, CONVERSATION_EXAMPLES, etc.) are inserted at startup
+    // with type='config' and live behind the unique `key` index. A plain
+    // create would collide with E11000; upsert lets the UI save freely.
+    if (key && String(key).trim() !== '') {
+      const update: Record<string, unknown> = {
+        name,
+        description: description || '',
+        type: type || 'knowledge',
+        content: content ?? {},
+        scope: scope || 'ALL',
+        category: category || 'general',
+        isActive: isActive !== undefined ? isActive : true,
+        metadata: metadata || {},
+      };
+
+      const upserted = await Dataset.findOneAndUpdate(
+        { key },
+        { $set: update, $setOnInsert: { key } },
+        { new: true, upsert: true, setDefaultsOnInsert: true },
+      );
+      return res.json(upserted);
+    }
+
     const newDataset = new Dataset({
       name,
       description: description || '',
       type: type || 'knowledge',
-      content: content || {},
+      content: content ?? {},
       scope: scope || 'ALL',
       category: category || 'general',
-      key: key || '',
       isActive: isActive !== undefined ? isActive : true,
       metadata: metadata || {},
     });
@@ -238,6 +264,7 @@ router.post('/', async (req, res) => {
     console.error('Error creating dataset:', {
       message: err.message,
       name: err.name,
+      code: err.code,
     });
     res.status(500).json({ error: err.message });
   }

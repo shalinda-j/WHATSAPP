@@ -97,7 +97,8 @@ export default function AIPersonalityTab({
       if (personality._id && personality._id.trim() !== '') {
         await api.put(`/api/datasets/${personality._id}`, payload);
       } else {
-        // Don't send _id when creating new - let backend/MongoDB generate it
+        // Don't send _id when creating new - backend now upserts by `key`,
+        // so this is safe whether or not a config-typed record exists.
         const { _id: _unused, ...createPayload } = payload;
         const res = await api.post('/api/datasets', createPayload);
         setPersonality({ ...personality, _id: res.data._id });
@@ -105,9 +106,14 @@ export default function AIPersonalityTab({
 
       onDataChange();
       alert('AI Personality saved successfully!');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to save personality:', error);
-      alert('Failed to save AI Personality');
+      const serverMsg =
+        error?.response?.data?.error ||
+        error?.response?.data?.message ||
+        error?.message ||
+        'Unknown error';
+      alert(`Failed to save AI Personality: ${serverMsg}`);
     } finally {
       setSaving(false);
     }
@@ -135,9 +141,14 @@ export default function AIPersonalityTab({
 
       onDataChange();
       alert('Conversation examples saved successfully!');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to save examples:', error);
-      alert('Failed to save conversation examples');
+      const serverMsg =
+        error?.response?.data?.error ||
+        error?.response?.data?.message ||
+        error?.message ||
+        'Unknown error';
+      alert(`Failed to save conversation examples: ${serverMsg}`);
     } finally {
       setSaving(false);
     }
