@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../config';
-import { Plus, Trash, Edit, Save, X, Bot, Settings, Activity, Cpu, Mic, RefreshCw, Calendar, Clock, TrendingUp, AlertCircle, DollarSign, Zap } from 'lucide-react';
+import { Plus, Trash, Edit, Save, X, Bot, Settings, Activity, Cpu, Mic, RefreshCw, Calendar, Clock, TrendingUp, AlertCircle, DollarSign, Zap, Link2, ShieldAlert, CheckCircle2, Loader2 } from 'lucide-react';
 
 interface Config {
     _id: string;
@@ -77,6 +77,75 @@ export default function Config() {
     const [voiceLoading, setVoiceLoading] = useState(true);
     const [voiceSaving, setVoiceSaving] = useState(false);
     const [voiceMessage, setVoiceMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+    // Session-Based (Unofficial) Connect Modal State
+    const [sessionModalOpen, setSessionModalOpen] = useState(false);
+    const [sessionProvider, setSessionProvider] = useState<'openai-session' | 'claude-session'>('openai-session');
+    const [sessionToken, setSessionToken] = useState('');
+    const [sessionModel, setSessionModel] = useState('');
+    const [sessionTesting, setSessionTesting] = useState(false);
+    const [sessionSaving, setSessionSaving] = useState(false);
+    const [sessionResult, setSessionResult] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+    const openSessionModal = (provider: 'openai-session' | 'claude-session') => {
+        setSessionProvider(provider);
+        setSessionToken('');
+        setSessionModel(provider === 'openai-session' ? 'text-davinci-002-render-sha' : 'claude-3-5-sonnet-20241022');
+        setSessionResult(null);
+        setSessionModalOpen(true);
+    };
+
+    const testSession = async () => {
+        if (!sessionToken.trim()) {
+            setSessionResult({ type: 'error', text: 'Paste your session cookie first' });
+            return;
+        }
+        setSessionTesting(true);
+        setSessionResult(null);
+        try {
+            const res = await api.post('/api/config/session/test', {
+                providerType: sessionProvider,
+                sessionToken: sessionToken.trim(),
+            });
+            if (res.data?.valid) {
+                const info = res.data.info || {};
+                const label = sessionProvider === 'openai-session'
+                    ? `OpenAI session valid${info.email ? ` (${info.email})` : ''}`
+                    : `Claude session valid${info.organizationName ? ` (${info.organizationName})` : ''}${info.isPro ? ' — Pro account ✨' : ''}`;
+                setSessionResult({ type: 'success', text: `✅ ${label}` });
+            } else {
+                setSessionResult({ type: 'error', text: `❌ ${res.data?.error || 'Invalid session'}` });
+            }
+        } catch (err: unknown) {
+            setSessionResult({ type: 'error', text: `❌ Test failed: ${getErrorMessage(err)}` });
+        } finally {
+            setSessionTesting(false);
+        }
+    };
+
+    const saveSession = async () => {
+        if (!sessionToken.trim()) {
+            setSessionResult({ type: 'error', text: 'Paste your session cookie first' });
+            return;
+        }
+        setSessionSaving(true);
+        setSessionResult(null);
+        try {
+            await api.post('/api/config/session/save', {
+                providerType: sessionProvider,
+                sessionToken: sessionToken.trim(),
+                model: sessionModel.trim() || undefined,
+                isActive: true,
+            });
+            setSessionResult({ type: 'success', text: '✅ Connected and activated!' });
+            await fetchConfigs();
+            setTimeout(() => setSessionModalOpen(false), 1200);
+        } catch (err: unknown) {
+            setSessionResult({ type: 'error', text: `❌ Save failed: ${getErrorMessage(err)}` });
+        } finally {
+            setSessionSaving(false);
+        }
+    };
 
     // Default form data
     const [formData, setFormData] = useState<Partial<Config>>({
@@ -611,6 +680,89 @@ export default function Config() {
                             )}
                         </div>
                     )}
+
+                    {/* ── Quick Connect: Unofficial Session-Based Providers ───── */}
+                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+                        <div className="flex items-start gap-3 mb-4">
+                            <div className="p-2 bg-amber-100 rounded-xl">
+                                <ShieldAlert className="h-5 w-5 text-amber-700" />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="font-bold text-gray-800">Quick Connect Your Account <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full ml-1">BETA</span></h3>
+                                <p className="text-sm text-amber-800 mt-0.5">
+                                    Use your existing ChatGPT / Claude account directly — no API key needed. Used as <strong>fallback only</strong> after official APIs. <strong>Risk:</strong> account may get banned. Use a throwaway account.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* OpenAI Quick Connect */}
+                            {(() => {
+                                const cfg = aiConfigs.find(c => c.providerType === 'openai-session');
+                                return (
+                                    <div className={`bg-white rounded-xl border-2 p-4 ${cfg?.isActive ? 'border-green-400' : 'border-gray-200'}`}>
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center text-white text-xs font-bold">AI</div>
+                                                <div>
+                                                    <p className="font-semibold text-gray-800">ChatGPT Account</p>
+                                                    <p className="text-[11px] text-gray-500">via session cookie</p>
+                                                </div>
+                                            </div>
+                                            {cfg?.isActive && (
+                                                <span className="text-[10px] bg-green-100 text-green-700 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                                                    <CheckCircle2 className="h-3 w-3" /> CONNECTED
+                                                </span>
+                                            )}
+                                            {cfg && !cfg.isActive && (
+                                                <span className="text-[10px] bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded-full">EXPIRED</span>
+                                            )}
+                                        </div>
+                                        <button
+                                            onClick={() => openSessionModal('openai-session')}
+                                            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-900 hover:bg-black text-white rounded-lg text-sm font-medium transition"
+                                        >
+                                            <Link2 className="h-4 w-4" />
+                                            {cfg ? 'Reconnect / Update' : 'Connect ChatGPT'}
+                                        </button>
+                                    </div>
+                                );
+                            })()}
+
+                            {/* Claude Quick Connect */}
+                            {(() => {
+                                const cfg = aiConfigs.find(c => c.providerType === 'claude-session');
+                                return (
+                                    <div className={`bg-white rounded-xl border-2 p-4 ${cfg?.isActive ? 'border-green-400' : 'border-gray-200'}`}>
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center text-white text-xs font-bold">C</div>
+                                                <div>
+                                                    <p className="font-semibold text-gray-800">Claude Account</p>
+                                                    <p className="text-[11px] text-gray-500">via session cookie</p>
+                                                </div>
+                                            </div>
+                                            {cfg?.isActive && (
+                                                <span className="text-[10px] bg-green-100 text-green-700 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                                                    <CheckCircle2 className="h-3 w-3" /> CONNECTED
+                                                </span>
+                                            )}
+                                            {cfg && !cfg.isActive && (
+                                                <span className="text-[10px] bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded-full">EXPIRED</span>
+                                            )}
+                                        </div>
+                                        <button
+                                            onClick={() => openSessionModal('claude-session')}
+                                            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-medium transition"
+                                        >
+                                            <Link2 className="h-4 w-4" />
+                                            {cfg ? 'Reconnect / Update' : 'Connect Claude'}
+                                        </button>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    </div>
 
                     {/* ── AI Provider Cards ────────────────────────────────── */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1169,6 +1321,136 @@ export default function Config() {
                 </div>
             )
             }
+
+            {/* ── Session Connect Modal (OpenAI / Claude Quick Connect) ───── */}
+            {sessionModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                        {/* Header */}
+                        <div className={`px-6 py-4 flex items-center justify-between border-b ${sessionProvider === 'openai-session' ? 'bg-gray-900 text-white' : 'bg-orange-600 text-white'}`}>
+                            <div className="flex items-center gap-3">
+                                <Link2 className="h-5 w-5" />
+                                <div>
+                                    <h3 className="font-bold text-lg">
+                                        Connect {sessionProvider === 'openai-session' ? 'ChatGPT' : 'Claude'} Account
+                                    </h3>
+                                    <p className="text-xs opacity-80">Paste your browser session cookie</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setSessionModalOpen(false)}
+                                className="p-1 hover:bg-white/10 rounded"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <div className="px-6 py-5 space-y-4">
+                            {/* Warning */}
+                            <div className="flex gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+                                <ShieldAlert className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                                <div>
+                                    <strong>Use a throwaway account.</strong> This is an unofficial method that violates {sessionProvider === 'openai-session' ? 'OpenAI' : 'Anthropic'} ToS. Your account may get banned. Cookies expire every {sessionProvider === 'openai-session' ? '~7 days' : '~30 days'} — you&apos;ll need to repeat this then.
+                                </div>
+                            </div>
+
+                            {/* Step-by-step guide */}
+                            <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
+                                <p className="font-semibold text-blue-900 mb-2 text-sm">📋 How to copy your cookie:</p>
+                                <ol className="list-decimal ml-5 text-sm text-blue-900 space-y-1.5">
+                                    {sessionProvider === 'openai-session' ? (
+                                        <>
+                                            <li>Open <a href="https://chat.openai.com" target="_blank" rel="noopener noreferrer" className="underline font-medium">chat.openai.com</a> and log in.</li>
+                                            <li>Press <kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs">F12</kbd> to open DevTools.</li>
+                                            <li>Go to <strong>Application</strong> tab → <strong>Cookies</strong> → <code className="bg-white px-1 rounded">https://chat.openai.com</code></li>
+                                            <li>Find <code className="bg-white px-1 rounded">__Secure-next-auth.session-token</code> and copy its <strong>Value</strong>.</li>
+                                            <li>Paste it below. (Long string starting with <code className="bg-white px-1 rounded">eyJ...</code>)</li>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <li>Open <a href="https://claude.ai" target="_blank" rel="noopener noreferrer" className="underline font-medium">claude.ai</a> and log in.</li>
+                                            <li>Press <kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs">F12</kbd> to open DevTools.</li>
+                                            <li>Go to <strong>Application</strong> tab → <strong>Cookies</strong> → <code className="bg-white px-1 rounded">https://claude.ai</code></li>
+                                            <li>Find <code className="bg-white px-1 rounded">sessionKey</code> and copy its <strong>Value</strong>.</li>
+                                            <li>Paste it below. (String starting with <code className="bg-white px-1 rounded">sk-ant-sid01-...</code>)</li>
+                                        </>
+                                    )}
+                                </ol>
+                            </div>
+
+                            {/* Token paste */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Session Cookie Value</label>
+                                <textarea
+                                    value={sessionToken}
+                                    onChange={(e) => setSessionToken(e.target.value)}
+                                    placeholder={sessionProvider === 'openai-session' ? 'eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..._very_long_string' : 'sk-ant-sid01-...'}
+                                    rows={3}
+                                    className="w-full p-2 border border-gray-300 rounded-lg font-mono text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                />
+                            </div>
+
+                            {/* Model selector */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
+                                <select
+                                    value={sessionModel}
+                                    onChange={(e) => setSessionModel(e.target.value)}
+                                    className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                >
+                                    {sessionProvider === 'openai-session' ? (
+                                        <>
+                                            <option value="text-davinci-002-render-sha">GPT-3.5 (free tier)</option>
+                                            <option value="gpt-4">GPT-4 (Plus subscription)</option>
+                                            <option value="gpt-4-turbo">GPT-4 Turbo (Plus)</option>
+                                            <option value="gpt-4o">GPT-4o (Plus)</option>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                                            <option value="claude-3-opus-20240229">Claude 3 Opus (Pro)</option>
+                                            <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+                                        </>
+                                    )}
+                                </select>
+                            </div>
+
+                            {/* Result */}
+                            {sessionResult && (
+                                <div className={`p-3 rounded-lg text-sm ${sessionResult.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
+                                    {sessionResult.text}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer Actions */}
+                        <div className="px-6 py-4 bg-gray-50 border-t flex items-center justify-end gap-2 rounded-b-2xl">
+                            <button
+                                onClick={() => setSessionModalOpen(false)}
+                                className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg text-sm font-medium"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={testSession}
+                                disabled={sessionTesting || sessionSaving || !sessionToken.trim()}
+                                className="flex items-center gap-2 px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg text-sm font-medium disabled:opacity-50"
+                            >
+                                {sessionTesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                                Test Connection
+                            </button>
+                            <button
+                                onClick={saveSession}
+                                disabled={sessionSaving || sessionTesting || !sessionToken.trim()}
+                                className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-medium disabled:opacity-50 ${sessionProvider === 'openai-session' ? 'bg-gray-900 hover:bg-black' : 'bg-orange-600 hover:bg-orange-700'}`}
+                            >
+                                {sessionSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                Connect & Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 }

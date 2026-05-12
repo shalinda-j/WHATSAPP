@@ -10,6 +10,8 @@ import Dataset from '../models/Dataset';
 import { OpenAIService } from './openai';
 import { GroqService } from './groq';
 import { OpenRouterService } from './openrouter';
+import { ChatGPTSessionService } from './ChatGPTSessionService';
+import { ClaudeSessionService } from './ClaudeSessionService';
 
 import Config from '../models/Config';
 import { createCompanyConfig } from '../config/companies';
@@ -150,6 +152,27 @@ export class AILoadBalancer {
                 providerType: 'openrouter',
               }),
             );
+          } else if (conf.providerType === 'openai-session') {
+            // Unofficial ChatGPT session-based provider (fallback only)
+            this.services.push(
+              new ChatGPTSessionService({
+                sessionToken: conf.apiKey,
+                model: conf.aiModel,
+                configId: String((conf as any)._id),
+                providerType: 'openai-session',
+              }),
+            );
+          } else if (conf.providerType === 'claude-session') {
+            // Unofficial Claude session-based provider (fallback only)
+            this.services.push(
+              new ClaudeSessionService({
+                sessionKey: conf.apiKey,
+                organizationId: conf.value || undefined,
+                model: conf.aiModel,
+                configId: String((conf as any)._id),
+                providerType: 'claude-session',
+              }),
+            );
           }
           // Add other providers here (e.g. Anthropic)
         }
@@ -166,17 +189,19 @@ export class AILoadBalancer {
         }
       }
 
-      // Sort by Priority (Cost/Speed) - Groq > Google > OpenRouter > OpenAI
+      // Sort by Priority (Cost/Speed) — official APIs first, session-based last (fallback only)
       const priorityMap: Record<string, number> = {
         GroqService: 1,
         GeminiService: 2,
         OpenRouterService: 3,
         OpenAIService: 4,
+        ChatGPTSessionService: 90,
+        ClaudeSessionService: 91,
       };
       this.services.sort(
         (a, b) =>
-          (priorityMap[a.constructor.name] || 99) -
-          (priorityMap[b.constructor.name] || 99),
+          (priorityMap[a.constructor.name] || 50) -
+          (priorityMap[b.constructor.name] || 50),
       );
 
       this.lastServiceLoad = Date.now();
@@ -337,6 +362,31 @@ export class AILoadBalancer {
         return response;
       } catch (error: any) {
         console.error(`   ❌ ${service.name} failed:`, error.message || error);
+
+        // Auto-disable session-based providers when their cookie expires
+        if (
+          error?.code === 'SESSION_EXPIRED' &&
+          (service as any).configId
+        ) {
+          const cfgId = (service as any).configId as string;
+          Config.updateOne(
+            { _id: cfgId },
+            {
+              $set: {
+                isActive: false,
+                description:
+                  'Auto-disabled: session token expired. Reconnect from Configuration page.',
+              },
+            },
+          )
+            .then(() => {
+              this.lastServiceLoad = 0; // force reload on next request
+              console.warn(
+                `🔒 Auto-disabled ${service.name} (configId=${cfgId}) — session expired.`,
+              );
+            })
+            .catch((e) => console.error('Failed to auto-disable provider:', e));
+        }
       }
     }
 

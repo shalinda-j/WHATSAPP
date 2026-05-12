@@ -11,6 +11,9 @@ import {
   ExperienceOption,
 } from '../../services/ConfigService';
 import { usageResetService } from '../../services/UsageResetService';
+import { ChatGPTSessionService } from '../../services/ChatGPTSessionService';
+import { ClaudeSessionService } from '../../services/ClaudeSessionService';
+import { aiLoadBalancer } from '../../services/AILoadBalancer';
 
 const router = Router();
 
@@ -575,6 +578,130 @@ router.post('/:id/reset-usage', async (req, res) => {
     res.json({ success: true, providerId: req.params.id, resetAt: new Date() });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
+// Unofficial Session-Based Providers (OpenAI / Claude)
+// ============================================
+
+/**
+ * POST /api/config/session/test
+ * Validate a pasted session cookie before saving.
+ * Body: { providerType: 'openai-session' | 'claude-session', sessionToken: string }
+ */
+router.post('/session/test', async (req, res) => {
+  const { providerType, sessionToken } = req.body || {};
+  if (!providerType || !sessionToken) {
+    return res
+      .status(400)
+      .json({ valid: false, error: 'providerType and sessionToken are required' });
+  }
+
+  try {
+    if (providerType === 'openai-session') {
+      const info = await ChatGPTSessionService.validateSession(sessionToken);
+      return res.json({
+        valid: true,
+        info: { email: info.email, expires: info.expires },
+      });
+    }
+    if (providerType === 'claude-session') {
+      const info = await ClaudeSessionService.validateSession(sessionToken);
+      return res.json({
+        valid: true,
+        info: {
+          organizationId: info.organizationId,
+          organizationName: info.organizationName,
+          isPro: (info.capabilities || []).includes('claude_pro'),
+        },
+      });
+    }
+    return res
+      .status(400)
+      .json({ valid: false, error: `Unknown providerType: ${providerType}` });
+  } catch (err: any) {
+    return res.json({
+      valid: false,
+      error: err?.message || String(err),
+      code: err?.code,
+    });
+  }
+});
+
+/**
+ * POST /api/config/session/save
+ * Validate + save (or update) a session-based provider in one call.
+ * Body: { providerType, sessionToken, model?, isActive? }
+ */
+router.post('/session/save', async (req, res) => {
+  const { providerType, sessionToken, model, isActive } = req.body || {};
+  if (!providerType || !sessionToken) {
+    return res
+      .status(400)
+      .json({ error: 'providerType and sessionToken are required' });
+  }
+  if (
+    providerType !== 'openai-session' &&
+    providerType !== 'claude-session'
+  ) {
+    return res.status(400).json({ error: 'Invalid providerType' });
+  }
+
+  try {
+    let organizationId: string | undefined;
+    let resolvedModel = model;
+
+    if (providerType === 'openai-session') {
+      await ChatGPTSessionService.validateSession(sessionToken);
+      if (!resolvedModel) resolvedModel = 'text-davinci-002-render-sha';
+    } else {
+      const info = await ClaudeSessionService.validateSession(sessionToken);
+      organizationId = info.organizationId;
+      if (!resolvedModel) resolvedModel = 'claude-3-5-sonnet-20241022';
+    }
+
+    // Upsert: one session-based entry per provider type
+    const existing = await Config.findOne({ isProvider: true, providerType });
+    const payload: any = {
+      isProvider: true,
+      providerType,
+      apiKey: sessionToken,
+      aiModel: resolvedModel,
+      isActive: isActive !== false,
+      description:
+        providerType === 'openai-session'
+          ? 'Unofficial ChatGPT session (refresh cookie ~weekly)'
+          : 'Unofficial Claude session (refresh cookie ~monthly)',
+    };
+    if (organizationId) payload.value = organizationId;
+
+    let saved;
+    if (existing) {
+      saved = await Config.findByIdAndUpdate(
+        (existing as any)._id,
+        { $set: payload },
+        { new: true },
+      );
+    } else {
+      payload.key = `provider_${providerType}_${Date.now()}`;
+      saved = await new Config(payload).save();
+    }
+
+    // Reload services so the new provider is picked up immediately
+    await aiLoadBalancer.forceReloadServices();
+
+    res.json({
+      success: true,
+      providerId: (saved as any)?._id,
+      providerType,
+      model: resolvedModel,
+    });
+  } catch (err: any) {
+    res.status(400).json({
+      error: err?.message || 'Failed to save session provider',
+      code: err?.code,
+    });
   }
 });
 
