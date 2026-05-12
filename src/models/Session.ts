@@ -8,9 +8,12 @@ interface ISession {
     | 'connected'
     | 'disconnected'
     | 'scan_qr'
-    | 'reconnecting';
+    | 'reconnecting'
+    | 'deleted'
+    | 'loggedOut';
   qr?: string;
   phoneNumber?: string;
+  deleted?: boolean; // Flag to prevent auto-restart after deletion
   createdAt: Date;
   updatedAt: Date;
 }
@@ -26,11 +29,14 @@ const SessionSchema = new Schema<ISession>({
       'disconnected',
       'scan_qr',
       'reconnecting',
+      'deleted',
+      'loggedOut',
     ],
     default: 'disconnected',
   },
   qr: { type: String },
   phoneNumber: { type: String },
+  deleted: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });
@@ -39,6 +45,10 @@ const SessionSchema = new Schema<ISession>({
 SessionSchema.pre('save', async function () {
   this.updatedAt = new Date();
 });
+
+// Indexes for fast querying of active sessions
+SessionSchema.index({ status: 1, updatedAt: -1 });
+SessionSchema.index({ deleted: 1 });
 
 const Session = mongoose.model(
   'Session',

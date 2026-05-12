@@ -41,6 +41,7 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run client\"",
     "build:client": "cd client && npm install && npm run build",
     "build": "npm run build:client && tsc",
+    "test": "jest",
     "start": "node dist/index.js"
   },
   "dependencies": {
@@ -54,7 +55,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.0.0",
     "@types/pdf-parse": "^1.1.5",
-    "@whiskeysockets/baileys": "^6.7.9",
+    "@whiskeysockets/baileys": "6.6.0",
     "axios": "^1.7.9",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
@@ -66,19 +67,25 @@
     "ics": "^3.8.1",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.1.5",
-    "multer": "^2.0.2",
+    "multer": "^2.1.1",
     "node-nlp": "^5.0.0-alpha.5",
     "openai": "^6.17.0",
     "pdf-parse": "^1.1.1",
     "pino": "^9.0.0",
     "qrcode-terminal": "^0.12.0",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.0/xlsx-0.20.0.tgz"
+    "socket.io": "^4.8.3",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "overrides": {
-    "axios": "^1.7.9"
+    "axios": "^1.7.9",
+    "minimatch": "^9.0.7",
+    "multer": "^2.1.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "@tootallnate/once": "^3.0.1"
   },
   "devDependencies": {
-    "@types/node": "16.11.49",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.0.0",
     "@types/qrcode": "1.4.3",
     "@types/qrcode-terminal": "0.12.0",
     "@typescript-eslint/eslint-plugin": "5.33.1",
@@ -88,8 +95,10 @@
     "eslint": "8.22.0",
     "eslint-config-prettier": "8.5.0",
     "eslint-plugin-prettier": "4.2.1",
+    "jest": "^30.4.2",
     "prettier": "2.7.1",
+    "ts-jest": "^29.4.9",
     "ts-node-dev": "2.0.0",
-    "typescript": "4.7.4"
+    "typescript": "^5.0.0"
   }
 }

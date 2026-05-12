@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import ChatMessage from '../../models/ChatMessage';
 import Lead from '../../models/Lead';
+import Booking from '../../models/Booking';
 import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
@@ -12,15 +13,18 @@ router.get('/', async (req, res) => {
     // Determine counts for VoiceAgentHub stats
     const [totalVoiceNotes, totalCallsRejected] = await Promise.all([
       ChatMessage.countDocuments({ type: 'voice' }),
-      // Our rejection data is not explicitly stored in ChatMessage differently, but 
+      // Our rejection data is not explicitly stored in ChatMessage differently, but
       // let's look for known rejections or just use a default placeholder or query
       // Alternatively, assuming text messages warning about calls
-      ChatMessage.countDocuments({ role: 'assistant', content: { $regex: /voice message/i } })
+      ChatMessage.countDocuments({
+        role: 'assistant',
+        content: { $regex: /voice message/i },
+      }),
     ]);
 
     res.json({
       totalVoiceNotes,
-      totalCallsRejected: totalCallsRejected || 0
+      totalCallsRejected: totalCallsRejected || 0,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -47,7 +51,8 @@ router.get('/overview', async (req, res) => {
       voiceMessages,
       textMessages,
       botMessages,
-      userMessages
+      userMessages,
+      totalCallsRejected,
     ] = await Promise.all([
       ChatMessage.countDocuments(),
       ChatMessage.countDocuments({ timestamp: { $gte: today } }),
@@ -57,7 +62,17 @@ router.get('/overview', async (req, res) => {
       ChatMessage.countDocuments({ type: 'voice' }),
       ChatMessage.countDocuments({ type: 'text' }),
       ChatMessage.countDocuments({ role: 'assistant' }),
-      ChatMessage.countDocuments({ role: 'user' })
+      ChatMessage.countDocuments({ role: 'user' }),
+      // Count messages that mention call rejection (bot telling user to send voice note instead)
+      ChatMessage.countDocuments({
+        role: 'assistant',
+        $or: [
+          { content: { $regex: /voice note/i } },
+          { content: { $regex: /voice message/i } },
+          { content: { $regex: /cannot.*call/i } },
+          { content: { $regex: /send a voice/i } },
+        ],
+      }),
     ]);
 
     const userCount = uniqueUsers.length;
@@ -72,7 +87,9 @@ router.get('/overview', async (req, res) => {
       textMessages,
       botMessages,
       userMessages,
-      avgMessagesPerUser: userCount > 0 ? (totalMessages / userCount).toFixed(1) : 0
+      totalCallsRejected,
+      avgMessagesPerUser:
+        userCount > 0 ? (totalMessages / userCount).toFixed(1) : 0,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -85,24 +102,25 @@ router.get('/questions', async (req, res) => {
 
     const userMessages = await ChatMessage.find({ role: 'user' })
       .sort({ timestamp: -1 })
-      .limit(Number(limit));
+      .limit(Number(limit))
+      .lean();
 
     const questionCounts: Record<string, number> = {};
     const keywordsMap: Record<string, string[]> = {
-      'jobs': ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
-      'register': ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
-      'payment': ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
-      'booking': ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
-      'location': ['address', 'location', 'where', 'branch', 'office', 'map'],
-      'services': ['service', 'what do you do', 'help', 'information', 'details'],
-      'hello': ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
-      'language': ['sinhala', 'english', 'tamil', 'translate']
+      jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
+      register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
+      payment: ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
+      booking: ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
+      location: ['address', 'location', 'where', 'branch', 'office', 'map'],
+      services: ['service', 'what do you do', 'help', 'information', 'details'],
+      hello: ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
+      language: ['sinhala', 'english', 'tamil', 'translate'],
     };
 
     for (const msg of userMessages) {
       const content = msg.content.toLowerCase();
       for (const [category, keywords] of Object.entries(keywordsMap)) {
-        if (keywords.some(k => content.includes(k))) {
+        if (keywords.some((k) => content.includes(k))) {
           questionCounts[category] = (questionCounts[category] || 0) + 1;
           break;
         }
@@ -114,8 +132,11 @@ router.get('/questions', async (req, res) => {
       .slice(0, 10);
 
     res.json({
-      categories: sortedQuestions.map(([category, count]) => ({ category, count })),
-      totalQuestions: userMessages.length
+      categories: sortedQuestions.map((item: any) => ({
+        category: item[0],
+        count: item[1],
+      })),
+      totalQuestions: userMessages.length,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -133,23 +154,23 @@ router.get('/trends', async (req, res) => {
       {
         $match: {
           timestamp: { $gte: startDate },
-          role: 'user'
-        }
+          role: 'user',
+        },
       },
       {
         $group: {
           _id: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp' } },
           count: { $sum: 1 },
-          uniqueUsers: { $addToSet: '$userId' }
-        }
+          uniqueUsers: { $addToSet: '$userId' },
+        },
       },
-      { $sort: { _id: 1 } }
+      { $sort: { _id: 1 } },
     ]);
 
-    const usersByDay = messagesByDay.map(item => ({
+    const usersByDay = messagesByDay.map((item: any) => ({
       date: item._id,
       messages: item.count,
-      users: item.uniqueUsers.length
+      users: item.uniqueUsers.length,
     }));
 
     res.json(usersByDay);
@@ -164,18 +185,41 @@ router.get('/datasets', async (req, res) => {
 
     const datasets = await Dataset.find({ isActive: true })
       .sort({ updatedAt: -1 })
-      .limit(10);
+      .limit(10)
+      .lean();
 
-    const totalRecords = datasets.reduce((sum, ds) => sum + (ds.content?.length || 0), 0);
-
-    res.json({
-      datasets: datasets.map(ds => ({
+    const mappedDatasets = datasets.map((ds: any) => {
+      const content = ds.content as string | Record<string, unknown> | null;
+      let contentLength = 0;
+      if (typeof content === 'string') {
+        contentLength = content.length;
+      } else if (content && typeof content === 'object') {
+        // Use a for...in loop with hasOwnProperty check instead of Object.keys().length
+        // to avoid memory overhead of allocating a large array of keys just to count them
+        let count = 0;
+        for (const key in content) {
+          if (Object.prototype.hasOwnProperty.call(content, key)) {
+            count++;
+          }
+        }
+        contentLength = count;
+      }
+      return {
         id: ds._id,
         name: ds.name || 'Unnamed Dataset',
-        contentLength: ds.content?.length || 0,
-        updatedAt: ds.updatedAt
-      })),
-      totalRecords
+        contentLength,
+        updatedAt: ds.updatedAt,
+      };
+    });
+
+    const totalRecords = mappedDatasets.reduce(
+      (sum, ds) => sum + ds.contentLength,
+      0,
+    );
+
+    res.json({
+      datasets: mappedDatasets,
+      totalRecords,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -190,20 +234,13 @@ router.get('/leads', async (req, res) => {
     const weekAgo = new Date(today);
     weekAgo.setDate(weekAgo.getDate() - 7);
 
-    const [
-      totalLeads,
-      weekLeads,
-      byStatus,
-      byJobType
-    ] = await Promise.all([
+    const [totalLeads, weekLeads, byStatus, byJobType] = await Promise.all([
       Lead.countDocuments(),
       Lead.countDocuments({ registeredAt: { $gte: weekAgo } }),
+      Lead.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
       Lead.aggregate([
-        { $group: { _id: '$status', count: { $sum: 1 } } }
+        { $group: { _id: '$jobVacancyType', count: { $sum: 1 } } },
       ]),
-      Lead.aggregate([
-        { $group: { _id: '$jobVacancyType', count: { $sum: 1 } } }
-      ])
     ]);
 
     res.json({
@@ -216,7 +253,7 @@ router.get('/leads', async (req, res) => {
       byJobType: byJobType.reduce((acc: any, item: any) => {
         acc[item._id] = item.count;
         return acc;
-      }, {})
+      }, {}),
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -229,7 +266,8 @@ router.get('/top-questions', async (req, res) => {
 
     const userMessages = await ChatMessage.find({ role: 'user', type: 'text' })
       .sort({ timestamp: -1 })
-      .limit(Number(limit) * 2);
+      .limit(Number(limit) * 2)
+      .lean();
 
     const messageCounts: Record<string, number> = {};
 
@@ -253,6 +291,110 @@ router.get('/top-questions', async (req, res) => {
   }
 });
 
+// ── Bookings ───────────────────────────────────────────────────────────────
+
+router.get('/bookings', async (req, res) => {
+  try {
+    const { year, month } = req.query as { year?: string; month?: string };
+
+    let query: Record<string, any> = {};
+    if (year && month) {
+      const y = parseInt(year, 10);
+      const m = parseInt(month, 10) - 1; // 0-indexed
+      const start = new Date(y, m, 1);
+      const end = new Date(y, m + 1, 0, 23, 59, 59, 999);
+      query = { date: { $gte: start, $lte: end } };
+    }
+
+    const bookings = await Booking.find(query).sort({ date: 1 }).lean();
+    res.json({ bookings });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/bookings', async (req, res) => {
+  try {
+    const {
+      clientName,
+      clientPhone,
+      clientEmail,
+      date,
+      time,
+      duration,
+      type,
+      notes,
+      sessionId,
+      location,
+    } = req.body;
+
+    if (!clientName || !clientPhone || !date) {
+      return res
+        .status(400)
+        .json({ error: 'clientName, clientPhone, and date are required' });
+    }
+
+    const dateObj = new Date(date);
+    if (time) {
+      const [h, m] = time.split(':').map(Number);
+      dateObj.setHours(h, m, 0, 0);
+    }
+
+    const booking = await Booking.create({
+      clientName,
+      clientPhone,
+      clientEmail,
+      date: dateObj,
+      time,
+      duration: duration || 60,
+      type: type || 'Consultation',
+      notes,
+      sessionId,
+      location,
+      status: 'confirmed',
+    });
+
+    res.status(201).json(booking);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/bookings/:id', async (req, res) => {
+  try {
+    const { status, notes, type, time, location } = req.body;
+    const booking = await Booking.findByIdAndUpdate(
+      req.params.id,
+      {
+        ...(status && { status }),
+        ...(notes !== undefined && { notes }),
+        ...(type && { type }),
+        ...(time && { time }),
+        ...(location && { location }),
+      },
+      { new: true },
+    ).lean();
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+    res.json(booking);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/bookings/:id', async (req, res) => {
+  try {
+    await Booking.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Recent Replies ──────────────────────────────────────────────────────────
+
 router.get('/recent-replies', async (req, res) => {
   try {
     const { limit = 10 } = req.query;
@@ -260,15 +402,18 @@ router.get('/recent-replies', async (req, res) => {
     // Fetch the absolute newest messages where the bot has replied
     const recentReplies = await ChatMessage.find({ role: 'assistant' })
       .sort({ timestamp: -1 })
-      .limit(Number(limit));
+      .limit(Number(limit))
+      .lean();
 
-    res.json(recentReplies.map((reply) => ({
-      id: reply._id,
-      content: reply.content,
-      type: reply.type,
-      timestamp: reply.timestamp,
-      metadata: reply.metadata
-    })));
+    res.json(
+      recentReplies.map((reply: any) => ({
+        id: reply._id,
+        content: reply.content,
+        type: reply.type,
+        timestamp: reply.timestamp,
+        metadata: reply.metadata,
+      })),
+    );
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

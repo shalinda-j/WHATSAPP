@@ -29,22 +29,24 @@ class WorkflowPersistenceService {
   private readonly API_ENDPOINT = '/api/workflows';
 
   // Local Storage Operations
-  async saveToLocalStorage(workflow: Omit<WorkflowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<WorkflowData> {
+  async saveToLocalStorage(
+    workflow: Omit<WorkflowData, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<WorkflowData> {
     try {
       const workflows = this.getFromLocalStorage();
       const now = new Date();
-      
+
       const workflowData: WorkflowData = {
         ...workflow,
         id: this.generateId(),
         createdAt: now,
         updatedAt: now,
-        version: '1.0.0'
+        version: '1.0.0',
       };
 
       workflows.push(workflowData);
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(workflows));
-      
+
       return workflowData;
     } catch (error) {
       console.error('Failed to save workflow to localStorage:', error);
@@ -52,11 +54,14 @@ class WorkflowPersistenceService {
     }
   }
 
-  async updateInLocalStorage(id: string, updates: Partial<WorkflowData>): Promise<WorkflowData> {
+  async updateInLocalStorage(
+    id: string,
+    updates: Partial<WorkflowData>,
+  ): Promise<WorkflowData> {
     try {
       const workflows = this.getFromLocalStorage();
-      const index = workflows.findIndex(w => w.id === id);
-      
+      const index = workflows.findIndex((w) => w.id === id);
+
       if (index === -1) {
         throw new Error('Workflow not found');
       }
@@ -64,7 +69,7 @@ class WorkflowPersistenceService {
       workflows[index] = {
         ...workflows[index],
         ...updates,
-        updatedAt: new Date()
+        updatedAt: new Date(),
       };
 
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(workflows));
@@ -79,7 +84,7 @@ class WorkflowPersistenceService {
     try {
       const data = localStorage.getItem(this.STORAGE_KEY);
       if (!data) return [];
-      
+
       const workflows = JSON.parse(data);
       return Array.isArray(workflows) ? workflows : [];
     } catch (error) {
@@ -91,7 +96,7 @@ class WorkflowPersistenceService {
   async deleteFromLocalStorage(id: string): Promise<void> {
     try {
       const workflows = this.getFromLocalStorage();
-      const filtered = workflows.filter(w => w.id !== id);
+      const filtered = workflows.filter((w) => w.id !== id);
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(filtered));
     } catch (error) {
       console.error('Failed to delete workflow from localStorage:', error);
@@ -100,14 +105,16 @@ class WorkflowPersistenceService {
   }
 
   // API Operations
-  async saveToAPI(workflow: Omit<WorkflowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<WorkflowData> {
+  async saveToAPI(
+    workflow: Omit<WorkflowData, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<WorkflowData> {
     try {
       const response = await fetch(this.API_ENDPOINT, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(workflow)
+        body: JSON.stringify(workflow),
       });
 
       if (!response.ok) {
@@ -122,14 +129,17 @@ class WorkflowPersistenceService {
     }
   }
 
-  async updateInAPI(id: string, updates: Partial<WorkflowData>): Promise<WorkflowData> {
+  async updateInAPI(
+    id: string,
+    updates: Partial<WorkflowData>,
+  ): Promise<WorkflowData> {
     try {
       const response = await fetch(`${this.API_ENDPOINT}/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(updates)
+        body: JSON.stringify(updates),
       });
 
       if (!response.ok) {
@@ -147,7 +157,7 @@ class WorkflowPersistenceService {
   async getFromAPI(): Promise<WorkflowData[]> {
     try {
       const response = await fetch(this.API_ENDPOINT);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -163,7 +173,7 @@ class WorkflowPersistenceService {
   async deleteFromAPI(id: string): Promise<void> {
     try {
       const response = await fetch(`${this.API_ENDPOINT}/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
       });
 
       if (!response.ok) {
@@ -177,21 +187,30 @@ class WorkflowPersistenceService {
   }
 
   // Auto-save functionality
-  async autoSave(workflow: { nodes: Node[]; edges: Edge[]; name?: string }): Promise<void> {
+  async autoSave(workflow: {
+    nodes: Node[];
+    edges: Edge[];
+    name?: string;
+  }): Promise<void> {
     try {
       const autoSaveKey = `${this.STORAGE_KEY}_autosave`;
       const autoSaveData = {
         ...workflow,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
-      
+
       localStorage.setItem(autoSaveKey, JSON.stringify(autoSaveData));
     } catch (error) {
       console.error('Failed to auto-save workflow:', error);
     }
   }
 
-  getAutoSave(): { nodes: Node[]; edges: Edge[]; name?: string; timestamp: string } | null {
+  getAutoSave(): {
+    nodes: Node[];
+    edges: Edge[];
+    name?: string;
+    timestamp: string;
+  } | null {
     try {
       const autoSaveKey = `${this.STORAGE_KEY}_autosave`;
       const data = localStorage.getItem(autoSaveKey);
@@ -212,23 +231,25 @@ class WorkflowPersistenceService {
   }
 
   // Template Management
-  async saveTemplate(template: Omit<WorkflowTemplate, 'id' | 'createdAt' | 'updatedAt'>): Promise<WorkflowTemplate> {
+  async saveTemplate(
+    template: Omit<WorkflowTemplate, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<WorkflowTemplate> {
     try {
       const templates = this.getTemplates();
       const now = new Date();
-      
+
       const templateData: WorkflowTemplate = {
         ...template,
         id: this.generateId(),
         createdAt: now,
         updatedAt: now,
         version: '1.0.0',
-        isTemplate: true
+        isTemplate: true,
       };
 
       templates.push(templateData);
       localStorage.setItem(this.TEMPLATES_KEY, JSON.stringify(templates));
-      
+
       return templateData;
     } catch (error) {
       console.error('Failed to save template:', error);
@@ -240,10 +261,13 @@ class WorkflowPersistenceService {
     try {
       const data = localStorage.getItem(this.TEMPLATES_KEY);
       if (!data) return this.getDefaultTemplates();
-      
+
       const templates = JSON.parse(data);
       const defaultTemplates = this.getDefaultTemplates();
-      return [...defaultTemplates, ...(Array.isArray(templates) ? templates : [])];
+      return [
+        ...defaultTemplates,
+        ...(Array.isArray(templates) ? templates : []),
+      ];
     } catch (error) {
       console.error('Failed to load templates:', error);
       return this.getDefaultTemplates();
@@ -255,37 +279,41 @@ class WorkflowPersistenceService {
       {
         id: 'welcome-sequence',
         name: 'Welcome Sequence',
-        description: 'Automatically welcome new users with a series of messages',
+        description:
+          'Automatically welcome new users with a series of messages',
         nodes: [
           {
             id: '1',
             type: 'input',
             data: { label: 'New User Joins' },
-            position: { x: 250, y: 0 }
+            position: { x: 250, y: 0 },
           },
           {
             id: '2',
             type: 'default',
-            data: { label: 'Send Welcome Message', integrationType: 'whatsapp_business' },
-            position: { x: 100, y: 100 }
+            data: {
+              label: 'Send Welcome Message',
+              integrationType: 'whatsapp_business',
+            },
+            position: { x: 100, y: 100 },
           },
           {
             id: '3',
             type: 'default',
             data: { label: 'Wait 1 Day' },
-            position: { x: 400, y: 100 }
+            position: { x: 400, y: 100 },
           },
           {
             id: '4',
             type: 'output',
             data: { label: 'Send Follow-up' },
-            position: { x: 250, y: 200 }
-          }
+            position: { x: 250, y: 200 },
+          },
         ],
         edges: [
           { id: 'e1-2', source: '1', target: '2' },
           { id: 'e2-3', source: '2', target: '3' },
-          { id: 'e3-4', source: '3', target: '4' }
+          { id: 'e3-4', source: '3', target: '4' },
         ],
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -295,9 +323,9 @@ class WorkflowPersistenceService {
           tags: ['welcome', 'onboarding'],
           category: 'Customer Journey',
           isTemplate: true,
-          difficulty: 'beginner'
-        }
-      }
+          difficulty: 'beginner',
+        },
+      },
     ];
   }
 
@@ -311,7 +339,7 @@ class WorkflowPersistenceService {
       const exportData = {
         ...workflow,
         exportedAt: new Date().toISOString(),
-        exportedBy: 'Marketing Workflow Builder v1.0.0'
+        exportedBy: 'Marketing Workflow Builder v1.0.0',
       };
 
       return JSON.stringify(exportData, null, 2);
@@ -324,7 +352,7 @@ class WorkflowPersistenceService {
   async importWorkflow(jsonString: string): Promise<WorkflowData> {
     try {
       const imported = JSON.parse(jsonString);
-      
+
       // Validate imported data
       if (!imported.nodes || !imported.edges || !imported.name) {
         throw new Error('Invalid workflow format');
@@ -339,7 +367,7 @@ class WorkflowPersistenceService {
         createdAt: new Date(),
         updatedAt: new Date(),
         version: '1.0.0',
-        metadata: imported.metadata
+        metadata: imported.metadata,
       };
 
       return workflowData;

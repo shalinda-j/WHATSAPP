@@ -10,7 +10,7 @@ export interface IWebhook {
   updatedAt?: Date;
 }
 
-export interface IWebhookDocument extends IWebhook, Document { }
+export interface IWebhookDocument extends IWebhook, Document {}
 
 const WebhookSchema = new Schema(
   {

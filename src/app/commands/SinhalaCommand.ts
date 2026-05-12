@@ -16,8 +16,9 @@ export class SinhalaCommand extends BaseCommand {
     args: string[],
     sessionId: string,
   ): Promise<void> {
-    const jid = message.key.remoteJid;
+    const jid = message.key?.remoteJid;
     if (!jid) return;
+    const text = args.join(' ');
 
     try {
       await this.sendTyping(message, sessionId);

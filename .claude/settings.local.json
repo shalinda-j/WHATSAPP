@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd D:/360ai/WHATSAPP && npx tsc --noEmit 2>&1)",
+      "Bash(cd D:/360ai/WHATSAPP && npm run build 2>&1)",
+      "Bash(cd D:/360ai/WHATSAPP && node_modules/.bin/tsc --noEmit 2>&1)",
+      "Bash(cd D:/360ai/WHATSAPP && ./node_modules/typescript/bin/tsc --noEmit 2>&1)",
+      "Bash(cd D:/360ai/WHATSAPP && npm install 2>&1 | tail -20)",
+      "Bash(cd D:/360ai/WHATSAPP && ./node_modules/.bin/tsc --noEmit 2>&1)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run:*)",
+      "Bash(curl -LsSf https://astral.sh/uv/install.sh)",
+      "Bash(sh)",
+      "Bash(~/.local/bin/uv sync:*)"
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../config';
-import { Plus, Trash, Globe, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
+import { Plus, Trash, Globe, CheckCircle, XCircle, RefreshCw, Send } from 'lucide-react';
 
 interface Webhook {
     _id: string;
@@ -16,6 +16,7 @@ export default function Webhooks() {
     const [webhooks, setWebhooks] = useState<Webhook[]>([]);
     const [loading, setLoading] = useState(true);
     const [creating, setCreating] = useState(false);
+    const [testingId, setTestingId] = useState<string | null>(null);
 
     // Form inputs
     const [newName, setNewName] = useState('');
@@ -78,6 +79,19 @@ export default function Webhooks() {
             fetchWebhooks();
         } catch {
             alert('Failed to update webhook');
+        }
+    };
+
+    const handleTestWebhook = async (id: string) => {
+        setTestingId(id);
+        try {
+            await api.post(`/api/webhooks/${id}/test`);
+            alert('✅ Test payload sent successfully! Check your receiver for the event.');
+        } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : 'Failed to send test webhook. Ensure receiver is online and reachable.';
+            alert(errorMessage);
+        } finally {
+            setTestingId(null);
         }
     };
 
@@ -165,9 +179,15 @@ export default function Webhooks() {
                                         <span key={ev} className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded-md">{ev}</span>
                                     ))}
                                 </div>
-                            </div>
-
-                            <div className="flex items-center gap-2">
+                            </div>                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => handleTestWebhook(hook._id)}
+                                    disabled={testingId === hook._id}
+                                    className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-full transition disabled:opacity-50"
+                                    title="Send Test Payload"
+                                >
+                                    <Send className={`w-5 h-5 ${testingId === hook._id ? 'animate-pulse' : ''}`} />
+                                </button>
                                 <button
                                     onClick={() => toggleActive(hook)}
                                     className={`p-2 rounded-full transition ${hook.isActive ? 'text-green-500 hover:bg-green-50' : 'text-gray-400 hover:bg-gray-100'}`}

@@ -1,3 +1,20 @@
+/**
+ * Voice Service — TTS (Text-to-Speech) + STT (Transcription)
+ *
+ * TTS Waterfall routing per language:
+ *
+ * All languages (en / ta / hi / si):
+ *   1. Gemini TTS        (gemini-2.5-flash-preview-tts — uses GEMINI_API_KEY, 30 voices,
+ *                         natively supports Sinhala/Tamil/Hindi/English + 100+ languages)
+ *   2. Google Cloud TTS  (official Neural2 voices, separate googleApiKey, NO Sinhala)
+ *   3. OpenAI TTS        (tts-1/tts-1-hd, requires apiKey)
+ *   4. ElevenLabs        (premium, requires apiKey)
+ *   5. Google Free TTS   (unofficial Google Translate, no API key, always last resort)
+ *
+ * Sinhala note: Gemini TTS now handles Sinhala natively (si BCP-47).
+ * Google Cloud TTS is still skipped for Sinhala (no native voice).
+ */
+
 import { transcribeAudio as openaiTranscribeAudio } from './openai';
 import { transcribeAudio as geminiTranscribeAudio } from './gemini';
 import { getAudioUrl } from 'google-tts-api';
@@ -24,124 +41,292 @@ export function detectLanguage(text: string): { code: string; name: string; ttsC
  * @returns Transcribed text
  */
 export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
-  try {
-    const config = await VoiceConfig.findOne().sort({ updatedAt: -1 });
-    const provider = config?.provider || 'google-free';
-
-    if (provider === 'openai' && config?.apiKey) {
-      console.log('   🎙️ Transcribing audio with OpenAI Whisper...');
-      try {
-        return await openaiTranscribeAudio(audioBuffer, config.apiKey);
-      } catch (openaiErr: any) {
-        console.warn(`   ⚠️ OpenAI STT failed: ${openaiErr.message}. Falling back to Gemini...`);
-        // Fallthrough to Gemini
-      }
-    }
-
-    console.log('   🎙️ Transcribing audio with Gemini...');
-
-    // Convert Buffer to Base64 for Gemini
-    const audioBase64 = audioBuffer.toString('base64');
-
-    // Use Gemini's multimodal transcription
-    const transcription = await geminiTranscribeAudio(audioBase64, 'audio/ogg');
-
-    return transcription;
-  } catch (error: any) {
-    console.error('❌ Transcription error:', error.message || error);
-    throw new Error('Failed to transcribe audio');
-  }
+  const result = await transcribeAudioWithLanguage(audioBuffer);
+  return result.text;
 }
 
-/**
- * Generate speech from text using configured provider
- */
-export async function generateSpeech(text: string): Promise<Buffer> {
-  // Fetch config from DB
-  const config = await VoiceConfig.findOne().sort({ updatedAt: -1 });
-
-  // If voice is disabled in config, return empty buffer or throw generic error to be handled by caller
-  if (config && !config.isActive) {
-    console.log('   🔇 Voice Agent is disabled in Admin Config.');
-    throw new Error('Voice Agent Disabled');
-  }
+export async function transcribeAudioWithLanguage(
+  audioBuffer: Buffer,
+): Promise<TranscriptionResult> {
+  let config = null;
+  try {
+    config = await VoiceConfig.findOne({ isActive: true }).sort({
+      updatedAt: -1,
+    });
+  } catch {}
 
   const provider = config?.provider || 'google-free';
-  const apiKey = config?.apiKey || process.env.OPENAI_API_KEY;
+  const apiKey = config?.apiKey || process.env.OPENAI_API_KEY || '';
 
-  console.log(`   🔊 Generating speech using provider: ${provider}`);
+  let text = '';
 
-  if (provider === 'elevenlabs') {
+  // ── Step 1: Try OpenAI Whisper (if API key is configured) ─────────────────
+  // Whisper supports: flac, mp3, mp4, mpeg, mpga, m4a, ogg, opus, wav, webm
+  if (apiKey && (provider === 'openai' || provider === 'google-cloud')) {
     try {
-      if (!apiKey) {
-        throw new Error('ElevenLabs API Key is missing in config');
-      }
+      console.log('   🎙️ Trying OpenAI Whisper STT...');
+      text = await openaiTranscribeAudio(audioBuffer, apiKey);
+      if (text)
+        console.log(`   ✅ OpenAI Whisper: "${text.substring(0, 60)}..."`);
+    } catch (err: any) {
+      console.warn(`   ⚠️ OpenAI Whisper failed: ${err.message}`);
+    }
+  }
 
-      const voiceId = config?.voiceId || 'pNInz6obpgDQGcFmaJcg'; // Default to a standard voice if none provided
-      const modelId = config?.ttsModel || 'eleven_multilingual_v2';
+  // ── Step 2: Try Gemini audio transcription (primary free option) ───────────
+  // Gemini 1.5 Flash supports audio/ogg natively (WhatsApp PTT format)
+  if (!text) {
+    try {
+      console.log('   🎙️ Trying Gemini STT...');
 
-      console.log(`   🎙️ Calling ElevenLabs TTS API (Voice ID: ${voiceId})...`);
-
-      const response = await axios.post(
-        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
-        {
-          text: text,
-          model_id: modelId,
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.75,
-          }
-        },
-        {
-          headers: {
-            'Accept': 'audio/mpeg',
-            'xi-api-key': apiKey,
-            'Content-Type': 'application/json'
-          },
-          responseType: 'arraybuffer'
-        }
+      // Try with the audio/ogg MIME type (WhatsApp PTT format)
+      text = await geminiTranscribeAudio(
+        audioBuffer.toString('base64'),
+        'audio/ogg',
       );
 
-      return Buffer.from(response.data);
-
+      if (text) console.log(`   ✅ Gemini: "${text.substring(0, 60)}..."`);
     } catch (err: any) {
-      console.error(`   ⚠️ ElevenLabs TTS failed: ${err.message}. Falling back to Google Free.`);
-      // Fallback to Google
+      console.warn(`   ⚠️ Gemini STT failed: ${err.message}`);
+      text = '';
     }
   }
 
-  if (provider === 'openai') {
+  // ── Step 3: Try Gemini with alternative MIME type ─────────────────────────
+  if (!text) {
     try {
-      if (!apiKey) {
-        throw new Error('OpenAI API Key is missing in config');
-      }
-
-      // Re-init OpenAI with new key if needed
-      const client = new OpenAI({ apiKey: apiKey });
-
-      console.log(`   🎙️ Calling OpenAI TTS API (Voice ID: ${config?.voiceId || 'alloy'})...`);
-
-      const mp3 = await client.audio.speech.create({
-        model: (config?.ttsModel as any) || "tts-1",
-        voice: (config?.voiceId as any) || "alloy",
-        input: text,
-      });
-
-      const buffer = Buffer.from(await mp3.arrayBuffer());
-      return buffer;
-
+      console.log('   🎙️ Trying Gemini STT with audio/webm...');
+      text = await geminiTranscribeAudio(
+        audioBuffer.toString('base64'),
+        'audio/webm',
+      );
+      if (text)
+        console.log(`   ✅ Gemini (webm): "${text.substring(0, 60)}..."`);
     } catch (err: any) {
-      console.error(`   ⚠️ OpenAI TTS failed: ${err.message}. Falling back to Google Free.`);
-      // Fallback
+      console.warn(`   ⚠️ Gemini STT (webm fallback) failed: ${err.message}`);
+      text = '';
     }
   }
 
-  // Google TTS (Default/Fallback)
-  return generateSpeechGoogle(text);
+  // ── Step 4: If all STT failed, return empty (caller will handle gracefully) ─
+  if (!text || text.trim().length < 2) {
+    console.error(
+      '   ❌ All STT providers failed — returning empty transcription',
+    );
+    return { text: '', detectedLanguage: 'si', languageConfidence: 0 };
+  }
+
+  const langResult = detectLanguage(text);
+  console.log(
+    `   🌐 Language: ${
+      langResult.lang
+    } (confidence: ${langResult.confidence.toFixed(2)})`,
+  );
+
+  return {
+    text,
+    detectedLanguage: langResult.lang,
+    languageConfidence: langResult.confidence,
+  };
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// TTS — Waterfall Provider System
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Google Cloud TTS voice names per language (Neural2 quality).
+ * Sinhala is intentionally absent — Google Cloud has no Sinhala voice.
+ */
+const GOOGLE_CLOUD_VOICES: Record<
+  string,
+  { languageCode: string; name: string; gender: string }
+> = {
+  en: { languageCode: 'en-US', name: 'en-US-Neural2-F', gender: 'FEMALE' },
+  ta: { languageCode: 'ta-IN', name: 'ta-IN-Neural2-B', gender: 'FEMALE' },
+  hi: { languageCode: 'hi-IN', name: 'hi-IN-Neural2-A', gender: 'FEMALE' },
+};
+
+/**
+ * Google Translate TTS language codes.
+ * Sinhala works here even though it's unavailable in Google Cloud TTS.
+ */
+const GOOGLE_FREE_LANG_MAP: Record<string, string> = {
+  en: 'en',
+  si: 'si',
+  ta: 'ta',
+  hi: 'hi',
+};
+
+/**
+ * Wrap text in SSML for a warm, friendly, conversational tone.
+ * Speaking rate 0.95 (slightly slower for clarity), pitch +2st for warmth.
+ */
+function wrapSSML(text: string): string {
+  // Escape XML special characters
+  const safe = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+  return `<speak><prosody rate="0.95" pitch="+2st">${safe}</prosody></speak>`;
+}
+
+// ─── Individual provider functions ────────────────────────────────────────────
+
+/**
+ * Convert raw PCM (s16le) to a WAV file buffer.
+ * Gemini TTS returns 24000Hz, 16-bit, mono PCM.
+ */
+function pcmToWav(
+  pcmData: Buffer,
+  sampleRate = 24000,
+  channels = 1,
+  bitsPerSample = 16,
+): Buffer {
+  const byteRate = sampleRate * channels * (bitsPerSample / 8);
+  const blockAlign = channels * (bitsPerSample / 8);
+  const dataSize = pcmData.length;
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0, 'ascii');
+  header.writeUInt32LE(36 + dataSize, 4);
+  header.write('WAVE', 8, 'ascii');
+  header.write('fmt ', 12, 'ascii');
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write('data', 36, 'ascii');
+  header.writeUInt32LE(dataSize, 40);
+  return Buffer.concat([header, pcmData]);
 }
 
 /**
- * Generate speech using google-tts-api (Unofficial Free API)
+ * Gemini TTS (gemini-2.5-flash-preview-tts).
+ * Uses the same GEMINI_API_KEY that drives the AI assistant — no separate key needed.
+ * Natively supports 100+ languages including Sinhala, Tamil, Hindi, English.
+ * Returns a WAV buffer (PCM converted to WAV in-memory — no ffmpeg required).
+ * Docs: https://ai.google.dev/gemini-api/docs/speech-generation
+ */
+async function ttsGemini(
+  text: string,
+  lang: string,
+  voiceName: string,
+): Promise<Buffer> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'your_gemini_api_key_here') {
+    throw new Error('GEMINI_API_KEY not configured');
+  }
+
+  // Map per-language default voices for natural accent/style
+  const GEMINI_VOICE_DEFAULTS: Record<string, string> = {
+    si: 'Sulafat', // Warm — closest to natural Sinhala cadence
+    ta: 'Leda', // Youthful — good for Tamil
+    hi: 'Achird', // Friendly — good for Hindi
+    en: 'Kore', // Firm — clear English
+  };
+  const voice = voiceName || GEMINI_VOICE_DEFAULTS[lang] || 'Kore';
+
+  console.log(
+    `   🤖 Gemini TTS — model: gemini-2.5-flash-preview-tts, voice: ${voice}, lang: ${lang}`,
+  );
+
+  const payload = {
+    contents: [{ parts: [{ text }] }],
+    generationConfig: {
+      responseModalities: ['AUDIO'],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: { voiceName: voice },
+        },
+      },
+    },
+  };
+
+  const response = await axios.post(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent`,
+    payload,
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      timeout: 30000,
+    },
+  );
+
+  const pcmBase64: string | undefined =
+    response.data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+
+  if (!pcmBase64) {
+    throw new Error('Gemini TTS returned no audio data');
+  }
+
+  // Convert raw PCM → WAV so WhatsApp can play it
+  const pcmBuffer = Buffer.from(pcmBase64, 'base64');
+  const wavBuffer = pcmToWav(pcmBuffer, 24000, 1, 16);
+
+  console.log(
+    `   ✅ Gemini TTS: ${pcmBuffer.length} PCM bytes → ${wavBuffer.length} WAV bytes`,
+  );
+  return wavBuffer;
+}
+
+/**
+ * Google Cloud Text-to-Speech (official REST API).
+ * Requires a Google Cloud API key with "Cloud Text-to-Speech API" enabled.
+ * Does NOT support Sinhala — call will throw for 'si'.
+ */
+async function ttsGoogleCloud(
+  text: string,
+  lang: string,
+  apiKey: string,
+): Promise<Buffer> {
+  const voice = GOOGLE_CLOUD_VOICES[lang];
+  if (!voice) {
+    throw new Error(
+      `Google Cloud TTS has no voice for language '${lang}'. Use Google Free for Sinhala.`,
+    );
+  }
+
+  console.log(`   🎙️ Google Cloud TTS — voice: ${voice.name}, lang: ${lang}`);
+
+  const payload = {
+    input: { ssml: wrapSSML(text) },
+    voice: {
+      languageCode: voice.languageCode,
+      name: voice.name,
+      ssmlGender: voice.gender,
+    },
+    audioConfig: {
+      audioEncoding: 'MP3',
+      speakingRate: 0.95, // Slightly slower for clarity
+      pitch: 2.0, // Slightly higher pitch for friendliness (+2 semitones)
+      volumeGainDb: 1.0, // Small boost
+      effectsProfileId: ['handset-class-device'], // Optimised for phone speakers
+    },
+  };
+
+  const response = await axios.post(
+    `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
+    payload,
+    { headers: { 'Content-Type': 'application/json' }, timeout: 15000 },
+  );
+
+  if (!response.data?.audioContent) {
+    throw new Error('Google Cloud TTS returned empty audioContent');
+  }
+
+  // audioContent is base64-encoded MP3
+  return Buffer.from(response.data.audioContent, 'base64');
+}
+
+/**
+ * OpenAI TTS (tts-1 / tts-1-hd).
+ * Supports English best, can handle Tamil and Sinhala with accent.
  */
 async function generateSpeechGoogle(text: string): Promise<Buffer> {
   try {
@@ -169,6 +354,79 @@ async function generateSpeechGoogle(text: string): Promise<Buffer> {
     console.error('❌ Google Speech generation error:', error.message || error);
     throw new Error('Failed to generate speech');
   }
+
+  // 5. Google Free TTS — primary (when explicitly selected)
+  if (primaryProvider === 'google-free') {
+    waterfall.push({
+      name: 'Google Free TTS (primary)',
+      fn: () => ttsGoogleFree(text, lang),
+    });
+  }
+
+  // ── Cascade fallbacks (providers not already in list) ─────────────────────────
+  // Gemini TTS fallback — for ALL languages including Sinhala (most reliable, no per-lang limits)
+  if (primaryProvider !== 'gemini-tts' && geminiApiKey) {
+    waterfall.push({
+      name: 'Gemini TTS (fallback)',
+      fn: () => ttsGemini(text, lang, voiceId),
+    });
+  }
+
+  // Google Cloud fallback — skip Sinhala
+  if (primaryProvider !== 'google-cloud' && lang !== 'si' && googleApiKey) {
+    waterfall.push({
+      name: 'Google Cloud TTS (fallback)',
+      fn: () => ttsGoogleCloud(text, lang, googleApiKey),
+    });
+  }
+
+  // OpenAI fallback
+  if (
+    primaryProvider !== 'openai' &&
+    primaryProvider !== 'elevenlabs' &&
+    apiKey
+  ) {
+    waterfall.push({
+      name: 'OpenAI TTS (fallback)',
+      fn: () => ttsOpenAI(text, lang, apiKey, voiceId, model),
+    });
+  }
+
+  // Google Free TTS — last resort when not already primary
+  if (primaryProvider !== 'google-free') {
+    waterfall.push({
+      name: 'Google Free TTS (last resort)',
+      fn: () => ttsGoogleFree(text, lang),
+    });
+  }
+
+  // ── Execute waterfall ────────────────────────────────────────────────────────
+  let lastError: Error | null = null;
+
+  for (const step of waterfall) {
+    try {
+      console.log(`   ▶ Trying ${step.name}...`);
+      const audio = await step.fn();
+
+      if (!audio || audio.length < 100) {
+        throw new Error(
+          `${step.name} returned empty or too-small audio buffer`,
+        );
+      }
+
+      console.log(`   ✅ TTS success via ${step.name} (${audio.length} bytes)`);
+      return audio;
+    } catch (err: any) {
+      lastError = err;
+      console.warn(
+        `   ⚠️ ${step.name} failed: ${err.message}. Trying next provider...`,
+      );
+    }
+  }
+
+  throw new Error(
+    `All TTS providers failed. Last error: ${lastError?.message || 'unknown'}`,
+  );
 }
 
 function splitTextForTTS(text: string, maxLen: number): string[] {

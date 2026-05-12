@@ -11,24 +11,41 @@ export interface IConfig extends Document {
   usageLimit?: number;
   usageUsed?: number;
   costPerToken?: number;
+  monthlyBudget?: number;
   isActive?: boolean;
+  // Monthly cycle tracking
+  usagePeriodStart?: Date;
+  lastResetAt?: Date;
 }
+
+import { CryptoService } from '../services/CryptoService';
 
 const ConfigSchema = new Schema(
   {
     key: { type: String, required: true, unique: true },
-    value: { type: String, default: '' }, // Made optional-ish by default empty string if providers use other fields
+    value: { type: String, default: '' },
     description: { type: String },
     isProvider: { type: Boolean, default: false },
     providerType: { type: String },
-    apiKey: { type: String },
+    apiKey: {
+      type: String,
+      set: (val: string) => CryptoService.encrypt(val),
+      get: (val: string) => CryptoService.decrypt(val),
+    },
     aiModel: { type: String },
     usageLimit: { type: Number, default: 0 },
     usageUsed: { type: Number, default: 0 },
     costPerToken: { type: Number, default: 0 },
+    monthlyBudget: { type: Number, default: 0 },
     isActive: { type: Boolean, default: false },
+    usagePeriodStart: { type: Date, default: null },
+    lastResetAt: { type: Date, default: null },
   } as any,
-  { timestamps: true },
+  {
+    timestamps: true,
+    toJSON: { getters: true },
+    toObject: { getters: true },
+  },
 );
 
 export default mongoose.model(

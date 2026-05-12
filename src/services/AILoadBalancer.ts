@@ -3,7 +3,7 @@ import { GeminiService } from './gemini';
 import {
   AI_PERSONALITY,
   JOB_KNOWLEDGE_BASE,
-  CONVERSATION_EXAMPLES,
+  getConversationExamples,
 } from '../config/ai-personality';
 import Dataset from '../models/Dataset';
 import { chatPersonality } from './ChatPersonality';
@@ -14,21 +14,92 @@ import { OpenRouterService } from './openrouter';
 
 import Config from '../models/Config';
 import { createCompanyConfig } from '../config/companies';
+import { configurationManager } from './ConfigurationManagerService';
+import { conversationHistoryService } from './ConversationHistoryService';
+import { knowledgeTrainingService } from './KnowledgeTrainingService';
 
 // Default company for load balancer if not specified (legacy support)
 const defaultConfig = createCompanyConfig('default');
 
+// Cache configuration
+const SERVICE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for AI providers
+
 export class AILoadBalancer {
   private services: AIService[] = [];
   private userAssignments: Map<string, number>;
-  private conversationHistory: Map<string, AIChatMessage[]>;
+  // Note: conversationHistory is now managed by ConversationHistoryService (persistent)
+  // This Map is kept for temporary caching during a single request
+  private historyCache: Map<string, AIChatMessage[]>;
   private totalRequests = 0;
   private servicesCacheTime: number = 0;
   private static SERVICES_CACHE_TTL = 60000; // 60 seconds
 
+  // Cache for loaded services
+  private lastServiceLoad = 0;
+  private serviceLoadPromise: Promise<void> | null = null;
+
+  // MEMORY LEAK FIX: Add limits and cleanup for caches
+  private readonly MAX_HISTORY_CACHE_SIZE = 1000;
+  private readonly MAX_USER_ASSIGNMENTS_SIZE = 5000;
+  private cleanupInterval: NodeJS.Timeout | null = null;
+
   constructor() {
     this.userAssignments = new Map();
-    this.conversationHistory = new Map();
+    this.historyCache = new Map();
+
+    // MEMORY LEAK FIX: Start periodic cleanup every 10 minutes
+    this.cleanupInterval = setInterval(
+      () => this.cleanupCaches(),
+      10 * 60 * 1000,
+    );
+  }
+
+  /**
+   * MEMORY LEAK FIX: Periodic cleanup of oversized caches
+   */
+  private cleanupCaches(): void {
+    // Cleanup historyCache if over limit
+    if (this.historyCache.size > this.MAX_HISTORY_CACHE_SIZE) {
+      // Remove oldest entries (first half of the limit)
+      const keysToDelete = Array.from(this.historyCache.keys()).slice(
+        0,
+        this.historyCache.size - this.MAX_HISTORY_CACHE_SIZE / 2,
+      );
+      for (const key of keysToDelete) {
+        this.historyCache.delete(key);
+      }
+      console.log(
+        `🧹 AILoadBalancer: Cleaned ${keysToDelete.length} history cache entries`,
+      );
+    }
+
+    // Cleanup userAssignments if over limit
+    if (this.userAssignments.size > this.MAX_USER_ASSIGNMENTS_SIZE) {
+      const keysToDelete = Array.from(this.userAssignments.keys()).slice(
+        0,
+        this.userAssignments.size - this.MAX_USER_ASSIGNMENTS_SIZE / 2,
+      );
+      for (const key of keysToDelete) {
+        this.userAssignments.delete(key);
+      }
+      console.log(
+        `🧹 AILoadBalancer: Cleaned ${keysToDelete.length} user assignment entries`,
+      );
+    }
+  }
+
+  /**
+   * MEMORY LEAK FIX: Cleanup on shutdown
+   */
+  public shutdown(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+    this.historyCache.clear();
+    this.userAssignments.clear();
+    this.services = [];
+    console.log('🧹 AILoadBalancer: Shutdown cleanup completed');
   }
 
   private async loadServices(): Promise<void> {
@@ -97,23 +168,20 @@ export class AILoadBalancer {
     }
   }
 
+  /**
+   * Force reload of services (call when config is updated)
+   */
+  async forceReloadServices(): Promise<void> {
+    this.lastServiceLoad = 0;
+    await this.loadServices();
+  }
+
   private async trackUsage(
     providerName: string,
     inputTokens: number,
     outputTokens: number,
   ) {
     try {
-      // Find config by parsing name "Gemini (model-name)" or better, match strictly.
-      // Simplified: update all configs that match strict criteria?
-      // Better: LoadBalancer should know the Config ID.
-      // For now, let's find the config that corresponds to the service.
-      // This is imperfect if multiple configs use same model/key, but good enough.
-      // Optimization: Update based on provider/model.
-
-      // Heuristic for token matching
-      const total = inputTokens + outputTokens;
-      // Config update: increment usageUsed
-
       // Extract model name from "Gemini (gemini-1.5-flash)" -> "gemini-1.5-flash"
       const modelMatch = providerName.match(/\((.*?)\)/);
       const modelName = modelMatch ? modelMatch[1] : '';
@@ -131,7 +199,7 @@ export class AILoadBalancer {
       if (modelName) {
         await Config.updateOne(
           { isProvider: true, providerType: providerType, aiModel: modelName },
-          { $inc: { usageUsed: total } },
+          { $inc: { usageUsed: inputTokens + outputTokens } },
         );
       }
     } catch (err) {
@@ -162,7 +230,7 @@ export class AILoadBalancer {
       },
     ];
 
-    for (const ex of CONVERSATION_EXAMPLES) {
+    for (const ex of conversationExamples) {
       history.push({ role: 'user', content: ex.user });
       history.push({ role: 'assistant', content: ex.assistant });
     }
@@ -170,55 +238,92 @@ export class AILoadBalancer {
   }
 
   async sendMessage(userId: string, message: string): Promise<string> {
-    // ALWAYS reload services to capture config changes (or use cache with TTL, but immediate is better for debugging)
+    // Load services with caching (not on every message)
     await this.loadServices();
 
     if (this.services.length === 0) {
       return '⚠️ No AI services are configured. Please check the Admin Panel.';
     }
 
-    let history = this.conversationHistory.get(userId);
-    if (!history) {
-      history = await this.getInitialHistory();
-      this.conversationHistory.set(userId, history);
+    // Get history from persistent storage
+    let history: AIChatMessage[] = [];
+
+    // Try to get cached history first (for same-request optimization)
+    const cachedHistory = this.historyCache.get(userId);
+    if (cachedHistory) {
+      history = cachedHistory;
+    } else {
+      // Get from persistent storage
+      const persistedMessages = await conversationHistoryService.getHistory(
+        userId,
+      );
+      if (persistedMessages.length > 0) {
+        history = persistedMessages.map((m) => ({
+          role: m.role,
+          content: m.content,
+        }));
+      } else {
+        // Initialize with system prompt and examples
+        history = await this.getInitialHistory();
+        await conversationHistoryService.setInitialHistory(
+          userId,
+          history.map((h) => ({
+            role: h.role,
+            content: h.content,
+            timestamp: new Date(),
+          })),
+        );
+      }
+      // Cache for this request
+      this.historyCache.set(userId, history);
     }
 
-    conversationHistoryAdd(history, 'user', message);
+    // Add user message to history
+    history.push({ role: 'user', content: message });
 
-    let currentServiceIndex = this.userAssignments.get(userId);
-    if (
-      currentServiceIndex === undefined ||
-      currentServiceIndex >= this.services.length
-    ) {
-      currentServiceIndex = this.totalRequests % this.services.length;
-      this.userAssignments.set(userId, currentServiceIndex);
-      this.totalRequests++;
-    }
+    this.totalRequests++;
 
-    // Try services
+    // Try services in priority order
     for (let i = 0; i < this.services.length; i++) {
-      const serviceIndex = (currentServiceIndex + i) % this.services.length;
-      const service = this.services[serviceIndex];
+      const service = this.services[i];
 
       try {
-        if (i > 0) console.log(`   ⚠️ Retrying with ${service.name}...`);
+        if (i > 0)
+          console.log(
+            `   ⚠️ Retrying with fallback: ${service.constructor.name}...`,
+          );
 
         const start = Date.now();
         const response = await service.generateResponse(history);
         const duration = Date.now() - start;
 
-        conversationHistoryAdd(history, 'assistant', response);
+        // Add assistant response to history
+        history.push({ role: 'assistant', content: response });
 
-        // Trim history
-        if (history.length > 20) {
-          const system = history[0];
-          const recent = history.slice(-19);
-          this.conversationHistory.set(userId, [system, ...recent]);
+        // Persist the new messages to database (fire and forget)
+        conversationHistoryService
+          .addMessage(userId, 'user', message)
+          .catch((err) => {
+            console.error('Failed to persist user message:', err);
+          });
+        conversationHistoryService
+          .addMessage(userId, 'assistant', response)
+          .catch((err) => {
+            console.error('Failed to persist assistant message:', err);
+          });
+
+        // AUTO-LEARN from successful conversation (fire and forget)
+        // Only learn if response is substantial (> 50 chars)
+        if (response.length > 50 && message.length > 10) {
+          knowledgeTrainingService
+            .learnFromConversation(message, response, 0.7)
+            .catch((err) => {
+              // Silent fail - learning is optional
+            });
         }
 
-        if (i > 0) {
-          this.userAssignments.set(userId, serviceIndex);
-        }
+        // Update cache
+        this.historyCache.set(userId, history);
 
         // TRACK USAGE
         // Estimate: 4 chars = 1 token
@@ -242,37 +347,61 @@ export class AILoadBalancer {
     throw new Error('All AI services failed.');
   }
 
-  clearConversation(userId: string) {
-    this.conversationHistory.delete(userId);
+  async clearConversation(userId: string) {
+    await conversationHistoryService.clearHistory(userId);
+    this.historyCache.delete(userId);
     this.userAssignments.delete(userId);
     console.log(`🗑️ LoadBalancer: Cleared conversation for ${userId}`);
   }
 
-  getStats() {
-    return {
-      activeConversations: this.conversationHistory.size,
-      activeUsers: this.userAssignments.size,
-      servicesLoaded: this.services.length,
-      totalRequests: this.totalRequests,
-    };
-  }
-
-  clearAllConversations() {
-    const count = this.conversationHistory.size;
-    this.conversationHistory.clear();
+  /**
+   * Clear all conversation histories (persistent storage)
+   */
+  async clearAllConversations() {
+    const count = await conversationHistoryService.clearAllHistories();
+    this.historyCache.clear();
     this.userAssignments.clear();
     console.log(`🧹 LoadBalancer: Cleared all ${count} conversations.`);
     return count;
   }
-}
 
-function conversationHistoryAdd(
-  history: AIChatMessage[],
-  role: 'user' | 'assistant',
-  content: string,
-) {
-  // Avoid duplicates if we are retrying? No, we add once before loop.
-  history.push({ role, content });
+  /**
+   * Get conversation count for monitoring
+   */
+  async getConversationCount(): Promise<number> {
+    return conversationHistoryService.getConversationCount();
+  }
+
+  /**
+   * Get retention period in days
+   */
+  getRetentionDays(): number {
+    return conversationHistoryService.getRetentionDays();
+  }
+
+  /**
+   * Cleanup old conversations (now handled by MongoDB TTL index)
+   */
+  async cleanupOldConversations(): Promise<number> {
+    // TTL index handles cleanup automatically
+    // This method is kept for compatibility
+    return 0;
+  }
+
+  getStats() {
+    return {
+      activeConversations: this.historyCache.size,
+      activeUsers: this.userAssignments.size,
+      servicesLoaded: this.services.length,
+      totalRequests: this.totalRequests,
+      lastServiceLoad: this.lastServiceLoad
+        ? new Date(this.lastServiceLoad).toISOString()
+        : null,
+      serviceCacheValid:
+        Date.now() - this.lastServiceLoad < SERVICE_CACHE_TTL_MS,
+      retentionDays: this.getRetentionDays(),
+    };
+  }
 }
 
 export const aiLoadBalancer = new AILoadBalancer();

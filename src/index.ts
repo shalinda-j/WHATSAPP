@@ -13,13 +13,21 @@ import {
 import { connectToMongoDB } from './services/MongoAuthService';
 import { seedAIProviders } from './services/AIProviderSeeder';
 import { seedDatasets } from './services/DatasetSeeder';
-import { transcribeAudio, generateSpeech } from './services/voice';
+import { seedDefaultFormTemplate } from './services/FormTemplateSeeder';
+import {
+  transcribeAudio,
+  generateSpeech,
+  transcribeAudioWithLanguage,
+  detectLanguage,
+} from './services/voice';
 import { aiLoadBalancer } from './services/AILoadBalancer';
 import { chatPersonality } from './services/ChatPersonality';
 import { nlpService } from './services/NLPService';
+import { autoresearchNLP, classifyMessage } from './services/autoresearchNLP';
 import { analyzeLeadIntent } from './services/gemini';
 import { WebhookService } from './services/WebhookService';
 import { configService } from './services/ConfigService';
+import { configurationManager } from './services/ConfigurationManagerService';
 import {
   handleBookingMessage,
   startBookingFlow,
@@ -30,12 +38,16 @@ import {
   startLeadRegistration,
   isUserInLeadFlow,
 } from './services/LeadService';
+import { FormService } from './services/FormService';
 import app from './server/app';
 import mongoose from 'mongoose';
 import { commandDispatcher } from './app/utils/CommandDispatcher';
 import './app/commands';
 import ChatMessage from './models/ChatMessage';
 import VoiceConfig from './models/VoiceConfig';
+import { initSocket, getIO } from './server/socket';
+import { autoRegistrationService } from './services/AutoRegistrationService';
+import { usageResetService } from './services/UsageResetService';
 
 const PORT = process.env.PORT || 8080;
 let server: any;
@@ -48,9 +60,23 @@ async function startServer() {
       // Seed AI providers from .env into the Config collection
       await seedAIProviders();
       await seedDatasets();
+      await seedDefaultFormTemplate();
       await nlpService.initializeNLP();
+
+      // CRITICAL: Clean up any old/stuck sessions on startup
+      // This prevents old sessions from triggering forms unexpectedly
+      const SessionState = (await import('./models/SessionState')).default;
+      const result = await SessionState.deleteMany({});
+      console.log(
+        `🧹 Cleaned up ${result.deletedCount} old sessions on startup`,
+      );
+
+      // Start monthly usage reset scheduler
+      usageResetService.start();
     } catch (dbErr) {
-      console.error('❌ MongoDB Connection Failed. Server starting in LIMITED MODE.');
+      console.error(
+        '❌ MongoDB Connection Failed. Server starting in LIMITED MODE.',
+      );
       console.error(dbErr);
     }
   } else {
@@ -64,6 +90,9 @@ async function startServer() {
     console.log(`🚀 Admin API Server running on port ${PORT}`);
     console.log(`🌐 Health check: http://localhost:${PORT}/health`);
   });
+
+  // Initialize Socket.io
+  initSocket(server);
 
   // 3. Connect to WhatsApp
   await connectToWhatsApp();
@@ -95,9 +124,11 @@ const gracefulShutdown = async (signal: string) => {
 
     console.log('✅ Shutdown complete. Exiting.');
     process.exit(0);
-  } catch (err) {
-    console.error('❌ Error during shutdown:', err);
-    process.exit(1);
+  } catch (err: any) {
+    if (!err?.message?.includes('buffering timed out')) {
+      console.error('❌ Error during shutdown:', err?.message || err);
+    }
+    process.exit(0);
   }
 };
 
@@ -108,7 +139,161 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 // Handle ts-node-dev restart signal
 process.on('SIGUSR2', () => gracefulShutdown('SIGUSR2'));
 
+// Global unhandled error handlers to prevent silent crashes
+process.on('uncaughtException', (err: Error) => {
+  console.error('🔥 FATAL UNCAUGHT EXCEPTION:', err);
+});
+
+process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  console.error(
+    '🔥 UNHANDLED PROMISE REJECTION at:',
+    promise,
+    '\nReason:',
+    reason,
+  );
+});
+
 startServer();
+
+// Track last message time per user for auto-registration trigger
+const lastMessageTime = new Map<string, number>();
+const AUTO_REG_DELAY_MS = 10 * 1000; // 10 seconds after last message
+const AUTO_REG_CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // Cleanup every hour
+const AUTO_REG_ENTRY_MAX_AGE_MS = 24 * 60 * 60 * 1000; // Remove entries older than 24 hours
+
+// Track users who have opted out of auto-registration
+const autoRegOptOut = new Set<string>();
+
+// Rate limiting: Track last processed message time per user
+const rateLimitMap = new Map<string, number>();
+const RATE_LIMIT_MS = 1000; // Minimum 1 second between messages per user
+const RATE_LIMIT_CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // Cleanup every hour
+
+// Check if user is rate limited
+function isRateLimited(jid: string): boolean {
+  const now = Date.now();
+  const lastTime = rateLimitMap.get(jid);
+
+  if (lastTime && now - lastTime < RATE_LIMIT_MS) {
+    return true;
+  }
+
+  rateLimitMap.set(jid, now);
+  return false;
+}
+
+// Cleanup rate limit entries periodically
+setInterval(() => {
+  const now = Date.now();
+  let cleaned = 0;
+  for (const [jid, time] of rateLimitMap.entries()) {
+    if (now - time > AUTO_REG_ENTRY_MAX_AGE_MS) {
+      rateLimitMap.delete(jid);
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) {
+    console.log(`🧹 Cleaned up ${cleaned} rate limit entries`);
+  }
+}, RATE_LIMIT_CLEANUP_INTERVAL_MS);
+
+// Cleanup old entries periodically to prevent memory leak
+setInterval(() => {
+  const now = Date.now();
+  let cleaned = 0;
+  for (const [jid, time] of lastMessageTime.entries()) {
+    if (now - time > AUTO_REG_ENTRY_MAX_AGE_MS) {
+      lastMessageTime.delete(jid);
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) {
+    console.log(
+      `🧹 Cleaned up ${cleaned} old auto-registration tracking entries`,
+    );
+  }
+}, AUTO_REG_CLEANUP_INTERVAL_MS);
+
+/**
+ * Schedule auto-registration check after conversation ends
+ * Waits for a delay after the last message, then triggers form if appropriate
+ */
+async function scheduleAutoRegistration(
+  jid: string,
+  sessionId: string,
+): Promise<void> {
+  const now = Date.now();
+  lastMessageTime.set(jid, now);
+
+  // Wait for the delay period
+  await new Promise((resolve) => setTimeout(resolve, AUTO_REG_DELAY_MS + 1000));
+
+  // Check if this is still the most recent message (no new messages came in)
+  const lastTime = lastMessageTime.get(jid);
+  if (lastTime !== now) {
+    // User sent another message, abort this trigger
+    return;
+  }
+
+  // Check if user has opted out of auto-registration
+  if (autoRegOptOut.has(jid)) {
+    return;
+  }
+
+  // Check if we should trigger auto-registration
+  try {
+    const template = await FormService.getActiveFormTemplate();
+    if (!template) {
+      // No active form template
+      return;
+    }
+
+    // Check trigger mode
+    if (template.triggerMode !== 'auto' && template.triggerMode !== 'both') {
+      // Auto-trigger not enabled for this form
+      return;
+    }
+
+    // Check if user already has an active session (AWAIT is required now)
+    if (await FormService.hasActiveFormSession(jid)) {
+      return;
+    }
+
+    // Check if user already submitted recently (last 24 hours)
+    const FormSubmission = (await import('./models/FormSubmission')).default;
+    const recentSubmission = await FormSubmission.findOne({
+      phoneNumber: jid,
+      submittedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+    });
+
+    if (recentSubmission) {
+      return;
+    }
+
+    // All conditions met - trigger the form
+    console.log(`   📋 Auto-triggering registration form for ${jid}`);
+    const result = await FormService.startFormSession(jid, jid);
+    if (result.success && result.field) {
+      const delay = template.triggerDelay || 10;
+      // Wait for the configured delay before showing the form
+      await new Promise((resolve) => setTimeout(resolve, delay * 1000));
+
+      // Double-check that no new messages came in during the delay
+      const finalTime = lastMessageTime.get(jid);
+      if (finalTime !== now) {
+        return;
+      }
+
+      if (result.welcomeMessage) {
+        await sendMessage(jid, result.welcomeMessage, sessionId);
+      }
+      const prompt = await FormService.getFieldPrompt(result.field);
+      await sendMessage(jid, prompt, sessionId);
+    }
+  } catch (err) {
+    console.error('   ⚠️ Auto-registration trigger error:', err);
+  }
+}
 
 /**
  * Main message handler
@@ -122,11 +307,29 @@ onMessage(async (message, sock, sessionId) => {
     // Debug: Log incoming messages
     console.log(`📩 Message: "${text.substring(0, 50)}..." from ${jid}`);
 
+    // Rate limiting check - skip if user is sending messages too quickly
+    if (isRateLimited(jid)) {
+      console.log('   ⚡ Rate limited - skipping duplicate message');
+      return;
+    }
+
+    // Update last message time for auto-registration
+    lastMessageTime.set(jid, Date.now());
+
     // Ignore messages from self
     if (isFromMe(message)) {
       console.log('   (Ignoring own message)');
       return;
     }
+
+    // Auto-register new users in CRM (fire and forget - don't block message processing)
+    const pushName =
+      (message as any).pushName || (message.key as any)?.pushName;
+    autoRegistrationService
+      .checkAndRegister(jid, pushName, sessionId)
+      .catch((err) => {
+        console.error('   ⚠️ Auto-registration check error:', err);
+      });
 
     // Helper to extract audio message from various wrappers
     const getAudioMessage = (msg: any) => {
@@ -155,9 +358,9 @@ onMessage(async (message, sock, sessionId) => {
     }
 
     let messageType: 'text' | 'voice' = 'text';
+    let detectedVoiceLanguage: string | null = null;
 
     // Helper to extract audio message from various wrappers
-
 
     // Check for Audio Message
     let isVoiceMessage = false;
@@ -167,21 +370,40 @@ onMessage(async (message, sock, sessionId) => {
       const audioBuffer = await downloadWhatsAppAudio(message);
 
       if (audioBuffer) {
-        try {
-          // 1. Transcribe
-          const transcription = await transcribeAudio(audioBuffer);
-          console.log(`   📝 Transcription: "${transcription}"`);
-          text = transcription;
-          isVoiceMessage = true;
-        } catch (err: any) {
-          console.error('   ❌ Transcription failed:', err);
-          await sendMessage(
-            jid,
-            '⚠️ Voice transcription failed. Please try text.',
-            sessionId,
+        // Transcription — NEVER throws (voice.ts handles all failures gracefully)
+        const transcriptionResult = await transcribeAudioWithLanguage(
+          audioBuffer,
+        );
+
+        if (
+          !transcriptionResult.text ||
+          transcriptionResult.text.trim().length < 2
+        ) {
+          console.warn(
+            '   ⚠️ Transcription returned empty result — all STT providers failed',
           );
+          // Language-aware "try again" messages
+          const retryMessages: Record<string, string> = {
+            si: '🎤 ඔබේ හඬ පණිවිඩය තේරුම් ගත නොහැකි විය. කරුණාකර නැවත උත්සාහ කරන්න.',
+            ta: '🎤 உங்கள் குரல் செய்தி புரியவில்லை. மீண்டும் முயற்சிக்கவும்.',
+            en: '🎤 Could not understand your voice message. Please speak clearly and try again.',
+          };
+          // Use Sinhala as default since most users are Sinhala
+          await sendMessage(jid, retryMessages.si, sessionId);
           return;
         }
+
+        console.log(
+          `   📝 Transcription: "${transcriptionResult.text.substring(0, 80)}"`,
+        );
+        console.log(
+          `   🌐 Language: ${transcriptionResult.detectedLanguage} (${(
+            transcriptionResult.languageConfidence * 100
+          ).toFixed(0)}%)`,
+        );
+        text = transcriptionResult.text;
+        detectedVoiceLanguage = transcriptionResult.detectedLanguage;
+        isVoiceMessage = true;
       } else {
         console.error('   ❌ Failed to download audio');
         return;
@@ -195,11 +417,24 @@ onMessage(async (message, sock, sessionId) => {
         role: 'user',
         type: messageType,
         content: text,
+        read: false, // User messages start as unread by admin
         metadata: {
           sessionId,
           isBooking: false,
         },
       });
+
+      // Emit to WebSocket for real-time dashboard
+      try {
+        const io = getIO();
+        io.emit('new-message', savedMsg);
+        console.log(`   📡 Emitted user message to live chat`);
+      } catch (socketErr) {
+        console.error(
+          '   ⚠️ Failed to emit user message to socket:',
+          socketErr,
+        );
+      }
 
       // [NEW] Trigger Webhook for incoming message
       WebhookService.triggerWebhook('message.received', {
@@ -228,6 +463,36 @@ onMessage(async (message, sock, sessionId) => {
       return;
     }
 
+    // 2.5. Check if user is in dynamic form flow
+    if (await FormService.hasActiveFormSession(jid)) {
+      console.log('   📋 Processing form field answer...');
+      const result = await FormService.processFieldAnswer(jid, text);
+      if (result.success) {
+        if (result.isComplete) {
+          await sendMessage(
+            jid,
+            result.completionMessage ||
+              '✅ Thank you! Your registration has been submitted.',
+            sessionId,
+          );
+        } else if (result.field) {
+          const prompt = await FormService.getFieldPrompt(result.field);
+          await sendMessage(jid, prompt, sessionId);
+        }
+      } else {
+        await sendMessage(
+          jid,
+          result.message || 'Something went wrong. Please try again.',
+          sessionId,
+        );
+        if (result.field) {
+          const prompt = await FormService.getFieldPrompt(result.field);
+          await sendMessage(jid, prompt, sessionId);
+        }
+      }
+      return;
+    }
+
     // Handle commands starting with !
     if (text.startsWith('!')) {
       console.log(`   🤖 Processing command: ${text}`);
@@ -243,32 +508,8 @@ onMessage(async (message, sock, sessionId) => {
 
       // 3. New Lead & Intent Analysis
       // Only check if message contains date/time related keywords (performance optimization)
-      const bookingKeywords = [
-        'tomorrow',
-        'today',
-        'monday',
-        'tuesday',
-        'wednesday',
-        'thursday',
-        'friday',
-        'saturday',
-        'sunday',
-        'am',
-        'pm',
-        'morning',
-        'afternoon',
-        'evening',
-        'visit',
-        'appointment',
-        'schedule',
-        'book',
-        'meet',
-        'හෙට',
-        'අද',
-        'පැමිණ',
-        'හමුවීම',
-        'වේලාව',
-      ];
+      // Fetch booking keywords from config (with fallback)
+      const bookingKeywords = await configService.getBookingKeywords();
       const hasBookingKeyword = bookingKeywords.some((keyword) =>
         text.toLowerCase().includes(keyword),
       );
@@ -298,8 +539,50 @@ onMessage(async (message, sock, sessionId) => {
       let response: string | undefined;
       let intentAnalysis: any = null;
       let answeredViaNLP = false;
+      let autoresearchIntent: string | null = null;
+      let responseLanguage = 'si'; // Default to Sinhala - accessible outside try block
 
       try {
+        // Autoresearch NLP Intent Classification (fast, under 200ms)
+        try {
+          const intentResult = await classifyMessage(text);
+          autoresearchIntent = intentResult.intent;
+          console.log(
+            `   🤖 AutoresearchNLP: ${autoresearchIntent} (${(
+              intentResult.confidence * 100
+            ).toFixed(0)}%) in ${intentResult.inference_time_ms}ms`,
+          );
+
+          // Route based on intent - DISABLED FOR lead_register
+          // Forms should ONLY trigger via !register command or explicit keyword
+          if (
+            autoresearchIntent === 'booking' &&
+            intentResult.confidence > 0.85
+          ) {
+            console.log(
+              '   📅 High-confidence booking intent detected via AutoresearchNLP',
+            );
+            await startBookingFlow(jid, sessionId);
+            return;
+          }
+          // lead_register intent is DISABLED - use !register command instead
+          // This prevents random chat messages from triggering the form
+          // else if (autoresearchIntent === 'lead_register' && intentResult.confidence > 0.9) {
+          //   console.log('   📝 High-confidence lead registration intent detected via AutoresearchNLP');
+          //   await startLeadRegistration(jid, sessionId);
+          //   return;
+          // }
+          else if (
+            autoresearchIntent === 'greeting' &&
+            intentResult.confidence > 0.85
+          ) {
+            console.log('   👋 Greeting detected via AutoresearchNLP');
+            // Let AI handle greetings naturally
+          }
+        } catch (nlpErr) {
+          console.log('   ⚠️ AutoresearchNLP unavailable, using fallback');
+        }
+
         // Analyze Intent first for metadata
         intentAnalysis = await analyzeLeadIntent(text);
 
@@ -355,7 +638,7 @@ onMessage(async (message, sock, sessionId) => {
 
           // Learn from AI response dynamically (Fire & Forget)
           if (isLocalNLPEnabled && response && response.trim() !== '') {
-            nlpService.learnFromAI(text, response).catch(err => {
+            nlpService.learnFromAI(text, response).catch((err) => {
               console.error('Failed to learn from AI:', err);
             });
           }
@@ -384,17 +667,30 @@ onMessage(async (message, sock, sessionId) => {
 
       // [NEW] 2. Save BOT Response to DB
       try {
-        await ChatMessage.create({
+        const savedBotMsg = await ChatMessage.create({
           userId: jid,
           role: 'assistant',
           type: 'text',
           content: response,
+          read: true, // Bot messages are always considered "read" (from system)
           metadata: {
             sessionId,
             intent: intentAnalysis?.intent || 'General',
             buyingSignal: intentAnalysis?.buyingSignal || 'None',
           },
         });
+
+        // Emit to WebSocket for real-time dashboard
+        try {
+          const io = getIO();
+          io.emit('new-message', savedBotMsg);
+          console.log(`   📡 Emitted bot message to live chat`);
+        } catch (socketErr) {
+          console.error(
+            '   ⚠️ Failed to emit bot message to socket:',
+            socketErr,
+          );
+        }
       } catch (dbErr) {
         console.error('   ❌ Failed to save bot response:', dbErr);
       }
@@ -413,14 +709,30 @@ onMessage(async (message, sock, sessionId) => {
         }
 
         // If mode requires voice, generate and send it
-        if (responseMode === 'voice-only' || responseMode === 'voice-and-text') {
+        if (
+          responseMode === 'voice-only' ||
+          responseMode === 'voice-and-text'
+        ) {
           try {
-            console.log('   🗣️ Generating voice response...');
-            const audioResponse = await generateSpeech(response);
-            await sendVoiceMessage(jid, audioResponse, sessionId);
-            console.log('   ✅ AI voice response sent (based on mode)');
-          } catch (ttsError) {
-            console.error('   ❌ TTS failed:', ttsError);
+            console.log(
+              `   🗣️ Generating voice response in language: ${responseLanguage}...`,
+            );
+            const audioResponse = await generateSpeech(
+              response,
+              responseLanguage,
+            );
+            const voiceSent = await sendVoiceMessage(
+              jid,
+              audioResponse,
+              sessionId,
+            );
+            if (voiceSent) {
+              console.log('   ✅ AI voice response sent (based on mode)');
+            } else {
+              console.log('   ⚠️ Voice send returned false');
+            }
+          } catch (ttsError: any) {
+            console.error('   ❌ TTS failed:', ttsError.message || ttsError);
             // Fallback if we didn't already send text
             if (!sentText) {
               await sendMessage(jid, response, sessionId);
@@ -435,6 +747,13 @@ onMessage(async (message, sock, sessionId) => {
           console.log('   ❌ Failed to send response');
         }
       }
+
+      // Auto-registration trigger: DISABLED by default
+      // Forms should only be triggered via !register command or explicit NLP intent
+      // Uncomment below if you want auto-registration after conversations
+      // scheduleAutoRegistration(jid, sessionId).catch(err => {
+      //   console.error('   ⚠️ Auto-registration check failed:', err);
+      // });
     } catch (aiError: any) {
       console.error('   ❌ AI response error:', aiError.message || aiError);
 
@@ -480,36 +799,82 @@ async function handleCommand(
 
   // 2. Fallback to manual switch (legacy/script commands)
   switch (command) {
-    case '!help':
-      await sendMessage(
-        jid,
-        `🏗️ *Jayalath Global AI (ජයලත් ග්ලොබල් AI)*
+    case '!help': {
+      // Build help message from dataset configuration
+      const helpTemplate = await configurationManager.getHelpMessage();
+      let helpMessage = '';
 
-*ඊශ්‍රායල ඉදිකිරීම් රැකියා විශේෂඥයා*
+      if (helpTemplate.title) {
+        helpMessage += `*${helpTemplate.title}*\n\n`;
+      }
+      if (helpTemplate.subtitle) {
+        helpMessage += `${helpTemplate.subtitle}\n\n`;
+      }
+      if (helpTemplate.commands && helpTemplate.commands.length > 0) {
+        helpMessage += '*Available Commands:*\n';
+        helpTemplate.commands.forEach(
+          (cmd: { command?: string; description?: string } | string) => {
+            // Handle both object format {command, description} and string format
+            if (typeof cmd === 'string') {
+              helpMessage += `• ${cmd}\n`;
+            } else if (cmd.command && cmd.description) {
+              helpMessage += `• \`${cmd.command}\` - ${cmd.description}\n`;
+            } else if (cmd.command) {
+              helpMessage += `• ${cmd.command}\n`;
+            }
+          },
+        );
+        helpMessage += '\n';
+      }
+      if (helpTemplate.footer) {
+        helpMessage += helpTemplate.footer;
+      }
 
-*Available Commands:*
-• \`!help\` - උදව් ලබාගන්න
-• \`!jobs\` - පවතින රැකියා ඇබෑර්තු
-• \`!visit\` - පැමිණීමට වේලාවක් වෙන්කරගන්න
-• \`!register\` - ලියාපදිංචි වන්න
-• \`!payment\` - ගෙවීම් විස්තර ලබාගන්න
-• \`!cv\` - CV submit කරන්න
-• \`!clear\` - කතාබහ අලුතින් අරඹන්න
+      // If nothing is configured, show warning
+      if (!helpMessage.trim()) {
+        helpMessage =
+          '⚠️ Help message not configured. Please configure via Admin Panel > Datasets > HELP_MESSAGE';
+      }
 
-*ඔබට අවශ්‍ය දේ පණිවුඩයක් ලෙස එවන්න.*`,
-        sessionId,
-      );
+      await sendMessage(jid, helpMessage, sessionId);
       break;
+    }
 
     case '!ping':
-      await sendMessage(jid, '🏓 Pong! Bot is online and ready.', sessionId);
+      await sendMessage(
+        jid,
+        await configurationManager.getPingMessage(),
+        sessionId,
+      );
       break;
 
     case '!clear':
       aiLoadBalancer.clearConversation(jid);
       await sendMessage(
         jid,
-        '🗑️ කතාබහ ඉතිහාසය මකා දැමුවා!\nදැන් අලුතින් ආරම්භ කරමු! 🏗️',
+        await configurationManager.getClearMessage(),
+        sessionId,
+      );
+      break;
+
+    case '!stop':
+    case '!unsubscribe':
+      // Opt out of auto-registration
+      autoRegOptOut.add(jid);
+      await sendMessage(
+        jid,
+        await configurationManager.getStopMessage(),
+        sessionId,
+      );
+      break;
+
+    case '!start':
+    case '!subscribe':
+      // Opt back in to auto-registration
+      autoRegOptOut.delete(jid);
+      await sendMessage(
+        jid,
+        await configurationManager.getStartMessage(),
         sessionId,
       );
       break;
@@ -517,8 +882,21 @@ async function handleCommand(
     case '!register':
     case '!join':
     case '!apply':
-      console.log('   📝 Starting lead registration flow...');
-      await startLeadRegistration(jid, sessionId);
+      console.log('   📝 Starting registration flow...');
+      // Try dynamic form first
+      const formResult = await FormService.startFormSession(jid, jid);
+      if (formResult.success) {
+        if (formResult.welcomeMessage) {
+          await sendMessage(jid, formResult.welcomeMessage, sessionId);
+        }
+        if (formResult.field) {
+          const prompt = await FormService.getFieldPrompt(formResult.field);
+          await sendMessage(jid, prompt, sessionId);
+        }
+      } else {
+        // Fallback to legacy lead registration
+        await startLeadRegistration(jid, sessionId);
+      }
       break;
 
     case '!payment':
@@ -539,23 +917,38 @@ async function handleCommand(
       await sendMessage(jid, await configService.getCVMessage(), sessionId);
       break;
 
-    case '!jobs':
-      await sendMessage(
-        jid,
-        `📋 *පවතින රැකියා ඇබෑර්තු:*
+    case '!jobs': {
+      const jobsTemplate = await configurationManager.getJobsMessage();
+      let jobsMessage = '';
 
-⚡ *Electricians* - 10 ක්
-🛣️ *Asphalt Teams* - 2 Teams
-🔧 *Plumbers* - 40 ක්
-🚛 *Concrete Pump Drivers* - 30 ක්
-🚜 *Excavator/JCB Operators*
-🧹 *Heavy Duty Cleaners* - 15 ක්
-🏠 *Gypsum/Tile Fixers* - 100 බැගින්
+      if (jobsTemplate.title) {
+        jobsMessage += `*${jobsTemplate.title}*\n\n`;
+      }
 
-📝 ලියාපදිංචි වීමට \`!register\` භාවිතා කරන්න.`,
-        sessionId,
-      );
+      if (jobsTemplate.jobs && jobsTemplate.jobs.length > 0) {
+        jobsTemplate.jobs.forEach(
+          (job: { emoji?: string; title: string; count?: string }) => {
+            jobsMessage += `${job.emoji || '•'} *${job.title}*`;
+            if (job.count) {
+              jobsMessage += ` - ${job.count}`;
+            }
+            jobsMessage += '\n';
+          },
+        );
+        jobsMessage += '\n';
+      } else {
+        jobsMessage += '⚠️ Jobs listing not configured.\n\n';
+      }
+
+      if (jobsTemplate.footer) {
+        jobsMessage += jobsTemplate.footer;
+      } else {
+        jobsMessage += '📝 Type `!register` to apply.';
+      }
+
+      await sendMessage(jid, jobsMessage, sessionId);
       break;
+    }
 
     case '!visit':
     case '!schedule':
@@ -568,7 +961,7 @@ async function handleCommand(
     default:
       await sendMessage(
         jid,
-        `❓ Unknown command: \`${command}\`\n\nUse \`!help\` to see available commands.`,
+        await configurationManager.getUnknownCommandMessage(command),
         sessionId,
       );
   }

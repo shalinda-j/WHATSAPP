@@ -24,17 +24,30 @@ export abstract class BaseCommand implements ICommand {
     message: proto.IWebMessageInfo,
     sessionId: string,
   ): Promise<void> {
-    const jid = message.key.remoteJid;
+    const jid = message.key?.remoteJid;
     if (jid) {
       await sendTyping(jid, sessionId);
     }
   }
 
   /**
+   * Sends a reply to a message
+   */
+  protected async sendReply(
+    message: proto.IWebMessageInfo,
+    text: string,
+    sessionId: string,
+  ): Promise<void> {
+    const jid = message.key?.remoteJid;
+    if (!jid) return;
+    await sendMessage(jid, text, sessionId);
+  }
+
+  /**
    * Checks if the message was sent in a group
    */
   protected isGroup(message: proto.IWebMessageInfo): boolean {
-    return message.key.remoteJid?.endsWith('@g.us') || false;
+    return message.key?.remoteJid?.endsWith('@g.us') || false;
   }
 
   /**
@@ -45,7 +58,7 @@ export abstract class BaseCommand implements ICommand {
     text: string,
     sessionId: string,
   ): Promise<void> {
-    const jid = message.key.remoteJid;
+    const jid = message.key?.remoteJid;
     if (jid) {
       await sendMessage(jid, text, sessionId);
     }

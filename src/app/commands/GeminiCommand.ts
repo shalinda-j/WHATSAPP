@@ -17,8 +17,10 @@ export class GeminiCommand extends BaseCommand {
     args: string[],
     sessionId: string,
   ): Promise<void> {
-    const jid = message.key.remoteJid;
+    const jid = message.key?.remoteJid;
     if (!jid) return;
+
+    const text = args.join(' ').trim();
 
     try {
       await this.sendTyping(message, sessionId);
@@ -28,7 +30,7 @@ export class GeminiCommand extends BaseCommand {
 
     // Handle clear command
     if (args[0]?.toLowerCase() === 'clear') {
-      aiLoadBalancer.clearConversation(jid);
+      await aiLoadBalancer.clearConversation(jid);
       await sendMessage(
         jid,
         '🧹 Conversation history cleared! Starting fresh.',

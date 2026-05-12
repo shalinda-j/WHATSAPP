@@ -1,9 +1,11 @@
-import { memo, type ChangeEvent } from 'react';
-import { Handle, Position, type NodeProps } from 'reactflow';
+import { memo, useCallback, type ChangeEvent } from 'react';
+import { Handle, Position, type NodeProps, useReactFlow } from 'reactflow';
 import { INTEGRATIONS } from '../../../config/integrationPresets';
 import { Globe } from 'lucide-react';
 
-const IntegrationNode = ({ data, isConnectable }: NodeProps) => {
+const IntegrationNode = ({ id, data, isConnectable }: NodeProps) => {
+    const { setNodes } = useReactFlow();
+
     // Determine which preset to use based on data.integrationType
     const presetId = data.integrationType;
     const preset = INTEGRATIONS[presetId];
@@ -12,6 +14,23 @@ const IntegrationNode = ({ data, isConnectable }: NodeProps) => {
     const Icon = preset?.icon || Globe;
     const label = preset?.label || data.label || 'Integration';
     const fields = preset?.fields || [{ key: 'config', label: 'Configuration', type: 'text' }];
+
+    const handleChange = useCallback(
+        (fieldKey: string, value: string) => {
+            setNodes((nds) =>
+                nds.map((node) => {
+                    if (node.id === id) {
+                        return {
+                            ...node,
+                            data: { ...node.data, [fieldKey]: value },
+                        };
+                    }
+                    return node;
+                }),
+            );
+        },
+        [id, setNodes],
+    );
 
     return (
         <div className="bg-white border-2 border-slate-200 rounded-lg p-3 shadow-md min-w-[220px] hover:border-indigo-500 transition-colors">
@@ -30,19 +49,18 @@ const IntegrationNode = ({ data, isConnectable }: NodeProps) => {
             <div className="space-y-3">
                 {fields.map((field) => (
                     <div key={field.key}>
-                        <label htmlFor={`field-${field.key}`} className="block text-[10px] uppercase font-semibold text-slate-500 mb-1">
+                        <label htmlFor={`field-${id}-${field.key}`} className="block text-[10px] uppercase font-semibold text-slate-500 mb-1">
                             {field.label}
                         </label>
                         <input
-                            id={`field-${field.key}`}
+                            id={`field-${id}-${field.key}`}
                             name={field.key}
                             className="nodrag w-full text-xs p-2 rounded border border-gray-300 focus:outline-none focus:border-indigo-500 bg-gray-50 focus:bg-white transition-all"
                             placeholder={field.placeholder || `Enter ${field.label}`}
                             type={field.type || 'text'}
-                            defaultValue={data[field.key] || ''}
+                            value={data[field.key] ?? ''}
                             onChange={(evt: ChangeEvent<HTMLInputElement>) => {
-                                // Update local node data
-                                data[field.key] = evt.target.value;
+                                handleChange(field.key, evt.target.value);
                             }}
                         />
                     </div>

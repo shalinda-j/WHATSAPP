@@ -1,0 +1,97 @@
+# GitHub Actions Status Badges
+
+[![CI Status](https://img.shields.io/github/actions/workflow/status/shalinda-j/WHATSAPP/ci.yml?branch=main&style=for-the-badge&logo=github-actions&label=CI)](https://github.com/shalinda-j/WHATSAPP/actions/workflows/ci.yml)
+
+[![Security Scan](https://img.shields.io/github/actions/workflow/status/shalinda-j/WHATSAPP/security.yml?branch=main&style=for-the-badge&logo=github-actions&label=Security)](https://github.com/shalinda-j/WHATSAPP/actions/workflows/security.yml)
+
+[![Code Quality](https://img.shields.io/github/actions/workflow/status/shalinda-j/WHATSAPP/code-quality.yml?branch=)main&style=for-the-badge&logo=github-actions&label=Quality)](https://github.com/shalinda-j/WHATSAPP/actions/workflows/code-quality.yml)
+
+[![CodeQL](https://img.shields.io/github/code-security/scan-results/shalinda-j/WHATSAPP?style=for-the-badge&logo=codeql)](https://github.com/shalinda-j/WHATSAPP/security/code-scanning)
+
+## Pipelines Overview
+
+### CI Pipeline ([ci.yml](.github/workflows/ci.yml)
+**Triggers:** Push to main/develop, Pull Requests
+
+**Jobs:**
+- `backend` - Lint, type check, test backend
+- `frontend` - Lint, build frontend
+
+### Security Pipeline ([security.yml](.github/workflows/security.yml)
+**Triggers:** Push to main, Pull Requests, Weekly schedule
+
+**Jobs:**
+- `dependency-review` - Review dependency changes (PRs only)
+- `codeql` - Static code analysis (JavaScript/TypeScript)
+- `trivy-scan` - Container and filesystem vulnerability scan
+
+### Code Quality Pipeline ([code-quality.yml](.github/workflows/code-quality.yml)
+**Triggers:** Push to main/develop, Pull Requests, Weekly schedule
+
+**Jobs:**
+- `eslint` - Run ESLint with SARIF output
+- `typescript` - Type check backend and frontend
+- `prettier` - Check code formatting
+- `complexity` - Analyze code complexity
+
+### Deployment Pipeline ([deploy.yml](.github/workflows/deploy.yml)
+**Triggers:** Push to main, Manual dispatch
+
+**Jobs:**
+- `test` - Reuse CI pipeline
+- `build` - Build artifacts and upload
+- `deploy-production` - Deploy to production environment
+
+### Pull Request Pipeline ([pull-request.yml](.github/workflows/pull-request.yml)
+**Triggers:** Opened, synchronized, reopened PRs on main/develop
+
+**Jobs:**
+- `validation` - Check conventional commits, large files
+- `code-review` - Manual approval checklist
+- `size-report` - PR size classification
+
+### Release Pipeline ([release.yml](.github/workflows/release.yml)
+**Triggers:** Tag pushes (v*), Manual dispatch
+
+**Jobs:**
+- `release` - Create GitHub release with changelog
+
+### Issue Management Pipeline ([issues.yml](.github/workflows/issues.yml)
+**Triggers:** Issue/PR events, Daily schedule
+
+**Jobs:**
+- `auto-label` - Apply labels based on title/body keywords
+- `stale-cleanup` - Mark and close stale items
+
+## Required Secrets
+
+For deployment and security features, configure these in GitHub Actions secrets:
+
+- `MONGODB_URI` - MongoDB connection string
+- `JWT_SECRET` - JWT authentication secret (min 32 chars)
+- `ENCRYPTION_KEY` - Encryption key for API keys (32 chars)
+- `GEMINI_API_KEY` - Google Gemini API key
+- `OPENAI_API_KEY` - OpenAI API key
+- `GROQ_API_KEY` - Groq API key
+- `OPENROUTER_API_KEY` - OpenRouter API key
+
+## CI/CD Best Practices
+
+1. **Branch Strategy:**
+   - `main` - Production-ready code
+   - `develop` - Integration branch
+   - Feature branches from `develop`
+
+2. **Commit Messages:**
+   - Use conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
+
+3. **PR Requirements:**
+   - CI must pass
+   - CodeQL must pass
+   - Manual approval required (configurable)
+   - PR size warnings for XL changes
+
+4. **Deployment:**
+   - Automatic on `main` branch push
+   - Requires successful CI and security scans
+   - Artifacts retained for 7 days

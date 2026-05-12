@@ -1,4 +1,3 @@
-
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -7,21 +6,25 @@ import Dashboard from './pages/Dashboard';
 import Datasets from './pages/Datasets';
 import Webhooks from './pages/Webhooks';
 import Config from './pages/Config';
-import VoiceConfig from './pages/VoiceConfig';
 import SystemMaintenance from './pages/SystemMaintenance';
 import BulkSender from './pages/BulkSender';
 import MarketingManager from './pages/MarketingManager';
-import Leads from './pages/Leads';
-import Analytics from './pages/Analytics';
-import N8nWorkflows from './pages/N8nWorkflows';
 import VoiceAgentHub from './pages/VoiceAgentHub';
-
+import CRM from './pages/CRM';
+import ChatInterface from './pages/ChatInterface';
 import Sessions from './pages/Sessions';
+import FormBuilder from './pages/FormBuilder';
+import Calendar from './pages/Calendar';
+import FollowUp from './pages/FollowUp';
 import Layout from './components/Layout';
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   const { token, loading } = useAuth();
-  if (loading) return <div>Loading...</div>;
+  if (loading) return (
+    <div className="flex items-center justify-center min-h-screen bg-gray-100">
+      <div className="animate-spin rounded-full h-10 w-10 border-4 border-green-200 border-t-green-600"></div>
+    </div>
+  );
   if (!token) return <Navigate to="/login" />;
   return children;
 };
@@ -34,19 +37,22 @@ function AppRoutes() {
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Navigate to="/dashboard" />} />
         <Route path="dashboard" element={<Dashboard />} />
+        <Route path="crm" element={<CRM />} />
+        <Route path="chat" element={<ChatInterface />} />
+        <Route path="calendar" element={<Calendar />} />
+        <Route path="follow-up" element={<FollowUp />} />
         <Route path="datasets" element={<Datasets />} />
         <Route path="webhooks" element={<Webhooks />} />
         <Route path="config" element={<Config />} />
-        <Route path="voice-config" element={<VoiceConfig />} />
         <Route path="bulk-message" element={<BulkSender />} />
         <Route path="system" element={<SystemMaintenance />} />
         <Route path="marketing" element={<MarketingManager />} />
-        <Route path="n8n" element={<N8nWorkflows />} />
-        <Route path="leads" element={<Leads />} />
-        <Route path="analytics" element={<Analytics />} />
         <Route path="voice-agent-hub" element={<VoiceAgentHub />} />
-
         <Route path="sessions" element={<Sessions />} />
+        <Route path="form-builder" element={<FormBuilder />} />
+        {/* Legacy redirects */}
+        <Route path="analytics" element={<Navigate to="/crm" replace />} />
+        <Route path="leads" element={<Navigate to="/crm" replace />} />
       </Route>
     </Routes>
   );

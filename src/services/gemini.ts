@@ -3,7 +3,7 @@ import {
   AI_PERSONALITY,
   SINHALA_SYSTEM_PROMPT,
   JOB_KNOWLEDGE_BASE,
-  CONVERSATION_EXAMPLES,
+  getConversationExamples,
 } from '../config/ai-personality';
 import { AIService, AIChatMessage } from '../interfaces/AIService';
 
@@ -33,7 +33,13 @@ async function getGeminiModel(modelName = 'gemini-1.5-flash-latest') {
   // Try to get the specific model assigned to the provider, or fallback to the requested model Name
   let activeModel = modelName;
   try {
-    const configModel = await import('../models/Config').then(m => m.default.findOne({ isProvider: true, providerType: 'google', isActive: true }));
+    const configModel = await import('../models/Config').then((m) =>
+      m.default.findOne({
+        isProvider: true,
+        providerType: 'google',
+        isActive: true,
+      }),
+    );
     if (configModel && configModel.aiModel) {
       activeModel = configModel.aiModel;
     }
@@ -50,10 +56,11 @@ const chatSessions: Map<string, ChatSession> = new Map();
 /**
  * Build conversation history from examples
  */
-function buildExampleHistory() {
+async function buildExampleHistory() {
   const history: { role: 'user' | 'model'; parts: { text: string }[] }[] = [];
 
-  for (const example of CONVERSATION_EXAMPLES) {
+  const examples = await getConversationExamples();
+  for (const example of examples) {
     history.push({ role: 'user', parts: [{ text: example.user }] });
     history.push({ role: 'model', parts: [{ text: example.assistant }] });
   }
@@ -114,6 +121,7 @@ export async function generateSinhalaResponse(prompt: string): Promise<string> {
 export async function getChatSession(userId: string): Promise<ChatSession> {
   if (!chatSessions.has(userId)) {
     const model = await getGeminiModel();
+    const exampleHistory = await buildExampleHistory();
     const chat = model.startChat({
       systemInstruction: `${AI_PERSONALITY}\n\n${JOB_KNOWLEDGE_BASE}`,
       history: [
@@ -125,12 +133,12 @@ export async function getChatSession(userId: string): Promise<ChatSession> {
             },
           ],
         },
-        ...buildExampleHistory(),
+        ...exampleHistory,
       ],
     });
     chatSessions.set(userId, chat);
   }
-  return chatSessions.get(userId)!;
+  return chatSessions.get(userId) as ChatSession;
 }
 
 /**
@@ -163,6 +171,7 @@ export function clearConversation(userId: string): void {
 
 /**
  * Transcribe audio using Gemini's multimodal capabilities
+ * Returns transcription with automatic language detection
  */
 export async function transcribeAudio(
   audioBase64: string,
@@ -181,13 +190,24 @@ export async function transcribeAudio(
         text: 'Transcribe this audio message accurately. The audio may be in Sinhala (සිංහල), English, or Tamil (தமிழ்). Return ONLY the transcription text in the original language using appropriate Unicode characters.',
       },
     ]);
-    return result.response.text();
+
+    const transcribed = result.response.text().trim();
+    // If Gemini returns meta-commentary instead of transcription, return empty
+    if (
+      transcribed.toLowerCase().includes('transcription:') ||
+      transcribed.toLowerCase().startsWith('the audio') ||
+      transcribed.toLowerCase().startsWith('this audio') ||
+      transcribed.toLowerCase().startsWith('i cannot')
+    ) {
+      return '';
+    }
+    return transcribed;
   } catch (error: any) {
     if (error.message === 'MISSING_API_KEY') {
-      return ''; // Missing API key, skip transcription
+      return ''; // Missing API key — return empty, caller will try other providers
     }
-    console.error('Audio transcription error:', error);
-    throw error;
+    console.error('Gemini STT error:', error.message || error);
+    throw error; // Let caller handle (voice.ts catches all STT errors)
   }
 }
 
@@ -281,11 +301,10 @@ export async function analyzeLeadIntent(text: string): Promise<{
 }
 
 // Remove exports of internal model/genAI if possible, or export dummy to prevent breakage
-// export { model, genAI }; 
+// export { model, genAI };
 // Since we removed global model, we should remove it from exports or provide a getter
 // But other files might be importing them. Let's see...
 // I will not export them. If something breaks, I'll fix the caller.
-
 
 export class GeminiService implements AIService {
   name: string;

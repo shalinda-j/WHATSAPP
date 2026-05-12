@@ -1,10 +1,13 @@
-import { sendMessage, sendTyping, getSenderJid, getSocket } from './whatsapp';
+import { sendMessage, sendTyping, getSocket } from './whatsapp';
 import { generateIcsFile } from './CalendarService';
 import {
   getRealAvailability,
   createGoogleCalendarEvent,
 } from './GoogleCalendarService';
 import { addDays, setHours, setMinutes, format } from 'date-fns';
+import { configurationManager } from './ConfigurationManagerService';
+import sessionStateService from './SessionStateService';
+import Booking from '../models/Booking';
 
 // Define the stages of the booking conversation
 export enum BookingInitState {
@@ -16,21 +19,56 @@ export enum BookingInitState {
 interface UserSession {
   state: BookingInitState;
   selectedDate?: Date;
-  availableSlots?: number[]; // Store the slots we offered
+  availableSlots?: number[];
+  bookingConfig?: any;
 }
 
-// In-memory session store (Map<Jid, Session>)
-const sessions = new Map<string, UserSession>();
-
-const CAMPUS_LOCATION = 'JCETI Campus, No 33, Main Street, Colombo';
-const ORGANIZER = { name: 'Jayalath Institute', email: 'info@jayalath.com' };
+// Session TTL: 30 minutes
+const SESSION_TTL_MS = 30 * 60 * 1000;
 
 /**
  * Check if user is currently in a booking flow
  */
-export function isUserInBookingSession(jid: string): boolean {
-  const session = sessions.get(jid);
-  return session !== undefined && session.state !== BookingInitState.IDLE;
+export async function isUserInBookingSession(jid: string): Promise<boolean> {
+  const session = await sessionStateService.getSession(jid, 'booking');
+  return session !== null && session.state.state !== BookingInitState.IDLE;
+}
+
+/**
+ * Get booking session
+ */
+async function getBookingSession(jid: string): Promise<UserSession | null> {
+  const session = await sessionStateService.getSession(jid, 'booking');
+  if (!session) return null;
+
+  return {
+    state: session.state.state as BookingInitState,
+    selectedDate: session.data.selectedDate
+      ? new Date(session.data.selectedDate)
+      : undefined,
+    availableSlots: session.data.availableSlots,
+    bookingConfig: session.data.bookingConfig,
+  };
+}
+
+/**
+ * Save booking session
+ */
+async function saveBookingSession(
+  jid: string,
+  session: UserSession,
+): Promise<void> {
+  await sessionStateService.setSession(
+    jid,
+    'booking',
+    { state: session.state },
+    {
+      selectedDate: session.selectedDate?.toISOString(),
+      availableSlots: session.availableSlots,
+      bookingConfig: session.bookingConfig,
+    },
+    SESSION_TTL_MS,
+  );
 }
 
 /**
@@ -40,8 +78,13 @@ export async function startBookingFlow(
   jid: string,
   sessionId: string,
 ): Promise<void> {
-  const session: UserSession = { state: BookingInitState.AWAITING_RESPONSE };
-  sessions.set(jid, session);
+  const bookingConfig = await configurationManager.getBookingConfig();
+  const session: UserSession = {
+    state: BookingInitState.AWAITING_RESPONSE,
+    bookingConfig,
+  };
+
+  await saveBookingSession(jid, session);
 
   await sendTyping(jid, sessionId);
   await sendMessage(
@@ -63,27 +106,38 @@ export async function handleBookingMessage(
   text: string,
   sessionId: string,
 ): Promise<boolean> {
-  const session = sessions.get(jid);
+  const session = await getBookingSession(jid);
   if (!session || session.state === BookingInitState.IDLE) return false;
 
   const cleanText = text.trim().toLowerCase();
 
+  // Get booking config (from session cache or fetch new)
+  const bookingConfig =
+    session.bookingConfig || (await configurationManager.getBookingConfig());
+  const acceptanceKeywords = bookingConfig.acceptanceKeywords || [
+    'yes',
+    'ow',
+    'y',
+    'ok',
+  ];
+
   // 1. Awaiting "Yes" to invitation
   if (session.state === BookingInitState.AWAITING_RESPONSE) {
-    if (['yes', 'ow', 'y', 'ok'].includes(cleanText)) {
+    if (acceptanceKeywords.includes(cleanText)) {
       // User accepted, show slots
       session.state = BookingInitState.SELECTING_TIME;
+      session.bookingConfig = bookingConfig;
 
       // For MVP, offer slots for "Tomorrow"
-      // Ensure we don't offer Sat/Sun if closed, but for now simple +1 day
       const tomorrow = addDays(new Date(), 1);
       session.selectedDate = tomorrow;
 
+      await saveBookingSession(jid, session);
       await sendTimeSlotMenu(jid, tomorrow, session, sessionId);
       return true;
     } else {
       // User rejected or said something else
-      sessions.delete(jid);
+      await sessionStateService.deleteSession(jid, 'booking');
       await sendMessage(
         jid,
         `👍 No problem. You can schedule a visit later using \`!visit\`.`,
@@ -96,7 +150,7 @@ export async function handleBookingMessage(
   // 2. Selecting Time Slot
   if (session.state === BookingInitState.SELECTING_TIME) {
     if (!session.availableSlots) {
-      sessions.delete(jid);
+      await sessionStateService.deleteSession(jid, 'booking');
       return false;
     }
 
@@ -150,9 +204,12 @@ async function sendTimeSlotMenu(
       `📅 Sorry, we have no available slots for ${dateStr}.`,
       sessionId,
     );
-    sessions.delete(jid);
+    await sessionStateService.deleteSession(jid, 'booking');
     return;
   }
+
+  // Save updated session with available slots
+  await saveBookingSession(jid, session);
 
   // Build menu string
   let menu = `🗓️ *Select a Time*\nAvailable slots for ${dateStr}:\n\n`;
@@ -172,65 +229,102 @@ async function finalizeBooking(
   jid: string,
   appointmentDate: Date,
   sessionId: string,
+  callerName?: string,
 ): Promise<void> {
   const sock = getSocket(sessionId);
   if (!sock) return;
 
+  // Get booking config for dynamic values
+  const bookingConfig = await configurationManager.getBookingConfig();
+  const campusLocation = bookingConfig.campusLocation || 'Campus';
+  const organizerName = bookingConfig.organizerName || 'Organization';
+  const organizerEmail = bookingConfig.organizerEmail || 'info@example.com';
+  const eventTitle = bookingConfig.eventTitle || 'Campus Visit';
+  const eventDescription =
+    bookingConfig.eventDescription || 'Introduction and Assessment';
+  const eventDuration = bookingConfig.eventDurationHours || 1;
+
+  // Extract phone number from jid
+  const callerPhone = jid.replace('@s.whatsapp.net', '').replace('@c.us', '');
+
   await sendMessage(jid, `✅ *Confirming your appointment...*`, sessionId);
 
   try {
-    const title = 'Campus Visit - Jayalath Institute';
-    const desc = 'Introduction and Skill Assessment';
-
     // 1. Create Google Calendar Event (if credentials exist)
+    const fullDescription = `${eventDescription}\n\nClient: ${
+      callerName || callerPhone
+    }\nPhone: ${callerPhone}\nLocation: ${campusLocation}`;
     const gcalLink = await createGoogleCalendarEvent(
       appointmentDate,
-      title,
-      desc,
+      eventTitle,
+      fullDescription,
     );
 
     // 2. Generate ICS file (Backup/Personal Calendar)
     const icsContent = await generateIcsFile({
       start: appointmentDate,
-      durationHours: 1,
-      title: title,
-      description: desc,
-      location: CAMPUS_LOCATION,
-      organizer: ORGANIZER,
+      durationHours: eventDuration,
+      title: eventTitle,
+      description: fullDescription,
+      location: campusLocation,
+      organizer: { name: organizerName, email: organizerEmail },
     });
 
-    // Send confirmation text
+    // 3. Save booking to MongoDB
+    const timeStr24 = format(appointmentDate, 'HH:mm');
+    await Booking.create({
+      clientName: callerName || callerPhone,
+      clientPhone: callerPhone,
+      date: appointmentDate,
+      time: timeStr24,
+      duration: eventDuration * 60,
+      type: eventTitle,
+      notes: eventDescription,
+      status: 'confirmed',
+      sessionId,
+      location: campusLocation,
+      gcalLink: gcalLink || undefined,
+    }).catch((err: Error) =>
+      console.error('Failed to save booking to DB:', err),
+    );
+
+    // 4. Send confirmation text with full details
     const timeStr = format(appointmentDate, 'PPpp');
     let msg =
       `🎉 *Appointment Confirmed!*\n\n` +
-      `📅 Time: ${timeStr}\n` +
-      `📍 Location: ${CAMPUS_LOCATION}\n\n`;
+      `📅 *Date & Time:* ${timeStr}\n` +
+      `📍 *Location:* ${campusLocation}\n` +
+      `🏷️ *Type:* ${eventTitle}\n` +
+      `⏱️ *Duration:* ${eventDuration} hour(s)\n` +
+      `📞 *Contact:* ${callerPhone}\n`;
 
     if (gcalLink) {
-      // Keep it simple for WhatsApp, maybe don't flood with links if we send the ICS
+      msg += `\n🔗 *Calendar Link:* ${gcalLink}\n`;
     }
 
-    msg += `Please download the attached file to add this to your calendar.`;
+    msg += `\nPlease download the attached file to add this event to your personal calendar.`;
 
     await sendMessage(jid, msg, sessionId);
 
-    // Send ICS file
+    // 5. Send ICS file
     await sock.sendMessage(jid, {
       document: Buffer.from(icsContent),
       mimetype: 'text/calendar',
-      fileName: 'Jayalath-Invite.ics',
-      caption: '📅 Add to Calendar',
+      fileName: `${organizerName.replace(/\s+/g, '-')}-Invite.ics`,
+      caption: `📅 ${eventTitle} – Add to Calendar`,
     });
 
     // Reset session
-    sessions.delete(jid);
+    await sessionStateService.deleteSession(jid, 'booking');
   } catch (err) {
     console.error('Error booking appointment:', err);
     await sendMessage(
       jid,
-      `❌ Sorry, there was an error reserving your slot.`,
+      `❌ Sorry, there was an error reserving your slot. Please try again.`,
       sessionId,
     );
+    // Clear session on error to prevent stuck state
+    await sessionStateService.deleteSession(jid, 'booking');
   }
 }
 
@@ -286,4 +380,11 @@ export async function handleSpecificDateRequest(
     console.error('Error handling specific date:', e);
     return false;
   }
+}
+
+/**
+ * Get active booking session count
+ */
+export async function getActiveSessionCount(): Promise<number> {
+  return sessionStateService.getSessionCount('booking');
 }

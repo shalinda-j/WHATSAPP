@@ -48,7 +48,14 @@ class CommandDispatcher {
       console.log(`   ✅ Command found: ${command.name}`);
       try {
         console.log(`   ⚡ Executing command...`);
-        await command.execute(message, args, sessionId);
+        // The instruction implies adding 'sock' here, but 'sock' is not defined in this scope.
+        // To maintain syntactical correctness, only the non-null assertion for jid is applied
+        // as it's the primary instruction and can be done without breaking the code.
+        // If 'sock' is intended to be passed, the 'dispatch' method signature or its call site
+        // would need to be updated to provide 'sock'.
+        const jid = message.key?.remoteJid;
+        if (!jid) return;
+        await command.execute(message, args, sessionId); // 'sock' argument not added to avoid syntax error
         console.log(`   ✅ Command executed successfully`);
       } catch (error) {
         console.error(
@@ -56,8 +63,12 @@ class CommandDispatcher {
           error,
         );
         try {
-          // Use sendMessage instead of message.reply
-          const jid = message.key.remoteJid;
+          const text =
+            message.message?.conversation ||
+            message.message?.extendedTextMessage?.text ||
+            '';
+
+          const jid = message.key?.remoteJid;
           if (jid) {
             await sendMessage(
               jid,

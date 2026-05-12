@@ -1,14 +1,21 @@
 import express from 'express';
 import { WhatsAppSessionManager } from '../../services/whatsapp';
 import Session from '../../models/Session';
+import { authenticateToken } from '../middleware/auth';
 
 const router = express.Router();
 const manager = WhatsAppSessionManager.instance;
 
+// SECURITY FIX: All session routes require authentication
+router.use(authenticateToken);
+
 // Get all sessions
 router.get('/', async (req, res) => {
   try {
-    const sessions = await Session.find().sort({ createdAt: -1 });
+    // Only return non-deleted sessions
+    const sessions = await Session.find({ deleted: { $ne: true } }).sort({
+      createdAt: -1,
+    });
     const activeCount = manager.getActiveSessionsCount();
     res.json({
       sessions,
@@ -31,15 +38,34 @@ router.post('/', async (req, res) => {
 
     console.log(`📲 API: Creating new session: ${newId} (${newName})`);
 
-    // Create DB entry if not exists
+    // If this session was previously deleted, allow it to restart
+    if (manager.isSessionDeleted(newId)) {
+      console.log(
+        `   🔄 Session ${newId} was previously deleted (in-memory). Allowing restart...`,
+      );
+      manager.allowSessionRestart(newId);
+    }
+
+    // Create DB entry if not exists, or update if it was deleted
     let session = await Session.findOne({ sessionId: newId });
     if (!session) {
       session = await Session.create({
         sessionId: newId,
         sessionName: newName,
         status: 'connecting',
+        deleted: false,
       });
       console.log(`   ✅ Session DB entry created for: ${newId}`);
+    } else if (session.deleted) {
+      // Session exists but was deleted - clear the deleted flag
+      session = await Session.findOneAndUpdate(
+        { sessionId: newId },
+        { deleted: false, status: 'connecting', qr: null },
+        { new: true },
+      );
+      console.log(`   ✅ Session ${newId} restored from deleted state.`);
+      // Also clear from in-memory deleted set
+      manager.allowSessionRestart(newId);
     } else {
       console.log(`   ⚠️ Session ${newId} already exists in DB. Reusing.`);
     }

@@ -1,7 +1,6 @@
 import { createContext, useContext, useReducer, useCallback, type ReactNode } from 'react';
 import type { Node, Edge } from 'reactflow';
 
-// Types
 export interface WorkflowState {
   nodes: Node[];
   edges: Edge[];
@@ -10,10 +9,9 @@ export interface WorkflowState {
   error: string | null;
   lastSaved: Date | null;
   isDirty: boolean;
-  history: {
-    nodes: Node[];
-    edges: Edge[];
-  }[];
+  savedWorkflowId: string | null;
+  pendingLoad: { nodes: Node[]; edges: Edge[] } | null;
+  history: { nodes: Node[]; edges: Edge[] }[];
   historyIndex: number;
 }
 
@@ -28,11 +26,13 @@ export type WorkflowAction =
   | { type: 'SET_ERROR'; payload: string | null }
   | { type: 'SET_LAST_SAVED'; payload: Date | null }
   | { type: 'SET_DIRTY'; payload: boolean }
+  | { type: 'SET_SAVED_WORKFLOW_ID'; payload: string | null }
+  | { type: 'LOAD_WORKFLOW'; payload: { nodes: Node[]; edges: Edge[] } }
+  | { type: 'CLEAR_PENDING_LOAD' }
   | { type: 'UNDO' }
   | { type: 'REDO' }
   | { type: 'SAVE_TO_HISTORY' };
 
-// Initial state
 const initialState: WorkflowState = {
   nodes: [],
   edges: [],
@@ -41,77 +41,81 @@ const initialState: WorkflowState = {
   error: null,
   lastSaved: null,
   isDirty: false,
+  savedWorkflowId: null,
+  pendingLoad: null,
   history: [],
-  historyIndex: -1
+  historyIndex: -1,
 };
 
-// Reducer
 const workflowReducer = (state: WorkflowState, action: WorkflowAction): WorkflowState => {
   switch (action.type) {
     case 'SET_NODES':
       return { ...state, nodes: action.payload, isDirty: true };
-    
+
     case 'SET_EDGES':
       return { ...state, edges: action.payload, isDirty: true };
-    
+
     case 'ADD_NODE':
-      return { 
-        ...state, 
-        nodes: [...state.nodes, action.payload], 
-        isDirty: true 
-      };
-    
+      return { ...state, nodes: [...state.nodes, action.payload], isDirty: true };
+
     case 'UPDATE_NODE':
       return {
         ...state,
-        nodes: state.nodes.map(node =>
+        nodes: state.nodes.map((node) =>
           node.id === action.payload.id
             ? { ...node, data: { ...node.data, ...action.payload.data } }
-            : node
+            : node,
         ),
-        isDirty: true
+        isDirty: true,
       };
-    
+
     case 'DELETE_NODE':
       return {
         ...state,
-        nodes: state.nodes.filter(node => node.id !== action.payload),
-        edges: state.edges.filter(edge => 
-          edge.source !== action.payload && edge.target !== action.payload
+        nodes: state.nodes.filter((node) => node.id !== action.payload),
+        edges: state.edges.filter(
+          (edge) => edge.source !== action.payload && edge.target !== action.payload,
         ),
-        isDirty: true
+        isDirty: true,
       };
-    
+
     case 'SET_SELECTED_NODE':
       return { ...state, selectedNode: action.payload };
-    
+
     case 'SET_LOADING':
       return { ...state, isLoading: action.payload };
-    
+
     case 'SET_ERROR':
       return { ...state, error: action.payload };
-    
+
     case 'SET_LAST_SAVED':
       return { ...state, lastSaved: action.payload, isDirty: false };
-    
+
     case 'SET_DIRTY':
       return { ...state, isDirty: action.payload };
-    
-    case 'SAVE_TO_HISTORY':
-      const newHistory = state.history.slice(0, state.historyIndex + 1);
-      newHistory.push({ nodes: state.nodes, edges: state.edges });
-      
-      // Keep only last 50 states
-      if (newHistory.length > 50) {
-        newHistory.shift();
-      }
-      
+
+    case 'SET_SAVED_WORKFLOW_ID':
+      return { ...state, savedWorkflowId: action.payload };
+
+    case 'LOAD_WORKFLOW':
       return {
         ...state,
-        history: newHistory,
-        historyIndex: newHistory.length - 1
+        nodes: action.payload.nodes,
+        edges: action.payload.edges,
+        pendingLoad: action.payload,
+        isDirty: false,
       };
-    
+
+    case 'CLEAR_PENDING_LOAD':
+      return { ...state, pendingLoad: null };
+
+    case 'SAVE_TO_HISTORY': {
+      const newHistory = state.history.slice(0, state.historyIndex + 1);
+      newHistory.push({ nodes: state.nodes, edges: state.edges });
+      if (newHistory.length > 50) newHistory.shift();
+      return { ...state, history: newHistory, historyIndex: newHistory.length - 1 };
+    }
+
     case 'UNDO':
       if (state.historyIndex > 0) {
         const prevState = state.history[state.historyIndex - 1];
@@ -120,11 +124,12 @@ const workflowReducer = (state: WorkflowState, action: WorkflowAction): Workflow
           nodes: prevState.nodes,
           edges: prevState.edges,
           historyIndex: state.historyIndex - 1,
-          isDirty: true
+          isDirty: true,
+          pendingLoad: prevState,
         };
       }
       return state;
-    
+
     case 'REDO':
       if (state.historyIndex < state.history.length - 1) {
         const nextState = state.history[state.historyIndex + 1];
@@ -133,17 +138,17 @@ const workflowReducer = (state: WorkflowState, action: WorkflowAction): Workflow
           nodes: nextState.nodes,
           edges: nextState.edges,
           historyIndex: state.historyIndex + 1,
-          isDirty: true
+          isDirty: true,
+          pendingLoad: nextState,
         };
       }
       return state;
-    
+
     default:
       return state;
   }
 };
 
-// Context
 const WorkflowContext = createContext<{
   state: WorkflowState;
   dispatch: React.Dispatch<WorkflowAction>;
@@ -157,6 +162,9 @@ const WorkflowContext = createContext<{
     setLoading: (loading: boolean) => void;
     setError: (error: string | null) => void;
     setLastSaved: (date: Date | null) => void;
+    setSavedWorkflowId: (id: string | null) => void;
+    loadWorkflow: (payload: { nodes: Node[]; edges: Edge[] }) => void;
+    clearPendingLoad: () => void;
     saveToHistory: () => void;
     undo: () => void;
     redo: () => void;
@@ -165,28 +173,53 @@ const WorkflowContext = createContext<{
   };
 } | null>(null);
 
-// Provider
 export const WorkflowProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(workflowReducer, initialState);
 
-  // Actions
   const actions = {
     setNodes: useCallback((nodes: Node[]) => dispatch({ type: 'SET_NODES', payload: nodes }), []),
     setEdges: useCallback((edges: Edge[]) => dispatch({ type: 'SET_EDGES', payload: edges }), []),
     addNode: useCallback((node: Node) => dispatch({ type: 'ADD_NODE', payload: node }), []),
-    updateNode: useCallback((id: string, data: Partial<Node['data']>) => 
-      dispatch({ type: 'UPDATE_NODE', payload: { id, data } }), []),
-    deleteNode: useCallback((id: string) => dispatch({ type: 'DELETE_NODE', payload: id }), []),
-    setSelectedNode: useCallback((node: Node | null) => 
-      dispatch({ type: 'SET_SELECTED_NODE', payload: node }), []),
-    setLoading: useCallback((loading: boolean) => dispatch({ type: 'SET_LOADING', payload: loading }), []),
-    setError: useCallback((error: string | null) => dispatch({ type: 'SET_ERROR', payload: error }), []),
-    setLastSaved: useCallback((date: Date | null) => dispatch({ type: 'SET_LAST_SAVED', payload: date }), []),
+    updateNode: useCallback(
+      (id: string, data: Partial<Node['data']>) =>
+        dispatch({ type: 'UPDATE_NODE', payload: { id, data } }),
+      [],
+    ),
+    deleteNode: useCallback(
+      (id: string) => dispatch({ type: 'DELETE_NODE', payload: id }),
+      [],
+    ),
+    setSelectedNode: useCallback(
+      (node: Node | null) => dispatch({ type: 'SET_SELECTED_NODE', payload: node }),
+      [],
+    ),
+    setLoading: useCallback(
+      (loading: boolean) => dispatch({ type: 'SET_LOADING', payload: loading }),
+      [],
+    ),
+    setError: useCallback(
+      (error: string | null) => dispatch({ type: 'SET_ERROR', payload: error }),
+      [],
+    ),
+    setLastSaved: useCallback(
+      (date: Date | null) => dispatch({ type: 'SET_LAST_SAVED', payload: date }),
+      [],
+    ),
+    setSavedWorkflowId: useCallback(
+      (id: string | null) => dispatch({ type: 'SET_SAVED_WORKFLOW_ID', payload: id }),
+      [],
+    ),
+    loadWorkflow: useCallback(
+      (payload: { nodes: Node[]; edges: Edge[] }) =>
+        dispatch({ type: 'LOAD_WORKFLOW', payload }),
+      [],
+    ),
+    clearPendingLoad: useCallback(() => dispatch({ type: 'CLEAR_PENDING_LOAD' }), []),
     saveToHistory: useCallback(() => dispatch({ type: 'SAVE_TO_HISTORY' }), []),
     undo: useCallback(() => dispatch({ type: 'UNDO' }), []),
     redo: useCallback(() => dispatch({ type: 'REDO' }), []),
     canUndo: state.historyIndex > 0,
-    canRedo: state.historyIndex < state.history.length - 1
+    canRedo: state.historyIndex < state.history.length - 1,
   };
 
   return (
@@ -196,7 +229,7 @@ export const WorkflowProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-// Hook
+// eslint-disable-next-line react-refresh/only-export-components
 export const useWorkflow = () => {
   const context = useContext(WorkflowContext);
   if (!context) {

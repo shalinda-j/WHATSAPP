@@ -30,67 +30,97 @@ AuthSchema.index({ sessionId: 1, key: 1 }, { unique: true });
 // Safer model initialization: Check mongoose.models first to prevent OverwriteModelError
 const AuthModel =
   (mongoose.models.AuthCredentials as any) ||
-  ((mongoose as any).model('AuthCredentials', AuthSchema));
+  (mongoose as any).model('AuthCredentials', AuthSchema);
 
 // --- MongoDB Connection Helper ---
 export const connectToMongoDB = async (uri: string): Promise<void> => {
   const MAX_RETRIES = 5;
   const RETRY_DELAY = 5000; // 5 seconds
 
+  // Add connection event handlers for monitoring
+  mongoose.connection.on('connected', () => {
+    console.log('📦 MongoDB connection established');
+  });
+
+  mongoose.connection.on('disconnected', () => {
+    console.warn('⚠️ MongoDB connection lost');
+  });
+
+  mongoose.connection.on('error', (err) => {
+    console.error('❌ MongoDB connection error:', err);
+  });
+
+  mongoose.connection.on('reconnected', () => {
+    console.log('🔄 MongoDB reconnected');
+  });
+
   for (let i = 1; i <= MAX_RETRIES; i++) {
     try {
       console.log(`⏳ Connecting to MongoDB (Attempt ${i}/${MAX_RETRIES})...`);
 
       await mongoose.connect(uri, {
+        serverSelectionTimeoutMS: 30000, // 30 seconds for slower networks
+        connectTimeoutMS: 60000, // 60 seconds connection timeout
+        socketTimeoutMS: 90000, // 90 seconds socket timeout
+        maxPoolSize: 10, // Connection pool size
+        minPoolSize: 2, // Minimum connections in pool
+        maxIdleTimeMS: 60000, // Close idle connections after 60s
+        heartbeatFrequencyMS: 10000, // Check connection health every 10s
         serverApi: {
-          version: '1',
-          strict: true,
-          deprecationErrors: true,
+          version: '1' as const,
+          strict: false,
+          deprecationErrors: false,
         },
-        serverSelectionTimeoutMS: 5000,
       });
 
       // Send a ping to confirm a successful connection (Mongoose way)
-      await mongoose.connection.db.admin().command({ ping: 1 });
-      console.log(
-        '✅ Pinged your deployment. You successfully connected to MongoDB!',
-      );
+      if (mongoose.connection.db) {
+        await mongoose.connection.db.admin().command({ ping: 1 });
+        console.log(
+          '✅ Pinged your deployment. You successfully connected to MongoDB!',
+        );
 
-      // --- Migration: Drop stale `key_1` index if it exists ---
-      try {
-        const collection = mongoose.connection.db.collection('authcredentials');
-        const indexes = await collection.indexes();
-        const staleIndex = indexes.find((idx: any) => idx.name === 'key_1');
-        if (staleIndex) {
-          await collection.dropIndex('key_1');
-          console.log(
-            "🔧 Dropped stale 'key_1' index from authcredentials collection.",
-          );
-        }
-      } catch (migrationError: any) {
-        // Ignore if index doesn't exist or collection doesn't exist yet
-        if (
-          migrationError.codeName !== 'IndexNotFound' &&
-          migrationError.codeName !== 'NamespaceNotFound'
-        ) {
-          console.warn('⚠️ Migration warning:', migrationError.message);
+        // --- Migration: Drop stale `key_1` index if it exists ---
+        try {
+          const collection =
+            mongoose.connection.db.collection('authcredentials');
+          const indexes = await collection.indexes();
+          const staleIndex = indexes.find((idx: any) => idx.name === 'key_1');
+          if (staleIndex) {
+            await collection.dropIndex('key_1');
+            console.log(
+              "🔧 Dropped stale 'key_1' index from authcredentials collection.",
+            );
+          }
+        } catch (migrationError: any) {
+          // Ignore if index doesn't exist or collection doesn't exist yet
+          if (
+            migrationError.codeName !== 'IndexNotFound' &&
+            migrationError.codeName !== 'NamespaceNotFound'
+          ) {
+            console.warn('⚠️ Migration warning:', migrationError.message);
+          }
         }
       }
 
       // If successful, break the loop
       return;
-
     } catch (error: any) {
-      console.error(`❌ MongoDB Connection Error (Attempt ${i}):`, error.message);
+      console.error(
+        `❌ MongoDB Connection Error (Attempt ${i}):`,
+        error.message,
+      );
 
       if (i < MAX_RETRIES) {
         console.log(`   Retrying in ${RETRY_DELAY / 1000}s...`);
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
       } else {
-        console.error('❌ Failed to connect to MongoDB after multiple attempts. Exiting.');
-        // We should probably let the process crash or handle it upstream, 
-        // but for now, swallowing it caused the timeout issues. 
-        // Let's rethrow or exit. 
+        console.error(
+          '❌ Failed to connect to MongoDB after multiple attempts. Exiting.',
+        );
+        // We should probably let the process crash or handle it upstream,
+        // but for now, swallowing it caused the timeout issues.
+        // Let's rethrow or exit.
         // If we rethrow, startServer matches it.
         // But since this is async, let's keep it simple for now and just log final failure.
         // Ideally we should throw so startServer stops.
@@ -119,7 +149,10 @@ export const useMongoDBAuthState = async (
       }
       const data = await AuthModel.findOne({ sessionId, key });
       if (data && data.value) {
-        const parsed = JSON.parse(JSON.stringify(data.value), BufferJSON.reviver);
+        const parsed = JSON.parse(
+          JSON.stringify(data.value),
+          BufferJSON.reviver,
+        );
         cache[key] = parsed;
         return parsed;
       }
@@ -200,8 +233,8 @@ export const useMongoDBAuthState = async (
         set: async (data) => {
           const tasks: Promise<void>[] = [];
           for (const category in data) {
-            for (const id in data[category]) {
-              const value = data[category][id];
+            for (const id in data[category as keyof typeof data]) {
+              const value = (data[category as keyof typeof data] as any)[id];
               const key = `${category}-${id}`;
               if (value) {
                 tasks.push(writeData(key, value));
@@ -219,4 +252,22 @@ export const useMongoDBAuthState = async (
     },
     clearState,
   };
+};
+
+/**
+ * Standalone function to clear auth data for a session
+ * Can be called from outside the auth state initialization
+ */
+export const clearSessionAuthData = async (
+  sessionId: string,
+): Promise<void> => {
+  try {
+    const result = await AuthModel.deleteMany({ sessionId });
+    console.log(
+      `🧹 Cleared ${result.deletedCount} auth entries for session: ${sessionId}`,
+    );
+  } catch (error) {
+    console.error(`Error clearing auth data for session ${sessionId}:`, error);
+    throw error;
+  }
 };

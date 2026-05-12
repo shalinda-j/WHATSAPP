@@ -28,6 +28,23 @@ interface Lead {
   registeredAt: Date;
 }
 
+interface LeadStats {
+  total: number;
+  totalLeads?: number;
+  weekLeads: number;
+  byStatus: Record<string, number>;
+  byJobType: Record<string, number>;
+}
+
+interface LeadMessage {
+  id: string;
+  content: string;
+  type: string;
+  timestamp: string;
+  sender: string;
+  role?: 'user' | 'assistant' | 'system';
+}
+
 const statusConfig = {
   new: { label: 'New', color: 'bg-blue-50 text-blue-700 border-blue-200', icon: Clock },
   reviewed: { label: 'Reviewed', color: 'bg-yellow-50 text-yellow-700 border-yellow-200', icon: Eye },
@@ -45,12 +62,12 @@ export default function Leads() {
   const [statusFilter, setStatusFilter] = useState('');
   const [jobFilter, setJobFilter] = useState('');
   const [jobTypes, setJobTypes] = useState<string[]>([]);
-  const [stats, setStats] = useState<any>({});
+  const [stats, setStats] = useState<LeadStats | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [uploading, setUploading] = useState(false);
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<LeadMessage[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
 
   const showNotify = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -69,7 +86,7 @@ export default function Leads() {
       link.click();
       link.remove();
       showNotify('Export downloaded successfully', 'success');
-    } catch (err) {
+    } catch {
       showNotify('Failed to export CSV', 'error');
     }
   };
@@ -78,9 +95,10 @@ export default function Leads() {
     setLoadingMessages(true);
     try {
       const res = await api.get(`/api/leads/${leadId}/messages`);
-      setMessages(res.data);
-    } catch (err) {
-      console.error('Failed to fetch messages', err);
+      setMessages(res.data.messages || []);
+    } catch (error) {
+      console.error('Failed to fetch messages', error);
+      setMessages([]);
     } finally {
       setLoadingMessages(false);
     }
@@ -92,6 +110,7 @@ export default function Leads() {
     } else {
       setMessages([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showModal, selectedLead?._id]);
 
   const fetchLeads = async () => {
@@ -135,6 +154,7 @@ export default function Leads() {
     fetchLeads();
     fetchStats();
     fetchJobTypes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, search, statusFilter, jobFilter]);
 
   const handleStatusChange = async (leadId: string, newStatus: string) => {
@@ -143,7 +163,7 @@ export default function Leads() {
       fetchLeads();
       fetchStats();
       showNotify('Status updated', 'success');
-    } catch (err) {
+    } catch {
       showNotify('Failed to update status', 'error');
     }
   };
@@ -159,7 +179,7 @@ export default function Leads() {
       fetchLeads();
       fetchStats();
       showNotify('Lead deleted successfully', 'success');
-    } catch (err) {
+    } catch {
       showNotify('Failed to delete lead', 'error');
     }
   };
@@ -179,7 +199,7 @@ export default function Leads() {
       }
       fetchLeads();
       showNotify('File uploaded successfully', 'success');
-    } catch (err) {
+    } catch {
       showNotify('Upload failed', 'error');
     } finally {
       setUploading(false);
@@ -207,7 +227,7 @@ export default function Leads() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-indigo-100 text-sm font-medium">Total Leads</p>
-              <p className="text-3xl font-extrabold mt-1">{stats.totalLeads || 0}</p>
+              <p className="text-3xl font-extrabold mt-1">{stats?.totalLeads || stats?.total || 0}</p>
             </div>
             <div className="bg-white/20 p-2 rounded-xl">
               <UserPlus className="h-6 w-6 text-white" />
@@ -217,7 +237,7 @@ export default function Leads() {
 
         {Object.entries(statusConfig).map(([key, config]) => {
           const Icon = config.icon;
-          const count = stats.byStatus?.[key] || 0;
+          const count = stats?.byStatus?.[key] || 0;
           return (
             <div
               key={key}
@@ -334,7 +354,7 @@ export default function Leads() {
                     <td className="px-8 py-5">
                       <div className="flex items-center gap-4">
                         <div className="h-12 w-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-lg shadow-sm group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300">
-                          {lead.fullName.charAt(0)}
+                          {(lead.fullName || 'U').charAt(0)}
                         </div>
                         <div>
                           <div className="font-bold text-gray-900 text-base">{lead.fullName}</div>
@@ -451,7 +471,7 @@ export default function Leads() {
             <div className="flex justify-between items-center px-8 py-6 border-b border-gray-100 bg-gray-50/50">
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 rounded-2xl bg-indigo-600 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-indigo-200">
-                  {selectedLead.fullName.charAt(0)}
+                  {(selectedLead.fullName || 'U').charAt(0)}
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">{selectedLead.fullName}</h2>
@@ -514,7 +534,7 @@ export default function Leads() {
                           value={selectedLead.status}
                           onChange={async (e) => {
                             await handleStatusChange(selectedLead._id, e.target.value);
-                            setSelectedLead({ ...selectedLead, status: e.target.value as any });
+                            setSelectedLead({ ...selectedLead, status: e.target.value as Lead['status'] });
                           }}
                           className={`w-full appearance-none px-4 py-3 rounded-2xl border-2 font-bold transition outline-none ring-indigo-500/20 focus:ring-4 ${statusConfig[selectedLead.status as keyof typeof statusConfig]?.color}`}
                           style={{ textAlign: 'center' }}

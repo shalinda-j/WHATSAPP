@@ -51,13 +51,12 @@ export class OpenAIService implements AIService {
   }
 }
 
-
 /**
  * Transcribe audio using OpenAI Whisper
  */
 export async function transcribeAudio(
   audioBuffer: Buffer,
-  apiKey: string
+  apiKey: string,
 ): Promise<string> {
   try {
     const openai = new OpenAI({ apiKey });

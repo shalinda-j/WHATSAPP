@@ -1,3 +1,5 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore - node-nlp lacks TypeScript definitions
 import { NlpManager } from 'node-nlp';
 import NLPCache from '../models/NLPCache';
 import crypto from 'crypto';
@@ -41,24 +43,40 @@ class NLPService {
         } catch (error) {
             console.error('❌ Failed to initialize Local NLP:', error);
         }
-    }
+        this.manager.addAnswer('en', cache.intentName, cache.aiResponse);
+      }
 
-    /**
-     * Internal method to train the model.
-     */
-    private async _trainModel() {
-        if (this.isTraining) return;
-        this.isTraining = true;
-        try {
-            console.log('⏳ Training Local NLP Model...');
-            await this.manager.train();
-            this.isTrained = true;
-            console.log('✅ Local NLP Model Trained Successfully.');
-        } catch (error) {
-            console.error('❌ Error training Local NLP Model:', error);
-        } finally {
-            this.isTraining = false;
-        }
+      console.log(
+        `📝 Loaded ${utteranceCount} utterances across ${caches.length} intents.`,
+      );
+
+      await this._trainModel();
+      this.initialized = true;
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to initialize Local NLP:', error);
+      this.initialized = false;
+      return false;
+    }
+  }
+
+  /**
+   * Check if the service is ready to process messages
+   */
+  isReady(): boolean {
+    return this.initialized && this.isTrained;
+  }
+
+  /**
+   * Internal method to train the model.
+   * Implements a queue mechanism to handle concurrent training requests.
+   */
+  private async _trainModel(): Promise<boolean> {
+    if (this.isTraining) {
+      // Mark that retraining is needed after current training completes
+      this.needsRetraining = true;
+      console.log('⏳ Training already in progress. Queuing retraining...');
+      return false;
     }
 
     /**
@@ -123,7 +141,68 @@ class NLPService {
         } catch (error) {
             console.error('❌ Error learning from AI in Local NLP:', error);
         }
+      } else {
+        // Create new intent
+        cache = new NLPCache({
+          intentName,
+          userUtterances: [userMessage.trim()],
+          aiResponse: normalizedResponse,
+        });
+        await cache.save();
+
+        // Add to NLP manager
+        this.manager.addDocument('en', userMessage.trim(), intentName);
+        this.manager.addAnswer('en', intentName, normalizedResponse);
+        console.log(`✨ [NLP LEARN] Created new intent: ${intentName}`);
+
+        await this._trainModel();
+        return true;
+      }
+    } catch (error) {
+      console.error('❌ Error learning from AI in Local NLP:', error);
+      return false;
     }
+  }
+
+  /**
+   * Clears all learned data and reinitializes the model.
+   * Useful for testing or resetting the cache.
+   */
+  async clearAll(): Promise<void> {
+    try {
+      await NLPCache.deleteMany({});
+      this.manager = new (NlpManager as any)({
+        languages: ['en'],
+        forceNER: true,
+        nlu: { log: false },
+      });
+      this.isTrained = true;
+      this.needsRetraining = false;
+      console.log('🧹 [NLP] All cached data cleared.');
+    } catch (error) {
+      console.error('❌ Error clearing NLP cache:', error);
+    }
+  }
+
+  /**
+   * Get statistics about the NLP cache
+   */
+  async getStats(): Promise<{ intentCount: number; totalUtterances: number }> {
+    try {
+      const caches = await NLPCache.find();
+      const totalUtterances = caches.reduce(
+        (sum: number, c: any) => sum + c.userUtterances.length,
+        0,
+      );
+      return {
+        intentCount: caches.length,
+        totalUtterances,
+      };
+    } catch (error) {
+      console.error('❌ Error getting NLP stats:', error);
+      return { intentCount: 0, totalUtterances: 0 };
+    }
+  }
 }
 
 export const nlpService = new NLPService();

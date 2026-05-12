@@ -13,15 +13,16 @@ export class ProfileCommand extends BaseCommand {
   async execute(
     message: proto.IWebMessageInfo,
     args: string[],
-    sessionId: string,
+    _sessionId: string,
   ): Promise<void> {
-    const jid = message.key.remoteJid;
-    if (!jid) return;
-
-    await this.sendTyping(message, sessionId);
+    const senderJid = message.key?.participant || message.key?.remoteJid;
+    const jid = message.key?.remoteJid;
+    if (!jid || !senderJid) return;
+    // Note: react requires sock but BaseCommand doesn't provide it here, so using sendReply or just ignoring react.
+    await this.sendTyping(message, _sessionId);
 
     // Validate if it's a group
-    const isGroup = await this.requireGroup(message, sessionId);
+    const isGroup = await this.requireGroup(message, _sessionId);
     if (!isGroup) return;
 
     // Get mentioned contact
@@ -34,17 +35,25 @@ export class ProfileCommand extends BaseCommand {
       await this.reply(
         message,
         '⚠️ Please mention a user.\n\n📖 *Usage:* !perfil @user',
-        sessionId,
+        _sessionId,
       );
       return;
     }
 
-    await this.reply(message, '🔍 Searching for profile picture...', sessionId);
+    await this.reply(
+      message,
+      '🔍 Searching for profile picture...',
+      _sessionId,
+    );
 
     try {
-      const sock = getSocket(sessionId);
+      const sock = getSocket(_sessionId);
       if (!sock) {
-        await this.reply(message, '⚠️ Connection error.', sessionId);
+        await this.reply(
+          message,
+          '⚠️ Failed to fetch group profile!',
+          _sessionId,
+        );
         return;
       }
 
@@ -56,7 +65,7 @@ export class ProfileCommand extends BaseCommand {
         await this.reply(
           message,
           '⚠️ This user does not have a profile picture.',
-          sessionId,
+          _sessionId,
         );
         return;
       }
@@ -71,7 +80,7 @@ export class ProfileCommand extends BaseCommand {
       await this.reply(
         message,
         '⚠️ Unable to get the profile picture.',
-        sessionId,
+        _sessionId,
       );
     }
   }
