@@ -264,7 +264,13 @@ router.get('/top-questions', async (req, res) => {
   try {
     const { limit = 50 } = req.query;
 
+    const limitNum = Number(limit);
+
+    // ⚡ Bolt: Use lean() and precise selection to minimize memory footprint
+    // Instead of instantiating full Mongoose documents which are memory heavy,
+    // we use lean() to get pure JS objects and only select the needed 'content' field.
     const userMessages = await ChatMessage.find({ role: 'user', type: 'text' })
+      .select('content -_id')
       .sort({ timestamp: -1 })
       .limit(Number(limit) * 2)
       .lean();
@@ -282,7 +288,7 @@ router.get('/top-questions', async (req, res) => {
     const topQuestions = Object.entries(messageCounts)
       .filter(([_, count]) => count >= 1)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, Number(limit))
+      .slice(0, limitNum)
       .map(([question, count]) => ({ question, count }));
 
     res.json(topQuestions);
