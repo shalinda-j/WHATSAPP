@@ -47,9 +47,7 @@ const SESSION_TTL_MS = 30 * 60 * 1000;
 /**
  * Get country menu string
  */
-function getCountryMenu(
-  countries: { code: string; name: string; flag: string }[],
-): string {
+function getCountryMenu(countries: { code: string; name: string; flag: string }[]): string {
   return countries.map((c, i) => `${i + 1}. ${c.flag} ${c.name}`).join('\n');
 }
 
@@ -187,16 +185,12 @@ export async function handleLeadMessage(
   const cleanText = text.trim();
 
   // Get configuration from session (stored during startLeadRegistration)
-  const jobTypes = session.jobTypes || [];
-  const countries = session.countries || [];
-  const experienceLevels = session.experienceLevels || [];
+  let jobTypes = session.jobTypes || [];
+  let countries = session.countries || [];
+  let experienceLevels = session.experienceLevels || [];
 
   // Validate configuration exists
-  if (
-    jobTypes.length === 0 ||
-    countries.length === 0 ||
-    experienceLevels.length === 0
-  ) {
+  if (jobTypes.length === 0 || countries.length === 0 || experienceLevels.length === 0) {
     await sendMessage(
       jid,
       '⚠️ Registration session is invalid. Please type `!register` to start again.',
@@ -210,11 +204,7 @@ export async function handleLeadMessage(
     // Step 1: Name
     case LeadState.AWAITING_NAME:
       if (cleanText.length < 2) {
-        await sendMessage(
-          jid,
-          `⚠️ Please enter a valid name (at least 2 characters).`,
-          sessionId,
-        );
+        await sendMessage(jid, `⚠️ Please enter a valid name (at least 2 characters).`, sessionId);
         return true;
       }
       session.data.fullName = cleanText;
@@ -263,11 +253,7 @@ export async function handleLeadMessage(
     case LeadState.AWAITING_PHONE:
       const phone = cleanText.replace(/[^0-9]/g, '');
       if (phone.length < 9) {
-        await sendMessage(
-          jid,
-          `⚠️ Please enter a valid phone number.`,
-          sessionId,
-        );
+        await sendMessage(jid, `⚠️ Please enter a valid phone number.`, sessionId);
         return true;
       }
       session.data.phoneNumber = phone;
@@ -290,11 +276,7 @@ export async function handleLeadMessage(
     // Step 4: Country Selection
     case LeadState.AWAITING_COUNTRY:
       const countrySelection = parseInt(cleanText);
-      if (
-        isNaN(countrySelection) ||
-        countrySelection < 1 ||
-        countrySelection > countries.length
-      ) {
+      if (isNaN(countrySelection) || countrySelection < 1 || countrySelection > countries.length) {
         await sendMessage(
           jid,
           `⚠️ Invalid selection. Please reply with a number between 1 and ${countries.length}.`,
@@ -324,11 +306,7 @@ export async function handleLeadMessage(
     // Step 5: Experience
     case LeadState.AWAITING_EXPERIENCE:
       const expSelection = parseInt(cleanText);
-      if (
-        isNaN(expSelection) ||
-        expSelection < 1 ||
-        expSelection > experienceLevels.length
-      ) {
+      if (isNaN(expSelection) || expSelection < 1 || expSelection > experienceLevels.length) {
         await sendMessage(
           jid,
           `⚠️ Invalid selection. Please reply with a number between 1 and ${experienceLevels.length}.`,
@@ -342,29 +320,56 @@ export async function handleLeadMessage(
 
       const jobMenu = getJobTypeMenu(jobTypes);
       await sendTyping(jid, sessionId);
-      
-      try {
-        const lead = await Lead.create({
-          fullName: session.data.fullName,
-          phoneNumber: session.data.phoneNumber,
-          address: session.data.address,
-          jobVacancyType: session.data.jobVacancyType,
-          status: 'new',
-        });
+      await sendMessage(
+        jid,
+        `✅ Experience: *${selectedExp.label}*\n\n` +
+          `*Step 6 of 7*\n` +
+          `Select your **Job Category**:\n\n` +
+          `${jobMenu}\n\n` +
+          `Reply with the number (1-${jobTypes.length})`,
+        sessionId,
+      );
+      session.state = LeadState.AWAITING_JOB_TYPE;
+      await saveLeadSession(jid, session);
+      break;
 
+    // Step 6: Job Type
+    case LeadState.AWAITING_JOB_TYPE:
+      const jobSelection = parseInt(cleanText);
+      if (isNaN(jobSelection) || jobSelection < 1 || jobSelection > jobTypes.length) {
         await sendMessage(
           jid,
-          `🎉 *Registration Complete!*\n\n` +
-          `✅ Name: ${session.data.fullName}\n` +
-          `✅ Phone: ${session.data.phoneNumber}\n` +
-          `✅ Job: ${session.data.jobVacancyType}\n\n` +
-          `📋 Your registration ID: ${lead._id}\n\n` +
-          `We will contact you soon!\n\n` +
-          `Type \`!help\` for other commands.`,
-          sessionId
+          `⚠️ Invalid selection. Please reply with a number between 1 and ${jobTypes.length}.`,
+          sessionId,
         );
-      } catch (error) {
-        console.error('Lead registration error:', error);
+        return true;
+      }
+      session.data.jobVacancyType = jobTypes[jobSelection - 1];
+      session.state = LeadState.AWAITING_CV;
+      await saveLeadSession(jid, session);
+
+      await sendTyping(jid, sessionId);
+      await sendMessage(
+        jid,
+        `✅ Job Category: *${session.data.jobVacancyType}*\n\n` +
+          `*Step 7 of 7*\n` +
+          `Do you have a **CV/Resume** to upload?\n\n` +
+          `1. ✅ Yes, I have a CV\n` +
+          `2. ❌ No, I don't have one\n\n` +
+          `Reply with 1 or 2`,
+        sessionId,
+      );
+      break;
+
+    // Step 7: CV Upload
+    case LeadState.AWAITING_CV:
+      const cvChoice = parseInt(cleanText);
+      if (cvChoice === 1) {
+        // User has CV - send upload link (configurable via admin panel)
+        const companyInfo = await configurationManager.getCompanyInfo();
+        const cvUploadUrl = process.env.CV_UPLOAD_URL || 'https://forms.gle/your-cv-upload-form';
+
+        await sendTyping(jid, sessionId);
         await sendMessage(
           jid,
           `📄 *CV Upload*\n\n` +
@@ -375,13 +380,7 @@ export async function handleLeadMessage(
           sessionId,
         );
         return true;
-      } else if (
-        cvChoice === 2 ||
-        cleanText.toLowerCase() === 'skip' ||
-        cleanText.toLowerCase() === 'no' ||
-        cleanText.toLowerCase().includes('no cv') ||
-        cleanText.toLowerCase().includes("don't have")
-      ) {
+      } else if (cvChoice === 2 || cleanText.toLowerCase() === 'skip' || cleanText.toLowerCase() === 'no' || cleanText.toLowerCase().includes('no cv') || cleanText.toLowerCase().includes("don't have")) {
         // No CV or skip - proceed to save with empty cvUrl
         session.data.cvUrl = '';
         await saveLeadSession(jid, session);
@@ -417,10 +416,7 @@ async function saveLeadRegistration(
   await sendTyping(jid, sessionId);
 
   try {
-    console.log(
-      '📋 Saving lead registration:',
-      JSON.stringify(session.data, null, 2),
-    );
+    console.log('📋 Saving lead registration:', JSON.stringify(session.data, null, 2));
 
     // Create lead in database
     const leadData = {
@@ -442,9 +438,7 @@ async function saveLeadRegistration(
 
     // Also create CRM contact
     try {
-      const [firstName, ...lastNameParts] = (session.data.fullName || '').split(
-        ' ',
-      );
+      const [firstName, ...lastNameParts] = (session.data.fullName || '').split(' ');
       const lastName = lastNameParts.join(' ') || '';
 
       const crmContact = await CRMService.createContact({
@@ -466,9 +460,7 @@ async function saveLeadRegistration(
 
       // Link CRM contact to lead
       if (crmContact) {
-        await Lead.findByIdAndUpdate(lead._id, {
-          crmContactId: crmContact._id,
-        });
+        await Lead.findByIdAndUpdate(lead._id, { crmContactId: crmContact._id });
         console.log('✅ CRM contact linked:', crmContact._id);
       }
     } catch (crmError) {
@@ -478,7 +470,7 @@ async function saveLeadRegistration(
 
     // Send confirmation
     const selectedCountry = session.countries?.find(
-      (c) => c.name === session.data.interestedCountry,
+      (c) => c.name === session.data.interestedCountry
     );
 
     await sendMessage(
@@ -488,9 +480,7 @@ async function saveLeadRegistration(
         `👤 *Name:* ${session.data.fullName}\n` +
         `🎂 *Age:* ${session.data.age}\n` +
         `📱 *Phone:* ${session.data.phoneNumber}\n` +
-        `🌍 *Country:* ${selectedCountry?.flag || ''} ${
-          session.data.interestedCountry
-        }\n` +
+        `🌍 *Country:* ${selectedCountry?.flag || ''} ${session.data.interestedCountry}\n` +
         `⏱️ *Experience:* ${session.data.experienceYears} years\n` +
         `💼 *Job:* ${session.data.jobVacancyType}\n` +
         `📄 *CV:* ${session.data.cvUrl ? 'Uploaded' : 'Not provided'}\n` +
@@ -527,9 +517,7 @@ export async function getLeadStats() {
     const [total, byStatus, byCountry, recent] = await Promise.all([
       Lead.countDocuments(),
       Lead.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
-      Lead.aggregate([
-        { $group: { _id: '$interestedCountry', count: { $sum: 1 } } },
-      ]),
+      Lead.aggregate([{ $group: { _id: '$interestedCountry', count: { $sum: 1 } } }]),
       Lead.find().sort({ registeredAt: -1 }).limit(10).lean(),
     ]);
 
