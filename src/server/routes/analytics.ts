@@ -102,7 +102,8 @@ router.get('/questions', async (req, res) => {
 
     const userMessages = await ChatMessage.find({ role: 'user' })
       .sort({ timestamp: -1 })
-      .limit(Number(limit));
+      .limit(Number(limit))
+      .lean();
 
     const questionCounts: Record<string, number> = {};
     const keywordsMap: Record<string, string[]> = {
@@ -184,7 +185,8 @@ router.get('/datasets', async (req, res) => {
 
     const datasets = await Dataset.find({ isActive: true })
       .sort({ updatedAt: -1 })
-      .limit(10);
+      .limit(10)
+      .lean();
 
     const totalRecords = datasets.reduce((sum, ds) => {
       const content = ds.content as string | Record<string, unknown> | null;
@@ -260,7 +262,8 @@ router.get('/top-questions', async (req, res) => {
 
     const userMessages = await ChatMessage.find({ role: 'user', type: 'text' })
       .sort({ timestamp: -1 })
-      .limit(Number(limit) * 2);
+      .limit(Number(limit) * 2)
+      .lean();
 
     const messageCounts: Record<string, number> = {};
 
@@ -395,7 +398,8 @@ router.get('/recent-replies', async (req, res) => {
     // Fetch the absolute newest messages where the bot has replied
     const recentReplies = await ChatMessage.find({ role: 'assistant' })
       .sort({ timestamp: -1 })
-      .limit(Number(limit));
+      .limit(Number(limit))
+      .lean();
 
     res.json(
       recentReplies.map((reply: any) => ({
