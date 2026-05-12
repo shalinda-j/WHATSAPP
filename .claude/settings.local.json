@@ -1,17 +1,29 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cd D:/360ai/WHATSAPP && npx tsc --noEmit 2>&1)",
-      "Bash(cd D:/360ai/WHATSAPP && npm run build 2>&1)",
-      "Bash(cd D:/360ai/WHATSAPP && node_modules/.bin/tsc --noEmit 2>&1)",
-      "Bash(cd D:/360ai/WHATSAPP && ./node_modules/typescript/bin/tsc --noEmit 2>&1)",
-      "Bash(cd D:/360ai/WHATSAPP && npm install 2>&1 | tail -20)",
-      "Bash(cd D:/360ai/WHATSAPP && ./node_modules/.bin/tsc --noEmit 2>&1)",
       "Bash(npx tsc:*)",
       "Bash(npm run:*)",
+      "Bash(npm install:*)",
+      "Bash(npm test:*)",
+      "Bash(npm audit:*)",
+      "Bash(npm ls:*)",
+      "Bash(npm outdated:*)",
+      "Bash(node:*)",
+      "Bash(node_modules/.bin/tsc:*)",
+      "Bash(./node_modules/.bin/tsc:*)",
+      "Bash(./node_modules/typescript/bin/tsc:*)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git add :*)",
+      "Bash(git commit -m :*)",
+      "Bash(git push:*)",
       "Bash(curl -LsSf https://astral.sh/uv/install.sh)",
-      "Bash(sh)",
-      "Bash(~/.local/bin/uv sync:*)"
+      "Bash(~/.local/bin/uv sync:*)",
+      "Bash(node -e \"console.log\\('ENCRYPTION_KEY=' + require\\('crypto'\\).randomBytes\\(32\\).toString\\('hex'\\).substring\\(0, 32\\)\\)\")",
+      "Bash(node -e \"console.log\\('JWT_SECRET=' + require\\('crypto'\\).randomBytes\\(32\\).toString\\('hex'\\)\\)\")"
     ]
   }
 }

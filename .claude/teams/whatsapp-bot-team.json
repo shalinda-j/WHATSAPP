@@ -1,0 +1,154 @@
+{
+  "team_name": "whatsapp-bot-team",
+  "description": "Software engineering team for WhatsApp AI Bot development and maintenance",
+  "created": "2026-05-09",
+  "updated": "2026-05-12",
+  "version": 2,
+  "members": [
+    {
+      "name": "team-lead",
+      "codename": "Orion",
+      "role": "Orchestrates tasks, monitors progress, integrates outputs",
+      "tools": ["Read", "Grep", "Glob", "Bash", "Edit", "Write"],
+      "focus": "Coordination, task assignment, integration"
+    },
+    {
+      "name": "whatsapp-specialist",
+      "codename": "Mercury",
+      "role": "WhatsApp integration, Baileys 6.6.0, sessions, messaging",
+      "tools": ["Read", "Grep", "Glob", "Bash", "Edit", "Write"],
+      "focus": "src/services/whatsapp.ts, MongoAuthService.ts, src/index.ts, voice.ts"
+    },
+    {
+      "name": "backend-developer",
+      "codename": "Atlas-API",
+      "role": "Express 5 API, services, TypeScript backend",
+      "tools": ["Read", "Grep", "Glob", "Bash", "Edit", "Write"],
+      "focus": "src/server/routes/ (20 routes), src/services/ (34 services), src/server/app.ts"
+    },
+    {
+      "name": "database-architect",
+      "codename": "Atlas",
+      "role": "MongoDB schemas, indexes, migrations, encryption-at-rest",
+      "tools": ["Read", "Grep", "Glob", "Bash", "Edit", "Write"],
+      "focus": "src/models/ (18 models), src/services/MongoAuthService.ts, ConfigurationManagerService"
+    },
+    {
+      "name": "ai-integration",
+      "codename": "Synapse",
+      "role": "AI providers, load balancing, prompt engineering",
+      "tools": ["Read", "Grep", "Glob", "Bash", "Edit", "Write"],
+      "focus": "AILoadBalancer.ts, gemini/openai/groq/openrouter services, ai-personality.ts"
+    },
+    {
+      "name": "nlp-ml-engineer",
+      "codename": "Nova",
+      "role": "Intent classifier, NLP cache, Python inference server, training",
+      "tools": ["Read", "Grep", "Glob", "Bash", "Edit", "Write"],
+      "focus": "inference_server.py, NLPService.ts, autoresearchNLP.ts, model.nlp, KnowledgeTrainingService"
+    },
+    {
+      "name": "frontend-developer",
+      "codename": "Aurora",
+      "role": "React 18 dashboard, Vite, TailwindCSS, real-time UI",
+      "tools": ["Read", "Grep", "Glob", "Bash", "Edit", "Write"],
+      "focus": "client/src/ (17 pages)"
+    },
+    {
+      "name": "security-specialist",
+      "codename": "Aegis",
+      "role": "Auth, encryption, input sanitization, secret handling, dependency CVEs",
+      "tools": ["Read", "Grep", "Glob", "Bash", "Edit"],
+      "focus": "SecurityService.ts, CryptoService.ts, auth middleware, .env, security.yml"
+    },
+    {
+      "name": "qa-testing",
+      "codename": "Argus",
+      "role": "Testing, debugging, validation, bug reproduction",
+      "tools": ["Read", "Grep", "Glob", "Bash", "Edit", "Write"],
+      "focus": "Jest + Supertest, message flow, log emoji markers, regression hunting"
+    },
+    {
+      "name": "code-reviewer",
+      "codename": "Sage",
+      "role": "Pre-merge code review, second opinions, architectural feedback",
+      "tools": ["Read", "Grep", "Glob", "Bash"],
+      "focus": "Diffs, project conventions, TypeScript hygiene"
+    },
+    {
+      "name": "performance-engineer",
+      "codename": "Velox",
+      "role": "Profiling, hot-path optimization, memory leaks, bundle size",
+      "tools": ["Read", "Grep", "Glob", "Bash", "Edit"],
+      "focus": "Message handler hot path, Map caches, MongoDB queries, frontend bundle"
+    },
+    {
+      "name": "devops",
+      "codename": "Forge",
+      "role": "CI/CD, deployment, .env, MongoDB Atlas, monitoring",
+      "tools": ["Read", "Grep", "Glob", "Bash", "Edit", "Write"],
+      "focus": ".github/workflows/ (7 files), .env.example, health endpoint, graceful shutdown"
+    }
+  ],
+  "skills": [
+    "development",
+    "testing",
+    "deployment",
+    "debugging",
+    "commands",
+    "voice-processing",
+    "security-review",
+    "code-review",
+    "performance-audit"
+  ],
+  "hooks": {
+    "PostToolUse": "Prettier auto-format on Edit/Write of .ts/.tsx/.js/.jsx/.json/.md/.css",
+    "PreToolUse": "tsc --noEmit blocks `git commit` if type errors present",
+    "UserPromptSubmit": "Reminder about pino + emoji log markers when prompt mentions console.log"
+  },
+  "workflows": {
+    "feature-development": {
+      "steps": [
+        "team-lead receives request and decomposes into tasks",
+        "team-lead assigns to specialists (backend, frontend, ai, db, nlp, security)",
+        "specialists implement assigned work in parallel where possible",
+        "code-reviewer reviews diff before merge",
+        "security-specialist reviews if auth/secrets/encryption touched",
+        "qa-testing validates implementation",
+        "performance-engineer audits if hot path was touched",
+        "team-lead integrates and closes tasks"
+      ]
+    },
+    "bug-fix": {
+      "steps": [
+        "qa-testing reproduces and diagnoses issue",
+        "team-lead creates fix task with root cause",
+        "specialist (by area) implements fix",
+        "code-reviewer reviews",
+        "qa-testing validates fix and adds regression test",
+        "team-lead closes bug task"
+      ]
+    },
+    "deployment": {
+      "steps": [
+        "devops prepares .env and verifies CI workflows",
+        "devops runs npm run build + health check",
+        "security-specialist confirms JWT_SECRET + ENCRYPTION_KEY are set for prod",
+        "team-lead validates deployment via /health endpoint",
+        "whatsapp-specialist tests WhatsApp connection + QR flow"
+      ]
+    },
+    "security-review": {
+      "steps": [
+        "security-specialist invokes /security-review skill",
+        "Cross-check with code-reviewer for cross-cutting concerns",
+        "Output severity-labeled findings",
+        "team-lead decides merge / block based on findings"
+      ]
+    }
+  },
+  "communication": {
+    "messageTypes": ["status-update", "task-complete", "blocker-alert", "integration-request", "review-request"],
+    "protocol": "Use Agent (subagent_type=<name>) to delegate; use TaskCreate/TaskUpdate for tracking"
+  }
+}
