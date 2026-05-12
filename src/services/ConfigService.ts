@@ -146,7 +146,11 @@ export class ConfigService {
       if (dataset) {
         // Handle both formats: legacy (content is data) and new (content.en is data)
         let content = dataset.content;
-        if (content && typeof content === 'object' && content.en !== undefined) {
+        if (
+          content &&
+          typeof content === 'object' &&
+          content.en !== undefined
+        ) {
           content = content.en;
         }
         this.cache[key] = content;
@@ -231,7 +235,10 @@ export class ConfigService {
    * Configure via Admin Panel > Datasets > CONVERSATION_EXAMPLES
    */
   public async getConversationExamples(): Promise<ConversationExample[]> {
-    const examples = await this.get('CONVERSATION_EXAMPLES', DEFAULT_CONVERSATION_EXAMPLES);
+    const examples = await this.get(
+      'CONVERSATION_EXAMPLES',
+      DEFAULT_CONVERSATION_EXAMPLES,
+    );
     // Validate it's an array
     if (Array.isArray(examples) && examples.length > 0) {
       return examples;
@@ -249,7 +256,9 @@ export class ConfigService {
     if (Array.isArray(jobTypes) && jobTypes.length > 0) {
       return jobTypes;
     }
-    console.warn('⚠️ JOB_TYPES not configured. Please set up in Admin Panel > Datasets.');
+    console.warn(
+      '⚠️ JOB_TYPES not configured. Please set up in Admin Panel > Datasets.',
+    );
     return DEFAULT_JOB_TYPES;
   }
 
@@ -258,12 +267,17 @@ export class ConfigService {
    * Configure via Admin Panel > Datasets > BOOKING_KEYWORDS
    */
   public async getBookingKeywords(): Promise<string[]> {
-    const keywords = await this.get('BOOKING_KEYWORDS', DEFAULT_BOOKING_KEYWORDS);
+    const keywords = await this.get(
+      'BOOKING_KEYWORDS',
+      DEFAULT_BOOKING_KEYWORDS,
+    );
     // Validate it's an array with content
     if (Array.isArray(keywords) && keywords.length > 0) {
       return keywords;
     }
-    console.warn('⚠️ BOOKING_KEYWORDS not configured. Please set up in Admin Panel > Datasets.');
+    console.warn(
+      '⚠️ BOOKING_KEYWORDS not configured. Please set up in Admin Panel > Datasets.',
+    );
     return DEFAULT_BOOKING_KEYWORDS;
   }
 
@@ -278,7 +292,9 @@ export class ConfigService {
 
     // Warn if critical fields are empty
     if (!merged.campusLocation || !merged.organizerName) {
-      console.warn('⚠️ BOOKING_CONFIG not fully configured. Please set up in Admin Panel > Datasets.');
+      console.warn(
+        '⚠️ BOOKING_CONFIG not fully configured. Please set up in Admin Panel > Datasets.',
+      );
     }
 
     return merged;
@@ -295,7 +311,9 @@ export class ConfigService {
 
     // Warn if critical fields are empty
     if (!merged.name || !merged.contact) {
-      console.warn('⚠️ COMPANY_INFO not fully configured. Please set up in Admin Panel > Datasets.');
+      console.warn(
+        '⚠️ COMPANY_INFO not fully configured. Please set up in Admin Panel > Datasets.',
+      );
     }
 
     return merged;
@@ -401,7 +419,10 @@ export class ConfigService {
    * Configure via Admin Panel > Datasets > EXPERIENCE_LEVELS
    */
   public async getExperienceLevels(): Promise<ExperienceOption[]> {
-    const levels = await this.get('EXPERIENCE_LEVELS', DEFAULT_EXPERIENCE_LEVELS);
+    const levels = await this.get(
+      'EXPERIENCE_LEVELS',
+      DEFAULT_EXPERIENCE_LEVELS,
+    );
     if (Array.isArray(levels) && levels.length > 0) {
       return levels;
     }
@@ -416,8 +437,18 @@ export class ConfigService {
    * Get Help Message Template
    * Configure via Admin Panel > Datasets > HELP_MESSAGE
    */
-  public async getHelpMessage(): Promise<{ title: string; subtitle: string; commands: string[]; footer: string }> {
-    const template = await this.get('HELP_MESSAGE', { title: '', subtitle: '', commands: [], footer: '' });
+  public async getHelpMessage(): Promise<{
+    title: string;
+    subtitle: string;
+    commands: string[];
+    footer: string;
+  }> {
+    const template = await this.get('HELP_MESSAGE', {
+      title: '',
+      subtitle: '',
+      commands: [],
+      footer: '',
+    });
     return template;
   }
 
@@ -425,8 +456,16 @@ export class ConfigService {
    * Get Jobs Message Template
    * Configure via Admin Panel > Datasets > JOBS_MESSAGE
    */
-  public async getJobsMessage(): Promise<{ title: string; jobs: Array<{ emoji: string; title: string; count: string }>; footer: string }> {
-    const template = await this.get('JOBS_MESSAGE', { title: '', jobs: [], footer: '' });
+  public async getJobsMessage(): Promise<{
+    title: string;
+    jobs: Array<{ emoji: string; title: string; count: string }>;
+    footer: string;
+  }> {
+    const template = await this.get('JOBS_MESSAGE', {
+      title: '',
+      jobs: [],
+      footer: '',
+    });
     return template;
   }
 
@@ -436,7 +475,10 @@ export class ConfigService {
    */
   public async getClearMessage(): Promise<string> {
     const config = await this.get('CLEAR_MESSAGE', { message: '' });
-    return config.message || '⚠️ Clear message not configured. Configure via Admin Panel > Datasets > CLEAR_MESSAGE';
+    return (
+      config.message ||
+      '⚠️ Clear message not configured. Configure via Admin Panel > Datasets > CLEAR_MESSAGE'
+    );
   }
 
   /**
@@ -445,7 +487,10 @@ export class ConfigService {
    */
   public async getPingMessage(): Promise<string> {
     const config = await this.get('PING_MESSAGE', { message: '' });
-    return config.message || '⚠️ Ping message not configured. Configure via Admin Panel > Datasets > PING_MESSAGE';
+    return (
+      config.message ||
+      '⚠️ Ping message not configured. Configure via Admin Panel > Datasets > PING_MESSAGE'
+    );
   }
 
   /**
@@ -475,7 +520,10 @@ export class ConfigService {
    */
   public async getStopMessage(): Promise<string> {
     const config = await this.get('STOP_MESSAGE', { message: '' });
-    return config.message || '⚠️ Stop message not configured. Configure via Admin Panel > Datasets > STOP_MESSAGE';
+    return (
+      config.message ||
+      '⚠️ Stop message not configured. Configure via Admin Panel > Datasets > STOP_MESSAGE'
+    );
   }
 
   /**
@@ -484,7 +532,10 @@ export class ConfigService {
    */
   public async getStartMessage(): Promise<string> {
     const config = await this.get('START_MESSAGE', { message: '' });
-    return config.message || '⚠️ Start message not configured. Configure via Admin Panel > Datasets > START_MESSAGE';
+    return (
+      config.message ||
+      '⚠️ Start message not configured. Configure via Admin Panel > Datasets > START_MESSAGE'
+    );
   }
 }
 

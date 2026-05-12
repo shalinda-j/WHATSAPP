@@ -74,7 +74,10 @@ export default function Dashboard() {
         fetchAIProviders();
 
         const API_URL = import.meta.env.VITE_API_URL || window.location.origin;
-        const socket = io(API_URL);
+        const token = localStorage.getItem('token');
+        const socket = io(API_URL, {
+            auth: { token },
+        });
 
         socket.on('new-message', (data) => {
             setRecentEvents(prev => [data, ...prev].slice(0, 5));
@@ -263,7 +266,7 @@ export default function Dashboard() {
                                             {evt.role === 'user' ? '👤 User:' : '🤖 Bot:'} {evt.content}
                                         </span>
                                         <span className="text-gray-400 ml-2 whitespace-nowrap">
-                                            {new Date(evt.timestamp || Date.now()).toLocaleTimeString()}
+                                            {evt.timestamp ? new Date(evt.timestamp).toLocaleTimeString() : ''}
                                         </span>
                                     </div>
                                 ))

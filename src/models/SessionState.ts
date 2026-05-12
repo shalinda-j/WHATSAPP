@@ -60,10 +60,13 @@ SessionStateSchema.index({ phoneNumber: 1, type: 1 });
 SessionStateSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 // Pre-save hook to update updatedAt
-SessionStateSchema.pre('save', function(this: any) {
+SessionStateSchema.pre('save', function (this: any) {
   this.updatedAt = new Date();
 });
 
-const SessionState = (mongoose as any).model('SessionState', SessionStateSchema);
+const SessionState = (mongoose as any).model(
+  'SessionState',
+  SessionStateSchema,
+);
 
 export default SessionState;

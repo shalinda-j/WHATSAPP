@@ -102,7 +102,8 @@ router.get('/questions', async (req, res) => {
 
     const userMessages = await ChatMessage.find({ role: 'user' })
       .sort({ timestamp: -1 })
-      .limit(Number(limit));
+      .limit(Number(limit))
+      .lean();
 
     const questionCounts: Record<string, number> = {};
     const keywordsMap: Record<string, string[]> = {
@@ -184,35 +185,40 @@ router.get('/datasets', async (req, res) => {
 
     const datasets = await Dataset.find({ isActive: true })
       .sort({ updatedAt: -1 })
-      .limit(10);
+      .limit(10)
+      .lean();
 
-    const totalRecords = datasets.reduce((sum, ds) => {
+    const mappedDatasets = datasets.map((ds: any) => {
       const content = ds.content as string | Record<string, unknown> | null;
-      const length =
-        typeof content === 'string'
-          ? content.length
-          : content
-          ? Object.keys(content).length
-          : 0;
-      return sum + length;
-    }, 0);
+      let contentLength = 0;
+      if (typeof content === 'string') {
+        contentLength = content.length;
+      } else if (content && typeof content === 'object') {
+        // Use a for...in loop with hasOwnProperty check instead of Object.keys().length
+        // to avoid memory overhead of allocating a large array of keys just to count them
+        let count = 0;
+        for (const key in content) {
+          if (Object.prototype.hasOwnProperty.call(content, key)) {
+            count++;
+          }
+        }
+        contentLength = count;
+      }
+      return {
+        id: ds._id,
+        name: ds.name || 'Unnamed Dataset',
+        contentLength,
+        updatedAt: ds.updatedAt,
+      };
+    });
+
+    const totalRecords = mappedDatasets.reduce(
+      (sum, ds) => sum + ds.contentLength,
+      0,
+    );
 
     res.json({
-      datasets: datasets.map((ds) => {
-        const content = ds.content as string | Record<string, unknown> | null;
-        const contentLength =
-          typeof content === 'string'
-            ? content.length
-            : content
-            ? Object.keys(content).length
-            : 0;
-        return {
-          id: ds._id,
-          name: ds.name || 'Unnamed Dataset',
-          contentLength,
-          updatedAt: ds.updatedAt,
-        };
-      }),
+      datasets: mappedDatasets,
       totalRecords,
     });
   } catch (err: any) {
@@ -260,7 +266,8 @@ router.get('/top-questions', async (req, res) => {
 
     const userMessages = await ChatMessage.find({ role: 'user', type: 'text' })
       .sort({ timestamp: -1 })
-      .limit(Number(limit) * 2);
+      .limit(Number(limit) * 2)
+      .lean();
 
     const messageCounts: Record<string, number> = {};
 
@@ -308,10 +315,23 @@ router.get('/bookings', async (req, res) => {
 
 router.post('/bookings', async (req, res) => {
   try {
-    const { clientName, clientPhone, clientEmail, date, time, duration, type, notes, sessionId, location } = req.body;
+    const {
+      clientName,
+      clientPhone,
+      clientEmail,
+      date,
+      time,
+      duration,
+      type,
+      notes,
+      sessionId,
+      location,
+    } = req.body;
 
     if (!clientName || !clientPhone || !date) {
-      return res.status(400).json({ error: 'clientName, clientPhone, and date are required' });
+      return res
+        .status(400)
+        .json({ error: 'clientName, clientPhone, and date are required' });
     }
 
     const dateObj = new Date(date);
@@ -345,7 +365,13 @@ router.patch('/bookings/:id', async (req, res) => {
     const { status, notes, type, time, location } = req.body;
     const booking = await Booking.findByIdAndUpdate(
       req.params.id,
-      { ...(status && { status }), ...(notes !== undefined && { notes }), ...(type && { type }), ...(time && { time }), ...(location && { location }) },
+      {
+        ...(status && { status }),
+        ...(notes !== undefined && { notes }),
+        ...(type && { type }),
+        ...(time && { time }),
+        ...(location && { location }),
+      },
       { new: true },
     ).lean();
 
@@ -376,7 +402,8 @@ router.get('/recent-replies', async (req, res) => {
     // Fetch the absolute newest messages where the bot has replied
     const recentReplies = await ChatMessage.find({ role: 'assistant' })
       .sort({ timestamp: -1 })
-      .limit(Number(limit));
+      .limit(Number(limit))
+      .lean();
 
     res.json(
       recentReplies.map((reply: any) => ({

@@ -47,7 +47,7 @@ export default function Calendar() {
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState<number | null>(today.getDate());
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
-  const [view, setView] = useState<'month' | 'week' | 'day'>('month');
+  const [_view, _setView] = useState<'month' | 'week' | 'day'>('month');
   const [showNewBooking, setShowNewBooking] = useState(false);
   const [newBooking, setNewBooking] = useState({
     clientName: '',
@@ -60,17 +60,6 @@ export default function Calendar() {
   });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  useEffect(() => {
-    fetchBookings();
-  }, [currentDate]);
-
-  useEffect(() => {
-    if (message) {
-      const t = setTimeout(() => setMessage(null), 4000);
-      return () => clearTimeout(t);
-    }
-  }, [message]);
 
   const fetchBookings = async () => {
     setLoading(true);
@@ -86,6 +75,17 @@ export default function Calendar() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchBookings();
+  }, [currentDate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (message) {
+      const t = setTimeout(() => setMessage(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [message]);
 
   const getDaysInMonth = () => {
     const year = currentDate.getFullYear();
@@ -474,7 +474,7 @@ export default function Calendar() {
                   <label className="block text-xs font-medium text-gray-700 mb-1">{label}</label>
                   <input
                     type={type}
-                    value={(newBooking as any)[field]}
+                    value={(newBooking as Record<string, string | number>)[field]}
                     onChange={e => setNewBooking(p => ({ ...p, [field]: e.target.value }))}
                     placeholder={placeholder}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"

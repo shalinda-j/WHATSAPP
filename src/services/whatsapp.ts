@@ -25,7 +25,9 @@ import { HumanizerService } from './HumanizerService';
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 // Logger - using pino with any type for Baileys compatibility
-const logger = pino({ level: process.env.DEBUG === 'true' ? 'debug' : 'warn' }) as any;
+const logger = pino({
+  level: process.env.DEBUG === 'true' ? 'debug' : 'warn',
+}) as any;
 
 // Global message handlers (shared across sessions for now)
 // MEMORY LEAK FIX: Add limit to prevent unbounded growth
@@ -113,7 +115,10 @@ export class WhatsAppSessionManager {
         }
       } catch (dbErr: any) {
         if (!dbErr?.message?.includes('buffering timed out')) {
-          console.warn(`   ⚠️ Error checking session deleted status:`, dbErr?.message);
+          console.warn(
+            `   ⚠️ Error checking session deleted status:`,
+            dbErr?.message,
+          );
         }
       }
     }
@@ -356,16 +361,22 @@ export class WhatsAppSessionManager {
               await sock.rejectCall(call.id, call.from);
 
               // Import VoiceCallAgent dynamically to avoid circular deps
-              const { voiceCallAgent } = await import('./VoiceCallAgentService');
-              const callAgentEnabled = await voiceCallAgent.isCallAgentEnabled();
+              const { voiceCallAgent } = await import(
+                './VoiceCallAgentService'
+              );
+              const callAgentEnabled =
+                await voiceCallAgent.isCallAgentEnabled();
 
               if (callAgentEnabled) {
                 // Voice Call Agent mode: log the call and send AI audio response
-                console.log(`📞 Voice Call Agent handling call from ${call.from}`);
-                
+                console.log(
+                  `📞 Voice Call Agent handling call from ${call.from}`,
+                );
+
                 // Use the configured primary language from agent settings
                 const agentSettings = voiceCallAgent.getSettings();
-                const agentLanguage = (agentSettings.language as 'en' | 'si' | 'ta') || 'en';
+                const agentLanguage =
+                  (agentSettings.language as 'en' | 'si' | 'ta') || 'en';
 
                 const result = await voiceCallAgent.handleIncomingCall({
                   callerId: call.from,
@@ -377,18 +388,28 @@ export class WhatsAppSessionManager {
                   // Send voice response — use sendVoiceMessage so ffmpeg converts to OGG/Opus
                   if (result.responseAudioBuffer) {
                     try {
-                      const sent = await sendVoiceMessage(call.from, result.responseAudioBuffer, sessionId);
+                      const sent = await sendVoiceMessage(
+                        call.from,
+                        result.responseAudioBuffer,
+                        sessionId,
+                      );
                       if (!sent) {
                         // Queue was used or send failed — also send text so user gets something immediately
-                        await sock.sendMessage(call.from, { text: result.responseText });
+                        await sock.sendMessage(call.from, {
+                          text: result.responseText,
+                        });
                       }
                     } catch {
                       // Fallback to text if voice fails
-                      await sock.sendMessage(call.from, { text: result.responseText });
+                      await sock.sendMessage(call.from, {
+                        text: result.responseText,
+                      });
                     }
                   } else {
                     // No audio generated — send text response
-                    await sock.sendMessage(call.from, { text: result.responseText });
+                    await sock.sendMessage(call.from, {
+                      text: result.responseText,
+                    });
                   }
                 }
               } else {
@@ -396,8 +417,8 @@ export class WhatsAppSessionManager {
                 const message = [
                   '📞 *Missed Call / මග හැරුණු ඇමතුම*',
                   '',
-                  '🇬🇧 _I\'m an AI assistant. I cannot answer live calls._',
-                  '_Please send me a *Voice Note* 🎤 with your question, and I\'ll reply!_',
+                  "🇬🇧 _I'm an AI assistant. I cannot answer live calls._",
+                  "_Please send me a *Voice Note* 🎤 with your question, and I'll reply!_",
                   '',
                   '🇱🇰 _මම AI සහකාරයෙකු. ජීවම ඇමතුම් ලබා ගත නොහැක._',
                   '_ඔබේ ප්‍රශ්නය *Voice Note* 🎤 ලෙස යොමු කරන්න, මම ප්‍රතිඋත්තර දෙන්නෙමි!_',
@@ -409,9 +430,14 @@ export class WhatsAppSessionManager {
                 await voiceCallAgent.logMissedCall(call.from, sessionId);
               }
 
-              console.log(`📞 Handled call from ${call.from} on session ${sessionId}`);
+              console.log(
+                `📞 Handled call from ${call.from} on session ${sessionId}`,
+              );
             } catch (err) {
-              console.error(`❌ Error handling incoming call from ${call.from}:`, err);
+              console.error(
+                `❌ Error handling incoming call from ${call.from}:`,
+                err,
+              );
             }
           }
         }
@@ -485,7 +511,9 @@ export class WhatsAppSessionManager {
       console.log(`   ✅ Marked session as deleted in database: ${sessionId}`);
     } catch (dbErr: any) {
       if (!dbErr?.message?.includes('buffering timed out')) {
-        console.warn(`   ⚠️ Failed to mark session as deleted in DB: ${dbErr.message}`);
+        console.warn(
+          `   ⚠️ Failed to mark session as deleted in DB: ${dbErr.message}`,
+        );
       }
       // Continue with deletion anyway
     }
@@ -538,7 +566,9 @@ export class WhatsAppSessionManager {
       console.log(`   ✅ Deleted session document from DB: ${sessionId}`);
     } catch (dbErr: any) {
       if (!dbErr?.message?.includes('buffering timed out')) {
-        console.warn(`   ⚠️ Failed to delete session from DB: ${dbErr.message}`);
+        console.warn(
+          `   ⚠️ Failed to delete session from DB: ${dbErr.message}`,
+        );
       }
     }
 
@@ -641,7 +671,9 @@ export function onMessage(
   ) => Promise<void>,
 ) {
   if (messageHandlers.length >= MAX_MESSAGE_HANDLERS) {
-    console.warn(`⚠️ Message handler limit reached (${MAX_MESSAGE_HANDLERS}). Handler not registered.`);
+    console.warn(
+      `⚠️ Message handler limit reached (${MAX_MESSAGE_HANDLERS}). Handler not registered.`,
+    );
     return;
   }
   messageHandlers.push(handler);
@@ -708,7 +740,11 @@ function initializeVoiceCleanup(): void {
     }
 
     if (voiceMessageQueue.length < oldCount) {
-      console.log(`🧹 VoiceQueue: Removed ${oldCount - voiceMessageQueue.length} old voice messages`);
+      console.log(
+        `🧹 VoiceQueue: Removed ${
+          oldCount - voiceMessageQueue.length
+        } old voice messages`,
+      );
     }
   }, 5 * 60 * 1000); // Clean every 5 minutes
 }

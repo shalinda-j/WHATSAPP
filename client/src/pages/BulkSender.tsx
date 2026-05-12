@@ -4,7 +4,7 @@ import {
     Info, Loader, Image as ImageIcon, X, ChevronDown, ChevronUp,
     Phone, Download
 } from 'lucide-react';
-import { api } from '../config';
+import { api as _api } from '../config';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface ProgressLine {
@@ -222,11 +222,12 @@ const BulkSender = () => {
                     } catch { /* ignore bad JSON lines */ }
                 }
             }
-        } catch (err: any) {
-            if (err.name === 'AbortError') {
+        } catch (err: unknown) {
+            const error = err as Error;
+            if (error.name === 'AbortError') {
                 setStatusMsg({ type: 'info', msg: 'Send cancelled' });
             } else {
-                setStatusMsg({ type: 'error', msg: `Send failed: ${err.message}` });
+                setStatusMsg({ type: 'error', msg: `Send failed: ${error.message}` });
             }
         } finally {
             setIsSending(false);

@@ -1,0 +1,70 @@
+name: Pull Request
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main, develop]
+
+jobs:
+  validation:
+    name: Validate PR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check conventional commits
+        uses: compumike/conventional-commits-action@v0.0.5
+        with:
+          types: 'feat,fix,docs,style,refactor,perf,test,chore,revert'
+
+      - name: Check for large files
+        run: |
+          find . -type f -size +10M -not -path './node_modules/*' -not -path './client/node_modules/*' | head -n 5
+          if [ $(find . -type f -size +10M -not -path './node_modules/*' -not -path './client/node_modules/*' | wc -l) -gt 0 ]; then
+            echo "::warning::Large files detected in the PR. Consider using Git LFS."
+          fi
+
+  code-review:
+    name: Code Review Checklist
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: PR Checklist
+        uses: trstringer/manual-approval@v1.0
+        with:
+          secret: ${{ secrets.GITHUB_TOKEN }}
+          approvers: "reviewer1,reviewer2"
+          min-approvals: 1
+
+  size-report:
+    name: PR Size Report
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate PR Size
+        run: |
+          FILES_CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | wc -l)
+          echo "Files changed: $FILES_CHANGED"
+
+          if [ $FILES_CHANGED -lt 10 ]; then
+            echo "::notice::Small PR (XS) - $FILES_CHANGED files changed"
+          elif [ $FILES_CHANGED -lt 30 ]; then
+            echo "::notice::Medium PR (S/M) - $FILES_CHANGED files changed"
+          elif [ $FILES_CHANGED -lt 100 ]; then
+            echo "::notice::Large PR (L) - $FILES_CHANGED files changed"
+          else
+            echo "::warning::Extra Large PR (XL) - $FILES_CHANGED files changed. Consider splitting."
+          fi

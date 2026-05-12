@@ -1,4 +1,6 @@
-import ConversationHistory, { IConversationMessage } from '../models/ConversationHistory';
+import ConversationHistory, {
+  IConversationMessage,
+} from '../models/ConversationHistory';
 
 /**
  * ConversationHistoryService
@@ -6,12 +8,16 @@ import ConversationHistory, { IConversationMessage } from '../models/Conversatio
  */
 
 // Default retention: 30 days (can be overridden via environment variable)
-const DEFAULT_RETENTION_DAYS = parseInt(process.env.CONVERSATION_RETENTION_DAYS || '30', 10);
+const DEFAULT_RETENTION_DAYS = parseInt(
+  process.env.CONVERSATION_RETENTION_DAYS || '30',
+  10,
+);
 const MAX_MESSAGES_PER_USER = 50; // Keep last 50 messages per user
 
 export class ConversationHistoryService {
   private static instance: ConversationHistoryService;
 
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
   private constructor() {}
 
   public static getInstance(): ConversationHistoryService {
@@ -65,7 +71,9 @@ export class ConversationHistoryService {
       // Trim messages if too many
       if (result && result.messages.length > MAX_MESSAGES_PER_USER) {
         // Keep system message (if first) + last N-1 messages
-        const systemMessage = result.messages.find((m: IConversationMessage) => m.role === 'system');
+        const systemMessage = result.messages.find(
+          (m: IConversationMessage) => m.role === 'system',
+        );
         const recentMessages = result.messages
           .filter((m: IConversationMessage) => m.role !== 'system')
           .slice(-(MAX_MESSAGES_PER_USER - 1));
@@ -100,7 +108,10 @@ export class ConversationHistoryService {
         { upsert: true },
       );
     } catch (error) {
-      console.error('[ConversationHistory] Error setting initial history:', error);
+      console.error(
+        '[ConversationHistory] Error setting initial history:',
+        error,
+      );
     }
   }
 
@@ -125,7 +136,10 @@ export class ConversationHistoryService {
       const result = await ConversationHistory.deleteMany({});
       return result.deletedCount || 0;
     } catch (error) {
-      console.error('[ConversationHistory] Error clearing all histories:', error);
+      console.error(
+        '[ConversationHistory] Error clearing all histories:',
+        error,
+      );
       return 0;
     }
   }
@@ -220,5 +234,6 @@ export class ConversationHistoryService {
   }
 }
 
-export const conversationHistoryService = ConversationHistoryService.getInstance();
+export const conversationHistoryService =
+  ConversationHistoryService.getInstance();
 export default conversationHistoryService;

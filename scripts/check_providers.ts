@@ -5,7 +5,12 @@ import mongoose from 'mongoose';
 import Config from '../src/models/Config';
 
 async function checkProviders() {
-  await mongoose.connect(process.env.MONGODB_URI!);
+  const mongoUri = process.env.MONGODB_URI;
+  if (!mongoUri) {
+    console.error('MONGODB_URI environment variable is not set');
+    process.exit(1);
+  }
+  await mongoose.connect(mongoUri);
   console.log('Connected to MongoDB');
 
   const providers = await Config.find({ isProvider: true });

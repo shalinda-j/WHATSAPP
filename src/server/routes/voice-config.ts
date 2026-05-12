@@ -28,10 +28,18 @@ router.get('/', async (req: Request, res: Response) => {
 // GET active config
 router.get('/active', async (req: Request, res: Response) => {
   try {
-    const activeConfig = await VoiceConfig.findOne({ isActive: true }).sort({ updatedAt: -1 });
+    const activeConfig = await VoiceConfig.findOne({ isActive: true }).sort({
+      updatedAt: -1,
+    });
     if (!activeConfig) {
       const latestConfig = await VoiceConfig.findOne().sort({ updatedAt: -1 });
-      return res.json(latestConfig || { provider: 'google-free', isActive: true, mode: 'voice-and-text' });
+      return res.json(
+        latestConfig || {
+          provider: 'google-free',
+          isActive: true,
+          mode: 'voice-and-text',
+        },
+      );
     }
     res.json(activeConfig);
   } catch (error) {
@@ -42,11 +50,22 @@ router.get('/active', async (req: Request, res: Response) => {
 // POST — save / activate a provider config
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { provider, apiKey, googleApiKey, voiceId, isActive, mode, ttsModel } = req.body;
+    const {
+      provider,
+      apiKey,
+      googleApiKey,
+      voiceId,
+      isActive,
+      mode,
+      ttsModel,
+    } = req.body;
 
     // Activate this provider → deactivate all others
     if (isActive !== false) {
-      await VoiceConfig.updateMany({ provider: { $ne: provider } }, { $set: { isActive: false } });
+      await VoiceConfig.updateMany(
+        { provider: { $ne: provider } },
+        { $set: { isActive: false } },
+      );
     }
 
     const config = await VoiceConfig.findOneAndUpdate(
@@ -88,16 +107,21 @@ router.post('/test', async (req: Request, res: Response) => {
     const { text, language, provider } = req.body;
     const { generateSpeech } = await import('../../services/voice');
 
-    const testText = text || (
-      language === 'si' ? 'ආයුබෝවන්! ඔබේ ඇමතුම ගැන ස්තූතියි.' :
-      language === 'ta' ? 'வணக்கம்! அழைத்ததற்கு நன்றி.' :
-      'Hello! Thank you for calling. How can I help you today?'
-    );
+    const testText =
+      text ||
+      (language === 'si'
+        ? 'ආයුබෝවන්! ඔබේ ඇමතුම ගැන ස්තූතියි.'
+        : language === 'ta'
+        ? 'வணக்கம்! அழைத்ததற்கு நன்றி.'
+        : 'Hello! Thank you for calling. How can I help you today?');
 
     const audioBuffer = await generateSpeech(testText, language || 'en');
 
     res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Content-Disposition', `attachment; filename="tts-test-${language || 'en'}.mp3"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="tts-test-${language || 'en'}.mp3"`,
+    );
     res.send(audioBuffer);
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'TTS test failed' });

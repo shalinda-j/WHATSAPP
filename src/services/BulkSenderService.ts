@@ -64,7 +64,9 @@ export const bulkSenderService = {
           );
 
           if (!sent) {
-            throw new Error('WhatsApp is not connected. Please scan the QR code first.');
+            throw new Error(
+              'WhatsApp is not connected. Please scan the QR code first.',
+            );
           }
         } else {
           // Send Text only

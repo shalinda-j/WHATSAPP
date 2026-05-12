@@ -39,8 +39,10 @@ function initializeCleanup(): void {
 
     // If store is still too large, remove oldest entries
     if (rateLimitStore.size > MAX_STORE_SIZE) {
-      const keysToDelete = Array.from(rateLimitStore.keys())
-        .slice(0, rateLimitStore.size - MAX_STORE_SIZE);
+      const keysToDelete = Array.from(rateLimitStore.keys()).slice(
+        0,
+        rateLimitStore.size - MAX_STORE_SIZE,
+      );
       for (const key of keysToDelete) {
         rateLimitStore.delete(key);
       }
@@ -53,22 +55,25 @@ function initializeCleanup(): void {
  * @param options Rate limit configuration
  */
 export function rateLimit(options: {
-  windowMs?: number;      // Time window in milliseconds (default: 60 seconds)
-  max?: number;           // Max requests per window (default: 100)
-  message?: string;       // Custom error message
+  windowMs?: number; // Time window in milliseconds (default: 60 seconds)
+  max?: number; // Max requests per window (default: 100)
+  message?: string; // Custom error message
   keyGenerator?: (req: Request) => string; // Custom key generator
 }) {
   const {
     windowMs = 60 * 1000, // 1 minute default
-    max = 100,            // 100 requests per minute default
+    max = 100, // 100 requests per minute default
     message = 'Too many requests, please try again later',
     keyGenerator = (req: Request) => {
       // Use IP address + path as key
       const forwarded = req.headers['x-forwarded-for'];
-      const ip = req.ip || (Array.isArray(forwarded) ? forwarded[0] : forwarded) || 'unknown';
+      const ip =
+        req.ip ||
+        (Array.isArray(forwarded) ? forwarded[0] : forwarded) ||
+        'unknown';
       const path = req.path;
       return `${ip}:${path}`;
-    }
+    },
   } = options;
 
   // Initialize cleanup on first use
@@ -96,7 +101,10 @@ export function rateLimit(options: {
       res.setHeader('Retry-After', retryAfter.toString());
       res.setHeader('X-RateLimit-Limit', max.toString());
       res.setHeader('X-RateLimit-Remaining', '0');
-      res.setHeader('X-RateLimit-Reset', new Date(entry.blockedUntil).toISOString());
+      res.setHeader(
+        'X-RateLimit-Reset',
+        new Date(entry.blockedUntil).toISOString(),
+      );
       res.status(429).json({
         error: 'Too Many Requests',
         message,
@@ -120,14 +128,17 @@ export function rateLimit(options: {
     // Check if limit exceeded
     if (entry.count > max) {
       // Block for remainder of window + additional penalty
-      const blockDuration = windowMs + (30 * 1000); // Extra 30s penalty
+      const blockDuration = windowMs + 30 * 1000; // Extra 30s penalty
       entry.blockedUntil = now + blockDuration;
 
       const retryAfter = Math.ceil(blockDuration / 1000);
       res.setHeader('Retry-After', retryAfter.toString());
       res.setHeader('X-RateLimit-Limit', max.toString());
       res.setHeader('X-RateLimit-Remaining', '0');
-      res.setHeader('X-RateLimit-Reset', new Date(entry.blockedUntil).toISOString());
+      res.setHeader(
+        'X-RateLimit-Reset',
+        new Date(entry.blockedUntil).toISOString(),
+      );
       res.status(429).json({
         error: 'Too Many Requests',
         message,
@@ -139,7 +150,10 @@ export function rateLimit(options: {
     // Set headers for transparency
     res.setHeader('X-RateLimit-Limit', max.toString());
     res.setHeader('X-RateLimit-Remaining', (max - entry.count).toString());
-    res.setHeader('X-RateLimit-Reset', new Date(entry.firstRequest + windowMs).toISOString());
+    res.setHeader(
+      'X-RateLimit-Reset',
+      new Date(entry.firstRequest + windowMs).toISOString(),
+    );
 
     next();
   };

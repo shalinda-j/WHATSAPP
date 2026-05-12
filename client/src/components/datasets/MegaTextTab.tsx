@@ -191,7 +191,7 @@ export default function MegaTextTab({ language, onDataChange }: MegaTextTabProps
                 onChange={(e) =>
                   setEditingItem({
                     ...editingItem,
-                    metadata: { ...editingItem.metadata, documentType: e.target.value as any },
+                    metadata: { ...editingItem.metadata, documentType: e.target.value as 'knowledge' | 'template' },
                   })
                 }
               >

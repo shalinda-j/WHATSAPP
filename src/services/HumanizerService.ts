@@ -1,5 +1,8 @@
 import { sendTyping, getSocket } from './whatsapp';
-import { configurationManager, HumanizerConfig } from './ConfigurationManagerService';
+import {
+  configurationManager,
+  HumanizerConfig,
+} from './ConfigurationManagerService';
 import type { WASocket } from '@whiskeysockets/baileys';
 
 interface QueuedMessage {
@@ -40,16 +43,23 @@ export class HumanizerService {
     const cutoff = now - this.MAX_QUEUE_AGE_MS;
 
     const oldCount = this.messageQueue.length;
-    this.messageQueue = this.messageQueue.filter(msg =>
-      msg.timestamp.getTime() > cutoff
+    this.messageQueue = this.messageQueue.filter(
+      (msg) => msg.timestamp.getTime() > cutoff,
     );
 
     if (this.messageQueue.length < oldCount) {
-      console.log(`🧹 HumanizerService: Removed ${oldCount - this.messageQueue.length} old queued messages`);
+      console.log(
+        `🧹 HumanizerService: Removed ${
+          oldCount - this.messageQueue.length
+        } old queued messages`,
+      );
     }
 
     // Also clear stale config cache
-    if (this.cachedConfig && now - this.configCacheTime > this.CONFIG_CACHE_TTL) {
+    if (
+      this.cachedConfig &&
+      now - this.configCacheTime > this.CONFIG_CACHE_TTL
+    ) {
       this.cachedConfig = null;
       this.configCacheTime = 0;
     }
@@ -88,7 +98,10 @@ export class HumanizerService {
    */
   private static async getConfig(): Promise<HumanizerConfig> {
     const now = Date.now();
-    if (this.cachedConfig && now - this.configCacheTime < this.CONFIG_CACHE_TTL) {
+    if (
+      this.cachedConfig &&
+      now - this.configCacheTime < this.CONFIG_CACHE_TTL
+    ) {
       return this.cachedConfig;
     }
 
@@ -209,7 +222,10 @@ export class HumanizerService {
     }
 
     // 1. Initial reaction delay (simulate reading the message before typing)
-    const reactionDelay = this.getRandomDelay(config.reactionDelayMin, config.reactionDelayMax);
+    const reactionDelay = this.getRandomDelay(
+      config.reactionDelayMin,
+      config.reactionDelayMax,
+    );
     await this.sleep(reactionDelay);
 
     // 2. Calculate typing duration based on typing speed
@@ -218,7 +234,10 @@ export class HumanizerService {
     let typingDelay = Math.floor((charCount / charsPerSecond) * 1000);
     const variance = typingDelay * 0.15;
     typingDelay = typingDelay + this.getRandomDelay(-variance, variance);
-    typingDelay = Math.max(config.minTypingDelayMs, Math.min(typingDelay, config.maxTypingDelayMs));
+    typingDelay = Math.max(
+      config.minTypingDelayMs,
+      Math.min(typingDelay, config.maxTypingDelayMs),
+    );
 
     console.log(
       `   ⏳ Humanizer: Intentionally delaying for ${Math.round(

@@ -28,7 +28,7 @@ export default function SystemMaintenance() {
     const [loading, setLoading] = useState(false);
     const [clearing, setClearing] = useState(false);
     const [exporting, setExporting] = useState(false);
-    const [timestamp, setTimestamp] = useState(Date.now());
+    const [timestamp, setTimestamp] = useState(() => Date.now());
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
     // Reset Modal State

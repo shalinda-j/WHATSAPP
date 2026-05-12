@@ -5,14 +5,9 @@ import mongoose from 'mongoose';
 import Admin from '../../models/Admin';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { strictRateLimit } from '../middleware/rateLimit';
+import { ACTUAL_JWT_SECRET } from '../jwt-secret';
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET;
-
-// SECURITY FIX: No hardcoded test admin - application requires proper MongoDB setup
-if (!JWT_SECRET) {
-  throw new Error('JWT_SECRET must be configured in environment');
-}
 
 // Check if MongoDB is available
 const isMongoDBAvailable = () => {
@@ -30,7 +25,8 @@ router.get('/setup-check', async (req, res) => {
       // SECURITY FIX: Return error instead of fallback to test admin
       return res.status(503).json({
         needsSetup: false,
-        error: 'Database unavailable. Please ensure MongoDB is connected before using authentication.'
+        error:
+          'Database unavailable. Please ensure MongoDB is connected before using authentication.',
       });
     }
     const adminCount = await Admin.countDocuments();
@@ -74,8 +70,9 @@ router.post('/login', strictRateLimit, async (req, res) => {
     // SECURITY FIX: Require MongoDB for authentication
     if (!isMongoDBAvailable()) {
       return res.status(503).json({
-        message: 'Authentication service unavailable. Database connection required.',
-        error: 'MONGODB_UNAVAILABLE'
+        message:
+          'Authentication service unavailable. Database connection required.',
+        error: 'MONGODB_UNAVAILABLE',
       });
     }
 
@@ -92,7 +89,7 @@ router.post('/login', strictRateLimit, async (req, res) => {
 
     const token = jwt.sign(
       { id: admin._id, username: admin.username, role: admin.role },
-      JWT_SECRET!,
+      ACTUAL_JWT_SECRET,
       { expiresIn: '24h' },
     );
     res.json({ token });

@@ -41,7 +41,7 @@ export class FormService {
         case 'COUNTRIES': {
           const countries = await configurationManager.getCountries();
           return countries.map((c: { name: string; flag?: string }) =>
-            c.flag ? `${c.name} ${c.flag}` : c.name
+            c.flag ? `${c.name} ${c.flag}` : c.name,
           );
         }
         case 'EXPERIENCE_LEVELS': {
@@ -52,7 +52,10 @@ export class FormService {
           return field.options || [];
       }
     } catch (error) {
-      console.error(`❌ [FormService] Error fetching dynamic options for ${dataSource}:`, error);
+      console.error(
+        `❌ [FormService] Error fetching dynamic options for ${dataSource}:`,
+        error,
+      );
       return field.options || [];
     }
   }
@@ -60,17 +63,27 @@ export class FormService {
   /**
    * Get the active/default form template
    */
-  static async getActiveFormTemplate(): Promise<typeof FormTemplate.prototype | null> {
+  static async getActiveFormTemplate(): Promise<
+    typeof FormTemplate.prototype | null
+  > {
     try {
       // First try to get the default active template
-      let template = await FormTemplate.findOne({ isActive: true, isDefault: true });
+      let template = await FormTemplate.findOne({
+        isActive: true,
+        isDefault: true,
+      });
       if (!template) {
         // Fallback to any active template, but sort by createdAt to ensure consistency
-        template = await FormTemplate.findOne({ isActive: true }).sort({ createdAt: 1 });
+        template = await FormTemplate.findOne({ isActive: true }).sort({
+          createdAt: 1,
+        });
       }
       return template;
     } catch (error) {
-      console.error('❌ [FormService] Error getting active form template:', error);
+      console.error(
+        '❌ [FormService] Error getting active form template:',
+        error,
+      );
       return null;
     }
   }
@@ -85,7 +98,9 @@ export class FormService {
   /**
    * Get user's current form state
    */
-  static async getFormSession(phoneNumber: string): Promise<UserFormState | null> {
+  static async getFormSession(
+    phoneNumber: string,
+  ): Promise<UserFormState | null> {
     const session = await sessionStateService.getSession(phoneNumber, 'form');
     if (!session) return null;
 
@@ -106,17 +121,27 @@ export class FormService {
   static async startFormSession(
     phoneNumber: string,
     whatsappJid: string,
-  ): Promise<{ success: boolean; message?: string; field?: FormField; welcomeMessage?: string }> {
+  ): Promise<{
+    success: boolean;
+    message?: string;
+    field?: FormField;
+    welcomeMessage?: string;
+  }> {
     try {
       // Check if user already has an active session
       const existingSession = await this.getFormSession(phoneNumber);
       if (existingSession) {
         const template = await FormTemplate.findById(existingSession.formId);
-        if (template && existingSession.currentFieldIndex < template.fields.length) {
-          const sortedFields = [...template.fields].sort((a, b) => a.order - b.order);
+        if (
+          template &&
+          existingSession.currentFieldIndex < template.fields.length
+        ) {
+          const sortedFields = [...template.fields].sort(
+            (a, b) => a.order - b.order,
+          );
           return {
             success: true,
-            message: 'You already have a form in progress. Let\'s continue.',
+            message: "You already have a form in progress. Let's continue.",
             field: sortedFields[existingSession.currentFieldIndex],
           };
         }
@@ -125,15 +150,23 @@ export class FormService {
       // Get active form template
       const template = await this.getActiveFormTemplate();
       if (!template) {
-        return { success: false, message: 'No active registration form available.' };
+        return {
+          success: false,
+          message: 'No active registration form available.',
+        };
       }
 
       if (!template.fields || template.fields.length === 0) {
-        return { success: false, message: 'Registration form has no fields configured.' };
+        return {
+          success: false,
+          message: 'Registration form has no fields configured.',
+        };
       }
 
       // Sort fields by order
-      const sortedFields = [...template.fields].sort((a, b) => a.order - b.order);
+      const sortedFields = [...template.fields].sort(
+        (a, b) => a.order - b.order,
+      );
 
       // Create new session with persistent storage
       const sessionData: UserFormState = {
@@ -162,7 +195,9 @@ export class FormService {
 
       return {
         success: true,
-        welcomeMessage: template.welcomeMessage || '📋 Let\'s get you registered! Please answer the following questions.',
+        welcomeMessage:
+          template.welcomeMessage ||
+          "📋 Let's get you registered! Please answer the following questions.",
         field: sortedFields[0],
       };
     } catch (error) {
@@ -185,9 +220,15 @@ export class FormService {
     completionMessage?: string;
   }> {
     try {
-      const sessionData = await sessionStateService.getSession(phoneNumber, 'form');
+      const sessionData = await sessionStateService.getSession(
+        phoneNumber,
+        'form',
+      );
       if (!sessionData) {
-        return { success: false, message: 'No active form session. Type "register" to start.' };
+        return {
+          success: false,
+          message: 'No active form session. Type "register" to start.',
+        };
       }
 
       // Get form template
@@ -198,7 +239,9 @@ export class FormService {
       }
 
       // Sort fields by order
-      const sortedFields = [...template.fields].sort((a, b) => a.order - b.order);
+      const sortedFields = [...template.fields].sort(
+        (a, b) => a.order - b.order,
+      );
       const currentFieldIndex = sessionData.state.currentFieldIndex;
       const currentField = sortedFields[currentFieldIndex];
 
@@ -207,11 +250,15 @@ export class FormService {
       }
 
       // Validate answer
-      const validationResult = await this.validateFieldAnswer(currentField, answer);
+      const validationResult = await this.validateFieldAnswer(
+        currentField,
+        answer,
+      );
       if (!validationResult.valid) {
         return {
           success: false,
-          message: validationResult.message || 'Invalid answer. Please try again.',
+          message:
+            validationResult.message || 'Invalid answer. Please try again.',
           field: currentField,
         };
       }
@@ -222,16 +269,29 @@ export class FormService {
 
       // Update session with new data
       const newIndex = currentFieldIndex + 1;
-      await sessionStateService.updateSessionState(phoneNumber, 'form', { currentFieldIndex: newIndex });
-      await sessionStateService.updateSessionData(phoneNumber, 'form', { formData });
+      await sessionStateService.updateSessionState(phoneNumber, 'form', {
+        currentFieldIndex: newIndex,
+      });
+      await sessionStateService.updateSessionData(phoneNumber, 'form', {
+        formData,
+      });
 
       // Extend session expiry
-      await sessionStateService.extendSession(phoneNumber, 'form', this.SESSION_TTL_MS);
+      await sessionStateService.extendSession(
+        phoneNumber,
+        'form',
+        this.SESSION_TTL_MS,
+      );
 
       // Check if form is complete
       if (newIndex >= sortedFields.length) {
         // Submit form
-        const submission = await this.submitForm(phoneNumber, sessionData.data.formId, formData, sessionData.data.whatsappJid);
+        const submission = await this.submitForm(
+          phoneNumber,
+          sessionData.data.formId,
+          formData,
+          sessionData.data.whatsappJid,
+        );
 
         // Clear session
         await sessionStateService.deleteSession(phoneNumber, 'form');
@@ -239,10 +299,12 @@ export class FormService {
         return {
           success: true,
           isComplete: true,
-          completionMessage: template.completionMessage || '✅ Thank you! Your registration has been submitted successfully.',
+          completionMessage:
+            template.completionMessage ||
+            '✅ Thank you! Your registration has been submitted successfully.',
           message: submission.success
             ? undefined
-            : 'Your registration was recorded but there was an issue saving. We\'ll contact you soon.',
+            : "Your registration was recorded but there was an issue saving. We'll contact you soon.",
         };
       }
 
@@ -253,7 +315,10 @@ export class FormService {
       };
     } catch (error) {
       console.error('❌ [FormService] Error processing field answer:', error);
-      return { success: false, message: 'Error processing your answer. Please try again.' };
+      return {
+        success: false,
+        message: 'Error processing your answer. Please try again.',
+      };
     }
   }
 
@@ -268,7 +333,10 @@ export class FormService {
 
     // Check required
     if (field.required && !trimmedAnswer) {
-      return { valid: false, message: 'This field is required. Please provide an answer.' };
+      return {
+        valid: false,
+        message: 'This field is required. Please provide an answer.',
+      };
     }
 
     // Skip validation if not required and empty
@@ -279,13 +347,19 @@ export class FormService {
     switch (field.type) {
       case 'text':
       case 'textarea':
-        if (field.validation?.minLength && trimmedAnswer.length < field.validation.minLength) {
+        if (
+          field.validation?.minLength &&
+          trimmedAnswer.length < field.validation.minLength
+        ) {
           return {
             valid: false,
             message: `Answer must be at least ${field.validation.minLength} characters.`,
           };
         }
-        if (field.validation?.maxLength && trimmedAnswer.length > field.validation.maxLength) {
+        if (
+          field.validation?.maxLength &&
+          trimmedAnswer.length > field.validation.maxLength
+        ) {
           return {
             valid: false,
             message: `Answer must be at most ${field.validation.maxLength} characters.`,
@@ -298,18 +372,33 @@ export class FormService {
         if (isNaN(numValue)) {
           return { valid: false, message: 'Please enter a valid number.' };
         }
-        if (field.validation?.min !== undefined && numValue < field.validation.min) {
-          return { valid: false, message: `Number must be at least ${field.validation.min}.` };
+        if (
+          field.validation?.min !== undefined &&
+          numValue < field.validation.min
+        ) {
+          return {
+            valid: false,
+            message: `Number must be at least ${field.validation.min}.`,
+          };
         }
-        if (field.validation?.max !== undefined && numValue > field.validation.max) {
-          return { valid: false, message: `Number must be at most ${field.validation.max}.` };
+        if (
+          field.validation?.max !== undefined &&
+          numValue > field.validation.max
+        ) {
+          return {
+            valid: false,
+            message: `Number must be at most ${field.validation.max}.`,
+          };
         }
         return { valid: true, value: numValue };
 
       case 'email':
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(trimmedAnswer)) {
-          return { valid: false, message: 'Please enter a valid email address.' };
+          return {
+            valid: false,
+            message: 'Please enter a valid email address.',
+          };
         }
         return { valid: true, value: trimmedAnswer.toLowerCase() };
 
@@ -317,7 +406,10 @@ export class FormService {
         // Accept various phone formats
         const phoneRegex = /^[\d\s\-\+\(\)]{7,20}$/;
         if (!phoneRegex.test(trimmedAnswer)) {
-          return { valid: false, message: 'Please enter a valid phone number.' };
+          return {
+            valid: false,
+            message: 'Please enter a valid phone number.',
+          };
         }
         return { valid: true, value: trimmedAnswer.replace(/[\s\-\(\)]/g, '') };
 
@@ -326,7 +418,11 @@ export class FormService {
         const options = await this.getDynamicOptions(field);
         // Also accept numeric selection (1, 2, 3, etc.)
         const selectedIndex = parseInt(trimmedAnswer);
-        if (!isNaN(selectedIndex) && selectedIndex > 0 && selectedIndex <= options.length) {
+        if (
+          !isNaN(selectedIndex) &&
+          selectedIndex > 0 &&
+          selectedIndex <= options.length
+        ) {
           return { valid: true, value: options[selectedIndex - 1] };
         }
         if (options.length > 0 && !options.includes(trimmedAnswer)) {
@@ -343,11 +439,15 @@ export class FormService {
         const options = await this.getDynamicOptions(field);
         // Split by comma or space
         const values = trimmedAnswer.split(/[,\s]+/).filter(Boolean);
-        const invalidValues = values.filter((v) => options.length > 0 && !options.includes(v));
+        const invalidValues = values.filter(
+          (v) => options.length > 0 && !options.includes(v),
+        );
         if (invalidValues.length > 0) {
           return {
             valid: false,
-            message: `Invalid selections: ${invalidValues.join(', ')}. Options: ${options.join(', ')}`,
+            message: `Invalid selections: ${invalidValues.join(
+              ', ',
+            )}. Options: ${options.join(', ')}`,
           };
         }
         return { valid: true, value: values };
@@ -356,7 +456,10 @@ export class FormService {
       case 'date':
         const dateValue = new Date(trimmedAnswer);
         if (isNaN(dateValue.getTime())) {
-          return { valid: false, message: 'Please enter a valid date (e.g., 1990-01-15).' };
+          return {
+            valid: false,
+            message: 'Please enter a valid date (e.g., 1990-01-15).',
+          };
         }
         return { valid: true, value: dateValue.toISOString().split('T')[0] };
 
@@ -390,7 +493,10 @@ export class FormService {
       await submission.save();
       console.log(`✅ [FormService] Form submitted for ${phoneNumber}`);
 
-      return { success: true, submissionId: (submission._id as any).toString() };
+      return {
+        success: true,
+        submissionId: (submission._id as any).toString(),
+      };
     } catch (error) {
       console.error('❌ [FormService] Error submitting form:', error);
       return { success: false };
@@ -414,7 +520,9 @@ export class FormService {
     const options = await this.getDynamicOptions(field);
 
     if (field.type === 'select' && options.length > 0) {
-      prompt += `\nOptions: ${options.map((o, i) => `${i + 1}. ${o}`).join('\n')}`;
+      prompt += `\nOptions: ${options
+        .map((o, i) => `${i + 1}. ${o}`)
+        .join('\n')}`;
     } else if (field.type === 'select' && (!options || options.length === 0)) {
       prompt += `\n⚠️ Options not configured. Please contact support.`;
     } else if (field.type === 'multiselect' && options.length > 0) {

@@ -41,7 +41,8 @@ class WorkflowValidationService {
     if (inputNodes.length === 0) {
       errors.push({
         type: 'error',
-        message: 'Workflow must start with a Trigger node (drag "WhatsApp Trigger" onto the canvas)',
+        message:
+          'Workflow must start with a Trigger node (drag "WhatsApp Trigger" onto the canvas)',
         code: 'MISSING_INPUT_NODE',
       });
     }
@@ -61,10 +62,18 @@ class WorkflowValidationService {
       const sourceNode = nodes.find((n) => n.id === edge.source);
       const targetNode = nodes.find((n) => n.id === edge.target);
       if (!sourceNode) {
-        errors.push({ type: 'error', message: `Connection has missing source node`, code: 'MISSING_SOURCE_NODE' });
+        errors.push({
+          type: 'error',
+          message: `Connection has missing source node`,
+          code: 'MISSING_SOURCE_NODE',
+        });
       }
       if (!targetNode) {
-        errors.push({ type: 'error', message: `Connection has missing target node`, code: 'MISSING_TARGET_NODE' });
+        errors.push({
+          type: 'error',
+          message: `Connection has missing target node`,
+          code: 'MISSING_TARGET_NODE',
+        });
       }
     });
 
@@ -75,7 +84,8 @@ class WorkflowValidationService {
     if (outputNodes.length === 0) {
       warnings.push({
         type: 'warning',
-        message: 'No "Send WhatsApp" node found — workflow will not send any messages',
+        message:
+          'No "Send WhatsApp" node found — workflow will not send any messages',
         code: 'MISSING_OUTPUT_NODE',
       });
     }
@@ -91,7 +101,9 @@ class WorkflowValidationService {
         warnings.push({
           type: 'warning',
           nodeId: node.id,
-          message: `Node "${node.data?.label || node.id}" is not connected to any other node`,
+          message: `Node "${
+            node.data?.label || node.id
+          }" is not connected to any other node`,
           code: 'DISCONNECTED_NODE',
         });
       }
@@ -101,11 +113,16 @@ class WorkflowValidationService {
     nodes
       .filter((n) => n.type === 'decisionNode')
       .forEach((node) => {
-        if (!node.data?.condition || String(node.data.condition).trim() === '') {
+        if (
+          !node.data?.condition ||
+          String(node.data.condition).trim() === ''
+        ) {
           warnings.push({
             type: 'warning',
             nodeId: node.id,
-            message: `Decision node "${node.data?.label || 'Decision'}" has no condition set (double-click to configure)`,
+            message: `Decision node "${
+              node.data?.label || 'Decision'
+            }" has no condition set (double-click to configure)`,
             code: 'MISSING_CONDITION',
           });
         }
@@ -119,7 +136,9 @@ class WorkflowValidationService {
           warnings.push({
             type: 'warning',
             nodeId: node.id,
-            message: `"Send WhatsApp" node "${node.data?.label || 'Send'}" has no message configured`,
+            message: `"Send WhatsApp" node "${
+              node.data?.label || 'Send'
+            }" has no message configured`,
             code: 'MISSING_MESSAGE',
           });
         }
@@ -129,7 +148,8 @@ class WorkflowValidationService {
     if (nodes.length > 20) {
       warnings.push({
         type: 'warning',
-        message: 'Large workflow — consider breaking it into smaller sub-workflows',
+        message:
+          'Large workflow — consider breaking it into smaller sub-workflows',
         code: 'LARGE_WORKFLOW',
       });
     }

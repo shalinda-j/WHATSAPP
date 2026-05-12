@@ -21,11 +21,12 @@ const MAX_AUTO_LEARN_PER_DAY = 100;
 export class KnowledgeTrainingService {
   private static instance: KnowledgeTrainingService;
   private knowledgeCache: Map<string, IKnowledgeEntry[]> = new Map();
-  private lastCacheRefresh: number = 0;
+  private lastCacheRefresh = 0;
   private cacheTTL: number = 5 * 60 * 1000; // 5 minutes
-  private autoLearnCount: number = 0;
+  private autoLearnCount = 0;
   private lastAutoLearnReset: number = Date.now();
 
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
   private constructor() {}
 
   public static getInstance(): KnowledgeTrainingService {
@@ -47,7 +48,7 @@ export class KnowledgeTrainingService {
         .limit(100);
 
       if (category) {
-        entries = entries.filter(e => e.category === category);
+        entries = entries.filter((e) => e.category === category);
       }
 
       if (entries.length === 0) {
@@ -57,9 +58,9 @@ export class KnowledgeTrainingService {
       }
 
       // Format as Q&A pairs for AI
-      const formattedKB = entries.map(entry =>
-        `Q: ${entry.question}\nA: ${entry.answer}`
-      ).join('\n\n');
+      const formattedKB = entries
+        .map((entry) => `Q: ${entry.question}\nA: ${entry.answer}`)
+        .join('\n\n');
 
       return `# Knowledge Base (${entries.length} entries)\n\n${formattedKB}`;
     } catch (error) {
@@ -71,12 +72,12 @@ export class KnowledgeTrainingService {
   /**
    * Search for relevant knowledge entries
    */
-  async searchKnowledge(query: string, limit: number = 5): Promise<IKnowledgeEntry[]> {
+  async searchKnowledge(query: string, limit = 5): Promise<IKnowledgeEntry[]> {
     try {
       // Use text search if available
       const results = await KnowledgeEntry.find(
         { isActive: true },
-        { score: { $meta: 'textScore' } }
+        { score: { $meta: 'textScore' } },
       )
         .find({ $text: { $search: query } })
         .sort({ score: { $meta: 'textScore' } })
@@ -85,8 +86,8 @@ export class KnowledgeTrainingService {
       // Update usage count
       if (results.length > 0) {
         await KnowledgeEntry.updateMany(
-          { _id: { $in: results.map(r => r._id) } },
-          { $inc: { usageCount: 1 }, $set: { lastUsedAt: new Date() } }
+          { _id: { $in: results.map((r) => r._id) } },
+          { $inc: { usageCount: 1 }, $set: { lastUsedAt: new Date() } },
         );
       }
 
@@ -98,8 +99,8 @@ export class KnowledgeTrainingService {
         isActive: true,
         $or: [
           { question: { $regex: query, $options: 'i' } },
-          { tags: { $in: [new RegExp(query, 'i')] } }
-        ]
+          { tags: { $in: [new RegExp(query, 'i')] } },
+        ],
       }).limit(limit);
 
       return regexResults;
@@ -112,9 +113,9 @@ export class KnowledgeTrainingService {
   async addKnowledge(
     question: string,
     answer: string,
-    category: string = 'general',
+    category = 'general',
     tags: string[] = [],
-    language: 'en' | 'si' | 'ta' | 'hi' | 'all' = 'all'
+    language: 'en' | 'si' | 'ta' | 'hi' | 'all' = 'all',
   ): Promise<IKnowledgeEntry> {
     const entry = await KnowledgeEntry.create({
       question,
@@ -128,7 +129,9 @@ export class KnowledgeTrainingService {
       language,
     });
 
-    console.log(`[KnowledgeTraining] Added knowledge: "${question.substring(0, 50)}..."`);
+    console.log(
+      `[KnowledgeTraining] Added knowledge: "${question.substring(0, 50)}..."`,
+    );
 
     // Invalidate cache
     this.invalidateCache();
@@ -142,7 +145,7 @@ export class KnowledgeTrainingService {
   async learnFromConversation(
     userMessage: string,
     aiResponse: string,
-    confidence: number = 1.0
+    confidence = 1.0,
   ): Promise<boolean> {
     try {
       // Reset daily counter
@@ -157,13 +160,18 @@ export class KnowledgeTrainingService {
       }
 
       // Validate input
-      if (userMessage.length < MIN_MESSAGE_LENGTH || aiResponse.length < MIN_MESSAGE_LENGTH) {
+      if (
+        userMessage.length < MIN_MESSAGE_LENGTH ||
+        aiResponse.length < MIN_MESSAGE_LENGTH
+      ) {
         return false;
       }
 
       // Check if similar question already exists
       const existing = await KnowledgeEntry.findOne({
-        question: { $regex: new RegExp(`^${userMessage.substring(0, 50)}`, 'i') }
+        question: {
+          $regex: new RegExp(`^${userMessage.substring(0, 50)}`, 'i'),
+        },
       });
 
       if (existing) {
@@ -191,7 +199,12 @@ export class KnowledgeTrainingService {
       });
 
       this.autoLearnCount++;
-      console.log(`[KnowledgeTraining] Auto-learned: "${userMessage.substring(0, 30)}..." (${this.autoLearnCount}/${MAX_AUTO_LEARN_PER_DAY} today)`);
+      console.log(
+        `[KnowledgeTraining] Auto-learned: "${userMessage.substring(
+          0,
+          30,
+        )}..." (${this.autoLearnCount}/${MAX_AUTO_LEARN_PER_DAY} today)`,
+      );
 
       return true;
     } catch (error) {
@@ -222,7 +235,7 @@ export class KnowledgeTrainingService {
               item.question,
               item.answer,
               item.category || datasetKey.toLowerCase(),
-              item.tags || []
+              item.tags || [],
             );
             importCount++;
           }
@@ -231,12 +244,18 @@ export class KnowledgeTrainingService {
         // Parse as text (Q: ... A: ... format)
         const pairs = this.parseQAText(content);
         for (const pair of pairs) {
-          await this.addKnowledge(pair.question, pair.answer, datasetKey.toLowerCase());
+          await this.addKnowledge(
+            pair.question,
+            pair.answer,
+            datasetKey.toLowerCase(),
+          );
           importCount++;
         }
       }
 
-      console.log(`[KnowledgeTraining] Imported ${importCount} entries from dataset: ${datasetKey}`);
+      console.log(
+        `[KnowledgeTraining] Imported ${importCount} entries from dataset: ${datasetKey}`,
+      );
       return importCount;
     } catch (error) {
       console.error('[KnowledgeTraining] Error importing from dataset:', error);
@@ -256,7 +275,7 @@ export class KnowledgeTrainingService {
       await Dataset.findOneAndUpdate(
         { key: 'AI_PERSONALITY' },
         { content: `${personality}\n\n${knowledgeBase}` },
-        { upsert: true }
+        { upsert: true },
       );
 
       // Clear configuration cache so AI picks up new knowledge
@@ -280,16 +299,18 @@ export class KnowledgeTrainingService {
     recentlyAdded: number;
   }> {
     try {
-      const totalEntries = await KnowledgeEntry.countDocuments({ isActive: true });
+      const totalEntries = await KnowledgeEntry.countDocuments({
+        isActive: true,
+      });
 
       const byCategory = await KnowledgeEntry.aggregate([
         { $match: { isActive: true } },
-        { $group: { _id: '$category', count: { $sum: 1 } } }
+        { $group: { _id: '$category', count: { $sum: 1 } } },
       ]);
 
       const bySource = await KnowledgeEntry.aggregate([
         { $match: { isActive: true } },
-        { $group: { _id: '$source', count: { $sum: 1 } } }
+        { $group: { _id: '$source', count: { $sum: 1 } } },
       ]);
 
       const stats = await KnowledgeEntry.aggregate([
@@ -298,29 +319,32 @@ export class KnowledgeTrainingService {
           $group: {
             _id: null,
             avgConfidence: { $avg: '$confidence' },
-            avgUsage: { $avg: '$usageCount' }
-          }
-        }
+            avgUsage: { $avg: '$usageCount' },
+          },
+        },
       ]);
 
       const recentlyAdded = await KnowledgeEntry.countDocuments({
         isActive: true,
-        createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+        createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
       });
 
       return {
         totalEntries,
-        byCategory: byCategory.reduce((acc: Record<string, number>, item: any) => {
-          acc[item._id || 'unknown'] = item.count;
-          return acc;
-        }, {}),
+        byCategory: byCategory.reduce(
+          (acc: Record<string, number>, item: any) => {
+            acc[item._id || 'unknown'] = item.count;
+            return acc;
+          },
+          {},
+        ),
         bySource: bySource.reduce((acc: Record<string, number>, item: any) => {
           acc[item._id || 'unknown'] = item.count;
           return acc;
         }, {}),
         avgConfidence: stats[0]?.avgConfidence || 0,
         avgUsage: stats[0]?.avgUsage || 0,
-        recentlyAdded
+        recentlyAdded,
       };
     } catch (error) {
       console.error('[KnowledgeTraining] Error getting stats:', error);
@@ -330,7 +354,7 @@ export class KnowledgeTrainingService {
         bySource: {},
         avgConfidence: 0,
         avgUsage: 0,
-        recentlyAdded: 0
+        recentlyAdded: 0,
       };
     }
   }
@@ -357,13 +381,13 @@ export class KnowledgeTrainingService {
    */
   async updateKnowledge(
     id: string,
-    updates: Partial<IKnowledgeEntry>
+    updates: Partial<IKnowledgeEntry>,
   ): Promise<IKnowledgeEntry | null> {
     try {
       const entry = await KnowledgeEntry.findByIdAndUpdate(
         id,
         { ...updates, updatedAt: new Date() },
-        { new: true }
+        { new: true },
       );
 
       if (entry) {
@@ -402,14 +426,181 @@ export class KnowledgeTrainingService {
   private extractTags(text: string): string[] {
     // Extract potential tags from text
     const words = text.toLowerCase().split(/\s+/);
-    const stopWords = new Set(['the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare', 'ought', 'used', 'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', 'now', 'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', 'your', 'yours', 'yourself', 'yourselves', 'he', 'him', 'his', 'himself', 'she', 'her', 'hers', 'herself', 'it', 'its', 'itself', 'they', 'them', 'their', 'theirs', 'themselves', 'what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those', 'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does', 'did', 'doing', 'and', 'but', 'if', 'or', 'because', 'until', 'while', 'about', 'against', 'between', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once']);
+    const stopWords = new Set([
+      'the',
+      'a',
+      'an',
+      'is',
+      'are',
+      'was',
+      'were',
+      'be',
+      'been',
+      'being',
+      'have',
+      'has',
+      'had',
+      'do',
+      'does',
+      'did',
+      'will',
+      'would',
+      'could',
+      'should',
+      'may',
+      'might',
+      'must',
+      'shall',
+      'can',
+      'need',
+      'dare',
+      'ought',
+      'used',
+      'to',
+      'of',
+      'in',
+      'for',
+      'on',
+      'with',
+      'at',
+      'by',
+      'from',
+      'as',
+      'into',
+      'through',
+      'during',
+      'before',
+      'after',
+      'above',
+      'below',
+      'between',
+      'under',
+      'again',
+      'further',
+      'then',
+      'once',
+      'here',
+      'there',
+      'when',
+      'where',
+      'why',
+      'how',
+      'all',
+      'each',
+      'few',
+      'more',
+      'most',
+      'other',
+      'some',
+      'such',
+      'no',
+      'nor',
+      'not',
+      'only',
+      'own',
+      'same',
+      'so',
+      'than',
+      'too',
+      'very',
+      's',
+      't',
+      'can',
+      'will',
+      'just',
+      'don',
+      'should',
+      'now',
+      'i',
+      'me',
+      'my',
+      'myself',
+      'we',
+      'our',
+      'ours',
+      'ourselves',
+      'you',
+      'your',
+      'yours',
+      'yourself',
+      'yourselves',
+      'he',
+      'him',
+      'his',
+      'himself',
+      'she',
+      'her',
+      'hers',
+      'herself',
+      'it',
+      'its',
+      'itself',
+      'they',
+      'them',
+      'their',
+      'theirs',
+      'themselves',
+      'what',
+      'which',
+      'who',
+      'whom',
+      'this',
+      'that',
+      'these',
+      'those',
+      'am',
+      'is',
+      'are',
+      'was',
+      'were',
+      'be',
+      'been',
+      'being',
+      'have',
+      'has',
+      'had',
+      'having',
+      'do',
+      'does',
+      'did',
+      'doing',
+      'and',
+      'but',
+      'if',
+      'or',
+      'because',
+      'until',
+      'while',
+      'about',
+      'against',
+      'between',
+      'into',
+      'through',
+      'during',
+      'before',
+      'after',
+      'above',
+      'below',
+      'up',
+      'down',
+      'out',
+      'off',
+      'over',
+      'under',
+      'again',
+      'further',
+      'then',
+      'once',
+    ]);
 
     return words
-      .filter(word => word.length > 3 && !stopWords.has(word))
+      .filter((word) => word.length > 3 && !stopWords.has(word))
       .slice(0, 5);
   }
 
-  private parseQAText(text: string): Array<{ question: string; answer: string }> {
+  private parseQAText(
+    text: string,
+  ): Array<{ question: string; answer: string }> {
     const pairs: Array<{ question: string; answer: string }> = [];
     const lines = text.split('\n');
     let currentQuestion = '';
@@ -418,7 +609,10 @@ export class KnowledgeTrainingService {
     for (const line of lines) {
       if (line.startsWith('Q:') || line.startsWith('Question:')) {
         if (currentQuestion && currentAnswer) {
-          pairs.push({ question: currentQuestion.trim(), answer: currentAnswer.trim() });
+          pairs.push({
+            question: currentQuestion.trim(),
+            answer: currentAnswer.trim(),
+          });
         }
         currentQuestion = line.replace(/^(Q:|Question:)\s*/, '');
         currentAnswer = '';
@@ -432,7 +626,10 @@ export class KnowledgeTrainingService {
     }
 
     if (currentQuestion && currentAnswer) {
-      pairs.push({ question: currentQuestion.trim(), answer: currentAnswer.trim() });
+      pairs.push({
+        question: currentQuestion.trim(),
+        answer: currentAnswer.trim(),
+      });
     }
 
     return pairs;

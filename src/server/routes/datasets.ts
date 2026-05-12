@@ -23,12 +23,16 @@ router.use(authenticateToken);
 // Get all datasets (with optional type filter)
 router.get('/', async (req, res) => {
   try {
-    const { type, scope, category } = req.query;
+    const { type, scope, category, key } = req.query;
 
     // Build filter - always exclude 'config' type (internal configuration items)
     const filter: Record<string, unknown> = {
       type: { $ne: 'config' },
     };
+
+    if (key) {
+      filter.key = key;
+    }
 
     if (type) {
       // For specific type filter, override the default
@@ -42,7 +46,13 @@ router.get('/', async (req, res) => {
         delete filter.type; // Remove $ne since $or handles it
         // Add explicit exclusion of config
         filter.$and = [
-          { $or: [{ type: 'knowledge' }, { type: { $exists: false } }, { type: null }] },
+          {
+            $or: [
+              { type: 'knowledge' },
+              { type: { $exists: false } },
+              { type: null },
+            ],
+          },
           { type: { $ne: 'config' } },
         ];
         delete filter.$or;
@@ -65,14 +75,23 @@ router.get('/', async (req, res) => {
 router.get('/type/:type', async (req, res) => {
   try {
     const { type } = req.params as { type: DatasetType };
-    const validTypes = ['knowledge', 'command', 'link', 'marketing', 'megatext', 'personality'];
+    const validTypes = [
+      'knowledge',
+      'command',
+      'link',
+      'marketing',
+      'megatext',
+      'personality',
+    ];
 
     if (!validTypes.includes(type)) {
       return res.status(400).json({ error: 'Invalid dataset type' });
     }
 
     // 'config' type is for internal configuration items, not displayed in Datasets page
-    const datasets = await Dataset.find({ type, isActive: true }).sort({ createdAt: -1 });
+    const datasets = await Dataset.find({ type, isActive: true }).sort({
+      createdAt: -1,
+    });
     res.json(datasets);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -100,14 +119,16 @@ router.put('/:id/language/:lang', validateObjectId(), async (req, res) => {
 
     const validLanguages = ['en', 'si', 'ta'];
     if (!validLanguages.includes(lang)) {
-      return res.status(400).json({ error: 'Invalid language. Use: en, si, or ta' });
+      return res
+        .status(400)
+        .json({ error: 'Invalid language. Use: en, si, or ta' });
     }
 
     const updatePath = `content.${lang}`;
     const updatedDataset = await Dataset.findByIdAndUpdate(
       id,
       { $set: { [updatePath]: content } },
-      { new: true }
+      { new: true },
     );
 
     if (!updatedDataset) {
@@ -173,16 +194,40 @@ router.post('/extract', upload.single('file'), async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { name, description, type, content, scope, category, key, isActive, metadata } = req.body;
+    // Strip invalid _id from payload (frontend may send empty string)
+    const {
+      _id,
+      name,
+      description,
+      type,
+      content,
+      scope,
+      category,
+      key,
+      isActive,
+      metadata,
+    } = req.body;
+
+    // Ignore empty or invalid _id values - let MongoDB auto-generate
+    if (_id && _id.trim() !== '' && /^[a-fA-F0-9]{24}$/.test(_id)) {
+      // Valid ObjectId provided - would be an update case, not create
+      return res
+        .status(400)
+        .json({ error: 'Dataset already exists. Use PUT to update.' });
+    }
+
+    if (!name) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
 
     const newDataset = new Dataset({
       name,
-      description,
+      description: description || '',
       type: type || 'knowledge',
       content: content || {},
       scope: scope || 'ALL',
       category: category || 'general',
-      key,
+      key: key || '',
       isActive: isActive !== undefined ? isActive : true,
       metadata: metadata || {},
     });
@@ -190,27 +235,49 @@ router.post('/', async (req, res) => {
     await newDataset.save();
     res.json(newDataset);
   } catch (err: any) {
+    console.error('Error creating dataset:', {
+      message: err.message,
+      name: err.name,
+    });
     res.status(500).json({ error: err.message });
   }
 });
 
 router.put('/:id', validateObjectId(), async (req, res) => {
   try {
-    const { name, description, type, content, scope, category, key, isActive, metadata } = req.body;
+    const {
+      name,
+      description,
+      type,
+      content,
+      scope,
+      category,
+      key,
+      isActive,
+      metadata,
+    } = req.body;
+
+    console.log('Updating dataset:', {
+      id: req.params.id,
+      name,
+      type,
+      contentKeys: content ? Object.keys(content) : [],
+    });
+
+    const updateData: Record<string, unknown> = {};
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
+    if (type !== undefined) updateData.type = type;
+    if (content !== undefined) updateData.content = content;
+    if (scope !== undefined) updateData.scope = scope;
+    if (category !== undefined) updateData.category = category;
+    if (key !== undefined) updateData.key = key;
+    if (isActive !== undefined) updateData.isActive = isActive;
+    if (metadata !== undefined) updateData.metadata = metadata;
 
     const updatedDataset = await Dataset.findByIdAndUpdate(
       req.params.id,
-      {
-        name,
-        description,
-        type,
-        content,
-        scope,
-        category,
-        key,
-        isActive,
-        metadata,
-      },
+      updateData,
       { new: true },
     );
 
@@ -220,7 +287,11 @@ router.put('/:id', validateObjectId(), async (req, res) => {
 
     res.json(updatedDataset);
   } catch (err: any) {
-    console.error('Error updating dataset:', err);
+    console.error('Error updating dataset:', {
+      message: err.message,
+      name: err.name,
+      id: req.params.id,
+    });
     res.status(500).json({ error: err.message });
   }
 });

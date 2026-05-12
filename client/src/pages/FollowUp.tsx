@@ -3,7 +3,7 @@ import { api } from '../config';
 import {
   UserCheck, Phone, Clock, Plus, Search, Filter,
   CheckCircle, AlertCircle, X, MessageSquare, Calendar,
-  RefreshCw, ChevronDown, Star, Archive, Trash2
+  RefreshCw, ChevronDown, Star, Archive
 } from 'lucide-react';
 
 interface FollowUpContact {
@@ -51,27 +51,25 @@ export default function FollowUp() {
   const [newNote, setNewNote] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
 
-  const [newContact, setNewContact] = useState({
+  const [newContact, setNewContact] = useState<{
+    name: string;
+    phone: string;
+    company: string;
+    status: 'new';
+    priority: 'low' | 'medium' | 'high';
+    notes: string;
+    nextFollowUp: string;
+    source: string;
+  }>({
     name: '',
     phone: '',
     company: '',
-    status: 'new' as const,
-    priority: 'medium' as const,
+    status: 'new',
+    priority: 'medium',
     notes: '',
     nextFollowUp: '',
     source: 'manual',
   });
-
-  useEffect(() => {
-    fetchContacts();
-  }, []);
-
-  useEffect(() => {
-    if (message) {
-      const t = setTimeout(() => setMessage(null), 4000);
-      return () => clearTimeout(t);
-    }
-  }, [message]);
 
   const fetchContacts = async () => {
     setLoading(true);
@@ -85,6 +83,17 @@ export default function FollowUp() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchContacts();
+  }, []);
+
+  useEffect(() => {
+    if (message) {
+      const t = setTimeout(() => setMessage(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [message]);
 
   const filteredContacts = contacts.filter(c => {
     const matchSearch = !searchQuery ||
@@ -490,7 +499,7 @@ export default function FollowUp() {
                   <label className="block text-xs font-medium text-gray-700 mb-1">{label}</label>
                   <input
                     type={type}
-                    value={(newContact as any)[field]}
+                    value={(newContact as Record<string, string>)[field]}
                     onChange={e => setNewContact(p => ({ ...p, [field]: e.target.value }))}
                     placeholder={placeholder}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
@@ -502,7 +511,7 @@ export default function FollowUp() {
                   <label className="block text-xs font-medium text-gray-700 mb-1">Priority</label>
                   <select
                     value={newContact.priority}
-                    onChange={e => setNewContact(p => ({ ...p, priority: e.target.value as any }))}
+                    onChange={e => setNewContact(p => ({ ...p, priority: e.target.value as 'high' | 'medium' | 'low' }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none"
                   >
                     <option value="high">High</option>

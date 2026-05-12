@@ -18,3 +18,21 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// Handle 401/403 responses - redirect to login
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error.response?.status;
+    if (status === 401 || status === 403) {
+      console.log(
+        'Token expired or invalid, clearing token and redirecting to login',
+      );
+      localStorage.removeItem('token');
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  },
+);

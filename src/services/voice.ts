@@ -24,43 +24,182 @@ import VoiceConfig from '../models/VoiceConfig';
 
 // ── Language detection patterns ───────────────────────────────────────────────
 const SINHALA_UNICODE_RANGE = /[\u0D80-\u0DFF]/;
-const TAMIL_UNICODE_RANGE   = /[\u0B80-\u0BFF]/;
-const HINDI_UNICODE_RANGE   = /[\u0900-\u097F]/;
+const TAMIL_UNICODE_RANGE = /[\u0B80-\u0BFF]/;
+const HINDI_UNICODE_RANGE = /[\u0900-\u097F]/;
 
 const SINHALA_ROMANIZED_WORDS = [
-  'mage','nama','mama','oyata','api','kohomada','kohomath','honda','neda','neh',
-  'enna','matta','pahada','karanna','balanna','thiyenna','ganna','denna','avilla',
-  'yanna','kale','kota','eta','methana','ethana','aruwen','karapu','hithe',
-  'theruma','hithuna','kiwwa','katha','karanawa','balanawa','thiyenawa','gananawa',
-  'mokada','mokak','kumana','kawda','kawuru','etrin','mehema','ubata','oba',
-  'thamai','wage','witarai','sambandha','wadha','pahath','lokuya','kudu',
-  'narak','sathutu','duka','katayuthu','karadara','sarpa','ayubowan','suba',
-  'pathum','nivasala','gedara','iskole','kendaraya','roshalaya','asepasala',
+  'mage',
+  'nama',
+  'mama',
+  'oyata',
+  'api',
+  'kohomada',
+  'kohomath',
+  'honda',
+  'neda',
+  'neh',
+  'enna',
+  'matta',
+  'pahada',
+  'karanna',
+  'balanna',
+  'thiyenna',
+  'ganna',
+  'denna',
+  'avilla',
+  'yanna',
+  'kale',
+  'kota',
+  'eta',
+  'methana',
+  'ethana',
+  'aruwen',
+  'karapu',
+  'hithe',
+  'theruma',
+  'hithuna',
+  'kiwwa',
+  'katha',
+  'karanawa',
+  'balanawa',
+  'thiyenawa',
+  'gananawa',
+  'mokada',
+  'mokak',
+  'kumana',
+  'kawda',
+  'kawuru',
+  'etrin',
+  'mehema',
+  'ubata',
+  'oba',
+  'thamai',
+  'wage',
+  'witarai',
+  'sambandha',
+  'wadha',
+  'pahath',
+  'lokuya',
+  'kudu',
+  'narak',
+  'sathutu',
+  'duka',
+  'katayuthu',
+  'karadara',
+  'sarpa',
+  'ayubowan',
+  'suba',
+  'pathum',
+  'nivasala',
+  'gedara',
+  'iskole',
+  'kendaraya',
+  'roshalaya',
+  'asepasala',
 ];
 
 const COMMON_ENGLISH_WORDS = new Set([
-  'the','is','are','i','you','he','she','we','they','my','your','it','and','or',
-  'but','what','how','can','could','please','hello','hi','thank','thanks','yes',
-  'no','okay','ok','not','do','does','did','will','would','should','have','has',
-  'been','was','were','am','be','being','this','that','these','those','a','an',
-  'want','need','like','know','think','see','get','make','go','come','take',
-  'give','find','tell','ask','work','call','try','leave','put','mean','keep',
-  'let','begin','seem','help','show','hear','play','run','move','live',
+  'the',
+  'is',
+  'are',
+  'i',
+  'you',
+  'he',
+  'she',
+  'we',
+  'they',
+  'my',
+  'your',
+  'it',
+  'and',
+  'or',
+  'but',
+  'what',
+  'how',
+  'can',
+  'could',
+  'please',
+  'hello',
+  'hi',
+  'thank',
+  'thanks',
+  'yes',
+  'no',
+  'okay',
+  'ok',
+  'not',
+  'do',
+  'does',
+  'did',
+  'will',
+  'would',
+  'should',
+  'have',
+  'has',
+  'been',
+  'was',
+  'were',
+  'am',
+  'be',
+  'being',
+  'this',
+  'that',
+  'these',
+  'those',
+  'a',
+  'an',
+  'want',
+  'need',
+  'like',
+  'know',
+  'think',
+  'see',
+  'get',
+  'make',
+  'go',
+  'come',
+  'take',
+  'give',
+  'find',
+  'tell',
+  'ask',
+  'work',
+  'call',
+  'try',
+  'leave',
+  'put',
+  'mean',
+  'keep',
+  'let',
+  'begin',
+  'seem',
+  'help',
+  'show',
+  'hear',
+  'play',
+  'run',
+  'move',
+  'live',
 ]);
 
 // ── Language detection ─────────────────────────────────────────────────────────
-export function detectLanguage(text: string): { lang: string; confidence: number } {
+export function detectLanguage(text: string): {
+  lang: string;
+  confidence: number;
+} {
   const normalized = text.toLowerCase().trim();
 
   if (SINHALA_UNICODE_RANGE.test(text)) return { lang: 'si', confidence: 0.95 };
-  if (TAMIL_UNICODE_RANGE.test(text))   return { lang: 'ta', confidence: 0.95 };
-  if (HINDI_UNICODE_RANGE.test(text))   return { lang: 'hi', confidence: 0.95 };
+  if (TAMIL_UNICODE_RANGE.test(text)) return { lang: 'ta', confidence: 0.95 };
+  if (HINDI_UNICODE_RANGE.test(text)) return { lang: 'hi', confidence: 0.95 };
 
   const words = normalized.split(/\s+/);
-  let sinhalaCount = 0, englishCount = 0;
+  let sinhalaCount = 0,
+    englishCount = 0;
 
   for (const w of words) {
-    if (SINHALA_ROMANIZED_WORDS.some(sw => w.includes(sw) || sw.includes(w))) sinhalaCount++;
+    if (SINHALA_ROMANIZED_WORDS.some((sw) => w.includes(sw) || sw.includes(w)))
+      sinhalaCount++;
     if (COMMON_ENGLISH_WORDS.has(w)) englishCount++;
   }
 
@@ -70,7 +209,8 @@ export function detectLanguage(text: string): { lang: string; confidence: number
 
   if (si > 0.15 && si >= en) return { lang: 'si', confidence: 0.7 + si * 0.2 };
 
-  const isAscii = /^[a-zA-Z0-9\s\p{P}!?.,;&'"()+\-*#@%$^\[\]{}|\\/<>=`~]+$/u.test(normalized);
+  const isAscii =
+    /^[a-zA-Z0-9\s\p{P}!?.,;&'"()+\-*#@%$^\[\]{}|\\/<>=`~]+$/u.test(normalized);
   if (isAscii && en > 0.1) return { lang: 'en', confidence: 0.8 + en * 0.15 };
   if (isAscii) return { lang: 'en', confidence: 0.5 };
 
@@ -78,24 +218,38 @@ export function detectLanguage(text: string): { lang: string; confidence: number
 }
 
 // ── Voice mode helpers ─────────────────────────────────────────────────────────
-export async function getVoiceMode(): Promise<'voice-only' | 'text-only' | 'voice-and-text'> {
+export async function getVoiceMode(): Promise<
+  'voice-only' | 'text-only' | 'voice-and-text'
+> {
   try {
-    const c = await VoiceConfig.findOne({ isActive: true }).sort({ updatedAt: -1 });
+    const c = await VoiceConfig.findOne({ isActive: true }).sort({
+      updatedAt: -1,
+    });
     return c?.mode || 'voice-and-text';
-  } catch { return 'voice-and-text'; }
+  } catch {
+    return 'voice-and-text';
+  }
 }
 
 export async function isVoiceAgentEnabled(): Promise<boolean> {
   try {
-    const c = await VoiceConfig.findOne({ isActive: true }).sort({ updatedAt: -1 });
+    const c = await VoiceConfig.findOne({ isActive: true }).sort({
+      updatedAt: -1,
+    });
     return c?.isActive ?? true;
-  } catch { return true; }
+  } catch {
+    return true;
+  }
 }
 
 export async function getActiveVoiceConfig() {
   try {
-    return await VoiceConfig.findOne({ isActive: true }).sort({ updatedAt: -1 });
-  } catch { return null; }
+    return await VoiceConfig.findOne({ isActive: true }).sort({
+      updatedAt: -1,
+    });
+  } catch {
+    return null;
+  }
 }
 
 // ── Transcription ─────────────────────────────────────────────────────────────
@@ -110,9 +264,15 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
   return result.text;
 }
 
-export async function transcribeAudioWithLanguage(audioBuffer: Buffer): Promise<TranscriptionResult> {
+export async function transcribeAudioWithLanguage(
+  audioBuffer: Buffer,
+): Promise<TranscriptionResult> {
   let config = null;
-  try { config = await VoiceConfig.findOne({ isActive: true }).sort({ updatedAt: -1 }); } catch {}
+  try {
+    config = await VoiceConfig.findOne({ isActive: true }).sort({
+      updatedAt: -1,
+    });
+  } catch {}
 
   const provider = config?.provider || 'google-free';
   const apiKey = config?.apiKey || process.env.OPENAI_API_KEY || '';
@@ -125,7 +285,8 @@ export async function transcribeAudioWithLanguage(audioBuffer: Buffer): Promise<
     try {
       console.log('   🎙️ Trying OpenAI Whisper STT...');
       text = await openaiTranscribeAudio(audioBuffer, apiKey);
-      if (text) console.log(`   ✅ OpenAI Whisper: "${text.substring(0, 60)}..."`);
+      if (text)
+        console.log(`   ✅ OpenAI Whisper: "${text.substring(0, 60)}..."`);
     } catch (err: any) {
       console.warn(`   ⚠️ OpenAI Whisper failed: ${err.message}`);
     }
@@ -138,7 +299,10 @@ export async function transcribeAudioWithLanguage(audioBuffer: Buffer): Promise<
       console.log('   🎙️ Trying Gemini STT...');
 
       // Try with the audio/ogg MIME type (WhatsApp PTT format)
-      text = await geminiTranscribeAudio(audioBuffer.toString('base64'), 'audio/ogg');
+      text = await geminiTranscribeAudio(
+        audioBuffer.toString('base64'),
+        'audio/ogg',
+      );
 
       if (text) console.log(`   ✅ Gemini: "${text.substring(0, 60)}..."`);
     } catch (err: any) {
@@ -151,8 +315,12 @@ export async function transcribeAudioWithLanguage(audioBuffer: Buffer): Promise<
   if (!text) {
     try {
       console.log('   🎙️ Trying Gemini STT with audio/webm...');
-      text = await geminiTranscribeAudio(audioBuffer.toString('base64'), 'audio/webm');
-      if (text) console.log(`   ✅ Gemini (webm): "${text.substring(0, 60)}..."`);
+      text = await geminiTranscribeAudio(
+        audioBuffer.toString('base64'),
+        'audio/webm',
+      );
+      if (text)
+        console.log(`   ✅ Gemini (webm): "${text.substring(0, 60)}..."`);
     } catch (err: any) {
       console.warn(`   ⚠️ Gemini STT (webm fallback) failed: ${err.message}`);
       text = '';
@@ -161,14 +329,24 @@ export async function transcribeAudioWithLanguage(audioBuffer: Buffer): Promise<
 
   // ── Step 4: If all STT failed, return empty (caller will handle gracefully) ─
   if (!text || text.trim().length < 2) {
-    console.error('   ❌ All STT providers failed — returning empty transcription');
+    console.error(
+      '   ❌ All STT providers failed — returning empty transcription',
+    );
     return { text: '', detectedLanguage: 'si', languageConfidence: 0 };
   }
 
   const langResult = detectLanguage(text);
-  console.log(`   🌐 Language: ${langResult.lang} (confidence: ${langResult.confidence.toFixed(2)})`);
+  console.log(
+    `   🌐 Language: ${
+      langResult.lang
+    } (confidence: ${langResult.confidence.toFixed(2)})`,
+  );
 
-  return { text, detectedLanguage: langResult.lang, languageConfidence: langResult.confidence };
+  return {
+    text,
+    detectedLanguage: langResult.lang,
+    languageConfidence: langResult.confidence,
+  };
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -179,7 +357,10 @@ export async function transcribeAudioWithLanguage(audioBuffer: Buffer): Promise<
  * Google Cloud TTS voice names per language (Neural2 quality).
  * Sinhala is intentionally absent — Google Cloud has no Sinhala voice.
  */
-const GOOGLE_CLOUD_VOICES: Record<string, { languageCode: string; name: string; gender: string }> = {
+const GOOGLE_CLOUD_VOICES: Record<
+  string,
+  { languageCode: string; name: string; gender: string }
+> = {
   en: { languageCode: 'en-US', name: 'en-US-Neural2-F', gender: 'FEMALE' },
   ta: { languageCode: 'ta-IN', name: 'ta-IN-Neural2-B', gender: 'FEMALE' },
   hi: { languageCode: 'hi-IN', name: 'hi-IN-Neural2-A', gender: 'FEMALE' },
@@ -216,7 +397,12 @@ function wrapSSML(text: string): string {
  * Convert raw PCM (s16le) to a WAV file buffer.
  * Gemini TTS returns 24000Hz, 16-bit, mono PCM.
  */
-function pcmToWav(pcmData: Buffer, sampleRate = 24000, channels = 1, bitsPerSample = 16): Buffer {
+function pcmToWav(
+  pcmData: Buffer,
+  sampleRate = 24000,
+  channels = 1,
+  bitsPerSample = 16,
+): Buffer {
   const byteRate = sampleRate * channels * (bitsPerSample / 8);
   const blockAlign = channels * (bitsPerSample / 8);
   const dataSize = pcmData.length;
@@ -244,7 +430,11 @@ function pcmToWav(pcmData: Buffer, sampleRate = 24000, channels = 1, bitsPerSamp
  * Returns a WAV buffer (PCM converted to WAV in-memory — no ffmpeg required).
  * Docs: https://ai.google.dev/gemini-api/docs/speech-generation
  */
-async function ttsGemini(text: string, lang: string, voiceName: string): Promise<Buffer> {
+async function ttsGemini(
+  text: string,
+  lang: string,
+  voiceName: string,
+): Promise<Buffer> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey === 'your_gemini_api_key_here') {
     throw new Error('GEMINI_API_KEY not configured');
@@ -252,14 +442,16 @@ async function ttsGemini(text: string, lang: string, voiceName: string): Promise
 
   // Map per-language default voices for natural accent/style
   const GEMINI_VOICE_DEFAULTS: Record<string, string> = {
-    si: 'Sulafat',   // Warm — closest to natural Sinhala cadence
-    ta: 'Leda',      // Youthful — good for Tamil
-    hi: 'Achird',    // Friendly — good for Hindi
-    en: 'Kore',      // Firm — clear English
+    si: 'Sulafat', // Warm — closest to natural Sinhala cadence
+    ta: 'Leda', // Youthful — good for Tamil
+    hi: 'Achird', // Friendly — good for Hindi
+    en: 'Kore', // Firm — clear English
   };
   const voice = voiceName || GEMINI_VOICE_DEFAULTS[lang] || 'Kore';
 
-  console.log(`   🤖 Gemini TTS — model: gemini-2.5-flash-preview-tts, voice: ${voice}, lang: ${lang}`);
+  console.log(
+    `   🤖 Gemini TTS — model: gemini-2.5-flash-preview-tts, voice: ${voice}, lang: ${lang}`,
+  );
 
   const payload = {
     contents: [{ parts: [{ text }] }],
@@ -296,7 +488,9 @@ async function ttsGemini(text: string, lang: string, voiceName: string): Promise
   const pcmBuffer = Buffer.from(pcmBase64, 'base64');
   const wavBuffer = pcmToWav(pcmBuffer, 24000, 1, 16);
 
-  console.log(`   ✅ Gemini TTS: ${pcmBuffer.length} PCM bytes → ${wavBuffer.length} WAV bytes`);
+  console.log(
+    `   ✅ Gemini TTS: ${pcmBuffer.length} PCM bytes → ${wavBuffer.length} WAV bytes`,
+  );
   return wavBuffer;
 }
 
@@ -305,22 +499,32 @@ async function ttsGemini(text: string, lang: string, voiceName: string): Promise
  * Requires a Google Cloud API key with "Cloud Text-to-Speech API" enabled.
  * Does NOT support Sinhala — call will throw for 'si'.
  */
-async function ttsGoogleCloud(text: string, lang: string, apiKey: string): Promise<Buffer> {
+async function ttsGoogleCloud(
+  text: string,
+  lang: string,
+  apiKey: string,
+): Promise<Buffer> {
   const voice = GOOGLE_CLOUD_VOICES[lang];
   if (!voice) {
-    throw new Error(`Google Cloud TTS has no voice for language '${lang}'. Use Google Free for Sinhala.`);
+    throw new Error(
+      `Google Cloud TTS has no voice for language '${lang}'. Use Google Free for Sinhala.`,
+    );
   }
 
   console.log(`   🎙️ Google Cloud TTS — voice: ${voice.name}, lang: ${lang}`);
 
   const payload = {
     input: { ssml: wrapSSML(text) },
-    voice: { languageCode: voice.languageCode, name: voice.name, ssmlGender: voice.gender },
+    voice: {
+      languageCode: voice.languageCode,
+      name: voice.name,
+      ssmlGender: voice.gender,
+    },
     audioConfig: {
       audioEncoding: 'MP3',
-      speakingRate: 0.95,   // Slightly slower for clarity
-      pitch: 2.0,           // Slightly higher pitch for friendliness (+2 semitones)
-      volumeGainDb: 1.0,    // Small boost
+      speakingRate: 0.95, // Slightly slower for clarity
+      pitch: 2.0, // Slightly higher pitch for friendliness (+2 semitones)
+      volumeGainDb: 1.0, // Small boost
       effectsProfileId: ['handset-class-device'], // Optimised for phone speakers
     },
   };
@@ -343,24 +547,32 @@ async function ttsGoogleCloud(text: string, lang: string, apiKey: string): Promi
  * OpenAI TTS (tts-1 / tts-1-hd).
  * Supports English best, can handle Tamil and Sinhala with accent.
  */
-async function ttsOpenAI(text: string, lang: string, apiKey: string, voiceId: string, model: string): Promise<Buffer> {
+async function ttsOpenAI(
+  text: string,
+  lang: string,
+  apiKey: string,
+  voiceId: string,
+  model: string,
+): Promise<Buffer> {
   // Choose voice optimised for language
   const voiceMap: Record<string, string> = {
-    en: voiceId || 'nova',     // nova: warm female voice
-    ta: voiceId || 'shimmer',  // shimmer: gentle
-    si: voiceId || 'alloy',    // alloy: neutral
+    en: voiceId || 'nova', // nova: warm female voice
+    ta: voiceId || 'shimmer', // shimmer: gentle
+    si: voiceId || 'alloy', // alloy: neutral
     hi: voiceId || 'nova',
   };
   const selectedVoice = voiceMap[lang] || voiceId || 'nova';
 
-  console.log(`   🎙️ OpenAI TTS — model: ${model}, voice: ${selectedVoice}, lang: ${lang}`);
+  console.log(
+    `   🎙️ OpenAI TTS — model: ${model}, voice: ${selectedVoice}, lang: ${lang}`,
+  );
 
   const client = new OpenAI({ apiKey });
   const mp3 = await client.audio.speech.create({
     model: (model as any) || 'tts-1',
     voice: selectedVoice as any,
     input: text,
-    speed: 0.95,  // Slightly slower for clarity
+    speed: 0.95, // Slightly slower for clarity
   });
 
   return Buffer.from(await mp3.arrayBuffer());
@@ -370,7 +582,12 @@ async function ttsOpenAI(text: string, lang: string, apiKey: string, voiceId: st
  * ElevenLabs TTS.
  * Premium multilingual voice synthesis.
  */
-async function ttsElevenLabs(text: string, apiKey: string, voiceId: string, model: string): Promise<Buffer> {
+async function ttsElevenLabs(
+  text: string,
+  apiKey: string,
+  voiceId: string,
+  model: string,
+): Promise<Buffer> {
   const vid = voiceId || 'pNInz6obpgDQGcFmaJcg'; // Default: Adam
   const mid = model || 'eleven_multilingual_v2';
   console.log(`   🎙️ ElevenLabs TTS — model: ${mid}, voice: ${vid}`);
@@ -380,10 +597,19 @@ async function ttsElevenLabs(text: string, apiKey: string, voiceId: string, mode
     {
       text,
       model_id: mid,
-      voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3, use_speaker_boost: true },
+      voice_settings: {
+        stability: 0.5,
+        similarity_boost: 0.75,
+        style: 0.3,
+        use_speaker_boost: true,
+      },
     },
     {
-      headers: { Accept: 'audio/mpeg', 'xi-api-key': apiKey, 'Content-Type': 'application/json' },
+      headers: {
+        Accept: 'audio/mpeg',
+        'xi-api-key': apiKey,
+        'Content-Type': 'application/json',
+      },
       responseType: 'arraybuffer',
       timeout: 30000,
     },
@@ -417,7 +643,9 @@ async function ttsGoogleFree(text: string, lang: string): Promise<Buffer> {
       chunk = chunk ? chunk + ' ' + sentence : sentence;
     } else {
       if (chunk) {
-        try { segments.push(await fetchGoogleFreeSegment(chunk, langCode)); } catch (e) {
+        try {
+          segments.push(await fetchGoogleFreeSegment(chunk, langCode));
+        } catch (e) {
           console.warn('   ⚠️ Google Free segment failed, skipping...');
         }
       }
@@ -426,32 +654,49 @@ async function ttsGoogleFree(text: string, lang: string): Promise<Buffer> {
   }
 
   if (chunk) {
-    try { segments.push(await fetchGoogleFreeSegment(chunk, langCode)); } catch (e) {
+    try {
+      segments.push(await fetchGoogleFreeSegment(chunk, langCode));
+    } catch (e) {
       console.warn('   ⚠️ Google Free final segment failed');
     }
   }
 
-  if (segments.length === 0) throw new Error('Google Free TTS: all segments failed');
+  if (segments.length === 0)
+    throw new Error('Google Free TTS: all segments failed');
   if (segments.length === 1) return segments[0];
 
   console.log(`   📦 Combining ${segments.length} audio segments...`);
   return Buffer.concat(segments);
 }
 
-async function fetchGoogleFreeSegment(text: string, lang: string): Promise<Buffer> {
+async function fetchGoogleFreeSegment(
+  text: string,
+  lang: string,
+): Promise<Buffer> {
   let t = text;
-  if (t.length > 195) { t = t.substring(0, 192) + '...'; }
+  if (t.length > 195) {
+    t = t.substring(0, 192) + '...';
+  }
 
-  const url = getAudioUrl(t, { lang, slow: false, host: 'https://translate.google.com' });
+  const url = getAudioUrl(t, {
+    lang,
+    slow: false,
+    host: 'https://translate.google.com',
+  });
 
   const response = await axios.get(url, {
     responseType: 'arraybuffer',
     timeout: 10000,
-    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    },
   });
 
   if (!response.data || response.data.byteLength < 100) {
-    throw new Error(`Google Free TTS: empty response for segment "${t.substring(0, 30)}..."`);
+    throw new Error(
+      `Google Free TTS: empty response for segment "${t.substring(0, 30)}..."`,
+    );
   }
 
   return Buffer.from(response.data);
@@ -459,13 +704,18 @@ async function fetchGoogleFreeSegment(text: string, lang: string): Promise<Buffe
 
 // ─── Main generateSpeech with waterfall routing ────────────────────────────────
 
-export async function generateSpeech(text: string, targetLanguage?: string): Promise<Buffer> {
+export async function generateSpeech(
+  text: string,
+  targetLanguage?: string,
+): Promise<Buffer> {
   // Load voice config (DB-resilient)
   let config: import('../models/VoiceConfig').IVoiceConfig | null = null;
   try {
     config = await VoiceConfig.findOne().sort({ updatedAt: -1 });
   } catch {
-    console.warn('   ⚠️ VoiceConfig DB unavailable — using Google Free TTS defaults');
+    console.warn(
+      '   ⚠️ VoiceConfig DB unavailable — using Google Free TTS defaults',
+    );
   }
 
   if (config && !config.isActive) {
@@ -474,13 +724,16 @@ export async function generateSpeech(text: string, targetLanguage?: string): Pro
 
   const lang = targetLanguage || detectLanguage(text).lang;
   const primaryProvider = config?.provider || 'google-free';
-  const googleApiKey = config?.googleApiKey || process.env.GOOGLE_TTS_API_KEY || '';
+  const googleApiKey =
+    config?.googleApiKey || process.env.GOOGLE_TTS_API_KEY || '';
   const apiKey = config?.apiKey || process.env.OPENAI_API_KEY || '';
   const geminiApiKey = process.env.GEMINI_API_KEY || '';
   const voiceId = config?.voiceId || '';
   const model = config?.ttsModel || 'tts-1';
 
-  console.log(`   🔊 TTS request — primary: ${primaryProvider}, lang: ${lang}, text length: ${text.length}`);
+  console.log(
+    `   🔊 TTS request — primary: ${primaryProvider}, lang: ${lang}, text length: ${text.length}`,
+  );
 
   // ── Build provider waterfall ─────────────────────────────────────────────────
   // Gemini TTS is the preferred first-choice for ALL languages (including Sinhala)
@@ -491,48 +744,79 @@ export async function generateSpeech(text: string, targetLanguage?: string): Pro
 
   // 1. Gemini TTS — primary if explicitly chosen (highest quality, all languages incl. Sinhala)
   if (primaryProvider === 'gemini-tts' && geminiApiKey) {
-    waterfall.push({ name: 'Gemini TTS (primary)', fn: () => ttsGemini(text, lang, voiceId) });
+    waterfall.push({
+      name: 'Gemini TTS (primary)',
+      fn: () => ttsGemini(text, lang, voiceId),
+    });
   }
 
   // 2. Google Cloud TTS — primary (NOT for Sinhala — no native voice)
   if (primaryProvider === 'google-cloud' && lang !== 'si' && googleApiKey) {
-    waterfall.push({ name: 'Google Cloud TTS (primary)', fn: () => ttsGoogleCloud(text, lang, googleApiKey) });
+    waterfall.push({
+      name: 'Google Cloud TTS (primary)',
+      fn: () => ttsGoogleCloud(text, lang, googleApiKey),
+    });
   }
 
   // 3. OpenAI TTS — primary
   if (primaryProvider === 'openai' && apiKey) {
-    waterfall.push({ name: 'OpenAI TTS (primary)', fn: () => ttsOpenAI(text, lang, apiKey, voiceId, model) });
+    waterfall.push({
+      name: 'OpenAI TTS (primary)',
+      fn: () => ttsOpenAI(text, lang, apiKey, voiceId, model),
+    });
   }
 
   // 4. ElevenLabs TTS — primary
   if (primaryProvider === 'elevenlabs' && apiKey) {
-    waterfall.push({ name: 'ElevenLabs TTS (primary)', fn: () => ttsElevenLabs(text, apiKey, voiceId, model) });
+    waterfall.push({
+      name: 'ElevenLabs TTS (primary)',
+      fn: () => ttsElevenLabs(text, apiKey, voiceId, model),
+    });
   }
 
   // 5. Google Free TTS — primary (when explicitly selected)
   if (primaryProvider === 'google-free') {
-    waterfall.push({ name: 'Google Free TTS (primary)', fn: () => ttsGoogleFree(text, lang) });
+    waterfall.push({
+      name: 'Google Free TTS (primary)',
+      fn: () => ttsGoogleFree(text, lang),
+    });
   }
 
   // ── Cascade fallbacks (providers not already in list) ─────────────────────────
   // Gemini TTS fallback — for ALL languages including Sinhala (most reliable, no per-lang limits)
   if (primaryProvider !== 'gemini-tts' && geminiApiKey) {
-    waterfall.push({ name: 'Gemini TTS (fallback)', fn: () => ttsGemini(text, lang, voiceId) });
+    waterfall.push({
+      name: 'Gemini TTS (fallback)',
+      fn: () => ttsGemini(text, lang, voiceId),
+    });
   }
 
   // Google Cloud fallback — skip Sinhala
   if (primaryProvider !== 'google-cloud' && lang !== 'si' && googleApiKey) {
-    waterfall.push({ name: 'Google Cloud TTS (fallback)', fn: () => ttsGoogleCloud(text, lang, googleApiKey) });
+    waterfall.push({
+      name: 'Google Cloud TTS (fallback)',
+      fn: () => ttsGoogleCloud(text, lang, googleApiKey),
+    });
   }
 
   // OpenAI fallback
-  if (primaryProvider !== 'openai' && primaryProvider !== 'elevenlabs' && apiKey) {
-    waterfall.push({ name: 'OpenAI TTS (fallback)', fn: () => ttsOpenAI(text, lang, apiKey, voiceId, model) });
+  if (
+    primaryProvider !== 'openai' &&
+    primaryProvider !== 'elevenlabs' &&
+    apiKey
+  ) {
+    waterfall.push({
+      name: 'OpenAI TTS (fallback)',
+      fn: () => ttsOpenAI(text, lang, apiKey, voiceId, model),
+    });
   }
 
   // Google Free TTS — last resort when not already primary
   if (primaryProvider !== 'google-free') {
-    waterfall.push({ name: 'Google Free TTS (last resort)', fn: () => ttsGoogleFree(text, lang) });
+    waterfall.push({
+      name: 'Google Free TTS (last resort)',
+      fn: () => ttsGoogleFree(text, lang),
+    });
   }
 
   // ── Execute waterfall ────────────────────────────────────────────────────────
@@ -544,16 +828,22 @@ export async function generateSpeech(text: string, targetLanguage?: string): Pro
       const audio = await step.fn();
 
       if (!audio || audio.length < 100) {
-        throw new Error(`${step.name} returned empty or too-small audio buffer`);
+        throw new Error(
+          `${step.name} returned empty or too-small audio buffer`,
+        );
       }
 
       console.log(`   ✅ TTS success via ${step.name} (${audio.length} bytes)`);
       return audio;
     } catch (err: any) {
       lastError = err;
-      console.warn(`   ⚠️ ${step.name} failed: ${err.message}. Trying next provider...`);
+      console.warn(
+        `   ⚠️ ${step.name} failed: ${err.message}. Trying next provider...`,
+      );
     }
   }
 
-  throw new Error(`All TTS providers failed. Last error: ${lastError?.message || 'unknown'}`);
+  throw new Error(
+    `All TTS providers failed. Last error: ${lastError?.message || 'unknown'}`,
+  );
 }

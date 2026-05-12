@@ -18,13 +18,16 @@ export async function seedDefaultFormTemplate(): Promise<void> {
     // Options for job_type and country are pulled from Datasets at runtime
     const defaultTemplate = new FormTemplate({
       name: 'Default Registration Form',
-      description: 'Standard registration form for job applicants - Configure JOB_TYPES and COUNTRIES in Admin Panel > Datasets',
+      description:
+        'Standard registration form for job applicants - Configure JOB_TYPES and COUNTRIES in Admin Panel > Datasets',
       isActive: true,
       isDefault: true,
       triggerMode: 'both', // Can be triggered manually (!register) or automatically
       triggerDelay: 10, // 10 seconds delay for auto-trigger
-      welcomeMessage: '📋 Welcome! Let\'s get you registered. Please answer the following questions.',
-      completionMessage: '✅ Thank you! Your registration has been submitted successfully. We will contact you soon!',
+      welcomeMessage:
+        "📋 Welcome! Let's get you registered. Please answer the following questions.",
+      completionMessage:
+        '✅ Thank you! Your registration has been submitted successfully. We will contact you soon!',
       fields: [
         {
           id: 'full_name',
@@ -35,8 +38,8 @@ export async function seedDefaultFormTemplate(): Promise<void> {
           order: 1,
           validation: {
             minLength: 2,
-            maxLength: 100
-          }
+            maxLength: 100,
+          },
         },
         {
           id: 'age',
@@ -47,8 +50,8 @@ export async function seedDefaultFormTemplate(): Promise<void> {
           order: 2,
           validation: {
             min: 18,
-            max: 70
-          }
+            max: 70,
+          },
         },
         {
           id: 'phone',
@@ -56,7 +59,7 @@ export async function seedDefaultFormTemplate(): Promise<void> {
           label: 'Phone Number',
           placeholder: '+94 77 123 4567',
           required: true,
-          order: 3
+          order: 3,
         },
         {
           id: 'country',
@@ -66,7 +69,7 @@ export async function seedDefaultFormTemplate(): Promise<void> {
           order: 4,
           // Options pulled from Datasets > COUNTRIES at runtime
           options: [],
-          _dataSource: 'COUNTRIES' // Indicates this field should use dataset
+          _dataSource: 'COUNTRIES', // Indicates this field should use dataset
         },
         {
           id: 'experience',
@@ -76,7 +79,7 @@ export async function seedDefaultFormTemplate(): Promise<void> {
           order: 5,
           // Options pulled from Datasets > EXPERIENCE_LEVELS at runtime
           options: [],
-          _dataSource: 'EXPERIENCE_LEVELS'
+          _dataSource: 'EXPERIENCE_LEVELS',
         },
         {
           id: 'job_type',
@@ -86,7 +89,7 @@ export async function seedDefaultFormTemplate(): Promise<void> {
           order: 6,
           // Options pulled from Datasets > JOB_TYPES at runtime
           options: [],
-          _dataSource: 'JOB_TYPES'
+          _dataSource: 'JOB_TYPES',
         },
         {
           id: 'cv_link',
@@ -94,14 +97,16 @@ export async function seedDefaultFormTemplate(): Promise<void> {
           label: 'CV Link (Google Drive, Dropbox, etc.)',
           placeholder: 'https://drive.google.com/...',
           required: false,
-          order: 7
-        }
-      ]
+          order: 7,
+        },
+      ],
     });
 
     await defaultTemplate.save();
     console.log('✅ Default registration form template seeded successfully');
-    console.log('   ⚠️ IMPORTANT: Configure JOB_TYPES, COUNTRIES, and EXPERIENCE_LEVELS in Admin Panel > Datasets');
+    console.log(
+      '   ⚠️ IMPORTANT: Configure JOB_TYPES, COUNTRIES, and EXPERIENCE_LEVELS in Admin Panel > Datasets',
+    );
   } catch (error) {
     console.error('❌ Error seeding default form template:', error);
   }

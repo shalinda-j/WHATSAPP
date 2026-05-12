@@ -1,8 +1,21 @@
 import Dataset from '../models/Dataset';
-import { configService, HumanizerConfig, CompanyInfo, BookingConfig, CountryOption, ExperienceOption } from './ConfigService';
+import {
+  configService,
+  HumanizerConfig,
+  CompanyInfo,
+  BookingConfig,
+  CountryOption,
+  ExperienceOption,
+} from './ConfigService';
 
 // Re-export types for convenience
-export { HumanizerConfig, CompanyInfo, BookingConfig, CountryOption, ExperienceOption };
+export {
+  HumanizerConfig,
+  CompanyInfo,
+  BookingConfig,
+  CountryOption,
+  ExperienceOption,
+};
 
 export interface ConfigurationManager {
   // Humanizer configuration
@@ -61,6 +74,7 @@ export class ConfigurationManagerService {
   private cache: Map<string, any> = new Map();
   private cacheExpiry: Map<string, number> = new Map();
 
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
   private constructor() {}
 
   public static getInstance(): ConfigurationManagerService {
@@ -75,7 +89,8 @@ export class ConfigurationManagerService {
     return expiry !== undefined && expiry > Date.now();
   }
 
-  private setCache(key: string, value: any, ttl: number = 60000): void { // 1 minute default
+  private setCache(key: string, value: any, ttl = 60000): void {
+    // 1 minute default
     this.cache.set(key, value);
     this.cacheExpiry.set(key, Date.now() + ttl);
   }
@@ -273,7 +288,9 @@ export class ConfigurationManagerService {
   /**
    * Get conversation examples
    */
-  async getConversationExamples(): Promise<ConfigurationManager['conversationExamples']> {
+  async getConversationExamples(): Promise<
+    ConfigurationManager['conversationExamples']
+  > {
     const cacheKey = 'conversationExamples';
 
     if (this.isCacheValid(cacheKey)) {
@@ -288,7 +305,10 @@ export class ConfigurationManagerService {
       console.error('Error fetching conversation examples:', error);
 
       const defaultExamples = [
-        { user: 'Tell me about services.', assistant: 'We offer training and job placement services.' },
+        {
+          user: 'Tell me about services.',
+          assistant: 'We offer training and job placement services.',
+        },
       ];
 
       this.setCache(cacheKey, defaultExamples);
@@ -313,7 +333,8 @@ export class ConfigurationManagerService {
     } catch (error) {
       console.error('Error fetching AI personality:', error);
 
-      const defaultPersonality = "You are a helpful AI assistant for Jayalath Global. Respond in a professional yet friendly manner.";
+      const defaultPersonality =
+        'You are a helpful AI assistant for Jayalath Global. Respond in a professional yet friendly manner.';
       this.setCache(cacheKey, defaultPersonality);
       return defaultPersonality;
     }
@@ -336,7 +357,8 @@ export class ConfigurationManagerService {
     } catch (error) {
       console.error('Error fetching AI knowledge base:', error);
 
-      const defaultKB = "# Knowledge Base\nThis is the default knowledge base content.";
+      const defaultKB =
+        '# Knowledge Base\nThis is the default knowledge base content.';
       this.setCache(cacheKey, defaultKB);
       return defaultKB;
     }
@@ -363,7 +385,7 @@ export class ConfigurationManagerService {
           category: 'config',
           content,
           description: `Configuration for ${this.formatKeyName(key)}`,
-          isActive: true
+          isActive: true,
         });
         await dataset.save();
       }
@@ -385,7 +407,7 @@ export class ConfigurationManagerService {
   private formatKeyName(key: string): string {
     return key
       .replace(/([A-Z])/g, ' $1')
-      .replace(/^./, str => str.toUpperCase());
+      .replace(/^./, (str) => str.toUpperCase());
   }
 
   /**
@@ -399,7 +421,7 @@ export class ConfigurationManagerService {
       jobTypes,
       bookingKeywords,
       conversationExamples,
-      aiPersonality
+      aiPersonality,
     ] = await Promise.all([
       this.getHumanizerConfig(),
       this.getCompanyInfo(),
@@ -407,7 +429,7 @@ export class ConfigurationManagerService {
       this.getJobTypes(),
       this.getBookingKeywords(),
       this.getConversationExamples(),
-      this.getAIPersonality()
+      this.getAIPersonality(),
     ]);
 
     return {
@@ -418,7 +440,7 @@ export class ConfigurationManagerService {
       bookingKeywords,
       conversationExamples,
       aiPersonality,
-      aiKnowledgeBase: await this.getAIKnowledgeBase()
+      aiKnowledgeBase: await this.getAIKnowledgeBase(),
     };
   }
 
@@ -490,7 +512,12 @@ export class ConfigurationManagerService {
   /**
    * Get Help Message Template
    */
-  async getHelpMessage(): Promise<{ title: string; subtitle: string; commands: string[]; footer: string }> {
+  async getHelpMessage(): Promise<{
+    title: string;
+    subtitle: string;
+    commands: string[];
+    footer: string;
+  }> {
     const cacheKey = 'helpMessage';
 
     if (this.isCacheValid(cacheKey)) {
@@ -510,7 +537,11 @@ export class ConfigurationManagerService {
   /**
    * Get Jobs Message Template
    */
-  async getJobsMessage(): Promise<{ title: string; jobs: Array<{ emoji: string; title: string; count: string }>; footer: string }> {
+  async getJobsMessage(): Promise<{
+    title: string;
+    jobs: Array<{ emoji: string; title: string; count: string }>;
+    footer: string;
+  }> {
     const cacheKey = 'jobsMessage';
 
     if (this.isCacheValid(cacheKey)) {

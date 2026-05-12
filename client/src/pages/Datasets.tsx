@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Database, Terminal, Link, Megaphone, FileText, Bot, Plus } from 'lucide-react';
+import { Database, Terminal, Link, FileText, Bot } from 'lucide-react';
 import { api } from '../config';
 import LanguageSwitcher, { type Language } from '../components/datasets/LanguageSwitcher';
 import KnowledgeTab from '../components/datasets/KnowledgeTab';
@@ -53,10 +53,9 @@ export default function Datasets() {
 
       // Filter out 'config' type (internal configuration items, not displayed in tabs)
       datasets
-        .filter((ds: any) => ds.type !== 'config')
-        .forEach((ds: any) => {
-          const type = ds.type || 'knowledge';
-          // Map backend type names to frontend tab types
+        .filter((ds: Record<string, unknown>) => ds.type !== 'config')
+        .forEach((ds: Record<string, unknown>) => {
+          const type = (ds.type as string) || 'knowledge';
           const typeMap: Record<string, TabType> = {
             'knowledge': 'knowledge',
             'command': 'commands',
