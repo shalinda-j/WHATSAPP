@@ -32,9 +32,9 @@ const app = express();
 // Middleware
 // CORS Configuration - Restrict to allowed origins
 const allowedOrigins = [
-  'http://localhost:5000',     // Vite dev server
-  'http://localhost:5173',     // Vite default port
-  'http://localhost:8080',     // Backend server (same origin)
+  'http://localhost:5000', // Vite dev server
+  'http://localhost:5173', // Vite default port
+  'http://localhost:8080', // Backend server (same origin)
   'http://127.0.0.1:5000',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:8080',
@@ -43,7 +43,10 @@ const allowedOrigins = [
 ];
 
 const corsOptions = {
-  origin: (origin: string | undefined, callback: (err: Error | null, allow: boolean) => void) => {
+  origin: (
+    origin: string | undefined,
+    callback: (err: Error | null, allow: boolean) => void,
+  ) => {
     // Allow requests with no origin (mobile apps, webhooks, etc.)
     if (!origin) return callback(null, true);
 
@@ -70,9 +73,9 @@ app.use(async (req, res, next) => {
     '/api/auth',
     '/api/marketing',
     '/api/webhooks/inbound', // External systems need to send webhooks even without DB
-    '/api/bulk',             // Bulk sender uses WhatsApp socket directly, not MongoDB
-    '/api/call-agent',       // Call agent settings now use file-system fallback
-    '/api/voice-config',     // Voice TTS config (graceful error if no DB)
+    '/api/bulk', // Bulk sender uses WhatsApp socket directly, not MongoDB
+    '/api/call-agent', // Call agent settings now use file-system fallback
+    '/api/voice-config', // Voice TTS config (graceful error if no DB)
     '/health', // Health check should always work
   ];
 
@@ -212,7 +215,11 @@ app.use(express.static(CLIENT_BUILD_PATH));
 // SPA Fallback - Use middleware instead of route pattern for Express 5.x compatibility
 app.use((req, res, next) => {
   // Skip API routes, static files, and health check
-  if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path === '/health') {
+  if (
+    req.path.startsWith('/api') ||
+    req.path.startsWith('/uploads') ||
+    req.path === '/health'
+  ) {
     return next();
   }
   // Serve index.html for SPA routes

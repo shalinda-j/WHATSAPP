@@ -126,7 +126,7 @@ router.post('/send', async (req: Request, res: Response) => {
     // Mark all user messages as read (admin is viewing this chat)
     await ChatMessage.updateMany(
       { userId, role: 'user', read: false },
-      { $set: { read: true } }
+      { $set: { read: true } },
     );
 
     // Send message via WhatsApp
@@ -200,15 +200,19 @@ router.get('/status', async (req: Request, res: Response) => {
 router.post('/mark-read/:userId', async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
-    const decodedUserId = decodeURIComponent(Array.isArray(userId) ? userId[0] : userId);
+    const decodedUserId = decodeURIComponent(
+      Array.isArray(userId) ? userId[0] : userId,
+    );
 
     // Mark all user messages as read
     const result = await ChatMessage.updateMany(
       { userId: decodedUserId, role: 'user', read: false },
-      { $set: { read: true } }
+      { $set: { read: true } },
     );
 
-    console.log(`📖 Marked ${result.modifiedCount} messages as read for user: ${decodedUserId}`);
+    console.log(
+      `📖 Marked ${result.modifiedCount} messages as read for user: ${decodedUserId}`,
+    );
 
     // Emit socket event to notify other clients (if any) about read status update
     try {

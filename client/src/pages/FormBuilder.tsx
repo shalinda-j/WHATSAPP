@@ -47,10 +47,6 @@ export default function FormBuilder() {
   const [welcomeMessage, setWelcomeMessage] = useState('');
   const [completionMessage, setCompletionMessage] = useState('');
 
-  useEffect(() => {
-    fetchTemplates();
-  }, []);
-
   const fetchTemplates = async () => {
     try {
       const res = await fetch('/api/forms/templates', {
@@ -66,6 +62,10 @@ export default function FormBuilder() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchTemplates();
+  }, []);
 
   const resetForm = () => {
     setFormName('');
@@ -383,7 +383,7 @@ export default function FormBuilder() {
                     <label className="block text-sm font-medium mb-1">Trigger Mode</label>
                     <select
                       value={triggerMode}
-                      onChange={(e) => setTriggerMode(e.target.value as any)}
+                      onChange={(e) => setTriggerMode(e.target.value as 'manual' | 'auto' | 'both')}
                       className="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-blue-300 outline-none"
                     >
                       <option value="manual">Manual Only (!register command)</option>
@@ -460,7 +460,7 @@ export default function FormBuilder() {
                           <label className="block text-xs text-gray-500 mb-1">Type</label>
                           <select
                             value={field.type}
-                            onChange={(e) => updateField(index, { type: e.target.value as any })}
+                            onChange={(e) => updateField(index, { type: e.target.value as FormField['type'] })}
                             className="w-full border rounded px-2 py-1 text-sm"
                           >
                             {fieldTypes.map((t) => (
@@ -685,14 +685,18 @@ export default function FormBuilder() {
   );
 }
 
+interface FormSubmissionItem {
+  _id: string;
+  phoneNumber: string;
+  formId: { name?: string } | string;
+  status: string;
+  submittedAt: string;
+}
+
 function FormSubmissions() {
-  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [submissions, setSubmissions] = useState<FormSubmissionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
-
-  useEffect(() => {
-    fetchSubmissions();
-  }, [statusFilter]);
 
   const fetchSubmissions = async () => {
     try {
@@ -712,6 +716,10 @@ function FormSubmissions() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchSubmissions();
+  }, [statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateStatus = async (id: string, status: string) => {
     try {
@@ -775,7 +783,7 @@ function FormSubmissions() {
             {submissions.map((sub) => (
               <tr key={sub._id}>
                 <td className="px-6 py-4 whitespace-nowrap">{sub.phoneNumber}</td>
-                <td className="px-6 py-4 whitespace-nowrap">{(sub.formId as any)?.name || 'N/A'}</td>
+                <td className="px-6 py-4 whitespace-nowrap">{typeof sub.formId === 'object' && sub.formId?.name ? sub.formId.name : 'N/A'}</td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`px-2 py-1 text-xs rounded ${
                     sub.status === 'new' ? 'bg-blue-100 text-blue-800' :

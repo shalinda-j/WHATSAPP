@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from '../config';
 import {
   MessageCircle, Users, TrendingUp, BarChart3,
@@ -65,12 +65,7 @@ export default function Analytics() {
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState('7');
 
-  useEffect(() => {
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPeriod]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const [overviewRes, questionsRes, topRes, trendsRes, leadsRes, repliesRes] = await Promise.all([
@@ -93,7 +88,11 @@ export default function Analytics() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedPeriod]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleExportCSV = async () => {
     try {

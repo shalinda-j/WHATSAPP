@@ -10,21 +10,23 @@ router.get('/', authenticateToken, async (req, res) => {
     const config = await configurationManager.getAllConfiguration();
     res.json({
       success: true,
-      data: config
+      data: config,
     });
   } catch (error) {
     console.error('Error fetching configurations:', error);
     res.status(500).json({
       success: false,
       message: 'Error fetching configurations',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });
 
 // GET specific configuration by key
 router.get('/:key', authenticateToken, async (req, res) => {
-  const key = Array.isArray(req.params.key) ? req.params.key[0] : req.params.key;
+  const key = Array.isArray(req.params.key)
+    ? req.params.key[0]
+    : req.params.key;
 
   try {
     let result;
@@ -57,39 +59,44 @@ router.get('/:key', authenticateToken, async (req, res) => {
       default:
         return res.status(404).json({
           success: false,
-          message: 'Configuration key not found'
+          message: 'Configuration key not found',
         });
     }
 
     res.json({
       success: true,
       key,
-      data: result
+      data: result,
     });
   } catch (error) {
     console.error(`Error fetching configuration for ${key}:`, error);
     res.status(500).json({
       success: false,
       message: `Error fetching configuration for ${key}`,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });
 
 // UPDATE specific configuration
 router.put('/:key', authenticateToken, express.json(), async (req, res) => {
-  const key = Array.isArray(req.params.key) ? req.params.key[0] : req.params.key;
+  const key = Array.isArray(req.params.key)
+    ? req.params.key[0]
+    : req.params.key;
   const { content } = req.body;
 
   if (content === undefined) {
     return res.status(400).json({
       success: false,
-      message: 'Content is required in request body'
+      message: 'Content is required in request body',
     });
   }
 
   try {
-    const success = await configurationManager.updateConfiguration(key, content);
+    const success = await configurationManager.updateConfiguration(
+      key,
+      content,
+    );
 
     if (success) {
       // Clear cache after update
@@ -97,12 +104,12 @@ router.put('/:key', authenticateToken, express.json(), async (req, res) => {
 
       res.json({
         success: true,
-        message: `Configuration ${key} updated successfully`
+        message: `Configuration ${key} updated successfully`,
       });
     } else {
       res.status(500).json({
         success: false,
-        message: `Failed to update configuration ${key}`
+        message: `Failed to update configuration ${key}`,
       });
     }
   } catch (error) {
@@ -110,7 +117,7 @@ router.put('/:key', authenticateToken, express.json(), async (req, res) => {
     res.status(500).json({
       success: false,
       message: `Error updating configuration for ${key}`,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });
@@ -121,14 +128,14 @@ router.post('/cache/clear', authenticateToken, async (req, res) => {
     configurationManager.clearCache();
     res.json({
       success: true,
-      message: 'Configuration cache cleared successfully'
+      message: 'Configuration cache cleared successfully',
     });
   } catch (error) {
     console.error('Error clearing configuration cache:', error);
     res.status(500).json({
       success: false,
       message: 'Error clearing configuration cache',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });

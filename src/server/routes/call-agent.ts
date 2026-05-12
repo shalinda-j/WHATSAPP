@@ -12,14 +12,22 @@ router.use(authenticateToken);
 // GET /api/call-agent/logs
 router.get('/logs', async (req, res) => {
   try {
-    const { sessionId, limit = '50', page = '1' } = req.query as Record<string, string>;
+    const {
+      sessionId,
+      limit = '50',
+      page = '1',
+    } = req.query as Record<string, string>;
     const pageNum = parseInt(page, 10);
     const limitNum = parseInt(limit, 10);
     const skip = (pageNum - 1) * limitNum;
 
     const query = sessionId ? { sessionId } : {};
     const [logs, total] = await Promise.all([
-      CallLog.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum).lean(),
+      CallLog.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
       CallLog.countDocuments(query),
     ]);
 
@@ -52,7 +60,13 @@ router.get('/settings', async (req, res) => {
       personality: settings.personality || '',
     });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch settings', enabled: false, language: 'en', greeting: '', personality: '' });
+    res.status(500).json({
+      error: 'Failed to fetch settings',
+      enabled: false,
+      language: 'en',
+      greeting: '',
+      personality: '',
+    });
   }
 });
 
@@ -62,10 +76,18 @@ router.post('/settings', async (req, res) => {
     const { enabled, language, greeting, personality } = req.body;
     await voiceCallAgent.enableCallAgent(!!enabled);
     if (language) voiceCallAgent.setPrimaryLanguage(language);
-    if (greeting !== undefined) voiceCallAgent.setCallGreeting(language || 'en', greeting);
-    if (personality !== undefined) voiceCallAgent.setAgentPersonality(personality);
+    if (greeting !== undefined)
+      voiceCallAgent.setCallGreeting(language || 'en', greeting);
+    if (personality !== undefined)
+      voiceCallAgent.setAgentPersonality(personality);
     const settings = voiceCallAgent.getSettings();
-    res.json({ success: true, enabled: !!enabled, language: settings.language, greeting: settings.greeting, personality: settings.personality });
+    res.json({
+      success: true,
+      enabled: !!enabled,
+      language: settings.language,
+      greeting: settings.greeting,
+      personality: settings.personality,
+    });
   } catch (err) {
     res.status(500).json({ error: 'Failed to save settings' });
   }
@@ -131,22 +153,37 @@ router.delete('/logs/:id', async (req, res) => {
 // Generates a TTS voice reply using the active provider (Gemini TTS preferred) and returns base64 WAV
 router.post('/test-voice', async (req, res) => {
   try {
-    const { language = 'en', text } = req.body as { language?: string; text?: string };
+    const { language = 'en', text } = req.body as {
+      language?: string;
+      text?: string;
+    };
 
     const defaultGreetings: Record<string, string> = {
       en: "Hello! Thank you for calling. I'm your AI voice assistant. How can I help you today?",
-      si: "ආයුබෝවන්! ඔබේ ඇමතුම ගැන ස්තූතියි. මම ඔබේ AI සහකාරයෙකි.",
-      ta: "வணக்கம்! அழைத்ததற்கு நன்றி. நான் உங்கள் AI உதவியாளர்.",
+      si: 'ආයුබෝවන්! ඔබේ ඇමතුම ගැන ස්තූතියි. මම ඔබේ AI සහකාරයෙකි.',
+      ta: 'வணக்கம்! அழைத்ததற்கு நன்றி. நான் உங்கள் AI உதவியாளர்.',
     };
 
-    const greetingText = text?.trim() || defaultGreetings[language] || defaultGreetings.en;
+    const greetingText =
+      text?.trim() || defaultGreetings[language] || defaultGreetings.en;
 
-    console.log(`🔊 Test voice TTS requested: lang=${language}, text="${greetingText.slice(0, 60)}..."`);
+    console.log(
+      `🔊 Test voice TTS requested: lang=${language}, text="${greetingText.slice(
+        0,
+        60,
+      )}..."`,
+    );
 
-    const audioBuffer = await generateSpeech(greetingText, language as 'en' | 'si' | 'ta');
+    const audioBuffer = await generateSpeech(
+      greetingText,
+      language as 'en' | 'si' | 'ta',
+    );
 
     if (!audioBuffer || audioBuffer.length < 100) {
-      return res.status(500).json({ error: 'TTS generation failed — audio buffer empty. Check your Gemini API key.' });
+      return res.status(500).json({
+        error:
+          'TTS generation failed — audio buffer empty. Check your Gemini API key.',
+      });
     }
 
     res.json({

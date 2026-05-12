@@ -66,7 +66,9 @@ async function startServer() {
       // This prevents old sessions from triggering forms unexpectedly
       const SessionState = (await import('./models/SessionState')).default;
       const result = await SessionState.deleteMany({});
-      console.log(`🧹 Cleaned up ${result.deletedCount} old sessions on startup`);
+      console.log(
+        `🧹 Cleaned up ${result.deletedCount} old sessions on startup`,
+      );
 
       // Start monthly usage reset scheduler
       usageResetService.start();
@@ -142,7 +144,12 @@ process.on('uncaughtException', (err: Error) => {
 });
 
 process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
-  console.error('🔥 UNHANDLED PROMISE REJECTION at:', promise, '\nReason:', reason);
+  console.error(
+    '🔥 UNHANDLED PROMISE REJECTION at:',
+    promise,
+    '\nReason:',
+    reason,
+  );
 });
 
 startServer();
@@ -200,7 +207,9 @@ setInterval(() => {
     }
   }
   if (cleaned > 0) {
-    console.log(`🧹 Cleaned up ${cleaned} old auto-registration tracking entries`);
+    console.log(
+      `🧹 Cleaned up ${cleaned} old auto-registration tracking entries`,
+    );
   }
 }, AUTO_REG_CLEANUP_INTERVAL_MS);
 
@@ -208,12 +217,15 @@ setInterval(() => {
  * Schedule auto-registration check after conversation ends
  * Waits for a delay after the last message, then triggers form if appropriate
  */
-async function scheduleAutoRegistration(jid: string, sessionId: string): Promise<void> {
+async function scheduleAutoRegistration(
+  jid: string,
+  sessionId: string,
+): Promise<void> {
   const now = Date.now();
   lastMessageTime.set(jid, now);
 
   // Wait for the delay period
-  await new Promise(resolve => setTimeout(resolve, AUTO_REG_DELAY_MS + 1000));
+  await new Promise((resolve) => setTimeout(resolve, AUTO_REG_DELAY_MS + 1000));
 
   // Check if this is still the most recent message (no new messages came in)
   const lastTime = lastMessageTime.get(jid);
@@ -250,7 +262,7 @@ async function scheduleAutoRegistration(jid: string, sessionId: string): Promise
     const FormSubmission = (await import('./models/FormSubmission')).default;
     const recentSubmission = await FormSubmission.findOne({
       phoneNumber: jid,
-      submittedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+      submittedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
     });
 
     if (recentSubmission) {
@@ -263,7 +275,7 @@ async function scheduleAutoRegistration(jid: string, sessionId: string): Promise
     if (result.success && result.field) {
       const delay = template.triggerDelay || 10;
       // Wait for the configured delay before showing the form
-      await new Promise(resolve => setTimeout(resolve, delay * 1000));
+      await new Promise((resolve) => setTimeout(resolve, delay * 1000));
 
       // Double-check that no new messages came in during the delay
       const finalTime = lastMessageTime.get(jid);
@@ -310,8 +322,13 @@ onMessage(async (message, sock, sessionId) => {
     }
 
     // Auto-register new users in CRM (fire and forget - don't block message processing)
-    const pushName = (message as any).pushName || (message.key as any)?.pushName;
-    autoRegistrationService.checkAndRegister(jid, pushName, sessionId).catch(() => {});
+    const pushName =
+      (message as any).pushName || (message.key as any)?.pushName;
+    autoRegistrationService
+      .checkAndRegister(jid, pushName, sessionId)
+      .catch((err) => {
+        console.error('   ⚠️ Auto-registration check error:', err);
+      });
 
     // Helper to extract audio message from various wrappers
     const getAudioMessage = (msg: any) => {
@@ -353,10 +370,17 @@ onMessage(async (message, sock, sessionId) => {
 
       if (audioBuffer) {
         // Transcription — NEVER throws (voice.ts handles all failures gracefully)
-        const transcriptionResult = await transcribeAudioWithLanguage(audioBuffer);
+        const transcriptionResult = await transcribeAudioWithLanguage(
+          audioBuffer,
+        );
 
-        if (!transcriptionResult.text || transcriptionResult.text.trim().length < 2) {
-          console.warn('   ⚠️ Transcription returned empty result — all STT providers failed');
+        if (
+          !transcriptionResult.text ||
+          transcriptionResult.text.trim().length < 2
+        ) {
+          console.warn(
+            '   ⚠️ Transcription returned empty result — all STT providers failed',
+          );
           // Language-aware "try again" messages
           const retryMessages: Record<string, string> = {
             si: '🎤 ඔබේ හඬ පණිවිඩය තේරුම් ගත නොහැකි විය. කරුණාකර නැවත උත්සාහ කරන්න.',
@@ -368,8 +392,14 @@ onMessage(async (message, sock, sessionId) => {
           return;
         }
 
-        console.log(`   📝 Transcription: "${transcriptionResult.text.substring(0, 80)}"`);
-        console.log(`   🌐 Language: ${transcriptionResult.detectedLanguage} (${(transcriptionResult.languageConfidence * 100).toFixed(0)}%)`);
+        console.log(
+          `   📝 Transcription: "${transcriptionResult.text.substring(0, 80)}"`,
+        );
+        console.log(
+          `   🌐 Language: ${transcriptionResult.detectedLanguage} (${(
+            transcriptionResult.languageConfidence * 100
+          ).toFixed(0)}%)`,
+        );
         text = transcriptionResult.text;
         detectedVoiceLanguage = transcriptionResult.detectedLanguage;
         isVoiceMessage = true;
@@ -438,13 +468,22 @@ onMessage(async (message, sock, sessionId) => {
       const result = await FormService.processFieldAnswer(jid, text);
       if (result.success) {
         if (result.isComplete) {
-          await sendMessage(jid, result.completionMessage || '✅ Thank you! Your registration has been submitted.', sessionId);
+          await sendMessage(
+            jid,
+            result.completionMessage ||
+              '✅ Thank you! Your registration has been submitted.',
+            sessionId,
+          );
         } else if (result.field) {
           const prompt = await FormService.getFieldPrompt(result.field);
           await sendMessage(jid, prompt, sessionId);
         }
       } else {
-        await sendMessage(jid, result.message || 'Something went wrong. Please try again.', sessionId);
+        await sendMessage(
+          jid,
+          result.message || 'Something went wrong. Please try again.',
+          sessionId,
+        );
         if (result.field) {
           const prompt = await FormService.getFieldPrompt(result.field);
           await sendMessage(jid, prompt, sessionId);
@@ -507,12 +546,21 @@ onMessage(async (message, sock, sessionId) => {
         try {
           const intentResult = await classifyMessage(text);
           autoresearchIntent = intentResult.intent;
-          console.log(`   🤖 AutoresearchNLP: ${autoresearchIntent} (${(intentResult.confidence * 100).toFixed(0)}%) in ${intentResult.inference_time_ms}ms`);
+          console.log(
+            `   🤖 AutoresearchNLP: ${autoresearchIntent} (${(
+              intentResult.confidence * 100
+            ).toFixed(0)}%) in ${intentResult.inference_time_ms}ms`,
+          );
 
           // Route based on intent - DISABLED FOR lead_register
           // Forms should ONLY trigger via !register command or explicit keyword
-          if (autoresearchIntent === 'booking' && intentResult.confidence > 0.85) {
-            console.log('   📅 High-confidence booking intent detected via AutoresearchNLP');
+          if (
+            autoresearchIntent === 'booking' &&
+            intentResult.confidence > 0.85
+          ) {
+            console.log(
+              '   📅 High-confidence booking intent detected via AutoresearchNLP',
+            );
             await startBookingFlow(jid, sessionId);
             return;
           }
@@ -523,7 +571,10 @@ onMessage(async (message, sock, sessionId) => {
           //   await startLeadRegistration(jid, sessionId);
           //   return;
           // }
-          else if (autoresearchIntent === 'greeting' && intentResult.confidence > 0.85) {
+          else if (
+            autoresearchIntent === 'greeting' &&
+            intentResult.confidence > 0.85
+          ) {
             console.log('   👋 Greeting detected via AutoresearchNLP');
             // Let AI handle greetings naturally
           }
@@ -789,16 +840,18 @@ async function handleCommand(
       }
       if (helpTemplate.commands && helpTemplate.commands.length > 0) {
         helpMessage += '*Available Commands:*\n';
-        helpTemplate.commands.forEach((cmd: { command?: string; description?: string } | string) => {
-          // Handle both object format {command, description} and string format
-          if (typeof cmd === 'string') {
-            helpMessage += `• ${cmd}\n`;
-          } else if (cmd.command && cmd.description) {
-            helpMessage += `• \`${cmd.command}\` - ${cmd.description}\n`;
-          } else if (cmd.command) {
-            helpMessage += `• ${cmd.command}\n`;
-          }
-        });
+        helpTemplate.commands.forEach(
+          (cmd: { command?: string; description?: string } | string) => {
+            // Handle both object format {command, description} and string format
+            if (typeof cmd === 'string') {
+              helpMessage += `• ${cmd}\n`;
+            } else if (cmd.command && cmd.description) {
+              helpMessage += `• \`${cmd.command}\` - ${cmd.description}\n`;
+            } else if (cmd.command) {
+              helpMessage += `• ${cmd.command}\n`;
+            }
+          },
+        );
         helpMessage += '\n';
       }
       if (helpTemplate.footer) {
@@ -807,7 +860,8 @@ async function handleCommand(
 
       // If nothing is configured, show warning
       if (!helpMessage.trim()) {
-        helpMessage = '⚠️ Help message not configured. Please configure via Admin Panel > Datasets > HELP_MESSAGE';
+        helpMessage =
+          '⚠️ Help message not configured. Please configure via Admin Panel > Datasets > HELP_MESSAGE';
       }
 
       await sendMessage(jid, helpMessage, sessionId);
@@ -815,26 +869,42 @@ async function handleCommand(
     }
 
     case '!ping':
-      await sendMessage(jid, await configurationManager.getPingMessage(), sessionId);
+      await sendMessage(
+        jid,
+        await configurationManager.getPingMessage(),
+        sessionId,
+      );
       break;
 
     case '!clear':
       aiLoadBalancer.clearConversation(jid);
-      await sendMessage(jid, await configurationManager.getClearMessage(), sessionId);
+      await sendMessage(
+        jid,
+        await configurationManager.getClearMessage(),
+        sessionId,
+      );
       break;
 
     case '!stop':
     case '!unsubscribe':
       // Opt out of auto-registration
       autoRegOptOut.add(jid);
-      await sendMessage(jid, await configurationManager.getStopMessage(), sessionId);
+      await sendMessage(
+        jid,
+        await configurationManager.getStopMessage(),
+        sessionId,
+      );
       break;
 
     case '!start':
     case '!subscribe':
       // Opt back in to auto-registration
       autoRegOptOut.delete(jid);
-      await sendMessage(jid, await configurationManager.getStartMessage(), sessionId);
+      await sendMessage(
+        jid,
+        await configurationManager.getStartMessage(),
+        sessionId,
+      );
       break;
 
     case '!register':
@@ -884,13 +954,15 @@ async function handleCommand(
       }
 
       if (jobsTemplate.jobs && jobsTemplate.jobs.length > 0) {
-        jobsTemplate.jobs.forEach((job: { emoji?: string; title: string; count?: string }) => {
-          jobsMessage += `${job.emoji || '•'} *${job.title}*`;
-          if (job.count) {
-            jobsMessage += ` - ${job.count}`;
-          }
-          jobsMessage += '\n';
-        });
+        jobsTemplate.jobs.forEach(
+          (job: { emoji?: string; title: string; count?: string }) => {
+            jobsMessage += `${job.emoji || '•'} *${job.title}*`;
+            if (job.count) {
+              jobsMessage += ` - ${job.count}`;
+            }
+            jobsMessage += '\n';
+          },
+        );
         jobsMessage += '\n';
       } else {
         jobsMessage += '⚠️ Jobs listing not configured.\n\n';

@@ -1,17 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
-
-// SECURITY: Generate a default secret if JWT_SECRET is not configured
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  console.warn('⚠️ WARNING: JWT_SECRET environment variable not set. Using default secret for development. Set a secure secret in production.');
-}
-if (JWT_SECRET && JWT_SECRET.length < 32) {
-  console.warn('⚠️ WARNING: JWT_SECRET should be at least 32 characters for security.');
-}
-// Use provided secret or generate a random one for development
-const ACTUAL_JWT_SECRET = JWT_SECRET || crypto.randomBytes(32).toString('hex');
+import { ACTUAL_JWT_SECRET } from '../jwt-secret';
 
 export interface JwtPayload {
   id: string;
@@ -42,7 +31,8 @@ export const authenticateToken = (
       console.error('JWT Verification Error:', {
         message: err.message,
         name: err.name,
-        expiredAt: err instanceof jwt.TokenExpiredError ? err.expiredAt : undefined,
+        expiredAt:
+          err instanceof jwt.TokenExpiredError ? err.expiredAt : undefined,
         path: req.path,
       });
       res.status(403).json({

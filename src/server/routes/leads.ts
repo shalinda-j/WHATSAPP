@@ -60,7 +60,9 @@ router.post('/register', strictRateLimit, async (req, res) => {
     } = req.body;
 
     if (!fullName || !phoneNumber || !jobVacancyType) {
-      return res.status(400).json({ error: 'Missing required fields: fullName, phoneNumber, jobVacancyType' });
+      return res.status(400).json({
+        error: 'Missing required fields: fullName, phoneNumber, jobVacancyType',
+      });
     }
 
     const lead = new Lead({
@@ -90,7 +92,15 @@ router.use(authenticateToken);
 
 router.get('/', async (req, res) => {
   try {
-    const { status, jobVacancyType, interestedCountry, experienceYears, search, page = 1, limit = 20 } = req.query;
+    const {
+      status,
+      jobVacancyType,
+      interestedCountry,
+      experienceYears,
+      search,
+      page = 1,
+      limit = 20,
+    } = req.query;
 
     const query: any = {};
 
@@ -100,7 +110,10 @@ router.get('/', async (req, res) => {
     if (experienceYears) query.experienceYears = experienceYears;
     if (search) {
       // SECURITY FIX: Escape regex special characters to prevent regex injection
-      const escapedSearch = (search as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const escapedSearch = (search as string).replace(
+        /[.*+?^${}()|[\]\\]/g,
+        '\\$&',
+      );
       query.$or = [
         { fullName: { $regex: escapedSearch, $options: 'i' } },
         { phoneNumber: { $regex: escapedSearch, $options: 'i' } },
@@ -281,15 +294,37 @@ router.get('/:id/messages', validateObjectId(), async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     // SECURITY FIX: Validate and sanitize input before creating lead
-    const { fullName, phoneNumber, email, age, address, interestedCountry, experienceYears, jobVacancyType, notes } = req.body;
+    const {
+      fullName,
+      phoneNumber,
+      email,
+      age,
+      address,
+      interestedCountry,
+      experienceYears,
+      jobVacancyType,
+      notes,
+    } = req.body;
 
     // Validate required fields
-    if (!fullName || typeof fullName !== 'string' || fullName.trim().length < 2) {
-      return res.status(400).json({ error: 'fullName must be a non-empty string (min 2 characters)' });
+    if (
+      !fullName ||
+      typeof fullName !== 'string' ||
+      fullName.trim().length < 2
+    ) {
+      return res.status(400).json({
+        error: 'fullName must be a non-empty string (min 2 characters)',
+      });
     }
 
-    if (!phoneNumber || typeof phoneNumber !== 'string' || phoneNumber.trim().length < 5) {
-      return res.status(400).json({ error: 'phoneNumber must be a valid phone number (min 5 characters)' });
+    if (
+      !phoneNumber ||
+      typeof phoneNumber !== 'string' ||
+      phoneNumber.trim().length < 5
+    ) {
+      return res.status(400).json({
+        error: 'phoneNumber must be a valid phone number (min 5 characters)',
+      });
     }
 
     // Sanitize and validate optional fields
@@ -313,7 +348,9 @@ router.post('/', async (req, res) => {
     if (age) {
       const ageNum = parseInt(age);
       if (isNaN(ageNum) || ageNum < 1 || ageNum > 150) {
-        return res.status(400).json({ error: 'Age must be a valid number between 1 and 150' });
+        return res
+          .status(400)
+          .json({ error: 'Age must be a valid number between 1 and 150' });
       }
       sanitizedData.age = ageNum;
     }
@@ -382,50 +419,55 @@ router.delete('/:id', validateObjectId(), async (req, res) => {
   }
 });
 
-router.post('/:id/qualifications', validateObjectId(), upload.single('file'), async (req, res) => {
-  try {
-    const lead = await Lead.findById(req.params.id);
-    if (!lead) {
-      return res.status(404).json({ error: 'Lead not found' });
-    }
-
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-
-    let extractedText = '';
-    if (req.file.mimetype === 'application/pdf') {
-      try {
-        const dataBuffer = fs.readFileSync(req.file.path);
-        const data = await pdf(dataBuffer);
-        extractedText = data.text;
-      } catch (pdfErr) {
-        console.error('PDF parsing error:', pdfErr);
+router.post(
+  '/:id/qualifications',
+  validateObjectId(),
+  upload.single('file'),
+  async (req, res) => {
+    try {
+      const lead = await Lead.findById(req.params.id);
+      if (!lead) {
+        return res.status(404).json({ error: 'Lead not found' });
       }
+
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      let extractedText = '';
+      if (req.file.mimetype === 'application/pdf') {
+        try {
+          const dataBuffer = fs.readFileSync(req.file.path);
+          const data = await pdf(dataBuffer);
+          extractedText = data.text;
+        } catch (pdfErr) {
+          console.error('PDF parsing error:', pdfErr);
+        }
+      }
+
+      const qualification: any = {
+        documentType: req.body.documentType || 'other',
+        fileName: req.file.originalname,
+        filePath: `/uploads/qualifications/${req.file.filename}`,
+        fileSize: req.file.size,
+        extractedText,
+        uploadedAt: new Date(),
+      };
+
+      const leadDoc = lead as any;
+      if (!leadDoc.qualifications) {
+        leadDoc.qualifications = [];
+      }
+      leadDoc.qualifications.push(qualification);
+      leadDoc.updatedAt = new Date();
+      await lead.save();
+
+      res.json(lead);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-
-    const qualification: any = {
-      documentType: req.body.documentType || 'other',
-      fileName: req.file.originalname,
-      filePath: `/uploads/qualifications/${req.file.filename}`,
-      fileSize: req.file.size,
-      extractedText,
-      uploadedAt: new Date(),
-    };
-
-    const leadDoc = lead as any;
-    if (!leadDoc.qualifications) {
-      leadDoc.qualifications = [];
-    }
-    leadDoc.qualifications.push(qualification);
-    leadDoc.updatedAt = new Date();
-    await lead.save();
-
-    res.json(lead);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
+  },
+);
 
 router.get('/:id/qualifications/:qualIndex/download', async (req, res) => {
   try {

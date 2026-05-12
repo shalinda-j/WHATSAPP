@@ -12,7 +12,6 @@ import {
     ChevronRight,
     MessageCircle,
     Settings,
-    Power,
     Mic,
     Volume2,
     VolumeX,
@@ -200,21 +199,9 @@ export default function VoiceAgentHub() {
     const [callAgentPersonality, setCallAgentPersonality] = useState('');
     const [callLogs, setCallLogs] = useState<Array<{ callerId: string; createdAt: string; status: string; language: string }>>([]);
     const [savingCallAgent, setSavingCallAgent] = useState(false);
-    const [testingLang, setTestingLang] = useState<string | null>(null);
+    const [_testingLang, setTestingLang] = useState<string | null>(null);
     const [testingVoiceLang, setTestingVoiceLang] = useState<string | null>(null);
     const [testVoiceError, setTestVoiceError] = useState<string | null>(null);
-
-    useEffect(() => {
-        fetchAllData();
-    }, []);
-
-    // Auto-dismiss messages after 5 seconds
-    useEffect(() => {
-        if (message) {
-            const timer = setTimeout(() => setMessage(null), 5000);
-            return () => clearTimeout(timer);
-        }
-    }, [message]);
 
     const fetchAllData = async (isRefresh = false) => {
         if (isRefresh) setRefreshing(true);
@@ -276,6 +263,18 @@ export default function VoiceAgentHub() {
         }
     };
 
+    useEffect(() => {
+        fetchAllData();
+    }, []);
+
+    // Auto-dismiss messages after 5 seconds
+    useEffect(() => {
+        if (message) {
+            const timer = setTimeout(() => setMessage(null), 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [message]);
+
     // Save Call Agent settings
     const saveCallAgentSettings = async () => {
         setSavingCallAgent(true);
@@ -321,8 +320,9 @@ export default function VoiceAgentHub() {
                 setTestVoiceError('Browser blocked autoplay — click "Allow" if prompted');
             });
             audioEl.onended = () => URL.revokeObjectURL(url);
-        } catch (err: any) {
-            const msg = err?.response?.data?.error || err.message || 'TTS test failed';
+        } catch (err: unknown) {
+            const axiosErr = err as { response?: { data?: { error?: string } }; message?: string };
+            const msg = axiosErr?.response?.data?.error || axiosErr.message || 'TTS test failed';
             setTestVoiceError(msg);
         } finally {
             setTestingLang(null);

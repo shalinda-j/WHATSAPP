@@ -42,7 +42,7 @@ export const migrateConfigDatasets = async () => {
     for (const key of configKeys) {
       const result = await Dataset.updateOne(
         { key },
-        { $set: { type: 'config' } }
+        { $set: { type: 'config' } },
       );
       if (result.modifiedCount > 0) {
         console.log(`   ✅ Migrated: ${key} → type='config'`);
@@ -133,7 +133,13 @@ export const seedSampleDatasets = async () => {
           ta: 'வேலை விண்ணப்பங்களுக்கு பதிவு செய்யும் செயல்முறையை தொடங்குகிறது',
         },
         metadata: {
-          triggerKeywords: ['!register', '!join', '!apply', 'ලියාපදිංචි', 'பதிவு'],
+          triggerKeywords: [
+            '!register',
+            '!join',
+            '!apply',
+            'ලියාපදිංචි',
+            'பதிவு',
+          ],
           aliases: ['!reg'],
         },
         scope: 'ALL',
@@ -331,10 +337,15 @@ Key principles:
 
     for (const dataset of sampleDatasets) {
       // Check if dataset with same name exists
-      const existing = await Dataset.findOne({ name: dataset.name, type: dataset.type });
+      const existing = await Dataset.findOne({
+        name: dataset.name,
+        type: dataset.type,
+      });
       if (!existing) {
         await Dataset.create(dataset);
-        console.log(`   ✅ Seeded Sample Dataset: ${dataset.name} (${dataset.type})`);
+        console.log(
+          `   ✅ Seeded Sample Dataset: ${dataset.name} (${dataset.type})`,
+        );
       }
     }
 
@@ -386,7 +397,8 @@ export const seedDatasets = async () => {
         content: {
           message: '',
         },
-        description: 'Message shown when conversation is cleared - CONFIGURE IN ADMIN PANEL',
+        description:
+          'Message shown when conversation is cleared - CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'STOP_MESSAGE',
@@ -396,7 +408,8 @@ export const seedDatasets = async () => {
         content: {
           message: '',
         },
-        description: 'Message shown when user opts out of auto-registration - CONFIGURE IN ADMIN PANEL',
+        description:
+          'Message shown when user opts out of auto-registration - CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'START_MESSAGE',
@@ -406,7 +419,8 @@ export const seedDatasets = async () => {
         content: {
           message: '',
         },
-        description: 'Message shown when user opts back in to auto-registration - CONFIGURE IN ADMIN PANEL',
+        description:
+          'Message shown when user opts back in to auto-registration - CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'PING_MESSAGE',
@@ -416,7 +430,8 @@ export const seedDatasets = async () => {
         content: {
           message: '',
         },
-        description: 'Message shown for !ping command - CONFIGURE IN ADMIN PANEL',
+        description:
+          'Message shown for !ping command - CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'WELCOME_MESSAGE',
@@ -436,7 +451,8 @@ export const seedDatasets = async () => {
         content: {
           message: '',
         },
-        description: 'Message template for unknown commands. Use {command} placeholder - CONFIGURE IN ADMIN PANEL',
+        description:
+          'Message template for unknown commands. Use {command} placeholder - CONFIGURE IN ADMIN PANEL',
       },
 
       // === CONFIGURATION ===
@@ -445,31 +461,34 @@ export const seedDatasets = async () => {
         name: 'Registration Links',
         type: 'config', // Configuration item, not displayed in Datasets tabs
         category: 'config',
-        content: {},  // Empty - must be configured
-        description: 'Links and messages for registration - MUST CONFIGURE IN ADMIN PANEL',
+        content: {}, // Empty - must be configured
+        description:
+          'Links and messages for registration - MUST CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'PAYMENT_CONFIG',
         name: 'Payment Instructions',
         type: 'config', // Configuration item, not displayed in Datasets tabs
         category: 'config',
-        content: {},  // Empty - must be configured
-        description: 'Payment instructions and messages - MUST CONFIGURE IN ADMIN PANEL',
+        content: {}, // Empty - must be configured
+        description:
+          'Payment instructions and messages - MUST CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'CV_CONFIG',
         name: 'CV Submission',
         type: 'config', // Configuration item, not displayed in Datasets tabs
         category: 'config',
-        content: {},  // Empty - must be configured
-        description: 'Settings for CV upload workflow - MUST CONFIGURE IN ADMIN PANEL',
+        content: {}, // Empty - must be configured
+        description:
+          'Settings for CV upload workflow - MUST CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'BANK_ACCOUNTS',
         name: 'Bank Accounts',
         type: 'config', // Configuration item, not displayed in Datasets tabs
         category: 'finance',
-        content: [],  // Empty - must be configured
+        content: [], // Empty - must be configured
         description: 'Bank account details - MUST CONFIGURE IN ADMIN PANEL',
       },
       {
@@ -477,16 +496,18 @@ export const seedDatasets = async () => {
         name: 'AI Personality',
         type: 'config', // Configuration item, not displayed in Datasets tabs
         category: 'ai',
-        content: '',  // Empty - must be configured
-        description: 'System prompt and personality settings - MUST CONFIGURE IN ADMIN PANEL',
+        content: '', // Empty - must be configured
+        description:
+          'System prompt and personality settings - MUST CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'AI_KNOWLEDGE_BASE',
         name: 'AI Knowledge Base',
         type: 'config', // Configuration item, not displayed in Datasets tabs
         category: 'ai',
-        content: '',  // Empty - must be configured
-        description: 'Knowledge base content for AI - MUST CONFIGURE IN ADMIN PANEL',
+        content: '', // Empty - must be configured
+        description:
+          'Knowledge base content for AI - MUST CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'COMPANY_INFO',
@@ -506,16 +527,18 @@ export const seedDatasets = async () => {
         name: 'Job Vacancy Types',
         type: 'config', // Configuration item, not displayed in Datasets tabs
         category: 'config',
-        content: [],  // Empty - must be configured
-        description: 'Available job types for registration - MUST CONFIGURE IN ADMIN PANEL',
+        content: [], // Empty - must be configured
+        description:
+          'Available job types for registration - MUST CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'BOOKING_KEYWORDS',
         name: 'Booking Keywords',
         type: 'config', // Configuration item, not displayed in Datasets tabs
         category: 'config',
-        content: [],  // Empty - must be configured
-        description: 'Keywords that trigger booking intent - MUST CONFIGURE IN ADMIN PANEL',
+        content: [], // Empty - must be configured
+        description:
+          'Keywords that trigger booking intent - MUST CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'BOOKING_CONFIG',
@@ -533,7 +556,8 @@ export const seedDatasets = async () => {
           eventDurationHours: 1,
           acceptanceKeywords: [],
         },
-        description: 'Booking system configuration - MUST CONFIGURE IN ADMIN PANEL',
+        description:
+          'Booking system configuration - MUST CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'HUMANIZER_CONFIG',
@@ -551,31 +575,35 @@ export const seedDatasets = async () => {
           minTypingDelayMs: 1500,
           maxTypingDelayMs: 8000,
         },
-        description: 'Timing parameters for message humanization - CONFIGURE IN ADMIN PANEL',
+        description:
+          'Timing parameters for message humanization - CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'CONVERSATION_EXAMPLES',
         name: 'Conversation Examples',
         type: 'config', // Configuration item, not displayed in Datasets tabs
         category: 'ai',
-        content: [],  // Empty - must be configured
-        description: 'Training examples for AI conversation context - CONFIGURE IN ADMIN PANEL',
+        content: [], // Empty - must be configured
+        description:
+          'Training examples for AI conversation context - CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'COUNTRIES',
         name: 'Job Placement Countries',
         type: 'config', // Configuration item, not displayed in Datasets tabs
         category: 'config',
-        content: [],  // Empty - must be configured
-        description: 'Countries available for job placement - MUST CONFIGURE IN ADMIN PANEL',
+        content: [], // Empty - must be configured
+        description:
+          'Countries available for job placement - MUST CONFIGURE IN ADMIN PANEL',
       },
       {
         key: 'EXPERIENCE_LEVELS',
         name: 'Experience Levels',
         type: 'config', // Configuration item, not displayed in Datasets tabs
         category: 'config',
-        content: [],  // Empty - must be configured
-        description: 'Experience level options for registration - MUST CONFIGURE IN ADMIN PANEL',
+        content: [], // Empty - must be configured
+        description:
+          'Experience level options for registration - MUST CONFIGURE IN ADMIN PANEL',
       },
     ];
 

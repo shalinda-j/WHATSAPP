@@ -308,10 +308,23 @@ router.get('/bookings', async (req, res) => {
 
 router.post('/bookings', async (req, res) => {
   try {
-    const { clientName, clientPhone, clientEmail, date, time, duration, type, notes, sessionId, location } = req.body;
+    const {
+      clientName,
+      clientPhone,
+      clientEmail,
+      date,
+      time,
+      duration,
+      type,
+      notes,
+      sessionId,
+      location,
+    } = req.body;
 
     if (!clientName || !clientPhone || !date) {
-      return res.status(400).json({ error: 'clientName, clientPhone, and date are required' });
+      return res
+        .status(400)
+        .json({ error: 'clientName, clientPhone, and date are required' });
     }
 
     const dateObj = new Date(date);
@@ -345,7 +358,13 @@ router.patch('/bookings/:id', async (req, res) => {
     const { status, notes, type, time, location } = req.body;
     const booking = await Booking.findByIdAndUpdate(
       req.params.id,
-      { ...(status && { status }), ...(notes !== undefined && { notes }), ...(type && { type }), ...(time && { time }), ...(location && { location }) },
+      {
+        ...(status && { status }),
+        ...(notes !== undefined && { notes }),
+        ...(type && { type }),
+        ...(time && { time }),
+        ...(location && { location }),
+      },
       { new: true },
     ).lean();
 

@@ -22,23 +22,31 @@ router.get('/templates', authenticateToken, async (req, res) => {
 });
 
 // Get single form template
-router.get('/templates/:id', authenticateToken, validateObjectId(), async (req, res) => {
-  try {
-    const template = await FormTemplate.findById(req.params.id);
-    if (!template) {
-      return res.status(404).json({ error: 'Template not found' });
+router.get(
+  '/templates/:id',
+  authenticateToken,
+  validateObjectId(),
+  async (req, res) => {
+    try {
+      const template = await FormTemplate.findById(req.params.id);
+      if (!template) {
+        return res.status(404).json({ error: 'Template not found' });
+      }
+      res.json(template);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-    res.json(template);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
+  },
+);
 
 // Get default/active form template (for bot)
 // SECURITY FIX: Add rate limiting to prevent abuse
 router.get('/default', standardRateLimit, async (req, res) => {
   try {
-    let template = await FormTemplate.findOne({ isActive: true, isDefault: true });
+    let template = await FormTemplate.findOne({
+      isActive: true,
+      isDefault: true,
+    });
     if (!template) {
       template = await FormTemplate.findOne({ isActive: true });
     }
@@ -54,7 +62,16 @@ router.get('/default', standardRateLimit, async (req, res) => {
 // Create form template
 router.post('/templates', authenticateToken, async (req, res) => {
   try {
-    const { name, description, fields, triggerMode, triggerDelay, welcomeMessage, completionMessage, isDefault } = req.body;
+    const {
+      name,
+      description,
+      fields,
+      triggerMode,
+      triggerDelay,
+      welcomeMessage,
+      completionMessage,
+      isDefault,
+    } = req.body;
 
     // If setting as default, unset other defaults
     if (isDefault) {
@@ -81,18 +98,13 @@ router.post('/templates', authenticateToken, async (req, res) => {
 });
 
 // Update form template
-router.put('/templates/:id', authenticateToken, validateObjectId(), async (req, res) => {
-  try {
-    const { name, description, fields, triggerMode, triggerDelay, welcomeMessage, completionMessage, isActive, isDefault } = req.body;
-
-    // If setting as default, unset other defaults
-    if (isDefault) {
-      await FormTemplate.updateMany({ _id: { $ne: req.params.id } }, { isDefault: false });
-    }
-
-    const template = await FormTemplate.findByIdAndUpdate(
-      req.params.id,
-      {
+router.put(
+  '/templates/:id',
+  authenticateToken,
+  validateObjectId(),
+  async (req, res) => {
+    try {
+      const {
         name,
         description,
         fields,
@@ -102,77 +114,115 @@ router.put('/templates/:id', authenticateToken, validateObjectId(), async (req, 
         completionMessage,
         isActive,
         isDefault,
-        updatedAt: new Date(),
-      },
-      { new: true },
-    );
+      } = req.body;
 
-    if (!template) {
-      return res.status(404).json({ error: 'Template not found' });
+      // If setting as default, unset other defaults
+      if (isDefault) {
+        await FormTemplate.updateMany(
+          { _id: { $ne: req.params.id } },
+          { isDefault: false },
+        );
+      }
+
+      const template = await FormTemplate.findByIdAndUpdate(
+        req.params.id,
+        {
+          name,
+          description,
+          fields,
+          triggerMode,
+          triggerDelay,
+          welcomeMessage,
+          completionMessage,
+          isActive,
+          isDefault,
+          updatedAt: new Date(),
+        },
+        { new: true },
+      );
+
+      if (!template) {
+        return res.status(404).json({ error: 'Template not found' });
+      }
+      res.json(template);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-    res.json(template);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
+  },
+);
 
 // Delete form template
-router.delete('/templates/:id', authenticateToken, validateObjectId(), async (req, res) => {
-  try {
-    const template = await FormTemplate.findByIdAndDelete(req.params.id);
-    if (!template) {
-      return res.status(404).json({ error: 'Template not found' });
+router.delete(
+  '/templates/:id',
+  authenticateToken,
+  validateObjectId(),
+  async (req, res) => {
+    try {
+      const template = await FormTemplate.findByIdAndDelete(req.params.id);
+      if (!template) {
+        return res.status(404).json({ error: 'Template not found' });
+      }
+      res.json({ message: 'Template deleted successfully' });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-    res.json({ message: 'Template deleted successfully' });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
+  },
+);
 
 // Set template as default
-router.post('/templates/:id/set-default', authenticateToken, validateObjectId(), async (req, res) => {
-  try {
-    await FormTemplate.updateMany({}, { isDefault: false });
-    const template = await FormTemplate.findByIdAndUpdate(
-      req.params.id,
-      { isDefault: true, updatedAt: new Date() },
-      { new: true },
-    );
-    if (!template) {
-      return res.status(404).json({ error: 'Template not found' });
+router.post(
+  '/templates/:id/set-default',
+  authenticateToken,
+  validateObjectId(),
+  async (req, res) => {
+    try {
+      await FormTemplate.updateMany({}, { isDefault: false });
+      const template = await FormTemplate.findByIdAndUpdate(
+        req.params.id,
+        { isDefault: true, updatedAt: new Date() },
+        { new: true },
+      );
+      if (!template) {
+        return res.status(404).json({ error: 'Template not found' });
+      }
+      res.json(template);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-    res.json(template);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
+  },
+);
 
 // Duplicate template
-router.post('/templates/:id/duplicate', authenticateToken, validateObjectId(), async (req, res) => {
-  try {
-    const original = await FormTemplate.findById(req.params.id);
-    if (!original) {
-      return res.status(404).json({ error: 'Template not found' });
+router.post(
+  '/templates/:id/duplicate',
+  authenticateToken,
+  validateObjectId(),
+  async (req, res) => {
+    try {
+      const original = await FormTemplate.findById(req.params.id);
+      if (!original) {
+        return res.status(404).json({ error: 'Template not found' });
+      }
+
+      const duplicate = new FormTemplate({
+        name: `${original.name} (Copy)`,
+        description: original.description,
+        fields: original.fields,
+        triggerMode: original.triggerMode,
+        triggerDelay: original.triggerDelay,
+        welcomeMessage: original.welcomeMessage,
+        completionMessage: original.completionMessage,
+        isDefault: false,
+        isActive: true,
+      });
+
+      await duplicate.save();
+      res.status(201).json(duplicate);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-
-    const duplicate = new FormTemplate({
-      name: `${original.name} (Copy)`,
-      description: original.description,
-      fields: original.fields,
-      triggerMode: original.triggerMode,
-      triggerDelay: original.triggerDelay,
-      welcomeMessage: original.welcomeMessage,
-      completionMessage: original.completionMessage,
-      isDefault: false,
-      isActive: true,
-    });
-
-    await duplicate.save();
-    res.status(201).json(duplicate);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
+  },
+);
 
 // ============================================
 // FORM SUBMISSIONS
@@ -188,7 +238,10 @@ router.get('/submissions', authenticateToken, async (req, res) => {
     if (status) query.status = status;
     if (search) {
       // SECURITY FIX: Escape regex to prevent injection
-      const escapedSearch = (search as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const escapedSearch = (search as string).replace(
+        /[.*+?^${}()|[\]\\]/g,
+        '\\$&',
+      );
       query.phoneNumber = { $regex: escapedSearch, $options: 'i' };
     }
 
@@ -218,25 +271,33 @@ router.get('/submissions', authenticateToken, async (req, res) => {
 });
 
 // Get single submission
-router.get('/submissions/:id', authenticateToken, validateObjectId(), async (req, res) => {
-  try {
-    const submission = await FormSubmission.findById(req.params.id)
-      .populate('formId', 'name fields')
-      .lean();
+router.get(
+  '/submissions/:id',
+  authenticateToken,
+  validateObjectId(),
+  async (req, res) => {
+    try {
+      const submission = await FormSubmission.findById(req.params.id)
+        .populate('formId', 'name fields')
+        .lean();
 
-    if (!submission) {
-      return res.status(404).json({ error: 'Submission not found' });
+      if (!submission) {
+        return res.status(404).json({ error: 'Submission not found' });
+      }
+
+      // Convert Map to object
+      res.json({
+        ...submission,
+        data:
+          submission.data instanceof Map
+            ? Object.fromEntries(submission.data)
+            : submission.data,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-
-    // Convert Map to object
-    res.json({
-      ...submission,
-      data: submission.data instanceof Map ? Object.fromEntries(submission.data) : submission.data,
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
+  },
+);
 
 // Create submission (from WhatsApp bot - no auth)
 // SECURITY FIX: Add rate limiting to prevent abuse
@@ -260,29 +321,34 @@ router.post('/submissions', standardRateLimit, async (req, res) => {
 });
 
 // Update submission status
-router.put('/submissions/:id/status', authenticateToken, validateObjectId(), async (req, res) => {
-  try {
-    const { status, notes } = req.body;
+router.put(
+  '/submissions/:id/status',
+  authenticateToken,
+  validateObjectId(),
+  async (req, res) => {
+    try {
+      const { status, notes } = req.body;
 
-    const submission = await FormSubmission.findByIdAndUpdate(
-      req.params.id,
-      {
-        status,
-        notes,
-        reviewedAt: status !== 'new' ? new Date() : undefined,
-        updatedAt: new Date(),
-      },
-      { new: true },
-    );
+      const submission = await FormSubmission.findByIdAndUpdate(
+        req.params.id,
+        {
+          status,
+          notes,
+          reviewedAt: status !== 'new' ? new Date() : undefined,
+          updatedAt: new Date(),
+        },
+        { new: true },
+      );
 
-    if (!submission) {
-      return res.status(404).json({ error: 'Submission not found' });
+      if (!submission) {
+        return res.status(404).json({ error: 'Submission not found' });
+      }
+      res.json(submission);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-    res.json(submission);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
+  },
+);
 
 // Export submissions to CSV
 router.get('/submissions/export', authenticateToken, async (req, res) => {
@@ -309,10 +375,11 @@ router.get('/submissions/export', authenticateToken, async (req, res) => {
 
     const csvRows = submissions.map((s: any) => {
       const data = s.data instanceof Map ? Object.fromEntries(s.data) : s.data;
-      const values = form?.fields?.map((f: FormField) => {
-        const val = data?.[f.id];
-        return `"${(val || '').toString().replace(/"/g, '""')}"`;
-      }) || [];
+      const values =
+        form?.fields?.map((f: FormField) => {
+          const val = data?.[f.id];
+          return `"${(val || '').toString().replace(/"/g, '""')}"`;
+        }) || [];
 
       return [
         s._id,
@@ -328,7 +395,9 @@ router.get('/submissions/export', authenticateToken, async (req, res) => {
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="form-submissions-${new Date().toISOString().split('T')[0]}.csv"`,
+      `attachment; filename="form-submissions-${
+        new Date().toISOString().split('T')[0]
+      }.csv"`,
     );
     res.send(csvContent);
   } catch (err: any) {
@@ -342,7 +411,12 @@ router.get('/submissions/export', authenticateToken, async (req, res) => {
 
 router.get('/stats', authenticateToken, async (req, res) => {
   try {
-    const [totalTemplates, activeTemplates, totalSubmissions, submissionsByStatus] = await Promise.all([
+    const [
+      totalTemplates,
+      activeTemplates,
+      totalSubmissions,
+      submissionsByStatus,
+    ] = await Promise.all([
       FormTemplate.countDocuments(),
       FormTemplate.countDocuments({ isActive: true }),
       FormSubmission.countDocuments(),
@@ -355,10 +429,13 @@ router.get('/stats', authenticateToken, async (req, res) => {
       totalTemplates,
       activeTemplates,
       totalSubmissions,
-      submissionsByStatus: submissionsByStatus.reduce((acc: Record<string, number>, item: any) => {
-        acc[item._id] = item.count;
-        return acc;
-      }, {}),
+      submissionsByStatus: submissionsByStatus.reduce(
+        (acc: Record<string, number>, item: any) => {
+          acc[item._id] = item.count;
+          return acc;
+        },
+        {},
+      ),
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

@@ -355,6 +355,79 @@ export default function CRM() {
     }
   };
 
+  // Analytics fetch — declared before useEffect to satisfy react-hooks/immutability
+  const fetchAnalytics = async () => {
+    try {
+      const [overviewRes, questionsRes, topRes, trendsRes, leadsRes, repliesRes] = await Promise.all([
+        api.get('/api/analytics/overview'),
+        api.get('/api/analytics/questions'),
+        api.get('/api/analytics/top-questions?limit=15'),
+        api.get(`/api/analytics/trends?days=${analyticsPeriod}`),
+        api.get('/api/analytics/leads'),
+        api.get('/api/analytics/recent-replies?limit=10')
+      ]);
+
+      setAnalyticsOverview(overviewRes.data);
+      setQuestionCategories(questionsRes.data.categories || []);
+      setTopQuestions(topRes.data);
+      setMessageTrends(trendsRes.data);
+      setLeadAnalyticsStats(leadsRes.data);
+      setRecentReplies(repliesRes.data);
+    } catch (err) {
+      console.error('Failed to fetch analytics:', err);
+    }
+  };
+
+  const fetchRegistrations = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('page', registrationsPage.toString());
+      params.append('limit', '20');
+      if (registrationSearch) params.append('search', registrationSearch);
+      if (registrationStatusFilter) params.append('status', registrationStatusFilter);
+      if (registrationJobFilter) params.append('jobType', registrationJobFilter);
+
+      const res = await api.get(`/api/crm/registrations?${params}`);
+      setRegistrations(res.data.registrations);
+      setRegistrationsTotal(res.data.total);
+      setRegistrationsTotalPages(res.data.totalPages);
+    } catch (err) {
+      console.error('Failed to fetch registrations:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchRegistrationStats = async () => {
+    try {
+      const res = await api.get('/api/crm/registrations/stats');
+      setRegistrationStats(res.data);
+    } catch (err) {
+      console.error('Failed to fetch stats:', err);
+    }
+  };
+
+  const fetchJobTypes = async () => {
+    try {
+      const res = await api.get('/api/crm/registrations/stats');
+      const types = Object.keys(res.data.byJobType || {});
+      setJobTypes(types.length > 0 ? types : [
+        'Electrician', 'Plumber', 'Asphalt Worker', 'Concrete Pump Driver',
+        'Excavator Operator', 'JCB Operator', 'Heavy Duty Cleaner',
+        'Gypsum Fixer', 'Tile Fixer', 'General Worker', 'Welder',
+        'Carpenter', 'Mason', 'Painter', 'AC Technician', 'Driver'
+      ]);
+    } catch (err) {
+      console.error('Failed to fetch job types:', err);
+      setJobTypes([
+        'Electrician', 'Plumber', 'Asphalt Worker', 'Concrete Pump Driver',
+        'Excavator Operator', 'JCB Operator', 'Heavy Duty Cleaner',
+        'Gypsum Fixer', 'Tile Fixer', 'General Worker'
+      ]);
+    }
+  };
+
   useEffect(() => {
     fetchDashboard();
     fetchAnalytics();
@@ -508,82 +581,8 @@ export default function CRM() {
     });
   };
 
-  // Analytics fetch
-  const fetchAnalytics = async () => {
-    try {
-      const [overviewRes, questionsRes, topRes, trendsRes, leadsRes, repliesRes] = await Promise.all([
-        api.get('/api/analytics/overview'),
-        api.get('/api/analytics/questions'),
-        api.get('/api/analytics/top-questions?limit=15'),
-        api.get(`/api/analytics/trends?days=${analyticsPeriod}`),
-        api.get('/api/analytics/leads'),
-        api.get('/api/analytics/recent-replies?limit=10')
-      ]);
-
-      setAnalyticsOverview(overviewRes.data);
-      setQuestionCategories(questionsRes.data.categories || []);
-      setTopQuestions(topRes.data);
-      setMessageTrends(trendsRes.data);
-      setLeadAnalyticsStats(leadsRes.data);
-      setRecentReplies(repliesRes.data);
-    } catch (err) {
-      console.error('Failed to fetch analytics:', err);
-    }
-  };
-
   // Leads Registration handlers
-  const fetchRegistrations = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      params.append('page', registrationsPage.toString());
-      params.append('limit', '20');
-      if (registrationSearch) params.append('search', registrationSearch);
-      if (registrationStatusFilter) params.append('status', registrationStatusFilter);
-      if (registrationJobFilter) params.append('jobType', registrationJobFilter);
-
-      const res = await api.get(`/api/crm/registrations?${params}`);
-      setRegistrations(res.data.registrations);
-      setRegistrationsTotal(res.data.total);
-      setRegistrationsTotalPages(res.data.totalPages);
-    } catch (err) {
-      console.error('Failed to fetch registrations:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchRegistrationStats = async () => {
-    try {
-      const res = await api.get('/api/crm/registrations/stats');
-      setRegistrationStats(res.data);
-    } catch (err) {
-      console.error('Failed to fetch stats:', err);
-    }
-  };
-
-  const fetchJobTypes = async () => {
-    try {
-      // Get unique job types from stats
-      const res = await api.get('/api/crm/registrations/stats');
-      const types = Object.keys(res.data.byJobType || {});
-      setJobTypes(types.length > 0 ? types : [
-        'Electrician', 'Plumber', 'Asphalt Worker', 'Concrete Pump Driver',
-        'Excavator Operator', 'JCB Operator', 'Heavy Duty Cleaner',
-        'Gypsum Fixer', 'Tile Fixer', 'General Worker', 'Welder',
-        'Carpenter', 'Mason', 'Painter', 'AC Technician', 'Driver'
-      ]);
-    } catch (err) {
-      console.error('Failed to fetch job types:', err);
-      setJobTypes([
-        'Electrician', 'Plumber', 'Asphalt Worker', 'Concrete Pump Driver',
-        'Excavator Operator', 'JCB Operator', 'Heavy Duty Cleaner',
-        'Gypsum Fixer', 'Tile Fixer', 'General Worker'
-      ]);
-    }
-  };
-
-  const fetchRegistrationMessages = async (leadId: string) => {
+  const _fetchRegistrationMessages = async (leadId: string) => {
     setLoadingRegistrationMessages(true);
     try {
       const res = await api.get(`/api/leads/${leadId}/messages`);

@@ -35,7 +35,11 @@ const upload = multer({
     if (allowedTypes.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only PDF, DOC, DOCX, and images are allowed.'));
+      cb(
+        new Error(
+          'Invalid file type. Only PDF, DOC, DOCX, and images are allowed.',
+        ),
+      );
     }
   },
 });
@@ -123,7 +127,9 @@ router.put('/contacts/:id', validateObjectId(), async (req, res) => {
   try {
     // Auto-populate name from firstName/lastName if not provided
     if (!req.body.name && (req.body.firstName || req.body.lastName)) {
-      req.body.name = `${req.body.firstName || ''} ${req.body.lastName || ''}`.trim();
+      req.body.name = `${req.body.firstName || ''} ${
+        req.body.lastName || ''
+      }`.trim();
     }
     // Sync whatsappId with whatsappNumber
     if (req.body.whatsappId && !req.body.whatsappNumber) {
@@ -133,7 +139,10 @@ router.put('/contacts/:id', validateObjectId(), async (req, res) => {
       req.body.whatsappId = req.body.whatsappNumber;
     }
 
-    const contact = await CRMService.updateContact(req.params.id as string, req.body);
+    const contact = await CRMService.updateContact(
+      req.params.id as string,
+      req.body,
+    );
     if (!contact) {
       return res.status(404).json({ error: 'Contact not found' });
     }
@@ -148,7 +157,9 @@ router.patch('/contacts/:id', validateObjectId(), async (req, res) => {
   try {
     // Auto-populate name from firstName/lastName if not provided
     if (!req.body.name && (req.body.firstName || req.body.lastName)) {
-      req.body.name = `${req.body.firstName || ''} ${req.body.lastName || ''}`.trim();
+      req.body.name = `${req.body.firstName || ''} ${
+        req.body.lastName || ''
+      }`.trim();
     }
     // Sync whatsappId with whatsappNumber
     if (req.body.whatsappId && !req.body.whatsappNumber) {
@@ -158,7 +169,10 @@ router.patch('/contacts/:id', validateObjectId(), async (req, res) => {
       req.body.whatsappId = req.body.whatsappNumber;
     }
 
-    const contact = await CRMService.updateContact(req.params.id as string, req.body);
+    const contact = await CRMService.updateContact(
+      req.params.id as string,
+      req.body,
+    );
     if (!contact) {
       return res.status(404).json({ error: 'Contact not found' });
     }
@@ -319,7 +333,10 @@ router.post('/activities', async (req, res) => {
 
 router.put('/activities/:id', validateObjectId(), async (req, res) => {
   try {
-    const activity = await CRMService.updateActivity(req.params.id as string, req.body);
+    const activity = await CRMService.updateActivity(
+      req.params.id as string,
+      req.body,
+    );
     if (!activity) {
       return res.status(404).json({ error: 'Activity not found' });
     }
@@ -398,7 +415,10 @@ router.get('/registrations', async (req, res) => {
     if (jobType) query.jobVacancyType = jobType;
     if (search) {
       // SECURITY FIX: Escape regex special characters
-      const escapedSearch = (search as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const escapedSearch = (search as string).replace(
+        /[.*+?^${}()|[\]\\]/g,
+        '\\$&',
+      );
       query.$or = [
         { fullName: { $regex: escapedSearch, $options: 'i' } },
         { phoneNumber: { $regex: escapedSearch, $options: 'i' } },
@@ -426,15 +446,22 @@ router.get('/registrations', async (req, res) => {
 // Get registration stats
 router.get('/registrations/stats', async (req, res) => {
   try {
-    const [total, byStatus, byCountry, byJobType, recentCount] = await Promise.all([
-      Lead.countDocuments(),
-      Lead.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
-      Lead.aggregate([{ $group: { _id: '$interestedCountry', count: { $sum: 1 } } }]),
-      Lead.aggregate([{ $group: { _id: '$jobVacancyType', count: { $sum: 1 } } }]),
-      Lead.countDocuments({
-        registeredAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-      }),
-    ]);
+    const [total, byStatus, byCountry, byJobType, recentCount] =
+      await Promise.all([
+        Lead.countDocuments(),
+        Lead.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+        Lead.aggregate([
+          { $group: { _id: '$interestedCountry', count: { $sum: 1 } } },
+        ]),
+        Lead.aggregate([
+          { $group: { _id: '$jobVacancyType', count: { $sum: 1 } } },
+        ]),
+        Lead.countDocuments({
+          registeredAt: {
+            $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+          },
+        }),
+      ]);
 
     res.json({
       total,
@@ -581,12 +608,17 @@ router.get('/registrations/export', async (req, res) => {
       new Date(r.registeredAt).toISOString(),
     ]);
 
-    const csvContent = [headers.join(','), ...csvRows.map((row: string[]) => row.join(','))].join('\n');
+    const csvContent = [
+      headers.join(','),
+      ...csvRows.map((row: string[]) => row.join(',')),
+    ].join('\n');
 
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="registrations-${new Date().toISOString().split('T')[0]}.csv"`,
+      `attachment; filename="registrations-${
+        new Date().toISOString().split('T')[0]
+      }.csv"`,
     );
     res.send(csvContent);
   } catch (err: any) {

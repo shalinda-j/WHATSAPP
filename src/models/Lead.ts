@@ -34,7 +34,14 @@ const LeadSchema = new (mongoose as any).Schema({
   // Status Tracking
   status: {
     type: String,
-    enum: ['new', 'reviewed', 'contacted', 'interviewed', 'accepted', 'rejected'],
+    enum: [
+      'new',
+      'reviewed',
+      'contacted',
+      'interviewed',
+      'accepted',
+      'rejected',
+    ],
     default: 'new',
     index: true,
   },

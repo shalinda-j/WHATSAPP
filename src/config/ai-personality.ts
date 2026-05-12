@@ -39,7 +39,9 @@ const DEFAULT_CONVERSATION_EXAMPLES: ConversationExample[] = [
  * Get conversation examples for AI training
  * Can be configured dynamically via admin panel (CONVERSATION_EXAMPLES dataset)
  */
-export async function getConversationExamples(): Promise<ConversationExample[]> {
+export async function getConversationExamples(): Promise<
+  ConversationExample[]
+> {
   try {
     const examples = await configService.getConversationExamples();
     return examples.length > 0 ? examples : DEFAULT_CONVERSATION_EXAMPLES;

@@ -4,7 +4,10 @@ import { bulkSenderService } from '../../services/BulkSenderService';
 import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
+});
 
 // SECURITY FIX: All bulk routes require authentication
 router.use(authenticateToken);
@@ -24,7 +27,10 @@ router.post('/send', upload.single('media'), async (req, res) => {
       try {
         recipientList = JSON.parse(recipients);
       } catch {
-        recipientList = recipients.split(',').map((s: string) => s.trim()).filter(Boolean);
+        recipientList = recipients
+          .split(',')
+          .map((s: string) => s.trim())
+          .filter(Boolean);
       }
     } else if (Array.isArray(recipients)) {
       recipientList = recipients;
@@ -35,7 +41,9 @@ router.post('/send', upload.single('media'), async (req, res) => {
     }
 
     if (!message && !req.file) {
-      return res.status(400).json({ error: 'A message or media file is required' });
+      return res
+        .status(400)
+        .json({ error: 'A message or media file is required' });
     }
 
     // Stream NDJSON progress back to client
@@ -46,10 +54,17 @@ router.post('/send', upload.single('media'), async (req, res) => {
     const write = (obj: object) => {
       try {
         res.write(JSON.stringify(obj) + '\n');
-      } catch { /* ignore write errors */ }
+      } catch {
+        /* ignore write errors */
+      }
     };
 
-    const result = { total: recipientList.length, success: 0, failed: 0, errors: [] as { number: string; error: string }[] };
+    const result = {
+      total: recipientList.length,
+      success: 0,
+      failed: 0,
+      errors: [] as { number: string; error: string }[],
+    };
     const delayMs = (Number(delay) || 5) * 1000;
     const sid = sessionId || 'default';
 
@@ -69,22 +84,40 @@ router.post('/send', upload.single('media'), async (req, res) => {
             jid,
             req.file.buffer,
             type,
-            { caption: message || undefined, mimetype: req.file.mimetype, fileName: req.file.originalname },
+            {
+              caption: message || undefined,
+              mimetype: req.file.mimetype,
+              fileName: req.file.originalname,
+            },
             sid,
           );
-          if (!sent) throw new Error('WhatsApp not connected — scan the QR code first');
+          if (!sent)
+            throw new Error('WhatsApp not connected — scan the QR code first');
         } else {
           const { sendMessage } = await import('../../services/whatsapp');
           await sendMessage(jid, message, sid);
         }
 
         result.success++;
-        write({ type: 'progress', current: i + 1, total: result.total, number, status: 'ok' });
+        write({
+          type: 'progress',
+          current: i + 1,
+          total: result.total,
+          number,
+          status: 'ok',
+        });
       } catch (err: any) {
         result.failed++;
         const errMsg = err?.message || String(err);
         result.errors.push({ number, error: errMsg });
-        write({ type: 'progress', current: i + 1, total: result.total, number, status: 'error', error: errMsg });
+        write({
+          type: 'progress',
+          current: i + 1,
+          total: result.total,
+          number,
+          status: 'error',
+          error: errMsg,
+        });
       }
 
       if (i < recipientList.length - 1) {
@@ -99,7 +132,14 @@ router.post('/send', upload.single('media'), async (req, res) => {
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     } else {
-      try { res.write(JSON.stringify({ type: 'error', error: error.message }) + '\n'); res.end(); } catch { /* ignore */ }
+      try {
+        res.write(
+          JSON.stringify({ type: 'error', error: error.message }) + '\n',
+        );
+        res.end();
+      } catch {
+        /* ignore */
+      }
     }
   }
 });
@@ -118,7 +158,10 @@ router.post('/upload-csv', upload.single('file'), (req, res) => {
     const numbers = parseCSVNumbers(text);
 
     if (numbers.length === 0) {
-      return res.status(400).json({ error: 'No valid phone numbers found in the file. Make sure the CSV has at least one column with 10+ digit phone numbers.' });
+      return res.status(400).json({
+        error:
+          'No valid phone numbers found in the file. Make sure the CSV has at least one column with 10+ digit phone numbers.',
+      });
     }
 
     res.json({ numbers, count: numbers.length });
@@ -143,7 +186,14 @@ function parseCSVNumbers(csvText: string): string[] {
   let phoneColIndex = -1;
   const firstRow = rows[0]?.toLowerCase() || '';
   const firstRowCells = splitCSVRow(firstRow);
-  const headerKeywords = ['phone', 'number', 'mobile', 'tel', 'contact', 'whatsapp'];
+  const headerKeywords = [
+    'phone',
+    'number',
+    'mobile',
+    'tel',
+    'contact',
+    'whatsapp',
+  ];
   for (let i = 0; i < firstRowCells.length; i++) {
     if (headerKeywords.some((k) => firstRowCells[i].includes(k))) {
       phoneColIndex = i;
