@@ -1,5 +1,8 @@
 import { sendTyping, getSocket } from './whatsapp';
-import { configurationManager, HumanizerConfig } from './ConfigurationManagerService';
+import {
+  configurationManager,
+  HumanizerConfig,
+} from './ConfigurationManagerService';
 import type { WASocket } from '@whiskeysockets/baileys';
 
 interface QueuedMessage {
@@ -16,6 +19,65 @@ export class HumanizerService {
   private static cachedConfig: HumanizerConfig | null = null;
   private static configCacheTime = 0;
   private static readonly CONFIG_CACHE_TTL = 60000; // 1 minute cache
+
+  // MEMORY LEAK FIX: Add cleanup interval and max age for queued messages
+  private static cleanupInterval: NodeJS.Timeout | null = null;
+  private static readonly MAX_QUEUE_AGE_MS = 30 * 60 * 1000; // 30 minutes max age
+
+  /**
+   * MEMORY LEAK FIX: Initialize cleanup interval
+   */
+  public static initializeCleanup(): void {
+    if (this.cleanupInterval) return;
+
+    this.cleanupInterval = setInterval(() => {
+      this.cleanupOldMessages();
+    }, 5 * 60 * 1000); // Clean every 5 minutes
+  }
+
+  /**
+   * MEMORY LEAK FIX: Remove old queued messages
+   */
+  private static cleanupOldMessages(): void {
+    const now = Date.now();
+    const cutoff = now - this.MAX_QUEUE_AGE_MS;
+
+    const oldCount = this.messageQueue.length;
+    this.messageQueue = this.messageQueue.filter(
+      (msg) => msg.timestamp.getTime() > cutoff,
+    );
+
+    if (this.messageQueue.length < oldCount) {
+      console.log(
+        `🧹 HumanizerService: Removed ${
+          oldCount - this.messageQueue.length
+        } old queued messages`,
+      );
+    }
+
+    // Also clear stale config cache
+    if (
+      this.cachedConfig &&
+      now - this.configCacheTime > this.CONFIG_CACHE_TTL
+    ) {
+      this.cachedConfig = null;
+      this.configCacheTime = 0;
+    }
+  }
+
+  /**
+   * MEMORY LEAK FIX: Shutdown cleanup
+   */
+  public static shutdown(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+    this.messageQueue = [];
+    this.cachedConfig = null;
+    this.configCacheTime = 0;
+    console.log('🧹 HumanizerService: Shutdown cleanup completed');
+  }
 
   /**
    * Helper function to wait for a specific amount of time
@@ -36,7 +98,10 @@ export class HumanizerService {
    */
   private static async getConfig(): Promise<HumanizerConfig> {
     const now = Date.now();
-    if (this.cachedConfig && now - this.configCacheTime < this.CONFIG_CACHE_TTL) {
+    if (
+      this.cachedConfig &&
+      now - this.configCacheTime < this.CONFIG_CACHE_TTL
+    ) {
       return this.cachedConfig;
     }
 
@@ -157,7 +222,10 @@ export class HumanizerService {
     }
 
     // 1. Initial reaction delay (simulate reading the message before typing)
-    const reactionDelay = this.getRandomDelay(config.reactionDelayMin, config.reactionDelayMax);
+    const reactionDelay = this.getRandomDelay(
+      config.reactionDelayMin,
+      config.reactionDelayMax,
+    );
     await this.sleep(reactionDelay);
 
     // 2. Calculate typing duration based on typing speed
@@ -166,7 +234,10 @@ export class HumanizerService {
     let typingDelay = Math.floor((charCount / charsPerSecond) * 1000);
     const variance = typingDelay * 0.15;
     typingDelay = typingDelay + this.getRandomDelay(-variance, variance);
-    typingDelay = Math.max(config.minTypingDelayMs, Math.min(typingDelay, config.maxTypingDelayMs));
+    typingDelay = Math.max(
+      config.minTypingDelayMs,
+      Math.min(typingDelay, config.maxTypingDelayMs),
+    );
 
     console.log(
       `   ⏳ Humanizer: Intentionally delaying for ${Math.round(

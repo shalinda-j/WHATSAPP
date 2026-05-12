@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { CRMService } from '../../services/CRMService';
 import { authenticateToken } from '../middleware/auth';
+import { validateObjectId } from '../middleware/validation';
 import Lead from '../../models/Lead';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -34,7 +35,11 @@ const upload = multer({
     if (allowedTypes.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only PDF, DOC, DOCX, and images are allowed.'));
+      cb(
+        new Error(
+          'Invalid file type. Only PDF, DOC, DOCX, and images are allowed.',
+        ),
+      );
     }
   },
 });
@@ -97,9 +102,9 @@ router.get('/contacts/stats', async (req, res) => {
   }
 });
 
-router.get('/contacts/:id', async (req, res) => {
+router.get('/contacts/:id', validateObjectId(), async (req, res) => {
   try {
-    const contact = await CRMService.getContactById(req.params.id);
+    const contact = await CRMService.getContactById(req.params.id as string);
     if (!contact) {
       return res.status(404).json({ error: 'Contact not found' });
     }
@@ -118,11 +123,13 @@ router.post('/contacts', async (req, res) => {
   }
 });
 
-router.put('/contacts/:id', async (req, res) => {
+router.put('/contacts/:id', validateObjectId(), async (req, res) => {
   try {
     // Auto-populate name from firstName/lastName if not provided
     if (!req.body.name && (req.body.firstName || req.body.lastName)) {
-      req.body.name = `${req.body.firstName || ''} ${req.body.lastName || ''}`.trim();
+      req.body.name = `${req.body.firstName || ''} ${
+        req.body.lastName || ''
+      }`.trim();
     }
     // Sync whatsappId with whatsappNumber
     if (req.body.whatsappId && !req.body.whatsappNumber) {
@@ -132,7 +139,10 @@ router.put('/contacts/:id', async (req, res) => {
       req.body.whatsappId = req.body.whatsappNumber;
     }
 
-    const contact = await CRMService.updateContact(req.params.id, req.body);
+    const contact = await CRMService.updateContact(
+      req.params.id as string,
+      req.body,
+    );
     if (!contact) {
       return res.status(404).json({ error: 'Contact not found' });
     }
@@ -143,11 +153,13 @@ router.put('/contacts/:id', async (req, res) => {
 });
 
 // PATCH endpoint for partial updates (used by FollowUp page)
-router.patch('/contacts/:id', async (req, res) => {
+router.patch('/contacts/:id', validateObjectId(), async (req, res) => {
   try {
     // Auto-populate name from firstName/lastName if not provided
     if (!req.body.name && (req.body.firstName || req.body.lastName)) {
-      req.body.name = `${req.body.firstName || ''} ${req.body.lastName || ''}`.trim();
+      req.body.name = `${req.body.firstName || ''} ${
+        req.body.lastName || ''
+      }`.trim();
     }
     // Sync whatsappId with whatsappNumber
     if (req.body.whatsappId && !req.body.whatsappNumber) {
@@ -157,7 +169,10 @@ router.patch('/contacts/:id', async (req, res) => {
       req.body.whatsappId = req.body.whatsappNumber;
     }
 
-    const contact = await CRMService.updateContact(req.params.id, req.body);
+    const contact = await CRMService.updateContact(
+      req.params.id as string,
+      req.body,
+    );
     if (!contact) {
       return res.status(404).json({ error: 'Contact not found' });
     }
@@ -167,9 +182,9 @@ router.patch('/contacts/:id', async (req, res) => {
   }
 });
 
-router.delete('/contacts/:id', async (req, res) => {
+router.delete('/contacts/:id', validateObjectId(), async (req, res) => {
   try {
-    const result = await CRMService.deleteContact(req.params.id);
+    const result = await CRMService.deleteContact(req.params.id as string);
     if (!result) {
       return res.status(404).json({ error: 'Contact not found' });
     }
@@ -216,9 +231,9 @@ router.get('/deals/stats', async (req, res) => {
   }
 });
 
-router.get('/deals/:id', async (req, res) => {
+router.get('/deals/:id', validateObjectId(), async (req, res) => {
   try {
-    const deal = await CRMService.getDealById(req.params.id);
+    const deal = await CRMService.getDealById(req.params.id as string);
     if (!deal) {
       return res.status(404).json({ error: 'Deal not found' });
     }
@@ -237,9 +252,9 @@ router.post('/deals', async (req, res) => {
   }
 });
 
-router.put('/deals/:id', async (req, res) => {
+router.put('/deals/:id', validateObjectId(), async (req, res) => {
   try {
-    const deal = await CRMService.updateDeal(req.params.id, req.body);
+    const deal = await CRMService.updateDeal(req.params.id as string, req.body);
     if (!deal) {
       return res.status(404).json({ error: 'Deal not found' });
     }
@@ -249,9 +264,9 @@ router.put('/deals/:id', async (req, res) => {
   }
 });
 
-router.delete('/deals/:id', async (req, res) => {
+router.delete('/deals/:id', validateObjectId(), async (req, res) => {
   try {
-    const result = await CRMService.deleteDeal(req.params.id);
+    const result = await CRMService.deleteDeal(req.params.id as string);
     if (!result) {
       return res.status(404).json({ error: 'Deal not found' });
     }
@@ -295,9 +310,9 @@ router.get('/activities/upcoming', async (req, res) => {
   }
 });
 
-router.get('/activities/:id', async (req, res) => {
+router.get('/activities/:id', validateObjectId(), async (req, res) => {
   try {
-    const activity = await CRMService.getActivityById(req.params.id);
+    const activity = await CRMService.getActivityById(req.params.id as string);
     if (!activity) {
       return res.status(404).json({ error: 'Activity not found' });
     }
@@ -316,9 +331,12 @@ router.post('/activities', async (req, res) => {
   }
 });
 
-router.put('/activities/:id', async (req, res) => {
+router.put('/activities/:id', validateObjectId(), async (req, res) => {
   try {
-    const activity = await CRMService.updateActivity(req.params.id, req.body);
+    const activity = await CRMService.updateActivity(
+      req.params.id as string,
+      req.body,
+    );
     if (!activity) {
       return res.status(404).json({ error: 'Activity not found' });
     }
@@ -328,9 +346,9 @@ router.put('/activities/:id', async (req, res) => {
   }
 });
 
-router.delete('/activities/:id', async (req, res) => {
+router.delete('/activities/:id', validateObjectId(), async (req, res) => {
   try {
-    const result = await CRMService.deleteActivity(req.params.id);
+    const result = await CRMService.deleteActivity(req.params.id as string);
     if (!result) {
       return res.status(404).json({ error: 'Activity not found' });
     }
@@ -396,9 +414,14 @@ router.get('/registrations', async (req, res) => {
     if (country) query.interestedCountry = country;
     if (jobType) query.jobVacancyType = jobType;
     if (search) {
+      // SECURITY FIX: Escape regex special characters
+      const escapedSearch = (search as string).replace(
+        /[.*+?^${}()|[\]\\]/g,
+        '\\$&',
+      );
       query.$or = [
-        { fullName: { $regex: search, $options: 'i' } },
-        { phoneNumber: { $regex: search, $options: 'i' } },
+        { fullName: { $regex: escapedSearch, $options: 'i' } },
+        { phoneNumber: { $regex: escapedSearch, $options: 'i' } },
       ];
     }
 
@@ -423,15 +446,22 @@ router.get('/registrations', async (req, res) => {
 // Get registration stats
 router.get('/registrations/stats', async (req, res) => {
   try {
-    const [total, byStatus, byCountry, byJobType, recentCount] = await Promise.all([
-      Lead.countDocuments(),
-      Lead.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
-      Lead.aggregate([{ $group: { _id: '$interestedCountry', count: { $sum: 1 } } }]),
-      Lead.aggregate([{ $group: { _id: '$jobVacancyType', count: { $sum: 1 } } }]),
-      Lead.countDocuments({
-        registeredAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-      }),
-    ]);
+    const [total, byStatus, byCountry, byJobType, recentCount] =
+      await Promise.all([
+        Lead.countDocuments(),
+        Lead.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+        Lead.aggregate([
+          { $group: { _id: '$interestedCountry', count: { $sum: 1 } } },
+        ]),
+        Lead.aggregate([
+          { $group: { _id: '$jobVacancyType', count: { $sum: 1 } } },
+        ]),
+        Lead.countDocuments({
+          registeredAt: {
+            $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+          },
+        }),
+      ]);
 
     res.json({
       total,
@@ -578,12 +608,17 @@ router.get('/registrations/export', async (req, res) => {
       new Date(r.registeredAt).toISOString(),
     ]);
 
-    const csvContent = [headers.join(','), ...csvRows.map((row: string[]) => row.join(','))].join('\n');
+    const csvContent = [
+      headers.join(','),
+      ...csvRows.map((row: string[]) => row.join(',')),
+    ].join('\n');
 
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="registrations-${new Date().toISOString().split('T')[0]}.csv"`,
+      `attachment; filename="registrations-${
+        new Date().toISOString().split('T')[0]
+      }.csv"`,
     );
     res.send(csvContent);
   } catch (err: any) {

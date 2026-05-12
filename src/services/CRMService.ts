@@ -1,5 +1,12 @@
 import { Contact, Deal, Activity, PipelineStage } from '../models/CRM';
 
+/**
+ * SECURITY FIX: Escape regex special characters to prevent regex injection
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export class CRMService {
   // ==================== CONTACTS ====================
 
@@ -35,15 +42,16 @@ export class CRMService {
     if (source) query.source = source;
     if (tags && tags.length > 0) query.tags = { $in: tags };
 
-    // Search
+    // Search - SECURITY FIX: Escape regex to prevent injection
     if (search) {
+      const escapedSearch = escapeRegex(search);
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-        { company: { $regex: search, $options: 'i' } },
+        { name: { $regex: escapedSearch, $options: 'i' } },
+        { firstName: { $regex: escapedSearch, $options: 'i' } },
+        { lastName: { $regex: escapedSearch, $options: 'i' } },
+        { email: { $regex: escapedSearch, $options: 'i' } },
+        { phone: { $regex: escapedSearch, $options: 'i' } },
+        { company: { $regex: escapedSearch, $options: 'i' } },
       ];
     }
 
@@ -173,9 +181,11 @@ export class CRMService {
     if (owner) query.owner = owner;
 
     if (search) {
+      // SECURITY FIX: Escape regex to prevent injection
+      const escapedSearch = escapeRegex(search);
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
+        { title: { $regex: escapedSearch, $options: 'i' } },
+        { description: { $regex: escapedSearch, $options: 'i' } },
       ];
     }
 

@@ -21,23 +21,29 @@ export interface IConversationHistory {
 }
 
 // Default retention: 30 days (configurable via environment variable)
-const CONVERSATION_RETENTION_DAYS = parseInt(process.env.CONVERSATION_RETENTION_DAYS || '30', 10);
+const CONVERSATION_RETENTION_DAYS = parseInt(
+  process.env.CONVERSATION_RETENTION_DAYS || '30',
+  10,
+);
 
-const ConversationMessageSchema = new mongoose.Schema({
-  role: {
-    type: String,
-    enum: ['system', 'user', 'assistant'],
-    required: true,
+const ConversationMessageSchema = new mongoose.Schema(
+  {
+    role: {
+      type: String,
+      enum: ['system', 'user', 'assistant'],
+      required: true,
+    },
+    content: {
+      type: String,
+      required: true,
+    },
+    timestamp: {
+      type: Date,
+      default: Date.now,
+    },
   },
-  content: {
-    type: String,
-    required: true,
-  },
-  timestamp: {
-    type: Date,
-    default: Date.now,
-  },
-}, { _id: false });
+  { _id: false },
+);
 
 const ConversationHistorySchema = new (mongoose as any).Schema({
   userId: {
@@ -71,16 +77,19 @@ const ConversationHistorySchema = new (mongoose as any).Schema({
 ConversationHistorySchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 // Pre-save hook to update expiresAt based on retention period
-ConversationHistorySchema.pre('save', function(this: any) {
-  this.expiresAt = new Date(Date.now() + CONVERSATION_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+ConversationHistorySchema.pre('save', function (this: any) {
+  this.expiresAt = new Date(
+    Date.now() + CONVERSATION_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+  );
 });
 
 // Static method to get retention days
 (ConversationHistorySchema as any).statics = {
-  getRetentionDays: () => CONVERSATION_RETENTION_DAYS
+  getRetentionDays: () => CONVERSATION_RETENTION_DAYS,
 };
 
-const ConversationHistory = mongoose.models.ConversationHistory ||
+const ConversationHistory =
+  mongoose.models.ConversationHistory ||
   (mongoose as any).model('ConversationHistory', ConversationHistorySchema);
 
 export default ConversationHistory;

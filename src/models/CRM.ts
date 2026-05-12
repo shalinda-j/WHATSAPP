@@ -33,7 +33,17 @@ const ContactSchema = new mongoose.Schema({
   // Updated status enum to match FollowUp frontend expectations
   status: {
     type: String,
-    enum: ['new', 'contacted', 'interested', 'not_interested', 'converted', 'follow_up', 'active', 'inactive', 'churned'],
+    enum: [
+      'new',
+      'contacted',
+      'interested',
+      'not_interested',
+      'converted',
+      'follow_up',
+      'active',
+      'inactive',
+      'churned',
+    ],
     default: 'new',
   },
   // Priority for follow-up management
@@ -78,7 +88,7 @@ ContactSchema.index({ nextFollowUp: 1 });
 ContactSchema.index({ priority: 1 });
 
 // Pre-save hook to auto-sync fields
-ContactSchema.pre('save', function() {
+ContactSchema.pre('save', function () {
   // Auto-populate name from firstName/lastName if not provided
   if (!this.name && (this.firstName || this.lastName)) {
     this.name = `${this.firstName || ''} ${this.lastName || ''}`.trim();

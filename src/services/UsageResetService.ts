@@ -13,11 +13,13 @@ import Config from '../models/Config';
 
 class UsageResetService {
   private schedulerInterval: NodeJS.Timeout | null = null;
-  private lastCheckedMonth: number = -1;
+  private lastCheckedMonth = -1;
 
   /** Call once on server startup to start the monthly scheduler */
   start(): void {
-    console.log('📅 UsageResetService: Monthly token-usage reset scheduler started');
+    console.log(
+      '📅 UsageResetService: Monthly token-usage reset scheduler started',
+    );
 
     // Check every hour whether a reset is due
     this.schedulerInterval = setInterval(() => {
@@ -78,9 +80,19 @@ class UsageResetService {
    * Reset all provider usage counters.
    * @param triggeredBy  'auto' | 'manual' — for logging
    */
-  async performReset(triggeredBy: 'auto' | 'manual' = 'manual'): Promise<{ resetCount: number }> {
+  async performReset(
+    triggeredBy: 'auto' | 'manual' = 'manual',
+  ): Promise<{ resetCount: number }> {
     const now = new Date();
-    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    const periodStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      1,
+      0,
+      0,
+      0,
+      0,
+    );
 
     const result = await Config.updateMany(
       { isProvider: true },
@@ -95,7 +107,9 @@ class UsageResetService {
 
     const resetCount = result.modifiedCount ?? 0;
     console.log(
-      `🔄 UsageResetService: ${triggeredBy === 'auto' ? 'Auto' : 'Manual'} reset — cleared usage for ${resetCount} provider(s). Period: ${periodStart.toISOString()}`,
+      `🔄 UsageResetService: ${
+        triggeredBy === 'auto' ? 'Auto' : 'Manual'
+      } reset — cleared usage for ${resetCount} provider(s). Period: ${periodStart.toISOString()}`,
     );
 
     return { resetCount };
@@ -106,7 +120,15 @@ class UsageResetService {
    */
   async resetProvider(providerId: string): Promise<boolean> {
     const now = new Date();
-    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    const periodStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      1,
+      0,
+      0,
+      0,
+      0,
+    );
 
     const result = await Config.findByIdAndUpdate(providerId, {
       $set: {
@@ -117,7 +139,9 @@ class UsageResetService {
     });
 
     if (result) {
-      console.log(`🔄 UsageResetService: Manual reset for provider ${providerId}`);
+      console.log(
+        `🔄 UsageResetService: Manual reset for provider ${providerId}`,
+      );
       return true;
     }
     return false;
@@ -154,7 +178,15 @@ class UsageResetService {
     const daysRemaining = Math.ceil(remainingMs / 86_400_000);
     const progressPct = Math.min(100, Math.round((elapsedMs / totalMs) * 100));
 
-    return { periodStart, periodEnd, nextReset, daysRemaining, daysElapsed, totalDays, progressPct };
+    return {
+      periodStart,
+      periodEnd,
+      nextReset,
+      daysRemaining,
+      daysElapsed,
+      totalDays,
+      progressPct,
+    };
   }
 }
 

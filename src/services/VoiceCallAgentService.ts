@@ -16,15 +16,15 @@ const FALLBACK_PATH = join(process.cwd(), 'data', 'call_agent_settings.json');
  * Settings are persisted to MongoDB so they survive restarts.
  */
 export class VoiceCallAgentService {
-  private isEnabled: boolean = false;
-  private agentPersonality: string = '';
-  private primaryLanguage: string = 'en';
+  private isEnabled = false;
+  private agentPersonality = '';
+  private primaryLanguage = 'en';
   private callGreeting: Record<string, string> = {
     en: "Hello! Thank you for calling. I'm an AI assistant. How can I help you today?",
-    si: "ආයුබෝවන්! ඔබේ ඇමතුම ගැන ස්තූතියි. මම AI සහකාරයෙකි. අද ඔබට කොහොමද සහාය වෙන්නේ?",
-    ta: "வணக்கம்! அழைத்ததற்கு நன்றி. நான் ஒரு AI உதவியாளர். இன்று உங்களுக்கு எப்படி உதவலாம்?",
+    si: 'ආයුබෝවන්! ඔබේ ඇමතුම ගැන ස්තූතියි. මම AI සහකාරයෙකි. අද ඔබට කොහොමද සහාය වෙන්නේ?',
+    ta: 'வணக்கம்! அழைத்ததற்கு நன்றி. நான் ஒரு AI உதவியாளர். இன்று உங்களுக்கு எப்படி உதவலாம்?',
   };
-  private settingsLoaded: boolean = false;
+  private settingsLoaded = false;
 
   /**
    * Load settings — tries MongoDB first, then falls back to local file.
@@ -40,13 +40,17 @@ export class VoiceCallAgentService {
       if (config?.value) {
         saved = JSON.parse(config.value);
       }
-    } catch { /* MongoDB unavailable */ }
+    } catch {
+      /* MongoDB unavailable */
+    }
 
     // 2. Fall back to file system
     if (!saved && existsSync(FALLBACK_PATH)) {
       try {
         saved = JSON.parse(readFileSync(FALLBACK_PATH, 'utf-8'));
-      } catch { /* corrupt file — ignore */ }
+      } catch {
+        /* corrupt file — ignore */
+      }
     }
 
     if (saved) {
@@ -80,7 +84,9 @@ export class VoiceCallAgentService {
         { key: CONFIG_KEY, value, description: 'Voice Call Agent Settings' },
         { upsert: true, new: true },
       );
-    } catch { /* MongoDB unavailable — file fallback below */ }
+    } catch {
+      /* MongoDB unavailable — file fallback below */
+    }
 
     // Always save to local file as fallback
     try {
@@ -113,7 +119,11 @@ export class VoiceCallAgentService {
       return this.callGreeting[language] || this.callGreeting.en;
     }
 
-    const langNames: Record<string, string> = { en: 'English', si: 'Sinhala', ta: 'Tamil' };
+    const langNames: Record<string, string> = {
+      en: 'English',
+      si: 'Sinhala',
+      ta: 'Tamil',
+    };
     const langName = langNames[language] || 'English';
     const prompt = `You are a voice call agent with the following personality: "${this.agentPersonality}". 
 A customer is calling on WhatsApp. Since live calls cannot be answered, generate a warm, professional greeting message to send back as a voice note in ${langName}. 
@@ -131,7 +141,10 @@ Keep it under 3 sentences. Be friendly and helpful. Do not mention you are an AI
             generationConfig: { maxOutputTokens: 200, temperature: 0.8 },
           },
           {
-            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': geminiKey,
+            },
             timeout: 15000,
           },
         );
@@ -141,13 +154,19 @@ Keep it under 3 sentences. Be friendly and helpful. Do not mention you are an AI
           return text.trim();
         }
       } catch (err: any) {
-        console.warn('⚠️ Gemini API greeting failed, falling back to AI load balancer:', err.message);
+        console.warn(
+          '⚠️ Gemini API greeting failed, falling back to AI load balancer:',
+          err.message,
+        );
       }
     }
 
     // 2. Fall back to AI load balancer (OpenAI, Groq, etc.)
     try {
-      const response = await aiLoadBalancer.sendMessage('call_agent_greeting', prompt);
+      const response = await aiLoadBalancer.sendMessage(
+        'call_agent_greeting',
+        prompt,
+      );
       return response || this.callGreeting[language] || this.callGreeting.en;
     } catch {
       return this.callGreeting[language] || this.callGreeting.en;
@@ -188,7 +207,9 @@ Keep it under 3 sentences. Be friendly and helpful. Do not mention you are an AI
       callLog.status = 'rejected';
       callLog.endTime = new Date();
       callLog.duration = 0;
-      await callLog.save().catch(() => {});
+      await callLog.save().catch((err: unknown) => {
+        console.error('Failed to save call log:', err);
+      });
       return { accepted: false, logId: callLog._id?.toString() };
     }
 
@@ -212,7 +233,9 @@ Keep it under 3 sentences. Be friendly and helpful. Do not mention you are an AI
     }
 
     callLog.aiResponseText = responseText;
-    await callLog.save().catch(() => {});
+    await callLog.save().catch((err: unknown) => {
+      console.error('Failed to save call log:', err);
+    });
 
     return {
       accepted: true,
@@ -231,7 +254,9 @@ Keep it under 3 sentences. Be friendly and helpful. Do not mention you are an AI
       await CallLog.create({
         sessionId,
         callerId,
-        callerPhone: callerId.replace('@s.whatsapp.net', '').replace('@c.us', ''),
+        callerPhone: callerId
+          .replace('@s.whatsapp.net', '')
+          .replace('@c.us', ''),
         startTime: new Date(),
         endTime: new Date(),
         status: 'missed',
@@ -247,7 +272,7 @@ Keep it under 3 sentences. Be friendly and helpful. Do not mention you are an AI
   /**
    * Get call logs for a session
    */
-  async getCallLogs(sessionId?: string, limit: number = 50): Promise<any[]> {
+  async getCallLogs(sessionId?: string, limit = 50): Promise<any[]> {
     try {
       const query: Record<string, any> = sessionId ? { sessionId } : {};
       return await CallLog.find(query)
@@ -274,10 +299,12 @@ Keep it under 3 sentences. Be friendly and helpful. Do not mention you are an AI
       const logs = await CallLog.find(query).lean<ICallLog[]>();
 
       const total = logs.length;
-      const answered = logs.filter(l => l.status === 'answered').length;
-      const missed = logs.filter(l => l.status === 'missed').length;
-      const rejected = logs.filter(l => l.status === 'rejected').length;
-      const durations = logs.filter(l => l.duration).map(l => l.duration || 0);
+      const answered = logs.filter((l) => l.status === 'answered').length;
+      const missed = logs.filter((l) => l.status === 'missed').length;
+      const rejected = logs.filter((l) => l.status === 'rejected').length;
+      const durations = logs
+        .filter((l) => l.duration)
+        .map((l) => l.duration || 0);
       const avgDuration = durations.length
         ? durations.reduce((a, b) => a + b, 0) / durations.length
         : 0;
@@ -303,7 +330,12 @@ Keep it under 3 sentences. Be friendly and helpful. Do not mention you are an AI
     this.saveSettings();
   }
 
-  getSettings(): { language: string; greeting: string; personality: string; enabled: boolean } {
+  getSettings(): {
+    language: string;
+    greeting: string;
+    personality: string;
+    enabled: boolean;
+  } {
     return {
       language: this.primaryLanguage || 'en',
       greeting: this.callGreeting[this.primaryLanguage || 'en'] || '',

@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { CompanyConfig } from '../../config/types';
 import { createCompanyConfig } from '../../config/companies';
+import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
 const STORAGE_DIR = path.join(__dirname, '../../config/companies/data');
@@ -11,6 +12,9 @@ const STORAGE_DIR = path.join(__dirname, '../../config/companies/data');
 if (!fs.existsSync(STORAGE_DIR)) {
   fs.mkdirSync(STORAGE_DIR, { recursive: true });
 }
+
+// SECURITY FIX: All company routes require authentication
+router.use(authenticateToken);
 
 /**
  * Get all available companies

@@ -3,14 +3,18 @@ import ChatMessage from '../../models/ChatMessage';
 import Session from '../../models/Session';
 import { sendMessage, getSocket } from '../../services/whatsapp';
 import { getIO } from '../socket';
+import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = Router();
+
+// SECURITY FIX: All chat routes require authentication
+router.use(authenticateToken);
 
 /**
  * GET /api/chat/conversations
  * Get list of unique conversations with last message and unread count
  */
-router.get('/conversations', async (req: Request, res: Response) => {
+router.get('/conversations', async (req: AuthRequest, res: Response) => {
   try {
     // Aggregate to get unique users with their last message
     const conversations = await ChatMessage.aggregate([
@@ -122,7 +126,7 @@ router.post('/send', async (req: Request, res: Response) => {
     // Mark all user messages as read (admin is viewing this chat)
     await ChatMessage.updateMany(
       { userId, role: 'user', read: false },
-      { $set: { read: true } }
+      { $set: { read: true } },
     );
 
     // Send message via WhatsApp
@@ -196,15 +200,19 @@ router.get('/status', async (req: Request, res: Response) => {
 router.post('/mark-read/:userId', async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
-    const decodedUserId = decodeURIComponent(Array.isArray(userId) ? userId[0] : userId);
+    const decodedUserId = decodeURIComponent(
+      Array.isArray(userId) ? userId[0] : userId,
+    );
 
     // Mark all user messages as read
     const result = await ChatMessage.updateMany(
       { userId: decodedUserId, role: 'user', read: false },
-      { $set: { read: true } }
+      { $set: { read: true } },
     );
 
-    console.log(`📖 Marked ${result.modifiedCount} messages as read for user: ${decodedUserId}`);
+    console.log(
+      `📖 Marked ${result.modifiedCount} messages as read for user: ${decodedUserId}`,
+    );
 
     // Emit socket event to notify other clients (if any) about read status update
     try {

@@ -1,13 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-
-// Warn if using default secret in production
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_key_change_in_prod';
-if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
-  console.warn(
-    '⚠️ WARNING: Using default JWT_SECRET in production is insecure!',
-  );
-}
+import { ACTUAL_JWT_SECRET } from '../jwt-secret';
 
 export interface JwtPayload {
   id: string;
@@ -28,14 +21,24 @@ export const authenticateToken = (
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
-    res.sendStatus(401);
+    console.log('Authentication failed: No token provided for', req.path);
+    res.status(401).json({ error: 'No authentication token provided' });
     return;
   }
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
+  jwt.verify(token, ACTUAL_JWT_SECRET, (err, user) => {
     if (err) {
-      console.error('JWT Verification Error:', err.message);
-      res.sendStatus(403);
+      console.error('JWT Verification Error:', {
+        message: err.message,
+        name: err.name,
+        expiredAt:
+          err instanceof jwt.TokenExpiredError ? err.expiredAt : undefined,
+        path: req.path,
+      });
+      res.status(403).json({
+        error: 'Invalid or expired token',
+        expired: err.name === 'TokenExpiredError',
+      });
       return;
     }
     req.user = user as JwtPayload;

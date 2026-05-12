@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
   try {
     const { category, source, language, active, search } = req.query;
 
-    let query: any = {};
+    const query: any = {};
 
     if (category) query.category = category;
     if (source) query.source = source;
@@ -28,7 +28,7 @@ router.get('/', async (req, res) => {
       // Text search
       entries = await KnowledgeEntry.find(
         { ...query },
-        { score: { $meta: 'textScore' } }
+        { score: { $meta: 'textScore' } },
       )
         .find({ $text: { $search: search as string } })
         .sort({ score: { $meta: 'textScore' } })
@@ -83,7 +83,9 @@ router.post('/', async (req, res) => {
     const { question, answer, category, tags, language } = req.body;
 
     if (!question || !answer) {
-      return res.status(400).json({ message: 'Question and answer are required' });
+      return res
+        .status(400)
+        .json({ message: 'Question and answer are required' });
     }
 
     const entry = await knowledgeTrainingService.addKnowledge(
@@ -91,7 +93,7 @@ router.post('/', async (req, res) => {
       answer,
       category || 'general',
       tags || [],
-      language || 'all'
+      language || 'all',
     );
 
     res.json(entry);
@@ -120,7 +122,7 @@ router.post('/batch', async (req, res) => {
           entry.answer,
           entry.category || 'general',
           entry.tags || [],
-          entry.language || 'all'
+          entry.language || 'all',
         );
         created.push(newEntry);
       }
@@ -138,7 +140,8 @@ router.post('/batch', async (req, res) => {
  */
 router.put('/:id', async (req, res) => {
   try {
-    const { question, answer, category, tags, language, isActive, confidence } = req.body;
+    const { question, answer, category, tags, language, isActive, confidence } =
+      req.body;
 
     const updates: any = {};
     if (question !== undefined) updates.question = question;
@@ -149,7 +152,10 @@ router.put('/:id', async (req, res) => {
     if (isActive !== undefined) updates.isActive = isActive;
     if (confidence !== undefined) updates.confidence = confidence;
 
-    const entry = await knowledgeTrainingService.updateKnowledge(req.params.id, updates);
+    const entry = await knowledgeTrainingService.updateKnowledge(
+      req.params.id,
+      updates,
+    );
 
     if (!entry) {
       return res.status(404).json({ message: 'Knowledge entry not found' });
@@ -167,7 +173,9 @@ router.put('/:id', async (req, res) => {
  */
 router.delete('/:id', async (req, res) => {
   try {
-    const success = await knowledgeTrainingService.deleteKnowledge(req.params.id);
+    const success = await knowledgeTrainingService.deleteKnowledge(
+      req.params.id,
+    );
 
     if (!success) {
       return res.status(404).json({ message: 'Knowledge entry not found' });
@@ -191,7 +199,10 @@ router.post('/search', async (req, res) => {
       return res.status(400).json({ message: 'Query is required' });
     }
 
-    const results = await knowledgeTrainingService.searchKnowledge(query, limit || 5);
+    const results = await knowledgeTrainingService.searchKnowledge(
+      query,
+      limit || 5,
+    );
     res.json(results);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -204,7 +215,9 @@ router.post('/search', async (req, res) => {
  */
 router.post('/import/:datasetKey', async (req, res) => {
   try {
-    const count = await knowledgeTrainingService.importFromDataset(req.params.datasetKey);
+    const count = await knowledgeTrainingService.importFromDataset(
+      req.params.datasetKey,
+    );
     res.json({ imported: count });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -231,7 +244,9 @@ router.post('/sync', async (req, res) => {
 router.get('/export/kb', async (req, res) => {
   try {
     const { category } = req.query;
-    const kb = await knowledgeTrainingService.getKnowledgeBaseForAI(category as string);
+    const kb = await knowledgeTrainingService.getKnowledgeBaseForAI(
+      category as string,
+    );
     res.json({ knowledgeBase: kb });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

@@ -24,6 +24,8 @@ export default defineConfig([
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
+      // Allow data fetching in useEffect (standard pattern)
+      'react-hooks/set-state-in-effect': 'off',
     },
   },
 ]);

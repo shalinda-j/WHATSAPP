@@ -1,0 +1,78 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20.x'
+
+jobs:
+  test:
+    name: Test Before Deploy
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Build Artifacts
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      backend-version: ${{ steps.version.outputs.version }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Generate Version
+      id: version
+      run: |
+        VERSION=$(date +%Y.%m.%d)-${{ github.run_number }}
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Build Backend
+      run: npm run build:client
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: whatsapp-bot-${{ steps.version.outputs.version }}
+        path: |
+          dist/
+          client/dist/
+        retention-days: 7
+
+  deploy-production:
+    name: Deploy to Production
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://your-domain.com
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Download Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: whatsapp-bot-${{ needs.build.outputs.backend-version }}
+
+    - name: Deploy
+      run: |
+        echo "Deploying version ${{ needs.build.outputs.backend-version }}"
+        # Add your deployment commands here
+        # Example: scp, rsync, or CI/CD tool commands
+        # scp -r ./dist user@server:/app/
+        # ssh user@server "cd /app && pm2 restart whatsapp-bot"

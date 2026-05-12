@@ -32,19 +32,81 @@ export class AILoadBalancer {
   private totalRequests = 0;
 
   // Cache for loaded services
-  private lastServiceLoad: number = 0;
+  private lastServiceLoad = 0;
   private serviceLoadPromise: Promise<void> | null = null;
+
+  // MEMORY LEAK FIX: Add limits and cleanup for caches
+  private readonly MAX_HISTORY_CACHE_SIZE = 1000;
+  private readonly MAX_USER_ASSIGNMENTS_SIZE = 5000;
+  private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor() {
     this.userAssignments = new Map();
     this.historyCache = new Map();
+
+    // MEMORY LEAK FIX: Start periodic cleanup every 10 minutes
+    this.cleanupInterval = setInterval(
+      () => this.cleanupCaches(),
+      10 * 60 * 1000,
+    );
+  }
+
+  /**
+   * MEMORY LEAK FIX: Periodic cleanup of oversized caches
+   */
+  private cleanupCaches(): void {
+    // Cleanup historyCache if over limit
+    if (this.historyCache.size > this.MAX_HISTORY_CACHE_SIZE) {
+      // Remove oldest entries (first half of the limit)
+      const keysToDelete = Array.from(this.historyCache.keys()).slice(
+        0,
+        this.historyCache.size - this.MAX_HISTORY_CACHE_SIZE / 2,
+      );
+      for (const key of keysToDelete) {
+        this.historyCache.delete(key);
+      }
+      console.log(
+        `🧹 AILoadBalancer: Cleaned ${keysToDelete.length} history cache entries`,
+      );
+    }
+
+    // Cleanup userAssignments if over limit
+    if (this.userAssignments.size > this.MAX_USER_ASSIGNMENTS_SIZE) {
+      const keysToDelete = Array.from(this.userAssignments.keys()).slice(
+        0,
+        this.userAssignments.size - this.MAX_USER_ASSIGNMENTS_SIZE / 2,
+      );
+      for (const key of keysToDelete) {
+        this.userAssignments.delete(key);
+      }
+      console.log(
+        `🧹 AILoadBalancer: Cleaned ${keysToDelete.length} user assignment entries`,
+      );
+    }
+  }
+
+  /**
+   * MEMORY LEAK FIX: Cleanup on shutdown
+   */
+  public shutdown(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+    this.historyCache.clear();
+    this.userAssignments.clear();
+    this.services = [];
+    console.log('🧹 AILoadBalancer: Shutdown cleanup completed');
   }
 
   private async loadServices(): Promise<void> {
     const now = Date.now();
 
     // Return cached services if still valid
-    if (this.services.length > 0 && now - this.lastServiceLoad < SERVICE_CACHE_TTL_MS) {
+    if (
+      this.services.length > 0 &&
+      now - this.lastServiceLoad < SERVICE_CACHE_TTL_MS
+    ) {
       return;
     }
 
@@ -182,7 +244,8 @@ export class AILoadBalancer {
 
   private async getInitialHistory(): Promise<AIChatMessage[]> {
     // Get knowledge base from training service (includes learned knowledge)
-    const knowledgeBase = await knowledgeTrainingService.getKnowledgeBaseForAI();
+    const knowledgeBase =
+      await knowledgeTrainingService.getKnowledgeBaseForAI();
     const aiPersonality = await configurationManager.getAIPersonality();
     const conversationExamples = await getConversationExamples();
 
@@ -217,15 +280,24 @@ export class AILoadBalancer {
       history = cachedHistory;
     } else {
       // Get from persistent storage
-      const persistedMessages = await conversationHistoryService.getHistory(userId);
+      const persistedMessages = await conversationHistoryService.getHistory(
+        userId,
+      );
       if (persistedMessages.length > 0) {
-        history = persistedMessages.map(m => ({ role: m.role, content: m.content }));
+        history = persistedMessages.map((m) => ({
+          role: m.role,
+          content: m.content,
+        }));
       } else {
         // Initialize with system prompt and examples
         history = await this.getInitialHistory();
         await conversationHistoryService.setInitialHistory(
           userId,
-          history.map(h => ({ role: h.role, content: h.content, timestamp: new Date() }))
+          history.map((h) => ({
+            role: h.role,
+            content: h.content,
+            timestamp: new Date(),
+          })),
         );
       }
       // Cache for this request
@@ -255,19 +327,25 @@ export class AILoadBalancer {
         history.push({ role: 'assistant', content: response });
 
         // Persist the new messages to database (fire and forget)
-        conversationHistoryService.addMessage(userId, 'user', message).catch(err => {
-          console.error('Failed to persist user message:', err);
-        });
-        conversationHistoryService.addMessage(userId, 'assistant', response).catch(err => {
-          console.error('Failed to persist assistant message:', err);
-        });
+        conversationHistoryService
+          .addMessage(userId, 'user', message)
+          .catch((err) => {
+            console.error('Failed to persist user message:', err);
+          });
+        conversationHistoryService
+          .addMessage(userId, 'assistant', response)
+          .catch((err) => {
+            console.error('Failed to persist assistant message:', err);
+          });
 
         // AUTO-LEARN from successful conversation (fire and forget)
         // Only learn if response is substantial (> 50 chars)
         if (response.length > 50 && message.length > 10) {
-          knowledgeTrainingService.learnFromConversation(message, response, 0.7).catch(err => {
-            // Silent fail - learning is optional
-          });
+          knowledgeTrainingService
+            .learnFromConversation(message, response, 0.7)
+            .catch((err) => {
+              // Silent fail - learning is optional
+            });
         }
 
         // Update cache
@@ -342,20 +420,14 @@ export class AILoadBalancer {
       activeUsers: this.userAssignments.size,
       servicesLoaded: this.services.length,
       totalRequests: this.totalRequests,
-      lastServiceLoad: this.lastServiceLoad ? new Date(this.lastServiceLoad).toISOString() : null,
-      serviceCacheValid: Date.now() - this.lastServiceLoad < SERVICE_CACHE_TTL_MS,
+      lastServiceLoad: this.lastServiceLoad
+        ? new Date(this.lastServiceLoad).toISOString()
+        : null,
+      serviceCacheValid:
+        Date.now() - this.lastServiceLoad < SERVICE_CACHE_TTL_MS,
       retentionDays: this.getRetentionDays(),
     };
   }
-}
-
-function conversationHistoryAdd(
-  history: AIChatMessage[],
-  role: 'user' | 'assistant',
-  content: string,
-) {
-  // Avoid duplicates if we are retrying? No, we add once before loop.
-  history.push({ role, content });
 }
 
 export const aiLoadBalancer = new AILoadBalancer();

@@ -3,7 +3,13 @@ import Config from '../../models/Config';
 import Dataset from '../../models/Dataset';
 import { authenticateToken } from '../middleware/auth';
 import { HumanizerService } from '../../services/HumanizerService';
-import { configService, HumanizerConfig, ConversationExample, CountryOption, ExperienceOption } from '../../services/ConfigService';
+import {
+  configService,
+  HumanizerConfig,
+  ConversationExample,
+  CountryOption,
+  ExperienceOption,
+} from '../../services/ConfigService';
 import { usageResetService } from '../../services/UsageResetService';
 
 const router = Router();
@@ -137,39 +143,48 @@ router.put('/conversation-examples', async (req, res) => {
       return res.status(400).json({ error: 'Examples must be an array' });
     }
 
+    // Allow empty array to clear examples
+    if (examples.length === 0) {
+      const dataset = await Dataset.findOneAndUpdate(
+        { key: 'CONVERSATION_EXAMPLES' },
+        { content: { en: [] }, isActive: true, updatedAt: new Date() },
+        { new: true, upsert: true, setDefaultsOnInsert: true },
+      );
+      configService.clearCache();
+      return res.json({ success: true, examples: [] });
+    }
+
     // Validate each example has user and assistant fields
     for (const ex of examples) {
       if (!ex.user || !ex.assistant) {
-        return res.status(400).json({ error: 'Each example must have user and assistant fields' });
+        return res
+          .status(400)
+          .json({ error: 'Each example must have user and assistant fields' });
       }
     }
 
-    // Find or create the dataset
-    let dataset = await Dataset.findOne({ key: 'CONVERSATION_EXAMPLES' });
-
-    if (dataset) {
-      dataset.content = examples;
-      dataset.isActive = true;
-      await dataset.save();
-    } else {
-      dataset = new Dataset({
+    // Find or create the dataset - save in content.en format
+    const dataset = await Dataset.findOneAndUpdate(
+      { key: 'CONVERSATION_EXAMPLES' },
+      {
         name: 'Conversation Examples',
-        key: 'CONVERSATION_EXAMPLES',
-        content: examples,
+        content: { en: examples }, // Store in multi-language format
         scope: 'ALL',
         category: 'config',
         isActive: true,
         description: 'Training examples for AI conversation context',
-      });
-      await dataset.save();
-    }
+        updatedAt: new Date(),
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
 
     // Clear cache to apply changes immediately
     configService.clearCache();
 
-    res.json({ success: true, examples: dataset.content });
+    res.json({ success: true, examples: dataset.content?.en || examples });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('Error saving conversation examples:', err);
+    res.status(500).json({ error: err.message || 'Failed to save examples' });
   }
 });
 
@@ -200,35 +215,33 @@ router.put('/job-types', async (req, res) => {
 
     // Validate it's an array
     if (!Array.isArray(jobTypes)) {
-      return res.status(400).json({ error: 'Job types must be an array of strings' });
+      return res
+        .status(400)
+        .json({ error: 'Job types must be an array of strings' });
     }
 
     // Find or create the dataset
-    let dataset = await Dataset.findOne({ key: 'JOB_TYPES' });
-
-    if (dataset) {
-      dataset.content = jobTypes;
-      dataset.isActive = true;
-      await dataset.save();
-    } else {
-      dataset = new Dataset({
+    const dataset = await Dataset.findOneAndUpdate(
+      { key: 'JOB_TYPES' },
+      {
         name: 'Job Vacancy Types',
-        key: 'JOB_TYPES',
-        content: jobTypes,
+        content: { en: jobTypes },
         scope: 'ALL',
         category: 'config',
         isActive: true,
         description: 'Available job types for lead registration',
-      });
-      await dataset.save();
-    }
+        updatedAt: new Date(),
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
 
     // Clear cache to apply changes immediately
     configService.clearCache();
 
-    res.json({ success: true, jobTypes: dataset.content });
+    res.json({ success: true, jobTypes: dataset.content?.en || jobTypes });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('Error saving job types:', err);
+    res.status(500).json({ error: err.message || 'Failed to save job types' });
   }
 });
 
@@ -259,35 +272,33 @@ router.put('/booking-keywords', async (req, res) => {
 
     // Validate it's an array
     if (!Array.isArray(keywords)) {
-      return res.status(400).json({ error: 'Keywords must be an array of strings' });
+      return res
+        .status(400)
+        .json({ error: 'Keywords must be an array of strings' });
     }
 
     // Find or create the dataset
-    let dataset = await Dataset.findOne({ key: 'BOOKING_KEYWORDS' });
-
-    if (dataset) {
-      dataset.content = keywords;
-      dataset.isActive = true;
-      await dataset.save();
-    } else {
-      dataset = new Dataset({
+    const dataset = await Dataset.findOneAndUpdate(
+      { key: 'BOOKING_KEYWORDS' },
+      {
         name: 'Booking Keywords',
-        key: 'BOOKING_KEYWORDS',
-        content: keywords,
+        content: { en: keywords },
         scope: 'ALL',
         category: 'config',
         isActive: true,
         description: 'Keywords that trigger booking intent detection',
-      });
-      await dataset.save();
-    }
+        updatedAt: new Date(),
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
 
     // Clear cache to apply changes immediately
     configService.clearCache();
 
-    res.json({ success: true, keywords: dataset.content });
+    res.json({ success: true, keywords: dataset.content?.en || keywords });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('Error saving booking keywords:', err);
+    res.status(500).json({ error: err.message || 'Failed to save keywords' });
   }
 });
 
@@ -430,31 +441,27 @@ router.put('/countries', async (req, res) => {
     }
 
     // Find or create the dataset
-    let dataset = await Dataset.findOne({ key: 'COUNTRIES' });
-
-    if (dataset) {
-      dataset.content = countries;
-      dataset.isActive = true;
-      await dataset.save();
-    } else {
-      dataset = new Dataset({
+    const dataset = await Dataset.findOneAndUpdate(
+      { key: 'COUNTRIES' },
+      {
         name: 'Job Placement Countries',
-        key: 'COUNTRIES',
-        content: countries,
+        content: { en: countries },
         scope: 'ALL',
         category: 'config',
         isActive: true,
         description: 'Countries available for job placement',
-      });
-      await dataset.save();
-    }
+        updatedAt: new Date(),
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
 
     // Clear cache to apply changes immediately
     configService.clearCache();
 
-    res.json({ success: true, countries: dataset.content });
+    res.json({ success: true, countries: dataset.content?.en || countries });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('Error saving countries:', err);
+    res.status(500).json({ error: err.message || 'Failed to save countries' });
   }
 });
 
@@ -485,35 +492,33 @@ router.put('/experience-levels', async (req, res) => {
 
     // Validate it's an array
     if (!Array.isArray(levels)) {
-      return res.status(400).json({ error: 'Experience levels must be an array' });
+      return res
+        .status(400)
+        .json({ error: 'Experience levels must be an array' });
     }
 
     // Find or create the dataset
-    let dataset = await Dataset.findOne({ key: 'EXPERIENCE_LEVELS' });
-
-    if (dataset) {
-      dataset.content = levels;
-      dataset.isActive = true;
-      await dataset.save();
-    } else {
-      dataset = new Dataset({
+    const dataset = await Dataset.findOneAndUpdate(
+      { key: 'EXPERIENCE_LEVELS' },
+      {
         name: 'Experience Levels',
-        key: 'EXPERIENCE_LEVELS',
-        content: levels,
+        content: { en: levels },
         scope: 'ALL',
         category: 'config',
         isActive: true,
         description: 'Experience level options for lead registration',
-      });
-      await dataset.save();
-    }
+        updatedAt: new Date(),
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
 
     // Clear cache to apply changes immediately
     configService.clearCache();
 
-    res.json({ success: true, levels: dataset.content });
+    res.json({ success: true, levels: dataset.content?.en || levels });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('Error saving experience levels:', err);
+    res.status(500).json({ error: err.message || 'Failed to save levels' });
   }
 });
 
@@ -549,7 +554,11 @@ router.get('/usage-cycle', async (req, res) => {
 router.post('/reset-usage', async (req, res) => {
   try {
     const result = await usageResetService.performReset('manual');
-    res.json({ success: true, resetCount: result.resetCount, resetAt: new Date() });
+    res.json({
+      success: true,
+      resetCount: result.resetCount,
+      resetAt: new Date(),
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -570,4 +579,3 @@ router.post('/:id/reset-usage', async (req, res) => {
 });
 
 export default router;
-

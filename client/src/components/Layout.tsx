@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Database, Settings, LogOut, Smartphone,
   Menu, X, Globe, AudioLines, Megaphone, Briefcase,
   MessageSquare, FileText, Calendar, UserCheck, ChevronDown,
-  ChevronRight, Cpu, Users, BarChart3, Layers
+  ChevronRight, Cpu, BarChart3
 } from 'lucide-react';
 
 interface NavItem {

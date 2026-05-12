@@ -6,6 +6,7 @@ import {
     Trash2, Copy, X, ChevronRight, Loader2, Plus
 } from 'lucide-react';
 import { WorkflowProvider, useWorkflow } from '../components/workflow/WorkflowContext';
+import type { Node, Edge } from 'reactflow';
 import { workflowValidation } from '../services/workflowValidation';
 import ErrorBoundary from '../components/workflow/ErrorBoundary';
 import LoadingState from '../components/workflow/LoadingState';
@@ -92,6 +93,15 @@ function MarketingManagerInner() {
         return () => clearTimeout(timer);
     }, [state.isDirty, state.isLoading, state.nodes, state.edges, workflowName]);
 
+    const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
+        const id = `${Date.now()}_${Math.random()}`;
+        setToasts(prev => [...prev, { id, message, type }]);
+    }, []);
+
+    const removeToast = useCallback((id: string) => {
+        setToasts(prev => prev.filter(t => t.id !== id));
+    }, []);
+
     // Restore auto-save on mount
     useEffect(() => {
         try {
@@ -105,17 +115,7 @@ function MarketingManagerInner() {
                 }
             }
         } catch { /* ignore */ }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
-        const id = `${Date.now()}_${Math.random()}`;
-        setToasts(prev => [...prev, { id, message, type }]);
-    }, []);
-
-    const removeToast = useCallback((id: string) => {
-        setToasts(prev => prev.filter(t => t.id !== id));
-    }, []);
+    }, [addToast, actions]);
 
     // ── Library ──────────────────────────────────────────────────────────────
     const fetchSavedWorkflows = useCallback(async () => {
@@ -145,8 +145,8 @@ function MarketingManagerInner() {
 
     const handleLoadWorkflow = useCallback((wf: SavedWorkflow) => {
         actions.loadWorkflow({
-            nodes: wf.nodes as any[],
-            edges: wf.edges as any[],
+            nodes: wf.nodes as Node[],
+            edges: wf.edges as Edge[],
         });
         setWorkflowName(wf.name);
         setCurrentWorkflowId(wf._id || wf.id || null);
@@ -167,7 +167,7 @@ function MarketingManagerInner() {
         try {
             const raw = localStorage.getItem('marketing_workflows');
             if (raw) {
-                const list = JSON.parse(raw).filter((w: any) => w.id !== id && w._id !== id);
+                const list = JSON.parse(raw).filter((w: Record<string, unknown>) => w.id !== id && w._id !== id);
                 localStorage.setItem('marketing_workflows', JSON.stringify(list));
             }
         } catch { /* ignore */ }
@@ -212,7 +212,7 @@ function MarketingManagerInner() {
             } catch {
                 // Fallback: localStorage
                 const raw = localStorage.getItem('marketing_workflows');
-                const list: any[] = raw ? JSON.parse(raw) : [];
+                const list: Record<string, unknown>[] = raw ? JSON.parse(raw) : [];
                 const existing = list.findIndex(w => w.id === currentWorkflowId);
                 const entry = { ...payload, id: currentWorkflowId || `wf_${Date.now()}`, createdAt: new Date().toISOString() };
                 if (existing >= 0) list[existing] = entry;

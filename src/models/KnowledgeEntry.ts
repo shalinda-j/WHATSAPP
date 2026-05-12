@@ -36,10 +36,12 @@ const KnowledgeEntrySchema = new (mongoose as any).Schema({
     default: 'general',
     index: true,
   },
-  tags: [{
-    type: String,
-    index: true,
-  }],
+  tags: [
+    {
+      type: String,
+      index: true,
+    },
+  ],
   source: {
     type: String,
     enum: ['manual', 'conversation', 'document', 'import'],
@@ -84,7 +86,8 @@ KnowledgeEntrySchema.index({ question: 'text', tags: 'text' });
 // Compound index for active entries by category
 KnowledgeEntrySchema.index({ isActive: 1, category: 1 });
 
-const KnowledgeEntry = mongoose.models.KnowledgeEntry ||
+const KnowledgeEntry =
+  mongoose.models.KnowledgeEntry ||
   (mongoose as any).model('KnowledgeEntry', KnowledgeEntrySchema);
 
 export default KnowledgeEntry;

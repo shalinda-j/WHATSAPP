@@ -35,8 +35,9 @@ export default function Login() {
                 const res = await api.post('/api/auth/login', { username, password });
                 login(res.data.token);
             }
-        } catch (err: any) {
-            setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
+        } catch (err: unknown) {
+            const axiosErr = err as { response?: { data?: { message?: string } } };
+            setError(axiosErr.response?.data?.message || 'Login failed. Please check your credentials.');
         } finally {
             setLoading(false);
         }

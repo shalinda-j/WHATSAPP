@@ -44,7 +44,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .finally(() => setLoading(false));
         } else {
             localStorage.removeItem('token');
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setUser(null);
             setLoading(false);
         }
