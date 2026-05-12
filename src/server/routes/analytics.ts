@@ -188,33 +188,37 @@ router.get('/datasets', async (req, res) => {
       .limit(10)
       .lean();
 
-    const totalRecords = datasets.reduce((sum, ds) => {
+    const mappedDatasets = datasets.map((ds: any) => {
       const content = ds.content as string | Record<string, unknown> | null;
-      const length =
-        typeof content === 'string'
-          ? content.length
-          : content
-          ? Object.keys(content).length
-          : 0;
-      return sum + length;
-    }, 0);
+      let contentLength = 0;
+      if (typeof content === 'string') {
+        contentLength = content.length;
+      } else if (content && typeof content === 'object') {
+        // Use a for...in loop with hasOwnProperty check instead of Object.keys().length
+        // to avoid memory overhead of allocating a large array of keys just to count them
+        let count = 0;
+        for (const key in content) {
+          if (Object.prototype.hasOwnProperty.call(content, key)) {
+            count++;
+          }
+        }
+        contentLength = count;
+      }
+      return {
+        id: ds._id,
+        name: ds.name || 'Unnamed Dataset',
+        contentLength,
+        updatedAt: ds.updatedAt,
+      };
+    });
+
+    const totalRecords = mappedDatasets.reduce(
+      (sum, ds) => sum + ds.contentLength,
+      0,
+    );
 
     res.json({
-      datasets: datasets.map((ds) => {
-        const content = ds.content as string | Record<string, unknown> | null;
-        const contentLength =
-          typeof content === 'string'
-            ? content.length
-            : content
-            ? Object.keys(content).length
-            : 0;
-        return {
-          id: ds._id,
-          name: ds.name || 'Unnamed Dataset',
-          contentLength,
-          updatedAt: ds.updatedAt,
-        };
-      }),
+      datasets: mappedDatasets,
       totalRecords,
     });
   } catch (err: any) {
