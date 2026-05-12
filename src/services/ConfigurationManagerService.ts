@@ -1,5 +1,6 @@
 import Dataset from '../models/Dataset';
 import { configService, HumanizerConfig, CompanyInfo, BookingConfig, CountryOption, ExperienceOption } from './ConfigService';
+import { BoundedMap } from '../utils/BoundedMap';
 
 // Re-export types for convenience
 export { HumanizerConfig, CompanyInfo, BookingConfig, CountryOption, ExperienceOption };
@@ -58,8 +59,12 @@ export interface ConfigurationManager {
 
 export class ConfigurationManagerService {
   private static instance: ConfigurationManagerService;
-  private cache: Map<string, any> = new Map();
-  private cacheExpiry: Map<string, number> = new Map();
+  // Bounded cache — Phase 2 memory-leak fix. Capped + auto-evicts expired entries.
+  private cache = new BoundedMap<string, any>({
+    maxSize: 500,
+    ttlMs: 60_000, // 1 minute default
+    cleanupIntervalMs: 5 * 60 * 1000,
+  });
 
   private constructor() {}
 
@@ -71,13 +76,11 @@ export class ConfigurationManagerService {
   }
 
   private isCacheValid(key: string): boolean {
-    const expiry = this.cacheExpiry.get(key);
-    return expiry !== undefined && expiry > Date.now();
+    return this.cache.has(key);
   }
 
   private setCache(key: string, value: any, ttl: number = 60000): void { // 1 minute default
-    this.cache.set(key, value);
-    this.cacheExpiry.set(key, Date.now() + ttl);
+    this.cache.set(key, value, ttl);
   }
 
   /**
@@ -370,7 +373,6 @@ export class ConfigurationManagerService {
 
       // Clear cache for this key
       this.cache.delete(key);
-      this.cacheExpiry.delete(key);
 
       return true;
     } catch (error) {
@@ -427,8 +429,14 @@ export class ConfigurationManagerService {
    */
   clearCache(): void {
     this.cache.clear();
-    this.cacheExpiry.clear();
     configService.clearCache(); // Also clear the base config service cache
+  }
+
+  /**
+   * Stop background cleanup timer (call on graceful shutdown)
+   */
+  shutdown(): void {
+    this.cache.shutdown();
   }
 
   /**

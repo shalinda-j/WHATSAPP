@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import ChatMessage from '../models/ChatMessage';
+import { BoundedMap } from '../utils/BoundedMap';
 
 // Lazy import to avoid circular deps
 const getContact = () => {
@@ -16,7 +17,12 @@ const getContact = () => {
  * when they send their first message.
  */
 export class AutoRegistrationService {
-  private registeredNumbers: Set<string> = new Set();
+  // Bounded cache — Phase 2 memory-leak fix. Cap at 50k users, evict after 24h idle.
+  private registeredNumbers = new BoundedMap<string, true>({
+    maxSize: 50_000,
+    ttlMs: 24 * 60 * 60 * 1000,
+    cleanupIntervalMs: 60 * 60 * 1000, // hourly sweep
+  });
 
   /**
    * Check if a user is new and auto-register them if so.
@@ -33,7 +39,7 @@ export class AutoRegistrationService {
     try {
       const Contact = getContact();
       if (!Contact) {
-        this.registeredNumbers.add(userId);
+        this.registeredNumbers.set(userId, true);
         return false;
       }
 
@@ -51,7 +57,7 @@ export class AutoRegistrationService {
       });
 
       if (existing) {
-        this.registeredNumbers.add(userId);
+        this.registeredNumbers.set(userId, true);
         return false;
       }
 
@@ -81,14 +87,14 @@ export class AutoRegistrationService {
         updatedAt: new Date(),
       });
 
-      this.registeredNumbers.add(userId);
+      this.registeredNumbers.set(userId, true);
       console.log(`✅ Auto-registered CRM contact: ${fullName} (${phone})`);
       return isFirstMessage; // Return true only for truly new users (to send welcome msg)
     } catch (err: any) {
       if (!err?.message?.includes('duplicate') && err?.code !== 11000) {
         console.error('⚠️ Auto-registration error:', err?.message || err);
       }
-      this.registeredNumbers.add(userId);
+      this.registeredNumbers.set(userId, true);
       return false;
     }
   }
@@ -112,10 +118,17 @@ export class AutoRegistrationService {
   }
 
   /**
-   * Clear in-memory cache (call on restart)
+   * Clear in-memory cache (call on restart / shutdown)
    */
   clearCache(): void {
     this.registeredNumbers.clear();
+  }
+
+  /**
+   * Stop background cleanup timer (call on graceful shutdown)
+   */
+  shutdown(): void {
+    this.registeredNumbers.shutdown();
   }
 }
 

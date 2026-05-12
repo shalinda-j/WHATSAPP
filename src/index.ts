@@ -107,13 +107,21 @@ const gracefulShutdown = async (signal: string) => {
     console.log('   🔌 Disconnecting WhatsApp...');
     await disconnectWhatsApp();
 
-    // 2. Close MongoDB
+    // 2. Clear bounded caches & stop their cleanup timers (Phase 2 memory-leak fix)
+    try {
+      const { shutdownBoundedCaches } = await import('./config/shutdown');
+      await shutdownBoundedCaches();
+    } catch (err: any) {
+      console.error('   ⚠️ Bounded-cache shutdown error:', err?.message || err);
+    }
+
+    // 3. Close MongoDB
     if (mongoose.connection.readyState === 1) {
       console.log('   🍃 Closing MongoDB...');
       await mongoose.connection.close();
     }
 
-    // 3. Close Server
+    // 4. Close Server
     if (server) {
       console.log('   🔒 Closing HTTP Server...');
       server.close();

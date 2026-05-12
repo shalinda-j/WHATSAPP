@@ -6,6 +6,7 @@ import {
   getConversationExamples,
 } from '../config/ai-personality';
 import { AIService, AIChatMessage } from '../interfaces/AIService';
+import { BoundedMap } from '../utils/BoundedMap';
 
 import Dataset from '../models/Dataset';
 import { configService } from './ConfigService';
@@ -50,8 +51,12 @@ async function getGeminiModel(modelName = 'gemini-1.5-flash-latest') {
   return genAI.getGenerativeModel({ model: activeModel });
 }
 
-// Store chat sessions for conversation memory
-const chatSessions: Map<string, ChatSession> = new Map();
+// Store chat sessions for conversation memory (bounded — Phase 2 memory-leak fix)
+const chatSessions = new BoundedMap<string, ChatSession>({
+  maxSize: 500,
+  ttlMs: 60 * 60 * 1000, // 1 hour
+  cleanupIntervalMs: 10 * 60 * 1000, // sweep every 10 min
+});
 
 /**
  * Build conversation history from examples

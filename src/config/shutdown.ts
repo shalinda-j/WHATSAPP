@@ -149,3 +149,27 @@ export async function shutdownAILoadBalancer(): Promise<void> {
     console.error('   ⚠️ Error shutting down AI Load Balancer:', err);
   }
 }
+
+/**
+ * Shutdown bounded in-memory caches (Phase 2 memory-leak fix)
+ */
+export async function shutdownBoundedCaches(): Promise<void> {
+  try {
+    console.log('🧹 Clearing bounded caches...');
+    const { autoRegistrationService } = await import('../services/AutoRegistrationService');
+    autoRegistrationService.shutdown();
+
+    const cmModule = await import('../services/ConfigurationManagerService');
+    cmModule.ConfigurationManagerService.getInstance().shutdown();
+
+    const { messageTemplateService } = await import('../services/MessageTemplateService');
+    messageTemplateService.shutdown();
+
+    const { KnowledgeTrainingService } = await import('../services/KnowledgeTrainingService');
+    KnowledgeTrainingService.getInstance().shutdown();
+
+    console.log('   ✅ Bounded caches cleared');
+  } catch (err) {
+    console.error('   ⚠️ Error clearing bounded caches:', err);
+  }
+}

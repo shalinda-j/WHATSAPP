@@ -2,6 +2,7 @@ import KnowledgeEntry, { IKnowledgeEntry } from '../models/KnowledgeEntry';
 import Dataset from '../models/Dataset';
 import { configurationManager } from './ConfigurationManagerService';
 import { aiLoadBalancer } from './AILoadBalancer';
+import { BoundedMap } from '../utils/BoundedMap';
 
 /**
  * KnowledgeTrainingService
@@ -20,9 +21,14 @@ const MAX_AUTO_LEARN_PER_DAY = 100;
 
 export class KnowledgeTrainingService {
   private static instance: KnowledgeTrainingService;
-  private knowledgeCache: Map<string, IKnowledgeEntry[]> = new Map();
+  // Bounded cache — Phase 2 memory-leak fix.
+  private knowledgeCache = new BoundedMap<string, IKnowledgeEntry[]>({
+    maxSize: 200,
+    ttlMs: 5 * 60 * 1000, // 5 minutes
+    cleanupIntervalMs: 10 * 60 * 1000,
+  });
   private lastCacheRefresh: number = 0;
-  private cacheTTL: number = 5 * 60 * 1000; // 5 minutes
+  private cacheTTL: number = 5 * 60 * 1000; // 5 minutes (legacy field; BoundedMap handles TTL internally)
   private autoLearnCount: number = 0;
   private lastAutoLearnReset: number = Date.now();
 
@@ -389,6 +395,13 @@ export class KnowledgeTrainingService {
   private invalidateCache(): void {
     this.knowledgeCache.clear();
     this.lastCacheRefresh = 0;
+  }
+
+  /**
+   * Stop background cleanup timer (call on graceful shutdown)
+   */
+  shutdown(): void {
+    this.knowledgeCache.shutdown();
   }
 
   private detectLanguage(text: string): 'en' | 'si' | 'ta' | 'hi' | 'all' {

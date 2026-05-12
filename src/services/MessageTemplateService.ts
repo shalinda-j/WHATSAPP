@@ -1,4 +1,5 @@
 import Dataset from '../models/Dataset';
+import { BoundedMap } from '../utils/BoundedMap';
 
 /**
  * MessageTemplateService
@@ -28,9 +29,13 @@ export interface JobsMessage {
 
 export class MessageTemplateService {
   private static instance: MessageTemplateService;
-  private cache: Map<string, any> = new Map();
-  private cacheExpiry: Map<string, number> = new Map();
   private cacheTTL: number = 60000; // 1 minute
+  // Bounded cache — Phase 2 memory-leak fix.
+  private cache = new BoundedMap<string, any>({
+    maxSize: 200,
+    ttlMs: this.cacheTTL,
+    cleanupIntervalMs: 5 * 60 * 1000,
+  });
 
   private constructor() {}
 
@@ -42,13 +47,11 @@ export class MessageTemplateService {
   }
 
   private isCacheValid(key: string): boolean {
-    const expiry = this.cacheExpiry.get(key);
-    return expiry !== undefined && expiry > Date.now();
+    return this.cache.has(key);
   }
 
   private setCache(key: string, value: any): void {
     this.cache.set(key, value);
-    this.cacheExpiry.set(key, Date.now() + this.cacheTTL);
   }
 
   /**
@@ -296,7 +299,13 @@ export class MessageTemplateService {
    */
   clearCache(): void {
     this.cache.clear();
-    this.cacheExpiry.clear();
+  }
+
+  /**
+   * Stop background cleanup timer (call on graceful shutdown)
+   */
+  shutdown(): void {
+    this.cache.shutdown();
   }
 }
 
