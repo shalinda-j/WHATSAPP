@@ -6,6 +6,7 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   downloadMediaMessage,
 } from '@whiskeysockets/baileys';
+import { callAssistant } from './CallAssistantService';
 import * as qrcode from 'qrcode-terminal';
 import pino from 'pino';
 import { resolve } from 'path';
@@ -352,93 +353,16 @@ export class WhatsAppSessionManager {
         );
       });
 
-      // Handle Incoming Calls (Auto-Responder + Voice Call Agent)
+      // Handle Incoming Calls (AI Call Assistant)
       sock.ev.on('call', async (calls) => {
         for (const call of calls) {
           if (call.status === 'offer') {
-            try {
-              // Always reject (WhatsApp API doesn't support true answering)
-              await sock.rejectCall(call.id, call.from);
-
-              // Import VoiceCallAgent dynamically to avoid circular deps
-              const { voiceCallAgent } = await import(
-                './VoiceCallAgentService'
-              );
-              const callAgentEnabled =
-                await voiceCallAgent.isCallAgentEnabled();
-
-              if (callAgentEnabled) {
-                // Voice Call Agent mode: log the call and send AI audio response
-                console.log(
-                  `📞 Voice Call Agent handling call from ${call.from}`,
-                );
-
-                // Use the configured primary language from agent settings
-                const agentSettings = voiceCallAgent.getSettings();
-                const agentLanguage =
-                  (agentSettings.language as 'en' | 'si' | 'ta') || 'en';
-
-                const result = await voiceCallAgent.handleIncomingCall({
-                  callerId: call.from,
-                  sessionId,
-                  language: agentLanguage,
-                });
-
-                if (result.responseText) {
-                  // Send voice response — use sendVoiceMessage so ffmpeg converts to OGG/Opus
-                  if (result.responseAudioBuffer) {
-                    try {
-                      const sent = await sendVoiceMessage(
-                        call.from,
-                        result.responseAudioBuffer,
-                        sessionId,
-                      );
-                      if (!sent) {
-                        // Queue was used or send failed — also send text so user gets something immediately
-                        await sock.sendMessage(call.from, {
-                          text: result.responseText,
-                        });
-                      }
-                    } catch {
-                      // Fallback to text if voice fails
-                      await sock.sendMessage(call.from, {
-                        text: result.responseText,
-                      });
-                    }
-                  } else {
-                    // No audio generated — send text response
-                    await sock.sendMessage(call.from, {
-                      text: result.responseText,
-                    });
-                  }
-                }
-              } else {
-                // Default mode: Send bilingual info message
-                const message = [
-                  '📞 *Missed Call / මග හැරුණු ඇමතුම*',
-                  '',
-                  "🇬🇧 _I'm an AI assistant. I cannot answer live calls._",
-                  "_Please send me a *Voice Note* 🎤 with your question, and I'll reply!_",
-                  '',
-                  '🇱🇰 _මම AI සහකාරයෙකු. ජීවම ඇමතුම් ලබා ගත නොහැක._',
-                  '_ඔබේ ප්‍රශ්නය *Voice Note* 🎤 ලෙස යොමු කරන්න, මම ප්‍රතිඋත්තර දෙන්නෙමි!_',
-                  '',
-                  '🇮🇳 _நான் AI உதவியாளர். நேரடி அழைப்புகளுக்கு பதிலளிக்க முடியாது._',
-                  '_உங்கள் கேள்வியை *Voice Note* 🎤 ஆக அனுப்புங்கள்!_',
-                ].join('\n');
-                await sock.sendMessage(call.from, { text: message });
-                await voiceCallAgent.logMissedCall(call.from, sessionId);
-              }
-
-              console.log(
-                `📞 Handled call from ${call.from} on session ${sessionId}`,
-              );
-            } catch (err) {
-              console.error(
-                `❌ Error handling incoming call from ${call.from}:`,
-                err,
-              );
-            }
+            await callAssistant.handleIncomingCall(
+              call.id,
+              call.from,
+              sessionId,
+              async (callId, from) => { await sock.rejectCall(callId, from); }
+            );
           }
         }
       });

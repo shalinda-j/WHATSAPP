@@ -21,6 +21,7 @@ import {
   detectLanguage,
 } from './services/voice';
 import { aiLoadBalancer } from './services/AILoadBalancer';
+import { chatPersonality } from './services/ChatPersonality';
 import { nlpService } from './services/NLPService';
 import { autoresearchNLP, classifyMessage } from './services/autoresearchNLP';
 import { analyzeLeadIntent } from './services/gemini';
@@ -588,67 +589,34 @@ onMessage(async (message, sock, sessionId) => {
         // LANGUAGE DETECTION: Detect language and set response language accordingly
         // Default language is SINHALA. If user writes in English only, reply in English.
         let finalPrompt = text;
+        if (isVoiceMessage) {
+          const looksLikeEnglish = /^([a-zA-Z]+\s*){3,}$/.test(text.trim()) &&
+            /\b(the|is|are|I|you|he|she|we|they|my|your|it|and|or|but|what|how|can|could|please|hello|hi|thank|yes|no|okay|ok)\b/i.test(text);
+          const hasSinhalaChars = /[\u0D80-\u0DFF]/.test(text);
+          const hasTamilChars = /[\u0B80-\u0BFF]/.test(text);
 
-        if (isVoiceMessage && detectedVoiceLanguage) {
-          // For voice messages, use the detected language from transcription
-          responseLanguage = detectedVoiceLanguage;
-
-          if (detectedVoiceLanguage === 'en') {
-            // User spoke in English
-            finalPrompt += `\n\n(SYSTEM: This is a VOICE message spoken in English. Reply ONLY in English, very short, max 2 sentences, natural spoken style.)`;
-          } else if (detectedVoiceLanguage === 'si') {
-            // User spoke in Sinhala (or romanized Sinhala detected as Sinhala)
-            finalPrompt += `\n\n(SYSTEM: මෙය VOICE (හඬ) පණිවිඩයකි. **සිංහල** භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න. ඉතා කෙටිව, ස්වාභාවිකව කතා කරන ශෛලියෙන් යෙදුම් 2කින් හෝ 1කින් ලිවිය යුතුය.)`;
-          } else if (detectedVoiceLanguage === 'ta') {
-            // User spoke in Tamil
-            finalPrompt += `\n\n(SYSTEM: This is a VOICE message. Reply in Tamil language. Keep it short, 1-2 sentences, natural spoken style.)`;
-          } else if (detectedVoiceLanguage === 'hi') {
-            // User spoke in Hindi
-            finalPrompt += `\n\n(SYSTEM: This is a VOICE message. Reply in Hindi language. Keep it short, 1-2 sentences, natural spoken style.)`;
+          if (hasSinhalaChars) {
+            finalPrompt += `\n\n(SYSTEM: මෙය VOICE පණිවිඩයකි. සිංහල භාෂාවෙන් කෙටිව, ස්වාභාවිකව ප්‍රතිඋත්තර දෙන්න.)`;
+          } else if (hasTamilChars) {
+            finalPrompt += `\n\n(SYSTEM: இது குரல் செய்தி. தமிழில் சுருக்கமாக, இயல்பாக பதிலளிக்கவும்.)`;
+          } else if (looksLikeEnglish) {
+            finalPrompt += `\n\n(SYSTEM: This is a VOICE message in English. Reply ONLY in English, short and natural.)`;
           } else {
-            // Default to Sinhala for unknown languages
-            finalPrompt += `\n\n(SYSTEM: මෙය VOICE (හඬ) පණිවිඩයකි. **සිංහල** භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න.)`;
-          }
-        } else if (isVoiceMessage) {
-          // Fallback for voice messages without detected language (shouldn't happen)
-          const looksLikeEnglish =
-            /^([a-zA-Z]+\s*){3,}$/.test(text.trim()) &&
-            /\b(the|is|are|I|you|he|she|we|they|my|your|it|and|or|but|what|how|can|could|please|hello|hi|thank|yes|no|okay|ok)\b/i.test(
-              text,
-            );
-
-          if (looksLikeEnglish) {
-            responseLanguage = 'en';
-            finalPrompt += `\n\n(SYSTEM: This is a VOICE message spoken in English. Reply ONLY in English, very short, max 2 sentences, natural spoken style.)`;
-          } else {
-            responseLanguage = 'si';
-            finalPrompt += `\n\n(SYSTEM: මෙය VOICE (හඬ) පණිවිඩයකි. **සිංහල** භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න. ඉතා කෙටිව, ස්වාභාවිකව කතා කරන ශෛලියෙන් යෙදුම් 2කින් හෝ 1කින් ලිවිය යුතුය.)`;
+            finalPrompt += `\n\n(SYSTEM: මෙය VOICE පණිවිඩයකි. සිංහල භාෂාවෙන් කෙටිව ප්‍රතිඋත්තර දෙන්න.)`;
           }
         } else {
           // Text message: detect language
           const hasSinhala = /[\u0D80-\u0DFF]/.test(text);
           const hasTamil = /[\u0B80-\u0BFF]/.test(text);
-          const hasHindi = /[\u0900-\u097F]/.test(text);
-          const isLikelyEnglish =
-            /^[a-zA-Z0-9\s\p{P}!?.,;&'"()+\-*#@%$^\[\]{}|\\/<>=`~]+$/u.test(
-              text.trim(),
-            );
+          const isLikelyEnglish = /^[a-zA-Z0-9\s\p{P}!?.,;&'"()+\-*#@%$^\[\]{}|\\/<>=`~]+$/u.test(text.trim());
 
           if (hasSinhala) {
-            responseLanguage = 'si';
             finalPrompt += `\n\n(SYSTEM: සිංහල භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න.)`;
           } else if (hasTamil) {
-            responseLanguage = 'ta';
-            finalPrompt += `\n\n(SYSTEM: Reply in Tamil language.)`;
-          } else if (hasHindi) {
-            responseLanguage = 'hi';
-            finalPrompt += `\n\n(SYSTEM: Reply in Hindi language.)`;
+            finalPrompt += `\n\n(SYSTEM: தமிழ் மொழியில் பதிலளிக்கவும்.)`;
           } else if (isLikelyEnglish) {
-            responseLanguage = 'en';
             finalPrompt += `\n\n(SYSTEM: The user is writing in English. Reply ONLY in English.)`;
           } else {
-            // Unknown/other language → default to Sinhala
-            responseLanguage = 'si';
             finalPrompt += `\n\n(SYSTEM: Default language is Sinhala. සිංහල භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න.)`;
           }
         }
@@ -675,6 +643,10 @@ onMessage(async (message, sock, sessionId) => {
             });
           }
         }
+
+        // Simulate realistic typing delay
+        const typingDelay = chatPersonality.getTypingDelay(response ? response.length : 0);
+        await new Promise(resolve => setTimeout(resolve, typingDelay));
       } catch (aiError: any) {
         console.error('   ❌ Error in AI/NLP processing:', aiError);
         throw aiError;

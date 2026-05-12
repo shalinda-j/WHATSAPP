@@ -342,61 +342,29 @@ export async function handleLeadMessage(
 
       const jobMenu = getJobTypeMenu(jobTypes);
       await sendTyping(jid, sessionId);
-      await sendMessage(
-        jid,
-        `✅ Experience: *${selectedExp.label}*\n\n` +
-          `*Step 6 of 7*\n` +
-          `Select your **Job Category**:\n\n` +
-          `${jobMenu}\n\n` +
-          `Reply with the number (1-${jobTypes.length})`,
-        sessionId,
-      );
-      session.state = LeadState.AWAITING_JOB_TYPE;
-      await saveLeadSession(jid, session);
-      break;
+      
+      try {
+        const lead = await Lead.create({
+          fullName: session.data.fullName,
+          phoneNumber: session.data.phoneNumber,
+          address: session.data.address,
+          jobVacancyType: session.data.jobVacancyType,
+          status: 'new',
+        });
 
-    // Step 6: Job Type
-    case LeadState.AWAITING_JOB_TYPE:
-      const jobSelection = parseInt(cleanText);
-      if (
-        isNaN(jobSelection) ||
-        jobSelection < 1 ||
-        jobSelection > jobTypes.length
-      ) {
         await sendMessage(
           jid,
-          `⚠️ Invalid selection. Please reply with a number between 1 and ${jobTypes.length}.`,
-          sessionId,
+          `🎉 *Registration Complete!*\n\n` +
+          `✅ Name: ${session.data.fullName}\n` +
+          `✅ Phone: ${session.data.phoneNumber}\n` +
+          `✅ Job: ${session.data.jobVacancyType}\n\n` +
+          `📋 Your registration ID: ${lead._id}\n\n` +
+          `We will contact you soon!\n\n` +
+          `Type \`!help\` for other commands.`,
+          sessionId
         );
-        return true;
-      }
-      session.data.jobVacancyType = jobTypes[jobSelection - 1];
-      session.state = LeadState.AWAITING_CV;
-      await saveLeadSession(jid, session);
-
-      await sendTyping(jid, sessionId);
-      await sendMessage(
-        jid,
-        `✅ Job Category: *${session.data.jobVacancyType}*\n\n` +
-          `*Step 7 of 7*\n` +
-          `Do you have a **CV/Resume** to upload?\n\n` +
-          `1. ✅ Yes, I have a CV\n` +
-          `2. ❌ No, I don't have one\n\n` +
-          `Reply with 1 or 2`,
-        sessionId,
-      );
-      break;
-
-    // Step 7: CV Upload
-    case LeadState.AWAITING_CV:
-      const cvChoice = parseInt(cleanText);
-      if (cvChoice === 1) {
-        // User has CV - send upload link (configurable via admin panel)
-        const companyInfo = await configurationManager.getCompanyInfo();
-        const cvUploadUrl =
-          process.env.CV_UPLOAD_URL || 'https://forms.gle/your-cv-upload-form';
-
-        await sendTyping(jid, sessionId);
+      } catch (error) {
+        console.error('Lead registration error:', error);
         await sendMessage(
           jid,
           `📄 *CV Upload*\n\n` +

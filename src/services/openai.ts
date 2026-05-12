@@ -1,6 +1,7 @@
 import OpenAI, { toFile } from 'openai';
 import { AIService, AIChatMessage } from '../interfaces/AIService';
-import { configService } from './ConfigService';
+import { AI_PERSONALITY, JOB_KNOWLEDGE_BASE } from '../config/ai-personality';
+import { createCompanyConfig } from '../config/companies';
 
 export class OpenAIService implements AIService {
   name: string;
@@ -30,11 +31,10 @@ export class OpenAIService implements AIService {
       // Ensure system message is present (if not in history, though it usually is)
       const hasSystem = formattedMessages.some((m) => m.role === 'system');
       if (!hasSystem) {
-        const personality = await configService.getAIPersonality();
-        const knowledgeBase = await configService.getDynamicKnowledgeBase();
+        const defaultConfig = createCompanyConfig('default');
         formattedMessages.unshift({
           role: 'system',
-          content: `${personality}\n\n${knowledgeBase}`,
+          content: `${AI_PERSONALITY(defaultConfig)}\n\n${JOB_KNOWLEDGE_BASE(defaultConfig)}`,
         });
       }
 

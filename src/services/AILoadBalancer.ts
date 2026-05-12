@@ -6,6 +6,7 @@ import {
   getConversationExamples,
 } from '../config/ai-personality';
 import Dataset from '../models/Dataset';
+import { chatPersonality } from './ChatPersonality';
 
 import { OpenAIService } from './openai';
 import { GroqService } from './groq';
@@ -30,6 +31,8 @@ export class AILoadBalancer {
   // This Map is kept for temporary caching during a single request
   private historyCache: Map<string, AIChatMessage[]>;
   private totalRequests = 0;
+  private servicesCacheTime: number = 0;
+  private static SERVICES_CACHE_TTL = 60000; // 60 seconds
 
   // Cache for loaded services
   private lastServiceLoad = 0;
@@ -101,31 +104,9 @@ export class AILoadBalancer {
 
   private async loadServices(): Promise<void> {
     const now = Date.now();
-
-    // Return cached services if still valid
-    if (
-      this.services.length > 0 &&
-      now - this.lastServiceLoad < SERVICE_CACHE_TTL_MS
-    ) {
-      return;
+    if (this.services.length > 0 && (now - this.servicesCacheTime) < AILoadBalancer.SERVICES_CACHE_TTL) {
+        return; // Use cached services
     }
-
-    // If a load is already in progress, wait for it
-    if (this.serviceLoadPromise) {
-      return this.serviceLoadPromise;
-    }
-
-    // Start loading
-    this.serviceLoadPromise = this._doLoadServices();
-
-    try {
-      await this.serviceLoadPromise;
-    } finally {
-      this.serviceLoadPromise = null;
-    }
-  }
-
-  private async _doLoadServices(): Promise<void> {
     this.services = []; // Clear existing
     try {
       const configs = await Config.find({ isProvider: true, isActive: true });
@@ -180,24 +161,8 @@ export class AILoadBalancer {
         }
       }
 
-      // Sort by Priority (Cost/Speed) - Groq > Google > OpenRouter > OpenAI
-      const priorityMap: Record<string, number> = {
-        GroqService: 1,
-        GeminiService: 2,
-        OpenRouterService: 3,
-        OpenAIService: 4,
-      };
-      this.services.sort(
-        (a, b) =>
-          (priorityMap[a.constructor.name] || 99) -
-          (priorityMap[b.constructor.name] || 99),
-      );
-
-      this.lastServiceLoad = Date.now();
-
-      console.log(
-        `🤖 Loaded ${this.services.length} AI services from DB. Primary: ${this.services[0]?.constructor.name}`,
-      );
+      console.log(`🤖 Loaded ${this.services.length} AI services from DB.`);
+      this.servicesCacheTime = Date.now();
     } catch (err) {
       console.error('Failed to load AI services:', err);
     }
@@ -243,16 +208,25 @@ export class AILoadBalancer {
   }
 
   private async getInitialHistory(): Promise<AIChatMessage[]> {
-    // Get knowledge base from training service (includes learned knowledge)
-    const knowledgeBase =
-      await knowledgeTrainingService.getKnowledgeBaseForAI();
-    const aiPersonality = await configurationManager.getAIPersonality();
-    const conversationExamples = await getConversationExamples();
+    let knowledgeBase = JOB_KNOWLEDGE_BASE(defaultConfig);
+    try {
+      const datasets = await Dataset.find({ isActive: true });
+      if (datasets.length > 0) {
+        const combinedData = datasets
+          .map((ds) => ds.content)
+          .join('\n\n---\n\n');
+        knowledgeBase = `\n# Knowledge Base\n${combinedData}\n`;
+      }
+    } catch (err) {
+      console.error('Dataset load error:', err);
+    }
+
+    const humanPrompt = chatPersonality.getHumanLikePrompt();
 
     const history: AIChatMessage[] = [
       {
         role: 'system',
-        content: `${aiPersonality}\n\n${knowledgeBase}`,
+        content: `${humanPrompt}\n\n${AI_PERSONALITY(defaultConfig)}\n\n${knowledgeBase}`,
       },
     ];
 

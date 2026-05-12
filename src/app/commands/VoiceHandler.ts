@@ -73,9 +73,37 @@ export class VoiceHandler {
 
       console.log(`🎤 Voice note received from ${jid}: ${buffer.length} bytes`);
 
-      // ── Transcribe using configured provider (OpenAI Whisper → Gemini) ─────
-      let transcription = '';
-      let detectedLang = 'en';
+      // Transcribe the audio using Zhipu (via existing service)
+      const transcription = await transcribeAudio(
+        buffer.toString('base64'),
+        mimetype,
+      );
+      console.log(`   Transcription: ${transcription}`);
+
+      // Check if transcription looks like a question or command
+      const lowerText = transcription.toLowerCase().trim();
+      const isQuestion =
+        lowerText.includes('?') ||
+        lowerText.startsWith('what') ||
+        lowerText.startsWith('how') ||
+        lowerText.startsWith('why') ||
+        lowerText.startsWith('when') ||
+        lowerText.startsWith('where') ||
+        lowerText.startsWith('who') ||
+        lowerText.startsWith('can') ||
+        lowerText.startsWith('please') ||
+        lowerText.startsWith('tell me') ||
+        // Sinhala question indicators
+        transcription.includes('මොකද') ||
+        transcription.includes('කොහොමද') ||
+        transcription.includes('ඇයි') ||
+        transcription.includes('කවුද') ||
+        transcription.includes('කොතනද') ||
+        transcription.includes('කීයද');
+
+      if (isQuestion && transcription.length > 10) {
+        // If it's a question, get an AI response via Load Balancer
+        const aiResponse = await aiLoadBalancer.sendMessage(jid, transcription);
 
       try {
         const result = await transcribeAudioWithLanguage(buffer);
