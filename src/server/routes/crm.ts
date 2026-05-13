@@ -556,8 +556,14 @@ router.delete('/registrations/:id/cv', async (req, res) => {
 
     // Delete file from disk
     if (registration.cvUrl) {
-      const filePath = path.join(__dirname, '../../..', registration.cvUrl);
-      if (fs.existsSync(filePath)) {
+      // SECURITY FIX: Prevent path traversal by resolving the absolute path and verifying it starts with the intended base directory
+      const baseDirectory = path.resolve(__dirname, '../../..', 'uploads/cvs');
+      // CV URL starts with / so we remove the leading slash for relative path resolution against root
+      const relativePath = registration.cvUrl.startsWith('/') ? registration.cvUrl.substring(1) : registration.cvUrl;
+      const filePath = path.resolve(__dirname, '../../..', relativePath);
+
+      // Ensure the resolved path strictly resides within the base directory (appending path.sep prevents partial name match attacks)
+      if (filePath.startsWith(baseDirectory + path.sep) && fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
     }
