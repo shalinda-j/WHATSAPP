@@ -11,7 +11,14 @@
       "Bash(npm run:*)",
       "Bash(curl -LsSf https://astral.sh/uv/install.sh)",
       "Bash(sh)",
-      "Bash(~/.local/bin/uv sync:*)"
+      "Bash(~/.local/bin/uv sync:*)",
+      "WebSearch",
+      "Bash(npm install *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(gh pr *)",
+      "Bash(git rev-list *)",
+      "Bash(git push *)"
     ]
   }
 }
