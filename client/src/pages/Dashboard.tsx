@@ -78,8 +78,8 @@ export default function Dashboard() {
     try {
       const res = await api.get('/api/config');
       if (Array.isArray(res.data)) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const providers = res.data.filter(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (config: any) => config.isProvider === true,
         );
         setAiProviders(providers);

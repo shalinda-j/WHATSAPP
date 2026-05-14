@@ -8,7 +8,6 @@ import Webhooks from './pages/Webhooks';
 import Config from './pages/Config';
 import SystemMaintenance from './pages/SystemMaintenance';
 import BulkSender from './pages/BulkSender';
-import MarketingManager from './pages/MarketingManager';
 import VoiceAgentHub from './pages/VoiceAgentHub';
 import CRM from './pages/CRM';
 import ChatInterface from './pages/ChatInterface';
@@ -58,7 +57,6 @@ function AppRoutes() {
         <Route path="config" element={<Config />} />
         <Route path="bulk-message" element={<BulkSender />} />
         <Route path="system" element={<SystemMaintenance />} />
-        <Route path="marketing" element={<MarketingManager />} />
         <Route path="voice-agent-hub" element={<VoiceAgentHub />} />
         <Route path="sessions" element={<Sessions />} />
         <Route path="form-builder" element={<FormBuilder />} />

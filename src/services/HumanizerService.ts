@@ -78,9 +78,7 @@ export class HumanizerService {
     this.rateCapsCache = null;
   }
 
-  private static async checkRateCap(
-    sessionId: string,
-  ): Promise<{
+  private static async checkRateCap(sessionId: string): Promise<{
     allowed: boolean;
     reason?: 'per_minute' | 'per_hour' | 'per_day';
   }> {

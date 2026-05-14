@@ -249,11 +249,9 @@ export default function VoiceAgentHub() {
         api.get('/api/datasets').catch(() => ({ data: [] })),
         api.get('/api/analytics/overview').catch(() => ({ data: {} })),
         api.get('/api/leads?limit=5').catch(() => ({ data: { leads: [] } })),
-        api
-          .get('/api/call-agent/settings')
-          .catch(() => ({
-            data: { enabled: false, language: 'en', greeting: '' },
-          })),
+        api.get('/api/call-agent/settings').catch(() => ({
+          data: { enabled: false, language: 'en', greeting: '' },
+        })),
         api
           .get('/api/call-agent/logs?limit=10')
           .catch(() => ({ data: { logs: [] } })),

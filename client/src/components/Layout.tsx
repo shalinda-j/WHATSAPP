@@ -64,7 +64,6 @@ const NAV_SECTIONS: NavSection[] = [
     title: 'AI & Automation',
     items: [
       { to: '/voice-agent-hub', icon: AudioLines, label: 'Voice Agent' },
-      { to: '/marketing', icon: BarChart3, label: 'Marketing' },
       { to: '/form-builder', icon: FileText, label: 'Form Builder' },
       { to: '/datasets', icon: Database, label: 'Datasets' },
       { to: '/webhooks', icon: Globe, label: 'Webhooks' },
