@@ -50,6 +50,7 @@ import { autoRegistrationService } from './services/AutoRegistrationService';
 import { usageResetService } from './services/UsageResetService';
 import { agentOrchestrator } from './services/AgentOrchestrator';
 import { agentReflectionService } from './services/AgentReflectionService';
+import { registerCoreAgents } from './agents/bootstrap';
 import { HumanizerService } from './services/HumanizerService';
 
 const PORT = process.env.PORT || 8080;
@@ -79,6 +80,9 @@ async function startServer() {
 
       // Start agent self-improvement scheduler (approval expiry + nightly promotion)
       agentReflectionService.start();
+
+      // Register specialist agents and seed their initial prompts
+      await registerCoreAgents();
     } catch (dbErr) {
       console.error(
         '❌ MongoDB Connection Failed. Server starting in LIMITED MODE.',
