@@ -27,7 +27,7 @@ jobs:
           node-version: 20.x
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Run ESLint
         uses: github/super-linter@v5
@@ -59,10 +59,14 @@ jobs:
           node-version: 20.x
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Type check Backend
         run: npx tsc --noEmit
+
+      - name: Install Frontend dependencies
+        working-directory: ./client
+        run: npm install --no-audit --no-fund
 
       - name: Type check Frontend
         working-directory: ./client
