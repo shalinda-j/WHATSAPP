@@ -23,6 +23,7 @@ import workflowRouter from './routes/workflows';
 import formsRouter from './routes/forms';
 import knowledgeRouter from './routes/knowledge';
 import callAgentRouter from './routes/call-agent';
+import agentsRouter from './routes/agents';
 
 import mongoose from 'mongoose';
 import { authenticateToken } from './middleware/auth';
@@ -133,6 +134,7 @@ app.use('/api/workflows', authenticateToken, workflowRouter);
 app.use('/api/forms', authenticateToken, formsRouter);
 app.use('/api/knowledge', authenticateToken, knowledgeRouter);
 app.use('/api/call-agent', callAgentRouter);
+app.use('/api/agents', agentsRouter);
 
 // Public forms endpoint (for bot)
 app.use('/api/forms/default', async (req, res, next) => {

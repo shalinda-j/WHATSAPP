@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Database, Settings, LogOut, Smartphone,
   Menu, X, Globe, AudioLines, Megaphone, Briefcase,
   MessageSquare, FileText, Calendar, UserCheck, ChevronDown,
-  ChevronRight, Cpu, BarChart3
+  ChevronRight, Cpu, BarChart3, Bot, Inbox, Search
 } from 'lucide-react';
 
 interface NavItem {
@@ -52,6 +52,14 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/form-builder', icon: FileText, label: 'Form Builder' },
       { to: '/datasets', icon: Database, label: 'Datasets' },
       { to: '/webhooks', icon: Globe, label: 'Webhooks' },
+    ],
+  },
+  {
+    title: 'Agents',
+    items: [
+      { to: '/agents', icon: Bot, label: 'Agents Hub' },
+      { to: '/agents/approvals', icon: Inbox, label: 'Approval Queue' },
+      { to: '/agents/traces', icon: Search, label: 'Traces' },
     ],
   },
   {

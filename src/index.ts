@@ -48,6 +48,9 @@ import VoiceConfig from './models/VoiceConfig';
 import { initSocket, getIO } from './server/socket';
 import { autoRegistrationService } from './services/AutoRegistrationService';
 import { usageResetService } from './services/UsageResetService';
+import { agentOrchestrator } from './services/AgentOrchestrator';
+import { agentReflectionService } from './services/AgentReflectionService';
+import { HumanizerService } from './services/HumanizerService';
 
 const PORT = process.env.PORT || 8080;
 let server: any;
@@ -73,6 +76,9 @@ async function startServer() {
 
       // Start monthly usage reset scheduler
       usageResetService.start();
+
+      // Start agent self-improvement scheduler (approval expiry + nightly promotion)
+      agentReflectionService.start();
     } catch (dbErr) {
       console.error(
         '❌ MongoDB Connection Failed. Server starting in LIMITED MODE.',
@@ -106,6 +112,9 @@ const gracefulShutdown = async (signal: string) => {
   console.log(`\n🛑 Received ${signal}. Closing connections gracefully...`);
 
   try {
+    // 0. Stop background schedulers
+    agentReflectionService.stop();
+
     // 1. Close WhatsApp Socket
     console.log('   🔌 Disconnecting WhatsApp...');
     await disconnectWhatsApp();
@@ -498,6 +507,40 @@ onMessage(async (message, sock, sessionId) => {
       console.log(`   🤖 Processing command: ${text}`);
       await handleCommand(jid, text, sessionId, message);
       return;
+    }
+
+    // Multi-agent orchestrator — runs only if specialist agents are registered
+    // and pass their confidence threshold. Falls through to legacy AI fallback
+    // on `no_handler`, so behaviour is unchanged until agents are wired in.
+    try {
+      const agentOutcome = await agentOrchestrator.handle({
+        sessionId,
+        userId: jid,
+        channel: 'whatsapp',
+        language: 'si',
+        inputMessage: text,
+        conversationHistory: [],
+        metadata: {},
+      });
+      if (agentOutcome.handled) {
+        if (agentOutcome.outbound) {
+          await HumanizerService.sendHumanizedMessage(
+            jid,
+            agentOutcome.outbound,
+            sessionId,
+          );
+          console.log(
+            `   🧠 Handled by agent: ${agentOutcome.agentName} (trace=${agentOutcome.traceId})`,
+          );
+        } else {
+          console.log(
+            `   🧠 Agent ${agentOutcome.agentName} handled silently/queued (reason=${agentOutcome.reason}, trace=${agentOutcome.traceId})`,
+          );
+        }
+        return;
+      }
+    } catch (err) {
+      console.error('   ❌ AgentOrchestrator error, falling back to legacy AI:', err);
     }
 
     // For all other messages, respond with AI

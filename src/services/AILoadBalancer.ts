@@ -393,6 +393,82 @@ export class AILoadBalancer {
     throw new Error('All AI services failed.');
   }
 
+  /**
+   * Raw send for the agent layer. Bypasses ConversationHistoryService
+   * (agents manage their own history) and returns provider metadata so the
+   * orchestrator can track budgets per execution. Respects provider/model
+   * overrides — falls back to priority chain only if the requested provider
+   * fails or isn't loaded.
+   */
+  async sendMessageRaw(options: {
+    systemPrompt: string;
+    userMessage: string;
+    history?: AIChatMessage[];
+    providerOverride?: string | null;
+    modelOverride?: string | null;
+  }): Promise<{
+    text: string;
+    provider: string;
+    inputTokens: number;
+    outputTokens: number;
+    latencyMs: number;
+  }> {
+    await this.loadServices();
+    if (this.services.length === 0) {
+      throw new Error('No AI services configured');
+    }
+
+    const messages: AIChatMessage[] = [
+      { role: 'system', content: options.systemPrompt },
+      ...(options.history ?? []),
+      { role: 'user', content: options.userMessage },
+    ];
+
+    const ordered = options.providerOverride
+      ? [
+          ...this.services.filter((s) =>
+            s.constructor.name
+              .toLowerCase()
+              .includes((options.providerOverride ?? '').toLowerCase()),
+          ),
+          ...this.services.filter(
+            (s) =>
+              !s.constructor.name
+                .toLowerCase()
+                .includes((options.providerOverride ?? '').toLowerCase()),
+          ),
+        ]
+      : this.services;
+
+    let lastError: unknown = null;
+    for (const service of ordered) {
+      try {
+        const start = Date.now();
+        const text = await service.generateResponse(messages);
+        const latencyMs = Date.now() - start;
+        const inputLen = messages.reduce((a, m) => a + m.content.length, 0);
+        const inputTokens = Math.ceil(inputLen / 4);
+        const outputTokens = Math.ceil(text.length / 4);
+        this.trackUsage(service.name, inputTokens, outputTokens);
+        return {
+          text,
+          provider: service.name,
+          inputTokens,
+          outputTokens,
+          latencyMs,
+        };
+      } catch (err) {
+        lastError = err;
+        console.error(`sendMessageRaw: ${service.name} failed:`, err);
+      }
+    }
+    throw new Error(
+      `sendMessageRaw: all providers failed (${
+        lastError instanceof Error ? lastError.message : 'unknown'
+      })`,
+    );
+  }
+
   async clearConversation(userId: string) {
     await conversationHistoryService.clearHistory(userId);
     this.historyCache.delete(userId);
