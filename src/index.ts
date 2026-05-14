@@ -51,6 +51,7 @@ import { usageResetService } from './services/UsageResetService';
 import { agentOrchestrator } from './services/AgentOrchestrator';
 import { agentReflectionService } from './services/AgentReflectionService';
 import { registerCoreAgents } from './agents/bootstrap';
+import { classifyIntent } from './services/IntentClassifierService';
 import { HumanizerService } from './services/HumanizerService';
 
 const PORT = process.env.PORT || 8080;
@@ -517,6 +518,7 @@ onMessage(async (message, sock, sessionId) => {
     // and pass their confidence threshold. Falls through to legacy AI fallback
     // on `no_handler`, so behaviour is unchanged until agents are wired in.
     try {
+      const intent = classifyIntent(text);
       const agentOutcome = await agentOrchestrator.handle({
         sessionId,
         userId: jid,
@@ -524,7 +526,7 @@ onMessage(async (message, sock, sessionId) => {
         language: 'si',
         inputMessage: text,
         conversationHistory: [],
-        metadata: {},
+        metadata: { intent },
       });
       if (agentOutcome.handled) {
         if (agentOutcome.outbound) {
