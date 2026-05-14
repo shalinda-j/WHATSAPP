@@ -9,6 +9,7 @@ import { validateObjectId } from '../middleware/validation';
 import pdf from 'pdf-parse';
 import ChatMessage from '../../models/ChatMessage';
 import { configurationManager } from '../../services/ConfigurationManagerService';
+import { agentReflectionService } from '../../services/AgentReflectionService';
 
 const router = Router();
 
@@ -385,14 +386,31 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', validateObjectId(), async (req, res) => {
   try {
+    const previous = await Lead.findById(req.params.id);
+    if (!previous) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
     const lead = await Lead.findByIdAndUpdate(
       req.params.id,
       { ...req.body, updatedAt: new Date() },
       { new: true },
     );
-    if (!lead) {
-      return res.status(404).json({ error: 'Lead not found' });
+
+    // Outcome correlation: when a status moves to a terminal state, push a
+    // feedback signal to any agent executions that touched this user in the
+    // last 7 days. Fire-and-forget — never block the API response on it.
+    if (
+      lead &&
+      req.body.status &&
+      req.body.status !== previous.status &&
+      previous.phoneNumber
+    ) {
+      const jid = `${previous.phoneNumber}@s.whatsapp.net`;
+      agentReflectionService
+        .correlateLeadOutcome(jid, lead._id, req.body.status)
+        .catch((err) => console.error('correlateLeadOutcome failed:', err));
     }
+
     res.json(lead);
   } catch (err: any) {
     res.status(500).json({ error: err.message });

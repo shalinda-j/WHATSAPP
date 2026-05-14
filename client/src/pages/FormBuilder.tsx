@@ -1,9 +1,29 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Copy, Star, FileText, Users, Download, Smartphone, CheckCircle } from 'lucide-react';
+import {
+  Plus,
+  Edit2,
+  Trash2,
+  Copy,
+  Star,
+  FileText,
+  Users,
+  Download,
+  Smartphone,
+  CheckCircle,
+} from 'lucide-react';
 
 interface FormField {
   id: string;
-  type: 'text' | 'number' | 'email' | 'phone' | 'select' | 'multiselect' | 'date' | 'textarea' | 'file';
+  type:
+    | 'text'
+    | 'number'
+    | 'email'
+    | 'phone'
+    | 'select'
+    | 'multiselect'
+    | 'date'
+    | 'textarea'
+    | 'file';
   label: string;
   placeholder?: string;
   required: boolean;
@@ -35,14 +55,20 @@ export default function FormBuilder() {
   const [templates, setTemplates] = useState<FormTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [showEditor, setShowEditor] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<FormTemplate | null>(null);
-  const [activeTab, setActiveTab] = useState<'templates' | 'submissions'>('templates');
+  const [editingTemplate, setEditingTemplate] = useState<FormTemplate | null>(
+    null,
+  );
+  const [activeTab, setActiveTab] = useState<'templates' | 'submissions'>(
+    'templates',
+  );
 
   // Form state
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [formFields, setFormFields] = useState<FormField[]>([]);
-  const [triggerMode, setTriggerMode] = useState<'manual' | 'auto' | 'both'>('both');
+  const [triggerMode, setTriggerMode] = useState<'manual' | 'auto' | 'both'>(
+    'both',
+  );
   const [triggerDelay, setTriggerDelay] = useState(10);
   const [welcomeMessage, setWelcomeMessage] = useState('');
   const [completionMessage, setCompletionMessage] = useState('');
@@ -51,7 +77,7 @@ export default function FormBuilder() {
     try {
       const res = await fetch('/api/forms/templates', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
         },
       });
       const data = await res.json();
@@ -128,7 +154,7 @@ export default function FormBuilder() {
         method,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
         },
         body: JSON.stringify({
           name: formName,
@@ -158,7 +184,7 @@ export default function FormBuilder() {
       await fetch(`/api/forms/templates/${id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
         },
       });
       fetchTemplates();
@@ -172,7 +198,7 @@ export default function FormBuilder() {
       await fetch(`/api/forms/templates/${id}/duplicate`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
         },
       });
       fetchTemplates();
@@ -186,7 +212,7 @@ export default function FormBuilder() {
       await fetch(`/api/forms/templates/${id}/set-default`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
         },
       });
       fetchTemplates();
@@ -222,14 +248,22 @@ export default function FormBuilder() {
         <div className="flex gap-2">
           <button
             onClick={() => setActiveTab('templates')}
-            className={`px-4 py-2 rounded ${activeTab === 'templates' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+            className={`px-4 py-2 rounded ${
+              activeTab === 'templates'
+                ? 'bg-blue-500 text-white'
+                : 'bg-gray-200'
+            }`}
           >
             <FileText className="inline mr-2 h-4 w-4" />
             Templates
           </button>
           <button
             onClick={() => setActiveTab('submissions')}
-            className={`px-4 py-2 rounded ${activeTab === 'submissions' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+            className={`px-4 py-2 rounded ${
+              activeTab === 'submissions'
+                ? 'bg-blue-500 text-white'
+                : 'bg-gray-200'
+            }`}
           >
             <Users className="inline mr-2 h-4 w-4" />
             Submissions
@@ -251,7 +285,10 @@ export default function FormBuilder() {
 
           <div className="grid gap-4">
             {templates.map((template) => (
-              <div key={template._id} className="bg-white rounded-lg shadow p-4">
+              <div
+                key={template._id}
+                className="bg-white rounded-lg shadow p-4"
+              >
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="flex items-center gap-2">
@@ -263,12 +300,18 @@ export default function FormBuilder() {
                         </span>
                       )}
                       {template.isActive ? (
-                        <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">Active</span>
+                        <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
+                          Active
+                        </span>
                       ) : (
-                        <span className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded">Inactive</span>
+                        <span className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded">
+                          Inactive
+                        </span>
                       )}
                     </div>
-                    <p className="text-gray-600 text-sm mt-1">{template.description}</p>
+                    <p className="text-gray-600 text-sm mt-1">
+                      {template.description}
+                    </p>
                     <div className="flex gap-4 mt-2 text-sm text-gray-500">
                       <span>{template.fields.length} fields</span>
                       <span>Trigger: {template.triggerMode}</span>
@@ -337,7 +380,9 @@ export default function FormBuilder() {
                 <h2 className="text-lg font-semibold text-gray-800">
                   {editingTemplate ? 'Edit Form' : 'Create New Form'}
                 </h2>
-                <p className="text-xs text-gray-500 mt-0.5">Live preview updates as you type</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Live preview updates as you type
+                </p>
               </div>
               <button
                 onClick={resetForm}
@@ -354,7 +399,9 @@ export default function FormBuilder() {
               {/* Basic Info */}
               <div className="grid gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Form Name *</label>
+                  <label className="block text-sm font-medium mb-1">
+                    Form Name *
+                  </label>
                   <input
                     type="text"
                     value={formName}
@@ -364,7 +411,9 @@ export default function FormBuilder() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Description</label>
+                  <label className="block text-sm font-medium mb-1">
+                    Description
+                  </label>
                   <textarea
                     value={formDescription}
                     onChange={(e) => setFormDescription(e.target.value)}
@@ -377,17 +426,29 @@ export default function FormBuilder() {
 
               {/* Trigger Settings */}
               <div className="border-t pt-4">
-                <h3 className="font-medium mb-3 text-gray-700">⚙️ Trigger Settings</h3>
+                <h3 className="font-medium mb-3 text-gray-700">
+                  ⚙️ Trigger Settings
+                </h3>
                 <div className="grid gap-4">
                   <div>
-                    <label className="block text-sm font-medium mb-1">Trigger Mode</label>
+                    <label className="block text-sm font-medium mb-1">
+                      Trigger Mode
+                    </label>
                     <select
                       value={triggerMode}
-                      onChange={(e) => setTriggerMode(e.target.value as 'manual' | 'auto' | 'both')}
+                      onChange={(e) =>
+                        setTriggerMode(
+                          e.target.value as 'manual' | 'auto' | 'both',
+                        )
+                      }
                       className="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-blue-300 outline-none"
                     >
-                      <option value="manual">Manual Only (!register command)</option>
-                      <option value="auto">Auto (After conversation ends)</option>
+                      <option value="manual">
+                        Manual Only (!register command)
+                      </option>
+                      <option value="auto">
+                        Auto (After conversation ends)
+                      </option>
                       <option value="both">Both Manual & Auto</option>
                     </select>
                   </div>
@@ -399,7 +460,9 @@ export default function FormBuilder() {
                       <input
                         type="number"
                         value={triggerDelay}
-                        onChange={(e) => setTriggerDelay(Number(e.target.value))}
+                        onChange={(e) =>
+                          setTriggerDelay(Number(e.target.value))
+                        }
                         className="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-blue-300 outline-none"
                         min={5}
                         max={300}
@@ -417,7 +480,9 @@ export default function FormBuilder() {
                 <h3 className="font-medium mb-3 text-gray-700">💬 Messages</h3>
                 <div className="grid gap-4">
                   <div>
-                    <label className="block text-sm font-medium mb-1">Welcome Message</label>
+                    <label className="block text-sm font-medium mb-1">
+                      Welcome Message
+                    </label>
                     <textarea
                       value={welcomeMessage}
                       onChange={(e) => setWelcomeMessage(e.target.value)}
@@ -427,7 +492,9 @@ export default function FormBuilder() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Completion Message</label>
+                    <label className="block text-sm font-medium mb-1">
+                      Completion Message
+                    </label>
                     <textarea
                       value={completionMessage}
                       onChange={(e) => setCompletionMessage(e.target.value)}
@@ -454,26 +521,41 @@ export default function FormBuilder() {
 
                 <div className="space-y-3">
                   {formFields.map((field, index) => (
-                    <div key={field.id} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                    <div
+                      key={field.id}
+                      className="bg-gray-50 rounded-lg p-3 border border-gray-200"
+                    >
                       <div className="grid grid-cols-4 gap-3">
                         <div>
-                          <label className="block text-xs text-gray-500 mb-1">Type</label>
+                          <label className="block text-xs text-gray-500 mb-1">
+                            Type
+                          </label>
                           <select
                             value={field.type}
-                            onChange={(e) => updateField(index, { type: e.target.value as FormField['type'] })}
+                            onChange={(e) =>
+                              updateField(index, {
+                                type: e.target.value as FormField['type'],
+                              })
+                            }
                             className="w-full border rounded px-2 py-1 text-sm"
                           >
                             {fieldTypes.map((t) => (
-                              <option key={t.value} value={t.value}>{t.label}</option>
+                              <option key={t.value} value={t.value}>
+                                {t.label}
+                              </option>
                             ))}
                           </select>
                         </div>
                         <div className="col-span-2">
-                          <label className="block text-xs text-gray-500 mb-1">Label</label>
+                          <label className="block text-xs text-gray-500 mb-1">
+                            Label
+                          </label>
                           <input
                             type="text"
                             value={field.label}
-                            onChange={(e) => updateField(index, { label: e.target.value })}
+                            onChange={(e) =>
+                              updateField(index, { label: e.target.value })
+                            }
                             className="w-full border rounded px-2 py-1 text-sm"
                             placeholder="Field label"
                           />
@@ -483,7 +565,11 @@ export default function FormBuilder() {
                             <input
                               type="checkbox"
                               checked={field.required}
-                              onChange={(e) => updateField(index, { required: e.target.checked })}
+                              onChange={(e) =>
+                                updateField(index, {
+                                  required: e.target.checked,
+                                })
+                              }
                               className="rounded"
                             />
                             Req.
@@ -496,13 +582,23 @@ export default function FormBuilder() {
                           </button>
                         </div>
                       </div>
-                      {(field.type === 'select' || field.type === 'multiselect') && (
+                      {(field.type === 'select' ||
+                        field.type === 'multiselect') && (
                         <div className="mt-2">
-                          <label className="block text-xs text-gray-500 mb-1">Options (comma-separated)</label>
+                          <label className="block text-xs text-gray-500 mb-1">
+                            Options (comma-separated)
+                          </label>
                           <input
                             type="text"
                             value={field.options?.join(', ') || ''}
-                            onChange={(e) => updateField(index, { options: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                            onChange={(e) =>
+                              updateField(index, {
+                                options: e.target.value
+                                  .split(',')
+                                  .map((s) => s.trim())
+                                  .filter(Boolean),
+                              })
+                            }
                             className="w-full border rounded px-2 py-1 text-sm"
                             placeholder="Option 1, Option 2, Option 3"
                           />
@@ -514,7 +610,9 @@ export default function FormBuilder() {
                   {formFields.length === 0 && (
                     <div className="text-center py-6 text-gray-400 border-2 border-dashed rounded-lg">
                       <Plus className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                      <p className="text-sm">Click "Add Field" to start building your form</p>
+                      <p className="text-sm">
+                        Click "Add Field" to start building your form
+                      </p>
                     </div>
                   )}
                 </div>
@@ -542,20 +640,29 @@ export default function FormBuilder() {
             <div className="p-4 bg-gray-50">
               <div className="flex items-center gap-2 mb-3">
                 <Smartphone className="h-4 w-4 text-gray-500" />
-                <span className="text-sm font-medium text-gray-600">WhatsApp Preview</span>
-                <span className="ml-auto text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full">Live</span>
+                <span className="text-sm font-medium text-gray-600">
+                  WhatsApp Preview
+                </span>
+                <span className="ml-auto text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
+                  Live
+                </span>
               </div>
 
               {/* Phone frame */}
               <div className="mx-auto max-w-xs">
-                <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200" style={{ maxHeight: '520px' }}>
+                <div
+                  className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200"
+                  style={{ maxHeight: '520px' }}
+                >
                   {/* WhatsApp header */}
                   <div className="bg-[#075E54] px-4 py-3 flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-green-300 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
                       AI
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-semibold truncate">360ai Bot</p>
+                      <p className="text-white text-sm font-semibold truncate">
+                        360ai Bot
+                      </p>
                       <p className="text-green-200 text-xs">online</p>
                     </div>
                   </div>
@@ -566,7 +673,8 @@ export default function FormBuilder() {
                     style={{
                       minHeight: '380px',
                       maxHeight: '400px',
-                      backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23d1d5db\' fill-opacity=\'0.15\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")',
+                      backgroundImage:
+                        "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d1d5db' fill-opacity='0.15'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")",
                       backgroundColor: '#ECE5DD',
                     }}
                   >
@@ -574,15 +682,23 @@ export default function FormBuilder() {
                     {welcomeMessage ? (
                       <div className="flex justify-start">
                         <div className="bg-white rounded-lg rounded-tl-none p-2.5 max-w-[85%] shadow-sm">
-                          <p className="text-sm text-gray-800 whitespace-pre-wrap">{welcomeMessage}</p>
-                          <p className="text-right text-xs text-gray-400 mt-1">10:00 AM</p>
+                          <p className="text-sm text-gray-800 whitespace-pre-wrap">
+                            {welcomeMessage}
+                          </p>
+                          <p className="text-right text-xs text-gray-400 mt-1">
+                            10:00 AM
+                          </p>
                         </div>
                       </div>
                     ) : (
                       <div className="flex justify-start">
                         <div className="bg-white rounded-lg rounded-tl-none p-2.5 max-w-[85%] shadow-sm opacity-50">
-                          <p className="text-sm text-gray-400 italic">Welcome message will appear here...</p>
-                          <p className="text-right text-xs text-gray-300 mt-1">10:00 AM</p>
+                          <p className="text-sm text-gray-400 italic">
+                            Welcome message will appear here...
+                          </p>
+                          <p className="text-right text-xs text-gray-300 mt-1">
+                            10:00 AM
+                          </p>
                         </div>
                       </div>
                     )}
@@ -590,44 +706,70 @@ export default function FormBuilder() {
                     {/* Each field as a bot question + fake user reply */}
                     {formFields.map((field, idx) => {
                       const time = `10:0${idx + 1} AM`;
-                      const placeholder = field.type === 'email' ? 'john@example.com' :
-                        field.type === 'phone' ? '+94 77 123 4567' :
-                        field.type === 'date' ? '1990-01-15' :
-                        field.type === 'number' ? '25' :
-                        field.type === 'select' && field.options?.length ? field.options[0] :
-                        field.type === 'textarea' ? 'I have 3 years of experience...' :
-                        'Your answer here';
+                      const placeholder =
+                        field.type === 'email'
+                          ? 'john@example.com'
+                          : field.type === 'phone'
+                          ? '+94 77 123 4567'
+                          : field.type === 'date'
+                          ? '1990-01-15'
+                          : field.type === 'number'
+                          ? '25'
+                          : field.type === 'select' && field.options?.length
+                          ? field.options[0]
+                          : field.type === 'textarea'
+                          ? 'I have 3 years of experience...'
+                          : 'Your answer here';
 
                       return (
                         <div key={field.id} className="space-y-1.5">
                           {/* Bot asks */}
                           <div className="flex justify-start">
                             <div className="bg-white rounded-lg rounded-tl-none p-2.5 max-w-[85%] shadow-sm">
-                              <p className="text-xs text-[#075E54] font-semibold mb-0.5">360ai Bot</p>
+                              <p className="text-xs text-[#075E54] font-semibold mb-0.5">
+                                360ai Bot
+                              </p>
                               <p className="text-sm text-gray-800">
                                 {field.label || `Field ${idx + 1}`}
-                                {field.required && <span className="text-red-500 ml-1">*</span>}
+                                {field.required && (
+                                  <span className="text-red-500 ml-1">*</span>
+                                )}
                               </p>
-                              {field.type === 'select' && field.options && field.options.length > 0 && (
-                                <div className="mt-1.5 space-y-1">
-                                  {field.options.slice(0, 4).map((opt, oi) => (
-                                    <div key={oi} className="text-xs bg-gray-100 rounded px-2 py-1 text-gray-600">
-                                      {oi + 1}. {opt}
-                                    </div>
-                                  ))}
-                                  {field.options.length > 4 && (
-                                    <div className="text-xs text-gray-400">+{field.options.length - 4} more...</div>
-                                  )}
-                                </div>
-                              )}
-                              <p className="text-right text-xs text-gray-400 mt-1">{time} ✓</p>
+                              {field.type === 'select' &&
+                                field.options &&
+                                field.options.length > 0 && (
+                                  <div className="mt-1.5 space-y-1">
+                                    {field.options
+                                      .slice(0, 4)
+                                      .map((opt, oi) => (
+                                        <div
+                                          key={oi}
+                                          className="text-xs bg-gray-100 rounded px-2 py-1 text-gray-600"
+                                        >
+                                          {oi + 1}. {opt}
+                                        </div>
+                                      ))}
+                                    {field.options.length > 4 && (
+                                      <div className="text-xs text-gray-400">
+                                        +{field.options.length - 4} more...
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              <p className="text-right text-xs text-gray-400 mt-1">
+                                {time} ✓
+                              </p>
                             </div>
                           </div>
                           {/* Simulated user reply */}
                           <div className="flex justify-end">
                             <div className="bg-[#DCF8C6] rounded-lg rounded-tr-none p-2.5 max-w-[75%] shadow-sm">
-                              <p className="text-sm text-gray-700 italic">{placeholder}</p>
-                              <p className="text-right text-xs text-gray-400 mt-1">{time} ✓✓</p>
+                              <p className="text-sm text-gray-700 italic">
+                                {placeholder}
+                              </p>
+                              <p className="text-right text-xs text-gray-400 mt-1">
+                                {time} ✓✓
+                              </p>
                             </div>
                           </div>
                         </div>
@@ -648,9 +790,16 @@ export default function FormBuilder() {
                     {completionMessage && (
                       <div className="flex justify-start">
                         <div className="bg-white rounded-lg rounded-tl-none p-2.5 max-w-[85%] shadow-sm border-l-4 border-green-400">
-                          <p className="text-xs text-green-600 font-semibold mb-0.5">✅ Complete</p>
-                          <p className="text-sm text-gray-800 whitespace-pre-wrap">{completionMessage}</p>
-                          <p className="text-right text-xs text-gray-400 mt-1">10:{String(formFields.length + 1).padStart(2, '0')} AM</p>
+                          <p className="text-xs text-green-600 font-semibold mb-0.5">
+                            ✅ Complete
+                          </p>
+                          <p className="text-sm text-gray-800 whitespace-pre-wrap">
+                            {completionMessage}
+                          </p>
+                          <p className="text-right text-xs text-gray-400 mt-1">
+                            10:{String(formFields.length + 1).padStart(2, '0')}{' '}
+                            AM
+                          </p>
                         </div>
                       </div>
                     )}
@@ -670,8 +819,11 @@ export default function FormBuilder() {
                 {/* Preview info */}
                 <div className="mt-3 text-center">
                   <p className="text-xs text-gray-400">
-                    {formFields.length} field{formFields.length !== 1 ? 's' : ''} · {triggerMode} trigger
-                    {triggerMode !== 'manual' ? ` · ${triggerDelay}s delay` : ''}
+                    {formFields.length} field
+                    {formFields.length !== 1 ? 's' : ''} · {triggerMode} trigger
+                    {triggerMode !== 'manual'
+                      ? ` · ${triggerDelay}s delay`
+                      : ''}
                   </p>
                 </div>
               </div>
@@ -705,7 +857,7 @@ function FormSubmissions() {
         : '/api/forms/submissions';
       const res = await fetch(url, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
         },
       });
       const data = await res.json();
@@ -727,7 +879,7 @@ function FormSubmissions() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
         },
         body: JSON.stringify({ status }),
       });
@@ -772,25 +924,46 @@ function FormSubmissions() {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Form</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submitted</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                Phone
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                Form
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                Status
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                Submitted
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {submissions.map((sub) => (
               <tr key={sub._id}>
-                <td className="px-6 py-4 whitespace-nowrap">{sub.phoneNumber}</td>
-                <td className="px-6 py-4 whitespace-nowrap">{typeof sub.formId === 'object' && sub.formId?.name ? sub.formId.name : 'N/A'}</td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 text-xs rounded ${
-                    sub.status === 'new' ? 'bg-blue-100 text-blue-800' :
-                    sub.status === 'reviewed' ? 'bg-yellow-100 text-yellow-800' :
-                    sub.status === 'contacted' ? 'bg-purple-100 text-purple-800' :
-                    'bg-green-100 text-green-800'
-                  }`}>
+                  {sub.phoneNumber}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {typeof sub.formId === 'object' && sub.formId?.name
+                    ? sub.formId.name
+                    : 'N/A'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span
+                    className={`px-2 py-1 text-xs rounded ${
+                      sub.status === 'new'
+                        ? 'bg-blue-100 text-blue-800'
+                        : sub.status === 'reviewed'
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : sub.status === 'contacted'
+                        ? 'bg-purple-100 text-purple-800'
+                        : 'bg-green-100 text-green-800'
+                    }`}
+                  >
                     {sub.status}
                   </span>
                 </td>

@@ -1,21 +1,61 @@
 import { useState, useEffect } from 'react';
 import { api } from '../config';
 import {
-  Users, DollarSign, Target, TrendingUp, Search, Plus, X,
-  Phone, Mail, Calendar, Clock, CheckCircle,
-  Edit, Trash2,
-  MessageSquare, UserPlus,
-  BarChart3, Activity, CheckSquare,
-  MessageCircle, FileText, Mic, Download,
-  Eye, Upload, RotateCcw, AlertCircle,
-  ChevronLeft, ChevronRight, Briefcase
+  Users,
+  DollarSign,
+  Target,
+  TrendingUp,
+  Search,
+  Plus,
+  X,
+  Phone,
+  Mail,
+  Calendar,
+  Clock,
+  CheckCircle,
+  Edit,
+  Trash2,
+  MessageSquare,
+  UserPlus,
+  BarChart3,
+  Activity,
+  CheckSquare,
+  MessageCircle,
+  FileText,
+  Mic,
+  Download,
+  Eye,
+  Upload,
+  RotateCcw,
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+  Briefcase,
 } from 'lucide-react';
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
 } from 'recharts';
 
-const COLORS = ['#3b82f6', '#22c55e', '#eab308', '#a855f7', '#ef4444', '#6366f1', '#ec4899', '#06b6d4'];
+const COLORS = [
+  '#3b82f6',
+  '#22c55e',
+  '#eab308',
+  '#a855f7',
+  '#ef4444',
+  '#6366f1',
+  '#ec4899',
+  '#06b6d4',
+];
 
 // Types
 interface Contact {
@@ -128,18 +168,48 @@ interface LeadRegistration {
     extractedText?: string;
     uploadedAt: Date;
   }[];
-  status: 'new' | 'reviewed' | 'contacted' | 'interviewed' | 'accepted' | 'rejected';
+  status:
+    | 'new'
+    | 'reviewed'
+    | 'contacted'
+    | 'interviewed'
+    | 'accepted'
+    | 'rejected';
   notes?: string;
   registeredAt: Date;
 }
 
 const leadStatusConfig = {
-  new: { label: 'New', color: 'bg-blue-50 text-blue-700 border-blue-200', icon: Clock },
-  reviewed: { label: 'Reviewed', color: 'bg-yellow-50 text-yellow-700 border-yellow-200', icon: Eye },
-  contacted: { label: 'Contacted', color: 'bg-purple-50 text-purple-700 border-purple-200', icon: Phone },
-  interviewed: { label: 'Interviewed', color: 'bg-cyan-50 text-cyan-700 border-cyan-200', icon: Calendar },
-  accepted: { label: 'Accepted', color: 'bg-green-50 text-green-700 border-green-200', icon: CheckCircle },
-  rejected: { label: 'Rejected', color: 'bg-red-50 text-red-700 border-red-200', icon: X }
+  new: {
+    label: 'New',
+    color: 'bg-blue-50 text-blue-700 border-blue-200',
+    icon: Clock,
+  },
+  reviewed: {
+    label: 'Reviewed',
+    color: 'bg-yellow-50 text-yellow-700 border-yellow-200',
+    icon: Eye,
+  },
+  contacted: {
+    label: 'Contacted',
+    color: 'bg-purple-50 text-purple-700 border-purple-200',
+    icon: Phone,
+  },
+  interviewed: {
+    label: 'Interviewed',
+    color: 'bg-cyan-50 text-cyan-700 border-cyan-200',
+    icon: Calendar,
+  },
+  accepted: {
+    label: 'Accepted',
+    color: 'bg-green-50 text-green-700 border-green-200',
+    icon: CheckCircle,
+  },
+  rejected: {
+    label: 'Rejected',
+    color: 'bg-red-50 text-red-700 border-red-200',
+    icon: X,
+  },
 };
 
 // Tab configuration
@@ -149,7 +219,7 @@ const tabs = [
   { id: 'contacts', label: 'Contacts', icon: Users },
   { id: 'deals', label: 'Deals', icon: DollarSign },
   { id: 'leads', label: 'Registrations', icon: UserPlus },
-  { id: 'activities', label: 'Activities', icon: Activity }
+  { id: 'activities', label: 'Activities', icon: Activity },
 ];
 
 // Stage colors for Kanban
@@ -159,7 +229,7 @@ const stageColors: Record<string, string> = {
   proposal: 'bg-yellow-50 border-yellow-200',
   negotiation: 'bg-orange-50 border-orange-200',
   won: 'bg-green-50 border-green-200',
-  lost: 'bg-red-50 border-red-200'
+  lost: 'bg-red-50 border-red-200',
 };
 
 const stageLabels: Record<string, string> = {
@@ -168,7 +238,7 @@ const stageLabels: Record<string, string> = {
   proposal: 'Proposal',
   negotiation: 'Negotiation',
   won: 'Won',
-  lost: 'Lost'
+  lost: 'Lost',
 };
 
 // Contact type colors
@@ -177,12 +247,22 @@ const typeColors: Record<string, string> = {
   prospect: 'bg-purple-100 text-purple-700',
   customer: 'bg-green-100 text-green-700',
   partner: 'bg-orange-100 text-orange-700',
-  vendor: 'bg-gray-100 text-gray-700'
+  vendor: 'bg-gray-100 text-gray-700',
 };
 
 interface DashboardStats {
-  contacts: { total: number; byType: Record<string, number>; byStatus: Record<string, number>; bySource: Record<string, number> };
-  deals: { total: number; totalValue: number; wonValue: number; byStage: Record<string, { count: number; value: number }> };
+  contacts: {
+    total: number;
+    byType: Record<string, number>;
+    byStatus: Record<string, number>;
+    bySource: Record<string, number>;
+  };
+  deals: {
+    total: number;
+    totalValue: number;
+    wonValue: number;
+    byStage: Record<string, { count: number; value: number }>;
+  };
   conversionRate: string;
   upcomingActivities: ActivityItem[];
   recentContacts: Contact[];
@@ -209,7 +289,9 @@ export default function CRM() {
   const [loading, setLoading] = useState(true);
 
   // Dashboard state
-  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(
+    null,
+  );
 
   // Contacts state
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -236,31 +318,58 @@ export default function CRM() {
   const [activitiesPage] = useState(1);
   const [activityTypeFilter] = useState('');
   const [showActivityModal, setShowActivityModal] = useState(false);
-  const [editingActivity, setEditingActivity] = useState<ActivityItem | null>(null);
+  const [editingActivity, setEditingActivity] = useState<ActivityItem | null>(
+    null,
+  );
 
   // Form states
   const [contactForm, setContactForm] = useState({
-    firstName: '', lastName: '', email: '', phone: '', company: '', position: '',
-    type: 'lead', source: 'other', status: 'active', tags: '', notes: ''
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    company: '',
+    position: '',
+    type: 'lead',
+    source: 'other',
+    status: 'active',
+    tags: '',
+    notes: '',
   });
 
   const [dealForm, setDealForm] = useState({
-    title: '', description: '', value: 0, currency: 'USD', stage: 'new',
-    probability: 10, contact: '', expectedCloseDate: ''
+    title: '',
+    description: '',
+    value: 0,
+    currency: 'USD',
+    stage: 'new',
+    probability: 10,
+    contact: '',
+    expectedCloseDate: '',
   });
 
   const [activityForm, setActivityForm] = useState({
-    type: 'task', title: '', description: '', contact: '', deal: '',
-    status: 'pending', priority: 'medium', dueDate: ''
+    type: 'task',
+    title: '',
+    description: '',
+    contact: '',
+    deal: '',
+    status: 'pending',
+    priority: 'medium',
+    dueDate: '',
   });
 
   // Analytics state
-  const [analyticsOverview, setAnalyticsOverview] = useState<OverviewStats | null>(null);
-  const [questionCategories, setQuestionCategories] = useState<QuestionCategory[]>([]);
+  const [analyticsOverview, setAnalyticsOverview] =
+    useState<OverviewStats | null>(null);
+  const [questionCategories, setQuestionCategories] = useState<
+    QuestionCategory[]
+  >([]);
   const [topQuestions, setTopQuestions] = useState<TopQuestion[]>([]);
   const [, setRecentReplies] = useState<ChatbotReply[]>([]);
   const [messageTrends, setMessageTrends] = useState<TrendData[]>([]);
-  const [leadAnalyticsStats, setLeadAnalyticsStats] = useState<LeadStats | null>(null);
+  const [leadAnalyticsStats, setLeadAnalyticsStats] =
+    useState<LeadStats | null>(null);
   const [analyticsPeriod, setAnalyticsPeriod] = useState('7');
 
   // Leads Registrations state
@@ -272,13 +381,18 @@ export default function CRM() {
   const [registrationStatusFilter, setRegistrationStatusFilter] = useState('');
   const [registrationJobFilter, setRegistrationJobFilter] = useState('');
   const [jobTypes, setJobTypes] = useState<string[]>([]);
-  const [registrationStats, setRegistrationStats] = useState<RegistrationStats | null>(null);
-  const [selectedRegistration, setSelectedRegistration] = useState<LeadRegistration | null>(null);
+  const [registrationStats, setRegistrationStats] =
+    useState<RegistrationStats | null>(null);
+  const [selectedRegistration, setSelectedRegistration] =
+    useState<LeadRegistration | null>(null);
   const [showRegistrationModal, setShowRegistrationModal] = useState(false);
   const [, setRegistrationMessages] = useState<RegistrationMessage[]>([]);
   const [, setLoadingRegistrationMessages] = useState(false);
   const [uploadingQualification, setUploadingQualification] = useState(false);
-  const [registrationNotification, setRegistrationNotification] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
+  const [registrationNotification, setRegistrationNotification] = useState<{
+    message: string;
+    type: 'success' | 'error' | 'info';
+  } | null>(null);
 
   // Fetch functions
   const fetchDashboard = async () => {
@@ -358,13 +472,20 @@ export default function CRM() {
   // Analytics fetch — declared before useEffect to satisfy react-hooks/immutability
   const fetchAnalytics = async () => {
     try {
-      const [overviewRes, questionsRes, topRes, trendsRes, leadsRes, repliesRes] = await Promise.all([
+      const [
+        overviewRes,
+        questionsRes,
+        topRes,
+        trendsRes,
+        leadsRes,
+        repliesRes,
+      ] = await Promise.all([
         api.get('/api/analytics/overview'),
         api.get('/api/analytics/questions'),
         api.get('/api/analytics/top-questions?limit=15'),
         api.get(`/api/analytics/trends?days=${analyticsPeriod}`),
         api.get('/api/analytics/leads'),
-        api.get('/api/analytics/recent-replies?limit=10')
+        api.get('/api/analytics/recent-replies?limit=10'),
       ]);
 
       setAnalyticsOverview(overviewRes.data);
@@ -385,8 +506,10 @@ export default function CRM() {
       params.append('page', registrationsPage.toString());
       params.append('limit', '20');
       if (registrationSearch) params.append('search', registrationSearch);
-      if (registrationStatusFilter) params.append('status', registrationStatusFilter);
-      if (registrationJobFilter) params.append('jobType', registrationJobFilter);
+      if (registrationStatusFilter)
+        params.append('status', registrationStatusFilter);
+      if (registrationJobFilter)
+        params.append('jobType', registrationJobFilter);
 
       const res = await api.get(`/api/crm/registrations?${params}`);
       setRegistrations(res.data.registrations);
@@ -412,18 +535,41 @@ export default function CRM() {
     try {
       const res = await api.get('/api/crm/registrations/stats');
       const types = Object.keys(res.data.byJobType || {});
-      setJobTypes(types.length > 0 ? types : [
-        'Electrician', 'Plumber', 'Asphalt Worker', 'Concrete Pump Driver',
-        'Excavator Operator', 'JCB Operator', 'Heavy Duty Cleaner',
-        'Gypsum Fixer', 'Tile Fixer', 'General Worker', 'Welder',
-        'Carpenter', 'Mason', 'Painter', 'AC Technician', 'Driver'
-      ]);
+      setJobTypes(
+        types.length > 0
+          ? types
+          : [
+              'Electrician',
+              'Plumber',
+              'Asphalt Worker',
+              'Concrete Pump Driver',
+              'Excavator Operator',
+              'JCB Operator',
+              'Heavy Duty Cleaner',
+              'Gypsum Fixer',
+              'Tile Fixer',
+              'General Worker',
+              'Welder',
+              'Carpenter',
+              'Mason',
+              'Painter',
+              'AC Technician',
+              'Driver',
+            ],
+      );
     } catch (err) {
       console.error('Failed to fetch job types:', err);
       setJobTypes([
-        'Electrician', 'Plumber', 'Asphalt Worker', 'Concrete Pump Driver',
-        'Excavator Operator', 'JCB Operator', 'Heavy Duty Cleaner',
-        'Gypsum Fixer', 'Tile Fixer', 'General Worker'
+        'Electrician',
+        'Plumber',
+        'Asphalt Worker',
+        'Concrete Pump Driver',
+        'Excavator Operator',
+        'JCB Operator',
+        'Heavy Duty Cleaner',
+        'Gypsum Fixer',
+        'Tile Fixer',
+        'General Worker',
       ]);
     }
   };
@@ -448,14 +594,32 @@ export default function CRM() {
       fetchJobTypes();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, contactsPage, contactSearch, contactTypeFilter, dealsPage, dealSearch, dealStageFilter, activitiesPage, activityTypeFilter, analyticsPeriod, registrationsPage, registrationSearch, registrationStatusFilter, registrationJobFilter]);
+  }, [
+    activeTab,
+    contactsPage,
+    contactSearch,
+    contactTypeFilter,
+    dealsPage,
+    dealSearch,
+    dealStageFilter,
+    activitiesPage,
+    activityTypeFilter,
+    analyticsPeriod,
+    registrationsPage,
+    registrationSearch,
+    registrationStatusFilter,
+    registrationJobFilter,
+  ]);
 
   // Contact handlers
   const handleSaveContact = async () => {
     try {
       const data = {
         ...contactForm,
-        tags: contactForm.tags.split(',').map(t => t.trim()).filter(Boolean)
+        tags: contactForm.tags
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean),
       };
 
       if (editingContact) {
@@ -486,8 +650,17 @@ export default function CRM() {
 
   const resetContactForm = () => {
     setContactForm({
-      firstName: '', lastName: '', email: '', phone: '', company: '', position: '',
-      type: 'lead', source: 'other', status: 'active', tags: '', notes: ''
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      company: '',
+      position: '',
+      type: 'lead',
+      source: 'other',
+      status: 'active',
+      tags: '',
+      notes: '',
     });
   };
 
@@ -497,7 +670,7 @@ export default function CRM() {
       const data = {
         ...dealForm,
         value: Number(dealForm.value),
-        probability: Number(dealForm.probability)
+        probability: Number(dealForm.probability),
       };
 
       if (editingDeal) {
@@ -530,8 +703,14 @@ export default function CRM() {
 
   const resetDealForm = () => {
     setDealForm({
-      title: '', description: '', value: 0, currency: 'USD', stage: 'new',
-      probability: 10, contact: '', expectedCloseDate: ''
+      title: '',
+      description: '',
+      value: 0,
+      currency: 'USD',
+      stage: 'new',
+      probability: 10,
+      contact: '',
+      expectedCloseDate: '',
     });
   };
 
@@ -539,7 +718,10 @@ export default function CRM() {
   const handleSaveActivity = async () => {
     try {
       if (editingActivity) {
-        await api.put(`/api/crm/activities/${editingActivity._id}`, activityForm);
+        await api.put(
+          `/api/crm/activities/${editingActivity._id}`,
+          activityForm,
+        );
       } else {
         await api.post('/api/crm/activities', activityForm);
       }
@@ -576,8 +758,14 @@ export default function CRM() {
 
   const resetActivityForm = () => {
     setActivityForm({
-      type: 'task', title: '', description: '', contact: '', deal: '',
-      status: 'pending', priority: 'medium', dueDate: ''
+      type: 'task',
+      title: '',
+      description: '',
+      contact: '',
+      deal: '',
+      status: 'pending',
+      priority: 'medium',
+      dueDate: '',
     });
   };
 
@@ -595,14 +783,22 @@ export default function CRM() {
     }
   };
 
-  const showRegistrationNotify = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+  const showRegistrationNotify = (
+    message: string,
+    type: 'success' | 'error' | 'info' = 'info',
+  ) => {
     setRegistrationNotification({ message, type });
     setTimeout(() => setRegistrationNotification(null), 3000);
   };
 
-  const handleRegistrationStatusChange = async (leadId: string, newStatus: string) => {
+  const handleRegistrationStatusChange = async (
+    leadId: string,
+    newStatus: string,
+  ) => {
     try {
-      await api.put(`/api/crm/registrations/${leadId}/status`, { status: newStatus });
+      await api.put(`/api/crm/registrations/${leadId}/status`, {
+        status: newStatus,
+      });
       fetchRegistrations();
       fetchRegistrationStats();
       showRegistrationNotify('Status updated', 'success');
@@ -633,15 +829,19 @@ export default function CRM() {
     formData.append('cv', file);
 
     try {
-      const res = await api.post(`/api/crm/registrations/${leadId}/cv`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const res = await api.post(
+        `/api/crm/registrations/${leadId}/cv`,
+        formData,
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        },
+      );
       if (selectedRegistration && selectedRegistration._id === leadId) {
         setSelectedRegistration({
           ...selectedRegistration,
           cvUrl: res.data.cvUrl,
           cvFileName: res.data.fileName,
-          cvUploadedAt: new Date()
+          cvUploadedAt: new Date(),
         });
       }
       fetchRegistrations();
@@ -655,11 +855,16 @@ export default function CRM() {
 
   const handleExportLeadsCSV = async () => {
     try {
-      const res = await api.get('/api/crm/registrations/export', { responseType: 'blob' });
+      const res = await api.get('/api/crm/registrations/export', {
+        responseType: 'blob',
+      });
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `registrations-export-${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute(
+        'download',
+        `registrations-export-${new Date().toISOString().split('T')[0]}.csv`,
+      );
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -678,7 +883,7 @@ export default function CRM() {
       location: 'Location & Address',
       services: 'Services & Help',
       hello: 'Greetings',
-      language: 'Language'
+      language: 'Language',
     };
     return labels[cat] || cat;
   };
@@ -691,8 +896,12 @@ export default function CRM() {
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-2xl shadow-lg text-white">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-blue-100 text-sm font-medium">Total Contacts</p>
-              <p className="text-3xl font-bold mt-1">{dashboardStats?.contacts?.total || 0}</p>
+              <p className="text-blue-100 text-sm font-medium">
+                Total Contacts
+              </p>
+              <p className="text-3xl font-bold mt-1">
+                {dashboardStats?.contacts?.total || 0}
+              </p>
             </div>
             <div className="bg-white/20 p-3 rounded-xl">
               <Users className="h-6 w-6" />
@@ -704,7 +913,9 @@ export default function CRM() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-green-100 text-sm font-medium">Total Deals</p>
-              <p className="text-3xl font-bold mt-1">{dashboardStats?.deals?.total || 0}</p>
+              <p className="text-3xl font-bold mt-1">
+                {dashboardStats?.deals?.total || 0}
+              </p>
             </div>
             <div className="bg-white/20 p-3 rounded-xl">
               <DollarSign className="h-6 w-6" />
@@ -715,8 +926,12 @@ export default function CRM() {
         <div className="bg-gradient-to-br from-purple-500 to-purple-600 p-6 rounded-2xl shadow-lg text-white">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-purple-100 text-sm font-medium">Pipeline Value</p>
-              <p className="text-3xl font-bold mt-1">${(dashboardStats?.deals?.totalValue || 0).toLocaleString()}</p>
+              <p className="text-purple-100 text-sm font-medium">
+                Pipeline Value
+              </p>
+              <p className="text-3xl font-bold mt-1">
+                ${(dashboardStats?.deals?.totalValue || 0).toLocaleString()}
+              </p>
             </div>
             <div className="bg-white/20 p-3 rounded-xl">
               <Target className="h-6 w-6" />
@@ -728,7 +943,9 @@ export default function CRM() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-orange-100 text-sm font-medium">Won Deals</p>
-              <p className="text-3xl font-bold mt-1">${(dashboardStats?.deals?.wonValue || 0).toLocaleString()}</p>
+              <p className="text-3xl font-bold mt-1">
+                ${(dashboardStats?.deals?.wonValue || 0).toLocaleString()}
+              </p>
             </div>
             <div className="bg-white/20 p-3 rounded-xl">
               <TrendingUp className="h-6 w-6" />
@@ -751,7 +968,9 @@ export default function CRM() {
                 style={{ width: `${dashboardStats?.conversionRate || 0}%` }}
               />
             </div>
-            <span className="text-2xl font-bold text-gray-800">{dashboardStats?.conversionRate || 0}%</span>
+            <span className="text-2xl font-bold text-gray-800">
+              {dashboardStats?.conversionRate || 0}%
+            </span>
           </div>
           <p className="text-sm text-gray-500 mt-2">Won deals / Total deals</p>
         </div>
@@ -763,19 +982,28 @@ export default function CRM() {
           </h3>
           {(dashboardStats?.upcomingActivities?.length ?? 0) > 0 ? (
             <div className="space-y-3">
-              {dashboardStats?.upcomingActivities?.slice(0, 4).map((activity: ActivityItem) => (
-                <div key={activity._id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                  <div className="p-2 bg-orange-100 rounded-lg">
-                    <CheckSquare className="h-4 w-4 text-orange-600" />
+              {dashboardStats?.upcomingActivities
+                ?.slice(0, 4)
+                .map((activity: ActivityItem) => (
+                  <div
+                    key={activity._id}
+                    className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl"
+                  >
+                    <div className="p-2 bg-orange-100 rounded-lg">
+                      <CheckSquare className="h-4 w-4 text-orange-600" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-800 text-sm">
+                        {activity.title}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {activity.dueDate
+                          ? new Date(activity.dueDate).toLocaleDateString()
+                          : 'No due date'}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-800 text-sm">{activity.title}</p>
-                    <p className="text-xs text-gray-500">
-                      {activity.dueDate ? new Date(activity.dueDate).toLocaleDateString() : 'No due date'}
-                    </p>
-                  </div>
-                </div>
-              ))}
+                ))}
             </div>
           ) : (
             <p className="text-gray-400 text-sm">No upcoming activities</p>
@@ -793,15 +1021,26 @@ export default function CRM() {
           {(dashboardStats?.recentContacts?.length ?? 0) > 0 ? (
             <div className="space-y-3">
               {dashboardStats?.recentContacts?.map((contact: Contact) => (
-                <div key={contact._id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                <div
+                  key={contact._id}
+                  className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl"
+                >
                   <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold">
                     {(contact.firstName || 'U').charAt(0)}
                   </div>
                   <div className="flex-1">
-                    <p className="font-medium text-gray-800 text-sm">{contact.firstName} {contact.lastName}</p>
-                    <p className="text-xs text-gray-500">{contact.company || contact.email || 'No company'}</p>
+                    <p className="font-medium text-gray-800 text-sm">
+                      {contact.firstName} {contact.lastName}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {contact.company || contact.email || 'No company'}
+                    </p>
                   </div>
-              <span className={`px-2 py-1 rounded-full text-xs font-medium ${typeColors[contact.type]}`}>
+                  <span
+                    className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      typeColors[contact.type]
+                    }`}
+                  >
                     {contact.type}
                   </span>
                 </div>
@@ -820,15 +1059,26 @@ export default function CRM() {
           {(dashboardStats?.recentDeals?.length ?? 0) > 0 ? (
             <div className="space-y-3">
               {dashboardStats?.recentDeals?.map((deal: Deal) => (
-                <div key={deal._id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                <div
+                  key={deal._id}
+                  className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl"
+                >
                   <div className="p-2 bg-green-100 rounded-lg">
                     <DollarSign className="h-4 w-4 text-green-600" />
                   </div>
                   <div className="flex-1">
-                    <p className="font-medium text-gray-800 text-sm">{deal.title}</p>
-                    <p className="text-xs text-gray-500">${deal.value.toLocaleString()}</p>
+                    <p className="font-medium text-gray-800 text-sm">
+                      {deal.title}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      ${deal.value.toLocaleString()}
+                    </p>
                   </div>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${stageColors[deal.stage]} border`}>
+                  <span
+                    className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      stageColors[deal.stage]
+                    } border`}
+                  >
                     {stageLabels[deal.stage]}
                   </span>
                 </div>
@@ -877,22 +1127,44 @@ export default function CRM() {
           <table className="w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Contact</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Company</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Type</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Source</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Status</th>
-                <th className="px-6 py-4 text-right text-xs font-bold text-gray-400 uppercase">Actions</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">
+                  Contact
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">
+                  Company
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">
+                  Type
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">
+                  Source
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">
+                  Status
+                </th>
+                <th className="px-6 py-4 text-right text-xs font-bold text-gray-400 uppercase">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-400">Loading...</td>
+                  <td
+                    colSpan={6}
+                    className="px-6 py-12 text-center text-gray-400"
+                  >
+                    Loading...
+                  </td>
                 </tr>
               ) : contacts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-400">No contacts found</td>
+                  <td
+                    colSpan={6}
+                    className="px-6 py-12 text-center text-gray-400"
+                  >
+                    No contacts found
+                  </td>
                 </tr>
               ) : (
                 contacts.map((contact) => (
@@ -903,31 +1175,50 @@ export default function CRM() {
                           {(contact.firstName || 'U').charAt(0)}
                         </div>
                         <div>
-                          <p className="font-medium text-gray-800">{contact.firstName} {contact.lastName}</p>
-                          <p className="text-sm text-gray-500">{contact.email || contact.phone}</p>
+                          <p className="font-medium text-gray-800">
+                            {contact.firstName} {contact.lastName}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            {contact.email || contact.phone}
+                          </p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-gray-600">{contact.company || '-'}</td>
+                    <td className="px-6 py-4 text-gray-600">
+                      {contact.company || '-'}
+                    </td>
                     <td className="px-6 py-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${typeColors[contact.type]}`}>
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          typeColors[contact.type]
+                        }`}
+                      >
                         {contact.type}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-gray-600 capitalize">{contact.source}</td>
+                    <td className="px-6 py-4 text-gray-600 capitalize">
+                      {contact.source}
+                    </td>
                     <td className="px-6 py-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        contact.status === 'active' ? 'bg-green-100 text-green-700' :
-                        contact.status === 'inactive' ? 'bg-gray-100 text-gray-700' :
-                        'bg-red-100 text-red-700'
-                      }`}>
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          contact.status === 'active'
+                            ? 'bg-green-100 text-green-700'
+                            : contact.status === 'inactive'
+                            ? 'bg-gray-100 text-gray-700'
+                            : 'bg-red-100 text-red-700'
+                        }`}
+                      >
                         {contact.status}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
                         <a
-                          href={`https://wa.me/${contact.phone.replace(/[^0-9]/g, '')}`}
+                          href={`https://wa.me/${contact.phone.replace(
+                            /[^0-9]/g,
+                            '',
+                          )}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
@@ -948,7 +1239,7 @@ export default function CRM() {
                               source: contact.source,
                               status: contact.status,
                               tags: contact.tags.join(', '),
-                              notes: contact.notes || ''
+                              notes: contact.notes || '',
                             });
                             setShowContactModal(true);
                           }}
@@ -1019,20 +1310,28 @@ export default function CRM() {
                       stage: deal.stage,
                       probability: deal.probability,
                       contact: deal.contact?._id || '',
-                      expectedCloseDate: deal.expectedCloseDate ? deal.expectedCloseDate.toString().split('T')[0] : ''
+                      expectedCloseDate: deal.expectedCloseDate
+                        ? deal.expectedCloseDate.toString().split('T')[0]
+                        : '',
                     });
                     setShowDealModal(true);
                   }}
                 >
-                  <h4 className="font-medium text-gray-800 mb-2">{deal.title}</h4>
-                  <p className="text-lg font-bold text-green-600">${deal.value.toLocaleString()}</p>
+                  <h4 className="font-medium text-gray-800 mb-2">
+                    {deal.title}
+                  </h4>
+                  <p className="text-lg font-bold text-green-600">
+                    ${deal.value.toLocaleString()}
+                  </p>
                   {deal.contact && (
                     <p className="text-sm text-gray-500 mt-2">
                       {deal.contact.firstName} {deal.contact.lastName}
                     </p>
                   )}
                   <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
-                    <span className="text-xs text-gray-400">{deal.probability}% probability</span>
+                    <span className="text-xs text-gray-400">
+                      {deal.probability}% probability
+                    </span>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -1074,47 +1373,79 @@ export default function CRM() {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="divide-y divide-gray-100">
           {loading ? (
-            <div className="px-6 py-12 text-center text-gray-400">Loading...</div>
+            <div className="px-6 py-12 text-center text-gray-400">
+              Loading...
+            </div>
           ) : activities.length === 0 ? (
-            <div className="px-6 py-12 text-center text-gray-400">No activities found</div>
+            <div className="px-6 py-12 text-center text-gray-400">
+              No activities found
+            </div>
           ) : (
             activities.map((activity) => (
-              <div key={activity._id} className="p-6 hover:bg-gray-50 transition">
+              <div
+                key={activity._id}
+                className="p-6 hover:bg-gray-50 transition"
+              >
                 <div className="flex items-start gap-4">
-                  <div className={`p-3 rounded-xl ${
-                    activity.type === 'call' ? 'bg-blue-100 text-blue-600' :
-                    activity.type === 'meeting' ? 'bg-purple-100 text-purple-600' :
-                    activity.type === 'email' ? 'bg-green-100 text-green-600' :
-                    activity.type === 'whatsapp' ? 'bg-emerald-100 text-emerald-600' :
-                    activity.type === 'task' ? 'bg-orange-100 text-orange-600' :
-                    'bg-gray-100 text-gray-600'
-                  }`}>
-                    {activity.type === 'call' ? <Phone className="h-5 w-5" /> :
-                     activity.type === 'meeting' ? <Calendar className="h-5 w-5" /> :
-                     activity.type === 'email' ? <Mail className="h-5 w-5" /> :
-                     activity.type === 'whatsapp' ? <MessageSquare className="h-5 w-5" /> :
-                     <CheckSquare className="h-5 w-5" />}
+                  <div
+                    className={`p-3 rounded-xl ${
+                      activity.type === 'call'
+                        ? 'bg-blue-100 text-blue-600'
+                        : activity.type === 'meeting'
+                        ? 'bg-purple-100 text-purple-600'
+                        : activity.type === 'email'
+                        ? 'bg-green-100 text-green-600'
+                        : activity.type === 'whatsapp'
+                        ? 'bg-emerald-100 text-emerald-600'
+                        : activity.type === 'task'
+                        ? 'bg-orange-100 text-orange-600'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    {activity.type === 'call' ? (
+                      <Phone className="h-5 w-5" />
+                    ) : activity.type === 'meeting' ? (
+                      <Calendar className="h-5 w-5" />
+                    ) : activity.type === 'email' ? (
+                      <Mail className="h-5 w-5" />
+                    ) : activity.type === 'whatsapp' ? (
+                      <MessageSquare className="h-5 w-5" />
+                    ) : (
+                      <CheckSquare className="h-5 w-5" />
+                    )}
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <h4 className="font-medium text-gray-800">{activity.title}</h4>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        activity.status === 'completed' ? 'bg-green-100 text-green-700' :
-                        activity.status === 'cancelled' ? 'bg-gray-100 text-gray-700' :
-                        'bg-yellow-100 text-yellow-700'
-                      }`}>
+                      <h4 className="font-medium text-gray-800">
+                        {activity.title}
+                      </h4>
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          activity.status === 'completed'
+                            ? 'bg-green-100 text-green-700'
+                            : activity.status === 'cancelled'
+                            ? 'bg-gray-100 text-gray-700'
+                            : 'bg-yellow-100 text-yellow-700'
+                        }`}
+                      >
                         {activity.status}
                       </span>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        activity.priority === 'high' ? 'bg-red-100 text-red-700' :
-                        activity.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          activity.priority === 'high'
+                            ? 'bg-red-100 text-red-700'
+                            : activity.priority === 'medium'
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-gray-100 text-gray-700'
+                        }`}
+                      >
                         {activity.priority}
                       </span>
                     </div>
                     {activity.description && (
-                      <p className="text-sm text-gray-500 mt-1">{activity.description}</p>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {activity.description}
+                      </p>
                     )}
                     {activity.dueDate && (
                       <p className="text-xs text-gray-400 mt-2">
@@ -1179,7 +1510,9 @@ export default function CRM() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Today</p>
-              <p className="text-2xl font-bold">{analyticsOverview?.todayMessages || 0}</p>
+              <p className="text-2xl font-bold">
+                {analyticsOverview?.todayMessages || 0}
+              </p>
             </div>
             <MessageCircle className="h-8 w-8 text-blue-500" />
           </div>
@@ -1188,7 +1521,9 @@ export default function CRM() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">This Week</p>
-              <p className="text-2xl font-bold">{analyticsOverview?.weekMessages || 0}</p>
+              <p className="text-2xl font-bold">
+                {analyticsOverview?.weekMessages || 0}
+              </p>
             </div>
             <TrendingUp className="h-8 w-8 text-green-500" />
           </div>
@@ -1197,7 +1532,9 @@ export default function CRM() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Total Users</p>
-              <p className="text-2xl font-bold">{analyticsOverview?.totalUsers || 0}</p>
+              <p className="text-2xl font-bold">
+                {analyticsOverview?.totalUsers || 0}
+              </p>
             </div>
             <Users className="h-8 w-8 text-purple-500" />
           </div>
@@ -1206,7 +1543,9 @@ export default function CRM() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Avg/User</p>
-              <p className="text-2xl font-bold">{analyticsOverview?.avgMessagesPerUser || 0}</p>
+              <p className="text-2xl font-bold">
+                {analyticsOverview?.avgMessagesPerUser || 0}
+              </p>
             </div>
             <BarChart3 className="h-8 w-8 text-orange-500" />
           </div>
@@ -1222,9 +1561,18 @@ export default function CRM() {
             <p className="text-gray-500 text-center py-8">No data available</p>
           ) : (
             <ResponsiveContainer width="100%" height="85%">
-              <AreaChart data={messageTrends} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+              <AreaChart
+                data={messageTrends}
+                margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+              >
                 <defs>
-                  <linearGradient id="colorMessages" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient
+                    id="colorMessages"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
                     <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                   </linearGradient>
@@ -1233,7 +1581,13 @@ export default function CRM() {
                 <YAxis />
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <RechartsTooltip />
-                <Area type="monotone" dataKey="messages" stroke="#3b82f6" fillOpacity={1} fill="url(#colorMessages)" />
+                <Area
+                  type="monotone"
+                  dataKey="messages"
+                  stroke="#3b82f6"
+                  fillOpacity={1}
+                  fill="url(#colorMessages)"
+                />
               </AreaChart>
             </ResponsiveContainer>
           )}
@@ -1259,10 +1613,18 @@ export default function CRM() {
                   label
                 >
                   {questionCategories.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={COLORS[index % COLORS.length]}
+                    />
                   ))}
                 </Pie>
-                <RechartsTooltip formatter={(value, name) => [value, getCategoryLabel(name as string)]} />
+                <RechartsTooltip
+                  formatter={(value, name) => [
+                    value,
+                    getCategoryLabel(name as string),
+                  ]}
+                />
                 <Legend formatter={(value) => getCategoryLabel(value)} />
               </PieChart>
             </ResponsiveContainer>
@@ -1280,8 +1642,13 @@ export default function CRM() {
               <p className="text-gray-500 text-center py-8">No questions yet</p>
             ) : (
               topQuestions.slice(0, 10).map((q, idx) => (
-                <div key={idx} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                  <span className="text-xs font-medium text-gray-400 w-6">#{idx + 1}</span>
+                <div
+                  key={idx}
+                  className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg"
+                >
+                  <span className="text-xs font-medium text-gray-400 w-6">
+                    #{idx + 1}
+                  </span>
                   <span className="flex-1 text-sm">{q.question}</span>
                   <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
                     {q.count}x
@@ -1301,25 +1668,33 @@ export default function CRM() {
                 <FileText className="h-6 w-6 text-blue-600" />
                 <span className="font-medium">Text Messages</span>
               </div>
-              <span className="text-xl font-bold">{analyticsOverview?.textMessages || 0}</span>
+              <span className="text-xl font-bold">
+                {analyticsOverview?.textMessages || 0}
+              </span>
             </div>
             <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg">
               <div className="flex items-center gap-3">
                 <Mic className="h-6 w-6 text-purple-600" />
                 <span className="font-medium">Voice Messages</span>
               </div>
-              <span className="text-xl font-bold">{analyticsOverview?.voiceMessages || 0}</span>
+              <span className="text-xl font-bold">
+                {analyticsOverview?.voiceMessages || 0}
+              </span>
             </div>
           </div>
 
           <div className="mt-6 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Total Interactions</span>
-              <span className="font-medium">{analyticsOverview?.totalMessages || 0}</span>
+              <span className="font-medium">
+                {analyticsOverview?.totalMessages || 0}
+              </span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Chatbot Messages</span>
-              <span className="font-medium text-blue-600">{analyticsOverview?.botMessages || 0}</span>
+              <span className="font-medium text-blue-600">
+                {analyticsOverview?.botMessages || 0}
+              </span>
             </div>
           </div>
         </div>
@@ -1327,23 +1702,33 @@ export default function CRM() {
 
       {/* Lead Stats Summary */}
       <div className="bg-white p-5 rounded-xl shadow-md">
-        <h3 className="text-lg font-semibold mb-4">Lead Registrations Summary</h3>
+        <h3 className="text-lg font-semibold mb-4">
+          Lead Registrations Summary
+        </h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="p-4 bg-blue-50 rounded-lg">
             <p className="text-sm text-blue-600">Total Leads</p>
-            <p className="text-2xl font-bold">{leadAnalyticsStats?.totalLeads || 0}</p>
+            <p className="text-2xl font-bold">
+              {leadAnalyticsStats?.totalLeads || 0}
+            </p>
           </div>
           <div className="p-4 bg-green-50 rounded-lg">
             <p className="text-sm text-green-600">This Week</p>
-            <p className="text-2xl font-bold">{leadAnalyticsStats?.weekLeads || 0}</p>
+            <p className="text-2xl font-bold">
+              {leadAnalyticsStats?.weekLeads || 0}
+            </p>
           </div>
           <div className="p-4 bg-yellow-50 rounded-lg">
             <p className="text-sm text-yellow-600">New</p>
-            <p className="text-2xl font-bold">{leadAnalyticsStats?.byStatus?.new || 0}</p>
+            <p className="text-2xl font-bold">
+              {leadAnalyticsStats?.byStatus?.new || 0}
+            </p>
           </div>
           <div className="p-4 bg-purple-50 rounded-lg">
             <p className="text-sm text-purple-600">Accepted</p>
-            <p className="text-2xl font-bold">{leadAnalyticsStats?.byStatus?.accepted || 0}</p>
+            <p className="text-2xl font-bold">
+              {leadAnalyticsStats?.byStatus?.accepted || 0}
+            </p>
           </div>
         </div>
       </div>
@@ -1359,7 +1744,9 @@ export default function CRM() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-indigo-100 text-xs font-medium">Total Leads</p>
-              <p className="text-2xl font-bold mt-1">{registrationStats?.totalLeads || registrationStats?.total || 0}</p>
+              <p className="text-2xl font-bold mt-1">
+                {registrationStats?.totalLeads || registrationStats?.total || 0}
+              </p>
             </div>
             <UserPlus className="h-5 w-5" />
           </div>
@@ -1368,7 +1755,9 @@ export default function CRM() {
           const count = registrationStats?.byStatus?.[key] || 0;
           return (
             <div key={key} className="bg-white p-4 rounded-xl shadow-sm border">
-              <p className="text-gray-500 text-xs font-medium">{config.label}</p>
+              <p className="text-gray-500 text-xs font-medium">
+                {config.label}
+              </p>
               <p className="text-xl font-bold mt-1">{count}</p>
             </div>
           );
@@ -1384,34 +1773,54 @@ export default function CRM() {
               type="text"
               placeholder="Search by name, phone, email..."
               value={registrationSearch}
-              onChange={(e) => { setRegistrationSearch(e.target.value); setRegistrationsPage(1); }}
+              onChange={(e) => {
+                setRegistrationSearch(e.target.value);
+                setRegistrationsPage(1);
+              }}
               className="pl-12 pr-4 py-2 w-full bg-gray-50 border-transparent focus:bg-white focus:ring-2 focus:ring-indigo-500 rounded-xl outline-none"
             />
           </div>
           <div className="flex gap-3">
             <select
               value={registrationStatusFilter}
-              onChange={(e) => { setRegistrationStatusFilter(e.target.value); setRegistrationsPage(1); }}
+              onChange={(e) => {
+                setRegistrationStatusFilter(e.target.value);
+                setRegistrationsPage(1);
+              }}
               className="px-4 py-2 bg-gray-50 border-transparent focus:bg-white focus:ring-2 focus:ring-indigo-500 rounded-xl outline-none"
             >
               <option value="">Status: All</option>
               {Object.entries(leadStatusConfig).map(([key, config]) => (
-                <option key={key} value={key}>{config.label}</option>
+                <option key={key} value={key}>
+                  {config.label}
+                </option>
               ))}
             </select>
             <select
               value={registrationJobFilter}
-              onChange={(e) => { setRegistrationJobFilter(e.target.value); setRegistrationsPage(1); }}
+              onChange={(e) => {
+                setRegistrationJobFilter(e.target.value);
+                setRegistrationsPage(1);
+              }}
               className="px-4 py-2 bg-gray-50 border-transparent focus:bg-white focus:ring-2 focus:ring-indigo-500 rounded-xl outline-none"
             >
               <option value="">Job: All</option>
               {jobTypes.map((type) => (
-                <option key={type} value={type}>{type}</option>
+                <option key={type} value={type}>
+                  {type}
+                </option>
               ))}
             </select>
-            {(registrationSearch || registrationStatusFilter || registrationJobFilter) && (
+            {(registrationSearch ||
+              registrationStatusFilter ||
+              registrationJobFilter) && (
               <button
-                onClick={() => { setRegistrationSearch(''); setRegistrationStatusFilter(''); setRegistrationJobFilter(''); setRegistrationsPage(1); }}
+                onClick={() => {
+                  setRegistrationSearch('');
+                  setRegistrationStatusFilter('');
+                  setRegistrationJobFilter('');
+                  setRegistrationsPage(1);
+                }}
                 className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl"
               >
                 <RotateCcw className="h-5 w-5" />
@@ -1433,23 +1842,47 @@ export default function CRM() {
           <table className="w-full">
             <thead>
               <tr className="bg-gray-50 border-b">
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Lead</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Details</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Job / Country</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">CV</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Status</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Registered</th>
-                <th className="px-6 py-4 text-right text-xs font-bold text-gray-400 uppercase">Actions</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">
+                  Lead
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">
+                  Details
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">
+                  Job / Country
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">
+                  CV
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">
+                  Status
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">
+                  Registered
+                </th>
+                <th className="px-6 py-4 text-right text-xs font-bold text-gray-400 uppercase">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-gray-400">Loading...</td>
+                  <td
+                    colSpan={7}
+                    className="px-6 py-12 text-center text-gray-400"
+                  >
+                    Loading...
+                  </td>
                 </tr>
               ) : registrations.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-gray-400">No registrations found</td>
+                  <td
+                    colSpan={7}
+                    className="px-6 py-12 text-center text-gray-400"
+                  >
+                    No registrations found
+                  </td>
                 </tr>
               ) : (
                 registrations.map((lead) => (
@@ -1460,8 +1893,12 @@ export default function CRM() {
                           {(lead.fullName || 'U').charAt(0)}
                         </div>
                         <div>
-                          <p className="font-medium text-gray-800">{lead.fullName}</p>
-                          <p className="text-xs text-gray-400">Age: {lead.age || 'N/A'}</p>
+                          <p className="font-medium text-gray-800">
+                            {lead.fullName}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            Age: {lead.age || 'N/A'}
+                          </p>
                         </div>
                       </div>
                     </td>
@@ -1472,11 +1909,14 @@ export default function CRM() {
                       </div>
                       {lead.email && (
                         <div className="flex items-center gap-2 text-xs text-gray-400 mt-1">
-                          <Mail className="h-3 w-3" />{lead.email}
+                          <Mail className="h-3 w-3" />
+                          {lead.email}
                         </div>
                       )}
                       {lead.experienceYears && (
-                        <p className="text-xs text-gray-400 mt-1">Exp: {lead.experienceYears} yrs</p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          Exp: {lead.experienceYears} yrs
+                        </p>
                       )}
                     </td>
                     <td className="px-6 py-4">
@@ -1484,13 +1924,17 @@ export default function CRM() {
                         {lead.jobVacancyType}
                       </span>
                       {lead.interestedCountry && (
-                        <p className="text-xs text-gray-500 mt-1">{lead.interestedCountry}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {lead.interestedCountry}
+                        </p>
                       )}
                     </td>
                     <td className="px-6 py-4">
                       {lead.cvUrl ? (
                         <a
-                          href={`${import.meta.env.VITE_API_URL || ''}${lead.cvUrl}`}
+                          href={`${import.meta.env.VITE_API_URL || ''}${
+                            lead.cvUrl
+                          }`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-1 text-green-600 hover:text-green-700"
@@ -1505,12 +1949,29 @@ export default function CRM() {
                     <td className="px-6 py-4">
                       <select
                         value={lead.status}
-                        onChange={(e) => handleRegistrationStatusChange(lead._id, e.target.value)}
-                        className={`text-xs font-medium px-3 py-1 rounded-full border ${leadStatusConfig[lead.status as keyof typeof leadStatusConfig]?.color}`}
+                        onChange={(e) =>
+                          handleRegistrationStatusChange(
+                            lead._id,
+                            e.target.value,
+                          )
+                        }
+                        className={`text-xs font-medium px-3 py-1 rounded-full border ${
+                          leadStatusConfig[
+                            lead.status as keyof typeof leadStatusConfig
+                          ]?.color
+                        }`}
                       >
-                        {Object.entries(leadStatusConfig).map(([key, config]) => (
-                          <option key={key} value={key} className="bg-white text-gray-900">{config.label}</option>
-                        ))}
+                        {Object.entries(leadStatusConfig).map(
+                          ([key, config]) => (
+                            <option
+                              key={key}
+                              value={key}
+                              className="bg-white text-gray-900"
+                            >
+                              {config.label}
+                            </option>
+                          ),
+                        )}
                       </select>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
@@ -1519,7 +1980,10 @@ export default function CRM() {
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
                         <a
-                          href={`https://wa.me/${lead.phoneNumber.replace(/[^0-9]/g, '')}`}
+                          href={`https://wa.me/${lead.phoneNumber.replace(
+                            /[^0-9]/g,
+                            '',
+                          )}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
@@ -1553,17 +2017,23 @@ export default function CRM() {
         {/* Pagination */}
         {registrationsTotalPages > 1 && (
           <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-t">
-            <p className="text-sm text-gray-500">Page {registrationsPage} of {registrationsTotalPages}</p>
+            <p className="text-sm text-gray-500">
+              Page {registrationsPage} of {registrationsTotalPages}
+            </p>
             <div className="flex gap-2">
               <button
-                onClick={() => setRegistrationsPage(p => Math.max(1, p - 1))}
+                onClick={() => setRegistrationsPage((p) => Math.max(1, p - 1))}
                 disabled={registrationsPage === 1}
                 className="p-2 bg-white rounded-lg border disabled:opacity-30 hover:border-indigo-500"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
               <button
-                onClick={() => setRegistrationsPage(p => Math.min(registrationsTotalPages, p + 1))}
+                onClick={() =>
+                  setRegistrationsPage((p) =>
+                    Math.min(registrationsTotalPages, p + 1),
+                  )
+                }
                 disabled={registrationsPage === registrationsTotalPages}
                 className="p-2 bg-white rounded-lg border disabled:opacity-30 hover:border-indigo-500"
               >
@@ -1584,11 +2054,18 @@ export default function CRM() {
                   {(selectedRegistration.fullName || 'U').charAt(0)}
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold">{selectedRegistration.fullName}</h3>
-                  <p className="text-sm text-gray-500">{selectedRegistration.jobVacancyType}</p>
+                  <h3 className="text-xl font-bold">
+                    {selectedRegistration.fullName}
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    {selectedRegistration.jobVacancyType}
+                  </p>
                 </div>
               </div>
-              <button onClick={() => setShowRegistrationModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+              <button
+                onClick={() => setShowRegistrationModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
                 <X className="h-6 w-6" />
               </button>
             </div>
@@ -1602,20 +2079,28 @@ export default function CRM() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-gray-50 p-3 rounded-xl">
                     <p className="text-xs text-gray-400 mb-1">Age</p>
-                    <p className="font-medium">{selectedRegistration.age || 'N/A'}</p>
+                    <p className="font-medium">
+                      {selectedRegistration.age || 'N/A'}
+                    </p>
                   </div>
                   <div className="bg-gray-50 p-3 rounded-xl">
                     <p className="text-xs text-gray-400 mb-1">Phone</p>
-                    <p className="font-medium">{selectedRegistration.phoneNumber}</p>
+                    <p className="font-medium">
+                      {selectedRegistration.phoneNumber}
+                    </p>
                   </div>
                 </div>
                 <div className="bg-gray-50 p-3 rounded-xl">
                   <p className="text-xs text-gray-400 mb-1">Email</p>
-                  <p className="font-medium">{selectedRegistration.email || 'N/A'}</p>
+                  <p className="font-medium">
+                    {selectedRegistration.email || 'N/A'}
+                  </p>
                 </div>
                 <div className="bg-gray-50 p-3 rounded-xl">
                   <p className="text-xs text-gray-400 mb-1">Address</p>
-                  <p className="font-medium">{selectedRegistration.address || 'N/A'}</p>
+                  <p className="font-medium">
+                    {selectedRegistration.address || 'N/A'}
+                  </p>
                 </div>
 
                 <h4 className="font-bold text-gray-800 flex items-center gap-2 pt-2">
@@ -1624,16 +2109,24 @@ export default function CRM() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-indigo-50 p-3 rounded-xl">
                     <p className="text-xs text-indigo-400 mb-1">Job Category</p>
-                    <p className="font-medium">{selectedRegistration.jobVacancyType}</p>
+                    <p className="font-medium">
+                      {selectedRegistration.jobVacancyType}
+                    </p>
                   </div>
                   <div className="bg-indigo-50 p-3 rounded-xl">
                     <p className="text-xs text-indigo-400 mb-1">Country</p>
-                    <p className="font-medium">{selectedRegistration.interestedCountry || 'N/A'}</p>
+                    <p className="font-medium">
+                      {selectedRegistration.interestedCountry || 'N/A'}
+                    </p>
                   </div>
                 </div>
                 <div className="bg-indigo-50 p-3 rounded-xl">
                   <p className="text-xs text-indigo-400 mb-1">Experience</p>
-                  <p className="font-medium">{selectedRegistration.experienceYears ? `${selectedRegistration.experienceYears} years` : 'N/A'}</p>
+                  <p className="font-medium">
+                    {selectedRegistration.experienceYears
+                      ? `${selectedRegistration.experienceYears} years`
+                      : 'N/A'}
+                  </p>
                 </div>
 
                 <div className="bg-purple-50 p-4 rounded-xl">
@@ -1641,13 +2134,29 @@ export default function CRM() {
                   <select
                     value={selectedRegistration.status}
                     onChange={async (e) => {
-                      await handleRegistrationStatusChange(selectedRegistration._id, e.target.value);
-                      setSelectedRegistration({ ...selectedRegistration, status: e.target.value as LeadRegistration['status'] });
+                      await handleRegistrationStatusChange(
+                        selectedRegistration._id,
+                        e.target.value,
+                      );
+                      setSelectedRegistration({
+                        ...selectedRegistration,
+                        status: e.target.value as LeadRegistration['status'],
+                      });
                     }}
-                    className={`w-full font-medium px-4 py-2 rounded-xl ${leadStatusConfig[selectedRegistration.status as keyof typeof leadStatusConfig]?.color}`}
+                    className={`w-full font-medium px-4 py-2 rounded-xl ${
+                      leadStatusConfig[
+                        selectedRegistration.status as keyof typeof leadStatusConfig
+                      ]?.color
+                    }`}
                   >
                     {Object.entries(leadStatusConfig).map(([key, config]) => (
-                      <option key={key} value={key} className="bg-white text-gray-900">{config.label}</option>
+                      <option
+                        key={key}
+                        value={key}
+                        className="bg-white text-gray-900"
+                      >
+                        {config.label}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -1655,7 +2164,9 @@ export default function CRM() {
                 {selectedRegistration.notes && (
                   <div className="bg-yellow-50 p-3 rounded-xl">
                     <p className="text-xs text-yellow-600 mb-1">Notes</p>
-                    <p className="font-medium text-sm">{selectedRegistration.notes}</p>
+                    <p className="font-medium text-sm">
+                      {selectedRegistration.notes}
+                    </p>
                   </div>
                 )}
               </div>
@@ -1673,14 +2184,23 @@ export default function CRM() {
                           <FileText className="h-6 w-6 text-green-600" />
                         </div>
                         <div>
-                          <p className="font-medium text-green-800">{selectedRegistration.cvFileName || 'CV Document'}</p>
+                          <p className="font-medium text-green-800">
+                            {selectedRegistration.cvFileName || 'CV Document'}
+                          </p>
                           <p className="text-xs text-green-600">
-                            Uploaded: {selectedRegistration.cvUploadedAt ? new Date(selectedRegistration.cvUploadedAt).toLocaleDateString() : 'N/A'}
+                            Uploaded:{' '}
+                            {selectedRegistration.cvUploadedAt
+                              ? new Date(
+                                  selectedRegistration.cvUploadedAt,
+                                ).toLocaleDateString()
+                              : 'N/A'}
                           </p>
                         </div>
                       </div>
                       <a
-                        href={`${import.meta.env.VITE_API_URL || ''}${selectedRegistration.cvUrl}`}
+                        href={`${import.meta.env.VITE_API_URL || ''}${
+                          selectedRegistration.cvUrl
+                        }`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
@@ -1703,49 +2223,72 @@ export default function CRM() {
                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (file) handleQualificationUpload(selectedRegistration._id, file);
+                      if (file)
+                        handleQualificationUpload(
+                          selectedRegistration._id,
+                          file,
+                        );
                     }}
                     disabled={uploadingQualification}
                     className="hidden"
                   />
                   <Upload className="h-6 w-6 text-indigo-400 mb-2" />
                   <span className="text-sm text-indigo-600 font-medium">
-                    {uploadingQualification ? 'Uploading...' : 'Upload CV / Document'}
+                    {uploadingQualification
+                      ? 'Uploading...'
+                      : 'Upload CV / Document'}
                   </span>
-                  <span className="text-xs text-gray-400 mt-1">PDF, DOC, DOCX, JPG, PNG</span>
+                  <span className="text-xs text-gray-400 mt-1">
+                    PDF, DOC, DOCX, JPG, PNG
+                  </span>
                 </label>
 
                 {/* Qualifications */}
-                {selectedRegistration.qualifications && selectedRegistration.qualifications.length > 0 && (
-                  <>
-                    <h4 className="font-bold text-gray-800 pt-2">Other Documents</h4>
-                    {selectedRegistration.qualifications.map((qual, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-3 bg-white border rounded-xl">
-                        <div className="flex items-center gap-3">
-                          <FileText className="h-5 w-5 text-orange-500" />
-                          <div>
-                            <p className="font-medium text-sm">{qual.fileName}</p>
-                            <p className="text-xs text-gray-400">{(qual.fileSize / 1024).toFixed(1)} KB</p>
-                          </div>
-                        </div>
-                        <a
-                          href={`${import.meta.env.VITE_API_URL || ''}${qual.filePath}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-2 hover:bg-gray-100 rounded-lg"
+                {selectedRegistration.qualifications &&
+                  selectedRegistration.qualifications.length > 0 && (
+                    <>
+                      <h4 className="font-bold text-gray-800 pt-2">
+                        Other Documents
+                      </h4>
+                      {selectedRegistration.qualifications.map((qual, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between p-3 bg-white border rounded-xl"
                         >
-                          <Download className="h-4 w-4" />
-                        </a>
-                      </div>
-                    ))}
-                  </>
-                )}
+                          <div className="flex items-center gap-3">
+                            <FileText className="h-5 w-5 text-orange-500" />
+                            <div>
+                              <p className="font-medium text-sm">
+                                {qual.fileName}
+                              </p>
+                              <p className="text-xs text-gray-400">
+                                {(qual.fileSize / 1024).toFixed(1)} KB
+                              </p>
+                            </div>
+                          </div>
+                          <a
+                            href={`${import.meta.env.VITE_API_URL || ''}${
+                              qual.filePath
+                            }`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 hover:bg-gray-100 rounded-lg"
+                          >
+                            <Download className="h-4 w-4" />
+                          </a>
+                        </div>
+                      ))}
+                    </>
+                  )}
               </div>
             </div>
 
             <div className="p-6 border-t border-gray-100 flex justify-end gap-3">
               <a
-                href={`https://wa.me/${selectedRegistration.phoneNumber.replace(/[^0-9]/g, '')}`}
+                href={`https://wa.me/${selectedRegistration.phoneNumber.replace(
+                  /[^0-9]/g,
+                  '',
+                )}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl font-medium"
@@ -1765,14 +2308,29 @@ export default function CRM() {
 
       {/* Notification Toast */}
       {registrationNotification && (
-        <div className={`fixed bottom-8 right-8 flex items-center gap-3 px-6 py-4 rounded-xl shadow-lg z-[100] ${
-          registrationNotification.type === 'success' ? 'bg-green-600 text-white' :
-          registrationNotification.type === 'error' ? 'bg-red-600 text-white' : 'bg-indigo-600 text-white'
-        }`}>
-          {registrationNotification.type === 'success' ? <CheckCircle className="h-5 w-5" /> :
-           registrationNotification.type === 'error' ? <AlertCircle className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
-          <p className="font-medium text-sm">{registrationNotification.message}</p>
-          <button onClick={() => setRegistrationNotification(null)} className="ml-2">
+        <div
+          className={`fixed bottom-8 right-8 flex items-center gap-3 px-6 py-4 rounded-xl shadow-lg z-[100] ${
+            registrationNotification.type === 'success'
+              ? 'bg-green-600 text-white'
+              : registrationNotification.type === 'error'
+              ? 'bg-red-600 text-white'
+              : 'bg-indigo-600 text-white'
+          }`}
+        >
+          {registrationNotification.type === 'success' ? (
+            <CheckCircle className="h-5 w-5" />
+          ) : registrationNotification.type === 'error' ? (
+            <AlertCircle className="h-5 w-5" />
+          ) : (
+            <FileText className="h-5 w-5" />
+          )}
+          <p className="font-medium text-sm">
+            {registrationNotification.message}
+          </p>
+          <button
+            onClick={() => setRegistrationNotification(null)}
+            className="ml-2"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -1785,7 +2343,9 @@ export default function CRM() {
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-800">CRM</h1>
-        <p className="text-gray-500 mt-1">Manage contacts, deals, and activities</p>
+        <p className="text-gray-500 mt-1">
+          Manage contacts, deals, and activities
+        </p>
       </div>
 
       {/* Tabs */}
@@ -1829,14 +2389,21 @@ export default function CRM() {
                   type="text"
                   placeholder="First Name"
                   value={contactForm.firstName}
-                  onChange={(e) => setContactForm({ ...contactForm, firstName: e.target.value })}
+                  onChange={(e) =>
+                    setContactForm({
+                      ...contactForm,
+                      firstName: e.target.value,
+                    })
+                  }
                   className="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
                 />
                 <input
                   type="text"
                   placeholder="Last Name"
                   value={contactForm.lastName}
-                  onChange={(e) => setContactForm({ ...contactForm, lastName: e.target.value })}
+                  onChange={(e) =>
+                    setContactForm({ ...contactForm, lastName: e.target.value })
+                  }
                   className="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
                 />
               </div>
@@ -1844,27 +2411,38 @@ export default function CRM() {
                 type="email"
                 placeholder="Email"
                 value={contactForm.email}
-                onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
+                onChange={(e) =>
+                  setContactForm({ ...contactForm, email: e.target.value })
+                }
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
               />
               <input
                 type="text"
                 placeholder="Phone"
                 value={contactForm.phone}
-                onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
+                onChange={(e) =>
+                  setContactForm({ ...contactForm, phone: e.target.value })
+                }
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
               />
               <input
                 type="text"
                 placeholder="Company"
                 value={contactForm.company}
-                onChange={(e) => setContactForm({ ...contactForm, company: e.target.value })}
+                onChange={(e) =>
+                  setContactForm({ ...contactForm, company: e.target.value })
+                }
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
               />
               <div className="grid grid-cols-2 gap-4">
                 <select
                   value={contactForm.type}
-                  onChange={(e) => setContactForm({ ...contactForm, type: e.target.value as Contact['type'] })}
+                  onChange={(e) =>
+                    setContactForm({
+                      ...contactForm,
+                      type: e.target.value as Contact['type'],
+                    })
+                  }
                   className="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
                 >
                   <option value="lead">Lead</option>
@@ -1875,7 +2453,9 @@ export default function CRM() {
                 </select>
                 <select
                   value={contactForm.source}
-                  onChange={(e) => setContactForm({ ...contactForm, source: e.target.value })}
+                  onChange={(e) =>
+                    setContactForm({ ...contactForm, source: e.target.value })
+                  }
                   className="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
                 >
                   <option value="website">Website</option>
@@ -1891,13 +2471,17 @@ export default function CRM() {
                 type="text"
                 placeholder="Tags (comma separated)"
                 value={contactForm.tags}
-                onChange={(e) => setContactForm({ ...contactForm, tags: e.target.value })}
+                onChange={(e) =>
+                  setContactForm({ ...contactForm, tags: e.target.value })
+                }
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
               />
               <textarea
                 placeholder="Notes"
                 value={contactForm.notes}
-                onChange={(e) => setContactForm({ ...contactForm, notes: e.target.value })}
+                onChange={(e) =>
+                  setContactForm({ ...contactForm, notes: e.target.value })
+                }
                 rows={3}
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none"
               />
@@ -1934,13 +2518,17 @@ export default function CRM() {
                 type="text"
                 placeholder="Deal Title"
                 value={dealForm.title}
-                onChange={(e) => setDealForm({ ...dealForm, title: e.target.value })}
+                onChange={(e) =>
+                  setDealForm({ ...dealForm, title: e.target.value })
+                }
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none"
               />
               <textarea
                 placeholder="Description"
                 value={dealForm.description}
-                onChange={(e) => setDealForm({ ...dealForm, description: e.target.value })}
+                onChange={(e) =>
+                  setDealForm({ ...dealForm, description: e.target.value })
+                }
                 rows={2}
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none resize-none"
               />
@@ -1949,12 +2537,16 @@ export default function CRM() {
                   type="number"
                   placeholder="Value"
                   value={dealForm.value}
-                  onChange={(e) => setDealForm({ ...dealForm, value: Number(e.target.value) })}
+                  onChange={(e) =>
+                    setDealForm({ ...dealForm, value: Number(e.target.value) })
+                  }
                   className="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none"
                 />
                 <select
                   value={dealForm.currency}
-                  onChange={(e) => setDealForm({ ...dealForm, currency: e.target.value })}
+                  onChange={(e) =>
+                    setDealForm({ ...dealForm, currency: e.target.value })
+                  }
                   className="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none"
                 >
                   <option value="USD">USD</option>
@@ -1965,7 +2557,12 @@ export default function CRM() {
               <div className="grid grid-cols-2 gap-4">
                 <select
                   value={dealForm.stage}
-                  onChange={(e) => setDealForm({ ...dealForm, stage: e.target.value as Deal['stage'] })}
+                  onChange={(e) =>
+                    setDealForm({
+                      ...dealForm,
+                      stage: e.target.value as Deal['stage'],
+                    })
+                  }
                   className="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none"
                 >
                   <option value="new">New</option>
@@ -1979,7 +2576,12 @@ export default function CRM() {
                   type="number"
                   placeholder="Probability %"
                   value={dealForm.probability}
-                  onChange={(e) => setDealForm({ ...dealForm, probability: Number(e.target.value) })}
+                  onChange={(e) =>
+                    setDealForm({
+                      ...dealForm,
+                      probability: Number(e.target.value),
+                    })
+                  }
                   min={0}
                   max={100}
                   className="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none"
@@ -1989,7 +2591,12 @@ export default function CRM() {
                 type="date"
                 placeholder="Expected Close Date"
                 value={dealForm.expectedCloseDate}
-                onChange={(e) => setDealForm({ ...dealForm, expectedCloseDate: e.target.value })}
+                onChange={(e) =>
+                  setDealForm({
+                    ...dealForm,
+                    expectedCloseDate: e.target.value,
+                  })
+                }
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none"
               />
             </div>
@@ -2023,7 +2630,12 @@ export default function CRM() {
             <div className="p-6 space-y-4">
               <select
                 value={activityForm.type}
-                onChange={(e) => setActivityForm({ ...activityForm, type: e.target.value as ActivityItem['type'] })}
+                onChange={(e) =>
+                  setActivityForm({
+                    ...activityForm,
+                    type: e.target.value as ActivityItem['type'],
+                  })
+                }
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
               >
                 <option value="task">Task</option>
@@ -2037,20 +2649,32 @@ export default function CRM() {
                 type="text"
                 placeholder="Title"
                 value={activityForm.title}
-                onChange={(e) => setActivityForm({ ...activityForm, title: e.target.value })}
+                onChange={(e) =>
+                  setActivityForm({ ...activityForm, title: e.target.value })
+                }
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
               />
               <textarea
                 placeholder="Description"
                 value={activityForm.description}
-                onChange={(e) => setActivityForm({ ...activityForm, description: e.target.value })}
+                onChange={(e) =>
+                  setActivityForm({
+                    ...activityForm,
+                    description: e.target.value,
+                  })
+                }
                 rows={3}
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none resize-none"
               />
               <div className="grid grid-cols-2 gap-4">
                 <select
                   value={activityForm.priority}
-                  onChange={(e) => setActivityForm({ ...activityForm, priority: e.target.value as ActivityItem['priority'] })}
+                  onChange={(e) =>
+                    setActivityForm({
+                      ...activityForm,
+                      priority: e.target.value as ActivityItem['priority'],
+                    })
+                  }
                   className="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                 >
                   <option value="low">Low Priority</option>
@@ -2061,7 +2685,12 @@ export default function CRM() {
                   type="date"
                   placeholder="Due Date"
                   value={activityForm.dueDate}
-                  onChange={(e) => setActivityForm({ ...activityForm, dueDate: e.target.value })}
+                  onChange={(e) =>
+                    setActivityForm({
+                      ...activityForm,
+                      dueDate: e.target.value,
+                    })
+                  }
                   className="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                 />
               </div>

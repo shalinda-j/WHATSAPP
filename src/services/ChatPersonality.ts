@@ -9,14 +9,20 @@ export class ChatPersonality {
 
   constructor() {
     this.botName = process.env.BOT_NAME || 'Work 360 AI';
-    this.personality = (process.env.BOT_PERSONALITY || 'friendly,casual,helpful').split(',').map(p => p.trim());
+    this.personality = (
+      process.env.BOT_PERSONALITY || 'friendly,casual,helpful'
+    )
+      .split(',')
+      .map((p) => p.trim());
   }
 
   /**
    * Generate a human-like system prompt
    */
   getHumanLikePrompt(): string {
-    return `You are ${this.botName}, a real person chatting on WhatsApp. You work at a recruitment agency helping people find overseas jobs.
+    return `You are ${
+      this.botName
+    }, a real person chatting on WhatsApp. You work at a recruitment agency helping people find overseas jobs.
 
 PERSONALITY TRAITS: ${this.personality.join(', ')}
 

@@ -25,13 +25,13 @@ This WhatsApp bot is built using a **modern, interface-based architecture** that
 
 ### Technology Stack
 
-| Technology | Purpose | Version |
-|------------|---------|---------|
-| **TypeScript** | Type-safe JavaScript | 4.7.4 |
-| **whatsapp-web.js** | WhatsApp Web API | 1.17.1+ |
-| **Puppeteer** | Browser automation | 18.2.1+ |
-| **Node.js** | Runtime environment | 16+ |
-| **Axios** | HTTP client | 0.27.0+ |
+| Technology          | Purpose              | Version |
+| ------------------- | -------------------- | ------- |
+| **TypeScript**      | Type-safe JavaScript | 4.7.4   |
+| **whatsapp-web.js** | WhatsApp Web API     | 1.17.1+ |
+| **Puppeteer**       | Browser automation   | 18.2.1+ |
+| **Node.js**         | Runtime environment  | 16+     |
+| **Axios**           | HTTP client          | 0.27.0+ |
 
 ---
 
@@ -51,6 +51,7 @@ interface ICommand {
 ```
 
 **Benefits:**
+
 - ✅ Compile-time type checking
 - ✅ Contract enforcement
 - ✅ Easy to mock for testing
@@ -59,6 +60,7 @@ interface ICommand {
 ### 2. Command Pattern
 
 Commands are self-contained units that encapsulate:
+
 - **What** they do (name, description)
 - **How** to invoke them (aliases)
 - **Implementation** (execute method)
@@ -73,7 +75,7 @@ abstract class BaseCommand implements ICommand {
   protected async sendTyping(message: Message): Promise<void>
   protected async requireGroup(message: Message): Promise<Message | null>
   protected validateArgs(...): Message | null
-  
+
   // Abstract method to be implemented
   abstract execute(message: Message, args: string[]): Promise<Message | void>
 }
@@ -85,11 +87,11 @@ abstract class BaseCommand implements ICommand {
 
 ```typescript
 class CommandDispatcher {
-  private commands: Map<string, ICommand>
-  private aliases: Map<string, string>
-  
-  register(command: ICommand): void
-  dispatch(name: string, message: Message, args: string[]): Promise<void>
+  private commands: Map<string, ICommand>;
+  private aliases: Map<string, string>;
+
+  register(command: ICommand): void;
+  dispatch(name: string, message: Message, args: string[]): Promise<void>;
 }
 ```
 
@@ -139,13 +141,13 @@ Provides common functionality for all commands.
 
 #### Helper Methods
 
-| Method | Description | Return Type |
-|--------|-------------|-------------|
-| `sendTyping(message)` | Shows "typing..." indicator | `Promise<void>` |
-| `isGroup(message)` | Checks if message is from group | `Promise<boolean>` |
-| `getChat(message)` | Gets the chat object | `Promise<Chat>` |
-| `requireGroup(message)` | Validates group-only command | `Promise<Message \| null>` |
-| `validateArgs(...)` | Validates argument count | `Message \| null` |
+| Method                  | Description                     | Return Type                |
+| ----------------------- | ------------------------------- | -------------------------- |
+| `sendTyping(message)`   | Shows "typing..." indicator     | `Promise<void>`            |
+| `isGroup(message)`      | Checks if message is from group | `Promise<boolean>`         |
+| `getChat(message)`      | Gets the chat object            | `Promise<Chat>`            |
+| `requireGroup(message)` | Validates group-only command    | `Promise<Message \| null>` |
+| `validateArgs(...)`     | Validates argument count        | `Message \| null`          |
 
 #### Usage Example
 
@@ -153,14 +155,14 @@ Provides common functionality for all commands.
 export class MyCommand extends BaseCommand {
   name = 'mycommand';
   description = 'My custom command';
-  
+
   async execute(message: Message, args: string[]): Promise<Message> {
     // Use helper methods
     await this.sendTyping(message);
-    
+
     const groupError = await this.requireGroup(message);
     if (groupError) return groupError;
-    
+
     // Your logic here
     return message.reply('Success!');
   }
@@ -179,7 +181,7 @@ Manages command registration and execution.
 class CommandDispatcher {
   // Primary storage: command name -> command instance
   private commands: Map<string, ICommand> = new Map();
-  
+
   // Alias resolution: alias -> command name
   private aliases: Map<string, string> = new Map();
 }
@@ -194,7 +196,7 @@ Registers a command and its aliases.
 ```typescript
 register(command: ICommand): void {
   this.commands.set(command.name, command);
-  
+
   if (command.aliases) {
     command.aliases.forEach(alias => {
       this.aliases.set(alias, command.name);
@@ -212,7 +214,7 @@ async dispatch(commandName: string, message: Message, args: string[]): Promise<v
   // Resolve alias to actual command name
   const resolvedName = this.aliases.get(commandName) || commandName;
   const command = this.commands.get(resolvedName);
-  
+
   if (command) {
     try {
       await command.execute(message, args);
@@ -252,8 +254,10 @@ export const initializeCommands = (): void => {
   commandDispatcher.register(new CepCommand());
   commandDispatcher.register(new ProfileCommand());
   commandDispatcher.register(new SmsCommand());
-  
-  console.log(`✅ ${commandDispatcher.getAllCommands().length} commands registered`);
+
+  console.log(
+    `✅ ${commandDispatcher.getAllCommands().length} commands registered`,
+  );
 };
 
 // Auto-initialize when module loads
@@ -266,11 +270,11 @@ initializeCommands();
 export const CommandHandler = async (message: Message): Promise<void> => {
   // Ignore non-command messages
   if (!message.body.startsWith('!')) return;
-  
+
   // Parse command and arguments
   const commandText = message.body.slice(1); // Remove '!'
   const [commandName, ...args] = commandText.split(' ');
-  
+
   // Dispatch to appropriate command
   await commandDispatcher.dispatch(commandName.toLowerCase(), message, args);
 };
@@ -376,7 +380,7 @@ graph TD
 
 ```typescript
 // Input: "!cep 01310-100"
-const commandText = "cep 01310-100";  // After removing '!'
+const commandText = 'cep 01310-100'; // After removing '!'
 const [commandName, ...args] = commandText.split(' ');
 
 // Result:
@@ -386,7 +390,7 @@ const [commandName, ...args] = commandText.split(' ');
 
 ```typescript
 // Input: "!perfil @John Doe"
-const commandText = "perfil @John Doe";
+const commandText = 'perfil @John Doe';
 const [commandName, ...args] = commandText.split(' ');
 
 // Result:
@@ -452,12 +456,14 @@ if (argError) return argError;
 ### Error Message Guidelines
 
 ✅ **DO:**
+
 - Use emoji for visual feedback (⚠️, ❌, ✅)
 - Provide clear, actionable messages
 - Include usage examples when appropriate
 - Log errors to console for debugging
 
 ❌ **DON'T:**
+
 - Expose technical details to users
 - Use generic "Error" messages
 - Crash the bot on errors
@@ -481,24 +487,26 @@ export class WeatherCommand extends BaseCommand {
   name = 'weather';
   description = 'Get weather information for a city';
   aliases = ['clima', 'tempo'];
-  
+
   async execute(message: Message, args: string[]): Promise<Message> {
     await this.sendTyping(message);
-    
+
     if (args.length === 0) {
-      return message.reply('⚠️ Please provide a city name.\n\n📖 *Usage:* !weather London');
+      return message.reply(
+        '⚠️ Please provide a city name.\n\n📖 *Usage:* !weather London',
+      );
     }
-    
+
     const city = args.join(' ');
-    
+
     try {
       const { data } = await axios.get(`https://api.weather.com/${city}`);
-      
+
       return message.reply(
         `🌤️ *Weather in ${city}*\n\n` +
-        `Temperature: ${data.temp}°C\n` +
-        `Condition: ${data.condition}\n` +
-        `Humidity: ${data.humidity}%`
+          `Temperature: ${data.temp}°C\n` +
+          `Condition: ${data.condition}\n` +
+          `Humidity: ${data.humidity}%`,
       );
     } catch (error) {
       console.error('Weather API error:', error);
@@ -529,18 +537,18 @@ You can add middleware to the dispatcher:
 ```typescript
 class CommandDispatcher {
   private middlewares: Array<(message: Message) => Promise<boolean>> = [];
-  
+
   use(middleware: (message: Message) => Promise<boolean>): void {
     this.middlewares.push(middleware);
   }
-  
+
   async dispatch(...): Promise<void> {
     // Run middlewares
     for (const middleware of this.middlewares) {
       const shouldContinue = await middleware(message);
       if (!shouldContinue) return;
     }
-    
+
     // Execute command
     // ...
   }
@@ -554,12 +562,12 @@ const rateLimitMiddleware = async (message: Message): Promise<boolean> => {
   const userId = message.from;
   const lastCommand = userLastCommand.get(userId);
   const now = Date.now();
-  
+
   if (lastCommand && now - lastCommand < 3000) {
     await message.reply('⏱️ Please wait 3 seconds between commands.');
     return false; // Stop execution
   }
-  
+
   userLastCommand.set(userId, now);
   return true; // Continue
 };
@@ -575,10 +583,10 @@ Create specialized base commands for specific use cases:
 abstract class ApiCommand extends BaseCommand {
   protected abstract apiUrl: string;
   protected abstract apiKey: string;
-  
+
   protected async fetchApi<T>(endpoint: string): Promise<T> {
     const { data } = await axios.get(`${this.apiUrl}${endpoint}`, {
-      headers: { 'Authorization': `Bearer ${this.apiKey}` }
+      headers: { Authorization: `Bearer ${this.apiKey}` },
     });
     return data;
   }
@@ -589,7 +597,7 @@ export class MyApiCommand extends ApiCommand {
   description = 'Fetch from my API';
   protected apiUrl = 'https://api.example.com';
   protected apiKey = process.env.API_KEY!;
-  
+
   async execute(message: Message, args: string[]): Promise<Message> {
     const data = await this.fetchApi('/endpoint');
     return message.reply(JSON.stringify(data));
@@ -604,20 +612,21 @@ export class MyApiCommand extends ApiCommand {
 ### 1. Command Design
 
 ✅ **DO:**
+
 ```typescript
 export class GoodCommand extends BaseCommand {
   name = 'good';
   description = 'Clear, concise description';
   aliases = ['better', 'best'];
-  
+
   async execute(message: Message, args: string[]): Promise<Message> {
     await this.sendTyping(message);
-    
+
     // Validate early
     if (args.length === 0) {
       return message.reply('⚠️ Usage: !good <arg>');
     }
-    
+
     // Handle errors
     try {
       const result = await this.doSomething(args);
@@ -631,9 +640,11 @@ export class GoodCommand extends BaseCommand {
 ```
 
 ❌ **DON'T:**
+
 ```typescript
 export class BadCommand {
-  async execute(msg) { // No type safety
+  async execute(msg) {
+    // No type safety
     // No typing indicator
     // No validation
     const result = await api.call(); // No error handling
@@ -645,11 +656,15 @@ export class BadCommand {
 ### 2. Error Messages
 
 ✅ **Good:**
+
 ```typescript
-return message.reply('⚠️ Please provide a valid CEP.\n\n📖 *Usage:* !cep 01310-100');
+return message.reply(
+  '⚠️ Please provide a valid CEP.\n\n📖 *Usage:* !cep 01310-100',
+);
 ```
 
 ❌ **Bad:**
+
 ```typescript
 return message.reply('Error');
 ```
@@ -657,6 +672,7 @@ return message.reply('Error');
 ### 3. Async/Await
 
 ✅ **Good:**
+
 ```typescript
 async execute(message: Message, args: string[]): Promise<Message> {
   await this.sendTyping(message);
@@ -666,6 +682,7 @@ async execute(message: Message, args: string[]): Promise<Message> {
 ```
 
 ❌ **Bad:**
+
 ```typescript
 execute(message, args) {
   this.sendTyping(message); // Not awaited
@@ -676,6 +693,7 @@ execute(message, args) {
 ### 4. Validation
 
 ✅ **Good:**
+
 ```typescript
 // Validate arguments
 if (args.length === 0) {
@@ -694,6 +712,7 @@ if (cep.length !== 8) {
 ```
 
 ❌ **Bad:**
+
 ```typescript
 const cep = args[0]; // No validation
 const data = await api.get(cep); // May crash
@@ -702,6 +721,7 @@ const data = await api.get(cep); // May crash
 ### 5. Type Safety
 
 ✅ **Good:**
+
 ```typescript
 async execute(message: Message, args: string[]): Promise<Message> {
   const response: ApiResponse = await fetchData();
@@ -710,6 +730,7 @@ async execute(message: Message, args: string[]): Promise<Message> {
 ```
 
 ❌ **Bad:**
+
 ```typescript
 async execute(message, args) { // No types
   const response = await fetchData(); // Any type
@@ -743,18 +764,18 @@ Cache expensive operations:
 class CachedCommand extends BaseCommand {
   private cache = new Map<string, any>();
   private cacheTTL = 60000; // 1 minute
-  
+
   async execute(message: Message, args: string[]): Promise<Message> {
     const key = args.join('-');
     const cached = this.cache.get(key);
-    
+
     if (cached && Date.now() - cached.timestamp < this.cacheTTL) {
       return message.reply(cached.data);
     }
-    
+
     const data = await this.fetchData(args);
     this.cache.set(key, { data, timestamp: Date.now() });
-    
+
     return message.reply(data);
   }
 }
@@ -769,7 +790,7 @@ Use `Promise.all` for parallel operations:
 const [user, chat, mentions] = await Promise.all([
   message.getContact(),
   message.getChat(),
-  message.getMentions()
+  message.getMentions(),
 ]);
 
 // ❌ Bad: Sequential
@@ -791,30 +812,30 @@ import { Message } from 'whatsapp-web.js';
 describe('CepCommand', () => {
   let command: CepCommand;
   let mockMessage: Partial<Message>;
-  
+
   beforeEach(() => {
     command = new CepCommand();
     mockMessage = {
       reply: jest.fn(),
       getChat: jest.fn().mockResolvedValue({
-        sendStateTyping: jest.fn()
-      })
+        sendStateTyping: jest.fn(),
+      }),
     };
   });
-  
+
   it('should return CEP information', async () => {
     await command.execute(mockMessage as Message, ['01310-100']);
-    
+
     expect(mockMessage.reply).toHaveBeenCalledWith(
-      expect.stringContaining('CEP')
+      expect.stringContaining('CEP'),
     );
   });
-  
+
   it('should return error for invalid CEP', async () => {
     await command.execute(mockMessage as Message, ['123']);
-    
+
     expect(mockMessage.reply).toHaveBeenCalledWith(
-      expect.stringContaining('inválido')
+      expect.stringContaining('inválido'),
     );
   });
 });

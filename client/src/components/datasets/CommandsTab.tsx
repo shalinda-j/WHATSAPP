@@ -1,6 +1,13 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../config';
-import { ToggleLeft, ToggleRight, Edit, Save, X, RefreshCw } from 'lucide-react';
+import {
+  ToggleLeft,
+  ToggleRight,
+  Edit,
+  Save,
+  X,
+  RefreshCw,
+} from 'lucide-react';
 import LanguageSwitcher, { type Language } from './LanguageSwitcher';
 
 interface CommandConfig {
@@ -37,10 +44,15 @@ const defaultCommands = [
   { name: 'profile', description: 'View user profile' },
 ];
 
-export default function CommandsTab({ language, onDataChange }: CommandsTabProps) {
+export default function CommandsTab({
+  language,
+  onDataChange,
+}: CommandsTabProps) {
   const [commands, setCommands] = useState<CommandConfig[]>([]);
   const [isEditing, setIsEditing] = useState(false);
-  const [editingCommand, setEditingCommand] = useState<CommandConfig | null>(null);
+  const [editingCommand, setEditingCommand] = useState<CommandConfig | null>(
+    null,
+  );
   const [editLanguage, setEditLanguage] = useState<Language>(language);
   const [loading, setLoading] = useState(true);
 
@@ -48,7 +60,11 @@ export default function CommandsTab({ language, onDataChange }: CommandsTabProps
     setLoading(true);
     try {
       const res = await api.get('/api/datasets?type=command');
-      setCommands(Array.isArray(res.data) ? res.data : (res.data?.datasets || res.data?.data || []));
+      setCommands(
+        Array.isArray(res.data)
+          ? res.data
+          : res.data?.datasets || res.data?.data || [],
+      );
     } catch (error) {
       console.error('Failed to fetch commands:', error);
     } finally {
@@ -130,7 +146,9 @@ export default function CommandsTab({ language, onDataChange }: CommandsTabProps
   };
 
   const getCommandStatus = (name: string): CommandConfig | undefined => {
-    return commands.find((c) => c.name === name || c.key === `COMMAND_${name.toUpperCase()}`);
+    return commands.find(
+      (c) => c.name === name || c.key === `COMMAND_${name.toUpperCase()}`,
+    );
   };
 
   const getTranslatedLanguages = (command: CommandConfig): Language[] => {
@@ -153,8 +171,13 @@ export default function CommandsTab({ language, onDataChange }: CommandsTabProps
     return (
       <div>
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-semibold">Edit Command: !{editingCommand.name}</h2>
-          <button onClick={() => setIsEditing(false)} className="text-gray-500 hover:text-gray-700">
+          <h2 className="text-xl font-semibold">
+            Edit Command: !{editingCommand.name}
+          </h2>
+          <button
+            onClick={() => setIsEditing(false)}
+            className="text-gray-500 hover:text-gray-700"
+          >
             <X className="h-6 w-6" />
           </button>
         </div>
@@ -166,7 +189,8 @@ export default function CommandsTab({ language, onDataChange }: CommandsTabProps
               <strong>Command:</strong> !{editingCommand.name}
             </p>
             <p className="text-sm text-gray-600 mt-1">
-              <strong>Description:</strong> {editingCommand.description || 'No description'}
+              <strong>Description:</strong>{' '}
+              {editingCommand.description || 'No description'}
             </p>
           </div>
 
@@ -204,14 +228,18 @@ export default function CommandsTab({ language, onDataChange }: CommandsTabProps
               type="text"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               value={editingCommand.content?.[editLanguage]?.description || ''}
-              onChange={(e) => handleUpdateContent('description', e.target.value)}
+              onChange={(e) =>
+                handleUpdateContent('description', e.target.value)
+              }
               placeholder="Brief description shown in help"
             />
           </div>
 
           {/* Aliases */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Aliases</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Aliases
+            </label>
             <input
               type="text"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -221,13 +249,18 @@ export default function CommandsTab({ language, onDataChange }: CommandsTabProps
                   ...editingCommand,
                   metadata: {
                     ...editingCommand.metadata,
-                    aliases: e.target.value.split(',').map((a) => a.trim()).filter(Boolean),
+                    aliases: e.target.value
+                      .split(',')
+                      .map((a) => a.trim())
+                      .filter(Boolean),
                   },
                 })
               }
               placeholder="e.g., h, assist (comma-separated)"
             />
-            <p className="text-xs text-gray-500 mt-1">Alternative names for this command</p>
+            <p className="text-xs text-gray-500 mt-1">
+              Alternative names for this command
+            </p>
           </div>
 
           {/* Actions */}
@@ -253,7 +286,8 @@ export default function CommandsTab({ language, onDataChange }: CommandsTabProps
   return (
     <div>
       <p className="text-gray-600 text-sm mb-4">
-        Configure bot commands - enable/disable and customize responses in multiple languages.
+        Configure bot commands - enable/disable and customize responses in
+        multiple languages.
       </p>
 
       <div className="space-y-2">
@@ -269,7 +303,9 @@ export default function CommandsTab({ language, onDataChange }: CommandsTabProps
             >
               <div className="flex-1">
                 <div className="flex items-center gap-3">
-                  <span className="font-mono text-blue-600 font-medium">!{defaultCmd.name}</span>
+                  <span className="font-mono text-blue-600 font-medium">
+                    !{defaultCmd.name}
+                  </span>
                   <span
                     className={`px-2 py-0.5 text-xs rounded-full ${
                       isActive
@@ -307,7 +343,7 @@ export default function CommandsTab({ language, onDataChange }: CommandsTabProps
                         description: defaultCmd.description,
                         content: {},
                         isActive: true,
-                      }
+                      },
                     )
                   }
                   className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
@@ -323,7 +359,7 @@ export default function CommandsTab({ language, onDataChange }: CommandsTabProps
                         description: defaultCmd.description,
                         content: {},
                         isActive: true,
-                      }
+                      },
                     )
                   }
                   className="p-2 text-gray-400 hover:text-blue-600"

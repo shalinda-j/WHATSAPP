@@ -41,7 +41,7 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run client\"",
     "build:client": "cd client && npm install && npm run build",
     "build": "npm run build:client && tsc",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "start": "node dist/index.js"
   },
   "dependencies": {

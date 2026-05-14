@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Database, Terminal, Link, FileText, Bot } from 'lucide-react';
 import { api } from '../config';
-import LanguageSwitcher, { type Language } from '../components/datasets/LanguageSwitcher';
+import LanguageSwitcher, {
+  type Language,
+} from '../components/datasets/LanguageSwitcher';
 import KnowledgeTab from '../components/datasets/KnowledgeTab';
 import CommandsTab from '../components/datasets/CommandsTab';
 import LinksTab from '../components/datasets/LinksTab';
@@ -21,7 +23,7 @@ const tabs: Tab[] = [
   { id: 'knowledge', label: 'Knowledge Base', icon: Database },
   { id: 'commands', label: 'Commands', icon: Terminal },
   { id: 'links', label: 'Links', icon: Link },
-// Marketing tab removed
+  // Marketing tab removed
   { id: 'megatext', label: 'Mega Text', icon: FileText },
   { id: 'personality', label: 'AI Personality', icon: Bot },
 ];
@@ -41,7 +43,9 @@ export default function Datasets() {
   const fetchCounts = async () => {
     try {
       const res = await api.get('/api/datasets');
-      const datasets = Array.isArray(res.data) ? res.data : (res.data?.datasets || res.data?.data || []);
+      const datasets = Array.isArray(res.data)
+        ? res.data
+        : res.data?.datasets || res.data?.data || [];
 
       const newCounts: Record<TabType, number> = {
         knowledge: 0,
@@ -57,11 +61,11 @@ export default function Datasets() {
         .forEach((ds: Record<string, unknown>) => {
           const type = (ds.type as string) || 'knowledge';
           const typeMap: Record<string, TabType> = {
-            'knowledge': 'knowledge',
-            'command': 'commands',
-            'link': 'links',
-            'megatext': 'megatext',
-            'personality': 'personality',
+            knowledge: 'knowledge',
+            command: 'commands',
+            link: 'links',
+            megatext: 'megatext',
+            personality: 'personality',
           };
           const tabType = typeMap[type];
           if (tabType) {
@@ -90,15 +94,40 @@ export default function Datasets() {
   const renderTabContent = () => {
     switch (activeTab) {
       case 'knowledge':
-        return <KnowledgeTab language={currentLanguage} onDataChange={handleDataChange} />;
+        return (
+          <KnowledgeTab
+            language={currentLanguage}
+            onDataChange={handleDataChange}
+          />
+        );
       case 'commands':
-        return <CommandsTab language={currentLanguage} onDataChange={handleDataChange} />;
+        return (
+          <CommandsTab
+            language={currentLanguage}
+            onDataChange={handleDataChange}
+          />
+        );
       case 'links':
-        return <LinksTab language={currentLanguage} onDataChange={handleDataChange} />;
+        return (
+          <LinksTab
+            language={currentLanguage}
+            onDataChange={handleDataChange}
+          />
+        );
       case 'megatext':
-        return <MegaTextTab language={currentLanguage} onDataChange={handleDataChange} />;
+        return (
+          <MegaTextTab
+            language={currentLanguage}
+            onDataChange={handleDataChange}
+          />
+        );
       case 'personality':
-        return <AIPersonalityTab language={currentLanguage} onDataChange={handleDataChange} />;
+        return (
+          <AIPersonalityTab
+            language={currentLanguage}
+            onDataChange={handleDataChange}
+          />
+        );
       default:
         return null;
     }
@@ -142,19 +171,26 @@ export default function Datasets() {
                 className={`
                   flex items-center gap-2 px-4 py-3 font-medium text-sm whitespace-nowrap
                   border-b-2 transition-all
-                  ${isActive
-                    ? 'border-blue-500 text-blue-600 bg-blue-50/50'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                  ${
+                    isActive
+                      ? 'border-blue-500 text-blue-600 bg-blue-50/50'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                   }
                 `}
               >
                 <Icon className="h-4 w-4" />
                 <span>{tab.label}</span>
                 {count > 0 && (
-                  <span className={`
+                  <span
+                    className={`
                     px-2 py-0.5 rounded-full text-xs font-semibold
-                    ${isActive ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'}
-                  `}>
+                    ${
+                      isActive
+                        ? 'bg-blue-100 text-blue-600'
+                        : 'bg-gray-100 text-gray-600'
+                    }
+                  `}
+                  >
                     {count}
                   </span>
                 )}

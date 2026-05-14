@@ -44,13 +44,13 @@ The Team Agent Architecture follows a **hierarchical orchestration model** with 
 
 ### 1.2 Agent Types Definition
 
-| Agent Type | Role | Tools Access | Primary Responsibilities |
-|------------|------|--------------|-------------------------|
-| **Orchestrator** | Team Lead | All tools | Coordination, task assignment, integration |
-| **Researcher** | Explorer | Read, Grep, Glob, WebFetch, WebSearch | Analysis, documentation, best practices |
-| **Developer** | Implementer | Read, Edit, Write, Bash | Code implementation, feature development |
-| **Tester** | QA | Read, Edit, Bash, Task tools | Testing, validation, quality assurance |
-| **Planner** | Architect | Read, Grep, Glob | Design, planning, documentation |
+| Agent Type       | Role        | Tools Access                          | Primary Responsibilities                   |
+| ---------------- | ----------- | ------------------------------------- | ------------------------------------------ |
+| **Orchestrator** | Team Lead   | All tools                             | Coordination, task assignment, integration |
+| **Researcher**   | Explorer    | Read, Grep, Glob, WebFetch, WebSearch | Analysis, documentation, best practices    |
+| **Developer**    | Implementer | Read, Edit, Write, Bash               | Code implementation, feature development   |
+| **Tester**       | QA          | Read, Edit, Bash, Task tools          | Testing, validation, quality assurance     |
+| **Planner**      | Architect   | Read, Grep, Glob                      | Design, planning, documentation            |
 
 ---
 
@@ -129,6 +129,7 @@ Phase 4: Validation (Tester Agent)
 **Objective**: Maintain code quality through systematic review.
 
 **Checklist**:
+
 - [ ] Code follows project patterns and conventions
 - [ ] TypeScript types are properly defined
 - [ ] Error handling is comprehensive
@@ -142,6 +143,7 @@ Phase 4: Validation (Tester Agent)
 **Objective**: Safely modify database schemas.
 
 **Procedure**:
+
 1. **Research**: Analyze existing schema and dependencies
 2. **Design**: Create migration strategy
 3. **Implement**: Add new fields/models with backward compatibility
@@ -155,6 +157,7 @@ Phase 4: Validation (Tester Agent)
 ### 3.1 Orchestrator Agent (Team Lead)
 
 **Responsibilities**:
+
 - Decompose complex tasks into subtasks
 - Assign tasks to appropriate agents
 - Monitor progress and handle blockers
@@ -162,12 +165,14 @@ Phase 4: Validation (Tester Agent)
 - Make final decisions on conflicts
 
 **Decision Authority**:
+
 - Task prioritization
 - Resource allocation
 - Architecture decisions
 - Release approval
 
 **Communication Pattern**:
+
 ```
 Orchestrator → Broadcast: "Starting feature X development"
 Orchestrator → Researcher: "Analyze requirements for feature X"
@@ -181,6 +186,7 @@ Tester → Orchestrator: "Tests passed, approved"
 ### 3.2 Researcher Agent (Explorer)
 
 **Responsibilities**:
+
 - Explore and understand codebase structure
 - Research best practices and patterns
 - Gather requirements and constraints
@@ -188,12 +194,14 @@ Tester → Orchestrator: "Tests passed, approved"
 - Perform web research for solutions
 
 **Output Artifacts**:
+
 - Analysis documents
 - Code maps and diagrams
 - Best practice recommendations
 - Research summaries
 
 **Key Skills**:
+
 - Deep codebase exploration
 - Pattern recognition
 - Documentation synthesis
@@ -202,6 +210,7 @@ Tester → Orchestrator: "Tests passed, approved"
 ### 3.3 Developer Agent (Implementer)
 
 **Responsibilities**:
+
 - Implement features following specifications
 - Write clean, maintainable code
 - Follow established patterns and conventions
@@ -209,6 +218,7 @@ Tester → Orchestrator: "Tests passed, approved"
 - Document implementation details
 
 **Coding Standards**:
+
 - TypeScript with proper typing
 - Follow existing code patterns
 - Handle errors appropriately
@@ -216,6 +226,7 @@ Tester → Orchestrator: "Tests passed, approved"
 - Add comments for complex logic
 
 **File Modification Protocol**:
+
 1. Read existing file completely
 2. Understand context and patterns
 3. Make minimal necessary changes
@@ -225,6 +236,7 @@ Tester → Orchestrator: "Tests passed, approved"
 ### 3.4 Tester Agent (QA)
 
 **Responsibilities**:
+
 - Execute test suites
 - Validate against requirements
 - Identify edge cases
@@ -242,6 +254,7 @@ Tester → Orchestrator: "Tests passed, approved"
 ### 3.5 Planner Agent (Architect)
 
 **Responsibilities**:
+
 - Design system architecture
 - Create implementation plans
 - Define technical specifications
@@ -249,6 +262,7 @@ Tester → Orchestrator: "Tests passed, approved"
 - Document design decisions
 
 **Planning Artifacts**:
+
 - Architecture diagrams
 - Implementation plans
 - Technical specifications
@@ -264,7 +278,7 @@ Tester → Orchestrator: "Tests passed, approved"
 ```typescript
 // Task creation with clear specifications
 TaskCreate({
-  subject: "Implement voice transcription fallback",
+  subject: 'Implement voice transcription fallback',
   description: `
     ## Objective
     Add fallback mechanism when primary STT provider fails.
@@ -282,7 +296,7 @@ TaskCreate({
     - [ ] Error logging implemented
     - [ ] Unit tests added
   `,
-  activeForm: "Implementing voice transcription fallback"
+  activeForm: 'Implementing voice transcription fallback',
 });
 ```
 
@@ -303,25 +317,27 @@ Task States:
 ```typescript
 // Setting up task dependencies
 TaskUpdate({
-  taskId: "2",
-  addBlockedBy: ["1"]  // Task 2 cannot start until Task 1 is complete
+  taskId: '2',
+  addBlockedBy: ['1'], // Task 2 cannot start until Task 1 is complete
 });
 
 TaskUpdate({
-  taskId: "1",
-  addBlocks: ["2", "3"]  // Task 1 blocks Tasks 2 and 3
+  taskId: '1',
+  addBlocks: ['2', '3'], // Task 1 blocks Tasks 2 and 3
 });
 ```
 
 ### 4.4 Communication Protocol
 
 **Message Types**:
+
 1. **Status Updates**: Progress reports to orchestrator
 2. **Requests**: Asking for help or clarification
 3. **Handoffs**: Transferring work between agents
 4. **Alerts**: Critical issues requiring attention
 
 **Message Format**:
+
 ```
 [AGENT_TYPE] [ACTION] [TARGET]
 
@@ -389,6 +405,7 @@ Examples:
 ### 5.3 Workflow Templates
 
 #### Feature Development Workflow
+
 ```yaml
 name: Feature Development
 steps:
@@ -413,6 +430,7 @@ steps:
 ```
 
 #### Bug Fix Workflow
+
 ```yaml
 name: Bug Fix
 steps:
@@ -438,18 +456,21 @@ steps:
 ### 6.1 Code Quality Standards
 
 **TypeScript Requirements**:
+
 - All functions must have explicit return types
 - No `any` types without justification
 - Proper error handling with typed errors
 - Interface-first design for APIs
 
 **Testing Requirements**:
+
 - Unit tests for all business logic
 - Integration tests for API endpoints
 - Minimum 80% code coverage
 - Performance benchmarks for critical paths
 
 **Documentation Requirements**:
+
 - JSDoc for public APIs
 - README updates for new features
 - Architecture diagrams for major changes
@@ -458,6 +479,7 @@ steps:
 ### 6.2 Review Checklists
 
 **Code Review Checklist**:
+
 ```markdown
 - [ ] Code compiles without errors
 - [ ] All tests pass
@@ -470,6 +492,7 @@ steps:
 ```
 
 **Security Review Checklist**:
+
 ```markdown
 - [ ] Input validation present
 - [ ] No SQL injection vulnerabilities
@@ -482,13 +505,13 @@ steps:
 
 ### 6.3 Performance Benchmarks
 
-| Metric | Target | Measurement |
-|--------|--------|-------------|
-| API Response Time | < 200ms | P95 latency |
-| Message Processing | < 500ms | End-to-end |
-| AI Response Generation | < 3s | First token |
-| Database Queries | < 50ms | P95 latency |
-| Memory Usage | < 512MB | Peak usage |
+| Metric                 | Target  | Measurement |
+| ---------------------- | ------- | ----------- |
+| API Response Time      | < 200ms | P95 latency |
+| Message Processing     | < 500ms | End-to-end  |
+| AI Response Generation | < 3s    | First token |
+| Database Queries       | < 50ms  | P95 latency |
+| Memory Usage           | < 512MB | Peak usage  |
 
 ---
 
@@ -496,12 +519,12 @@ steps:
 
 ### 7.1 Error Categories
 
-| Level | Description | Response Time | Escalation |
-|-------|-------------|---------------|------------|
-| P1 - Critical | System down | Immediate | Orchestrator |
-| P2 - High | Feature broken | < 1 hour | Team Lead |
-| P3 - Medium | Degraded performance | < 4 hours | Developer |
-| P4 - Low | Minor issues | < 24 hours | Any agent |
+| Level         | Description          | Response Time | Escalation   |
+| ------------- | -------------------- | ------------- | ------------ |
+| P1 - Critical | System down          | Immediate     | Orchestrator |
+| P2 - High     | Feature broken       | < 1 hour      | Team Lead    |
+| P3 - Medium   | Degraded performance | < 4 hours     | Developer    |
+| P4 - Low      | Minor issues         | < 24 hours    | Any agent    |
 
 ### 7.2 Escalation Protocol
 
@@ -540,6 +563,7 @@ Agent encounters blocker
 **Memory Files Location**: `C:\Users\user\.claude\projects\D--360ai-WHATSAPP\memory\`
 
 **Memory Categories**:
+
 - `MEMORY.md` - Project overview and key patterns
 - `architecture.md` - System architecture details
 - `patterns.md` - Reusable code patterns
@@ -549,6 +573,7 @@ Agent encounters blocker
 ### 8.2 Knowledge Updates
 
 **When to Update Memory**:
+
 - New feature implementation
 - Architecture changes
 - New patterns discovered
@@ -556,6 +581,7 @@ Agent encounters blocker
 - Configuration changes
 
 **Memory Update Process**:
+
 1. Identify information to persist
 2. Determine appropriate file/category
 3. Write/update memory file
@@ -567,6 +593,7 @@ Agent encounters blocker
 **Skill Files Location**: `.claude/skills/`
 
 **Available Skills**:
+
 - `development.md` - Development workflow and patterns
 - `testing.md` - Testing procedures and standards
 - `deployment.md` - Deployment procedures
@@ -582,19 +609,24 @@ Agent encounters blocker
 ## Status Report - [DATE]
 
 ### Completed Tasks
+
 - [Task ID] Task description - Status
 
 ### In Progress
+
 - [Task ID] Task description - % complete
 
 ### Blocked
+
 - [Task ID] Task description - Blocker reason
 
 ### Next Steps
+
 1. Action item 1
 2. Action item 2
 
 ### Questions/Concerns
+
 - Item needing clarification
 ```
 
@@ -604,24 +636,30 @@ Agent encounters blocker
 ## Handoff: [FEATURE/BUG]
 
 ### Summary
+
 Brief description of the work
 
 ### Completed Work
+
 - Item 1
 - Item 2
 
 ### Remaining Work
+
 - [ ] Item 1
 - [ ] Item 2
 
 ### Context/Notes
+
 Important information for next agent
 
 ### Files Modified
+
 - path/to/file1.ts
 - path/to/file2.ts
 
 ### Tests
+
 - Test suite status
 - Coverage information
 ```
@@ -632,24 +670,25 @@ Important information for next agent
 
 ### 10.1 Agent Tool Access Matrix
 
-| Tool | Orchestrator | Researcher | Developer | Tester | Planner |
-|------|:------------:|:----------:|:---------:|:------:|:-------:|
-| Read | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Edit | ✅ | ❌ | ✅ | ✅ | ❌ |
-| Write | ✅ | ❌ | ✅ | ✅ | ✅ |
-| Bash | ✅ | ❌ | ✅ | ✅ | ❌ |
-| Grep | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Glob | ✅ | ✅ | ✅ | ✅ | ✅ |
-| WebFetch | ✅ | ✅ | ❌ | ❌ | ✅ |
-| WebSearch | ✅ | ✅ | ❌ | ❌ | ✅ |
-| Agent | ✅ | ❌ | ❌ | ❌ | ❌ |
-| TaskCreate | ✅ | ❌ | ✅ | ✅ | ✅ |
-| TaskUpdate | ✅ | ❌ | ✅ | ✅ | ❌ |
-| SendMessage | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Tool        | Orchestrator | Researcher | Developer | Tester | Planner |
+| ----------- | :----------: | :--------: | :-------: | :----: | :-----: |
+| Read        |      ✅      |     ✅     |    ✅     |   ✅   |   ✅    |
+| Edit        |      ✅      |     ❌     |    ✅     |   ✅   |   ❌    |
+| Write       |      ✅      |     ❌     |    ✅     |   ✅   |   ✅    |
+| Bash        |      ✅      |     ❌     |    ✅     |   ✅   |   ❌    |
+| Grep        |      ✅      |     ✅     |    ✅     |   ✅   |   ✅    |
+| Glob        |      ✅      |     ✅     |    ✅     |   ✅   |   ✅    |
+| WebFetch    |      ✅      |     ✅     |    ❌     |   ❌   |   ✅    |
+| WebSearch   |      ✅      |     ✅     |    ❌     |   ❌   |   ✅    |
+| Agent       |      ✅      |     ❌     |    ❌     |   ❌   |   ❌    |
+| TaskCreate  |      ✅      |     ❌     |    ✅     |   ✅   |   ✅    |
+| TaskUpdate  |      ✅      |     ❌     |    ✅     |   ✅   |   ❌    |
+| SendMessage |      ✅      |     ✅     |    ✅     |   ✅   |   ✅    |
 
 ### 10.2 Common Task Patterns
 
 **Pattern: Add New API Endpoint**
+
 ```
 1. Researcher: Analyze existing endpoint patterns
 2. Developer: Create route file, model, and tests
@@ -658,6 +697,7 @@ Important information for next agent
 ```
 
 **Pattern: Database Schema Change**
+
 ```
 1. Researcher: Analyze current schema usage
 2. Planner: Design migration strategy
@@ -667,6 +707,7 @@ Important information for next agent
 ```
 
 **Pattern: Bug Investigation**
+
 ```
 1. Researcher: Reproduce and document issue
 2. Researcher: Trace code execution path
@@ -686,10 +727,10 @@ Important information for next agent
 
 ## Document History
 
-| Version | Date | Author | Changes |
-|---------|------|--------|---------|
-| 1.0.0 | 2026-03-19 | Claude | Initial framework creation |
+| Version | Date       | Author | Changes                    |
+| ------- | ---------- | ------ | -------------------------- |
+| 1.0.0   | 2026-03-19 | Claude | Initial framework creation |
 
 ---
 
-*This SOP Team Agent Architecture Framework is a living document that should be updated as the project evolves and new patterns emerge.*
+_This SOP Team Agent Architecture Framework is a living document that should be updated as the project evolves and new patterns emerge._

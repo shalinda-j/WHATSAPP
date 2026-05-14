@@ -53,9 +53,7 @@ function adminUser(req: Request): string {
   return (req as any).user?.userId || (req as any).user?.username || 'admin';
 }
 
-function asyncHandler(
-  fn: (req: Request, res: Response) => Promise<unknown>,
-) {
+function asyncHandler(fn: (req: Request, res: Response) => Promise<unknown>) {
   return (req: Request, res: Response) => {
     fn(req, res).catch((err) => {
       console.error('🔥 /api/agents error:', err);

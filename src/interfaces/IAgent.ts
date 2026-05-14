@@ -1,8 +1,4 @@
-import {
-  AgentContext,
-  AgentResult,
-  AgentMode,
-} from '../types/agent';
+import { AgentContext, AgentResult, AgentMode } from '../types/agent';
 
 export interface IAgent {
   /**

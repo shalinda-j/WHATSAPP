@@ -54,12 +54,20 @@ export class VoiceHandler {
 
     try {
       // ── Show typing indicator ──────────────────────────────────────────────
-      try { await sendTyping(jid, sessionId); } catch { /* non-critical */ }
+      try {
+        await sendTyping(jid, sessionId);
+      } catch {
+        /* non-critical */
+      }
 
       // ── Download voice note from WhatsApp ──────────────────────────────────
       const buffer = await downloadWhatsAppAudio(message);
       if (!buffer || buffer.length < 100) {
-        await sendMessage(jid, '⚠️ Could not download your voice message. Please try again.', sessionId);
+        await sendMessage(
+          jid,
+          '⚠️ Could not download your voice message. Please try again.',
+          sessionId,
+        );
         return;
       }
 
@@ -73,15 +81,28 @@ export class VoiceHandler {
         const result = await transcribeAudioWithLanguage(buffer);
         transcription = result.text;
         detectedLang = result.detectedLanguage;
-        console.log(`   ✅ Transcribed (${detectedLang}): "${transcription.substring(0, 100)}..."`);
+        console.log(
+          `   ✅ Transcribed (${detectedLang}): "${transcription.substring(
+            0,
+            100,
+          )}..."`,
+        );
       } catch (sttErr: any) {
         console.error('   ❌ Transcription failed:', sttErr.message);
-        await sendMessage(jid, '⚠️ Could not transcribe your voice message. Please try again.', sessionId);
+        await sendMessage(
+          jid,
+          '⚠️ Could not transcribe your voice message. Please try again.',
+          sessionId,
+        );
         return;
       }
 
       if (!transcription || transcription.trim().length < 2) {
-        await sendMessage(jid, '⚠️ Voice message was too short or silent. Please try again.', sessionId);
+        await sendMessage(
+          jid,
+          '⚠️ Voice message was too short or silent. Please try again.',
+          sessionId,
+        );
         return;
       }
 
@@ -89,7 +110,9 @@ export class VoiceHandler {
       const voiceMode = await getVoiceMode();
       const agentEnabled = await isVoiceAgentEnabled();
 
-      console.log(`   Voice Mode: ${voiceMode}, Agent Enabled: ${agentEnabled}`);
+      console.log(
+        `   Voice Mode: ${voiceMode}, Agent Enabled: ${agentEnabled}`,
+      );
 
       if (!agentEnabled) {
         // Agent disabled — just echo the transcription
@@ -108,14 +131,17 @@ export class VoiceHandler {
         ta: '\n\n(SYSTEM: இது ஒலி செய்தி. தமிழில் மட்டும் பதிலளிக்கவும். 1-2 வாக்கியங்களில் இயல்பான பேச்சு வழக்கில் பதிலளிக்கவும்.)',
         hi: '\n\n(SYSTEM: यह एक VOICE संदेश है। हिंदी में ही जवाब दें। 1-2 वाक्यों में स्वाभाविक तरीके से।)',
       };
-      const langInstruction = langInstructions[detectedLang] || langInstructions.si;
+      const langInstruction =
+        langInstructions[detectedLang] || langInstructions.si;
       const finalPrompt = transcription + langInstruction;
 
       // ── Generate AI response for ALL voice messages ────────────────────────
       const aiResponse = await aiLoadBalancer.sendMessage(jid, finalPrompt);
 
-      const shouldSendText  = voiceMode === 'text-only'  || voiceMode === 'voice-and-text';
-      const shouldSendVoice = voiceMode === 'voice-only' || voiceMode === 'voice-and-text';
+      const shouldSendText =
+        voiceMode === 'text-only' || voiceMode === 'voice-and-text';
+      const shouldSendVoice =
+        voiceMode === 'voice-only' || voiceMode === 'voice-and-text';
 
       // Send text response (includes transcription so user can read what was heard)
       if (shouldSendText) {
@@ -144,15 +170,19 @@ export class VoiceHandler {
           }
         }
       }
-
     } catch (error: any) {
       console.error('❌ Voice processing error:', error);
 
-      const userMsg = (error.message?.includes('429') || error.message?.includes('quota'))
-        ? '⚠️ AI quota exceeded. Please wait a moment and try again.'
-        : '⚠️ Could not process your voice message. Please try again.';
+      const userMsg =
+        error.message?.includes('429') || error.message?.includes('quota')
+          ? '⚠️ AI quota exceeded. Please wait a moment and try again.'
+          : '⚠️ Could not process your voice message. Please try again.';
 
-      try { await sendMessage(jid, userMsg, sessionId); } catch { /* ignore secondary error */ }
+      try {
+        await sendMessage(jid, userMsg, sessionId);
+      } catch {
+        /* ignore secondary error */
+      }
     }
   }
 }

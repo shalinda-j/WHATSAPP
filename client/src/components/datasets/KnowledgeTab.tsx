@@ -31,7 +31,10 @@ const categories = [
   { value: 'general', label: 'General' },
 ];
 
-export default function KnowledgeTab({ language, onDataChange }: KnowledgeTabProps) {
+export default function KnowledgeTab({
+  language,
+  onDataChange,
+}: KnowledgeTabProps) {
   const [items, setItems] = useState<KnowledgeItem[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -49,7 +52,11 @@ export default function KnowledgeTab({ language, onDataChange }: KnowledgeTabPro
   const fetchItems = async () => {
     try {
       const res = await api.get('/api/datasets?type=knowledge');
-      setItems(Array.isArray(res.data) ? res.data : (res.data?.datasets || res.data?.data || []));
+      setItems(
+        Array.isArray(res.data)
+          ? res.data
+          : res.data?.datasets || res.data?.data || [],
+      );
     } catch (error) {
       console.error('Failed to fetch knowledge items:', error);
     }
@@ -145,7 +152,8 @@ export default function KnowledgeTab({ language, onDataChange }: KnowledgeTabPro
         ...prev,
         content: {
           ...(prev.content || {}),
-          [editLanguage]: (prev.content?.[editLanguage] || '') + '\n\n' + res.data.text,
+          [editLanguage]:
+            (prev.content?.[editLanguage] || '') + '\n\n' + res.data.text,
         },
       }));
     } catch (error) {
@@ -171,7 +179,10 @@ export default function KnowledgeTab({ language, onDataChange }: KnowledgeTabPro
           <h2 className="text-xl font-semibold">
             {editingId ? 'Edit Knowledge' : 'New Knowledge Entry'}
           </h2>
-          <button onClick={() => setIsEditing(false)} className="text-gray-500 hover:text-gray-700">
+          <button
+            onClick={() => setIsEditing(false)}
+            className="text-gray-500 hover:text-gray-700"
+          >
             <X className="h-6 w-6" />
           </button>
         </div>
@@ -179,24 +190,32 @@ export default function KnowledgeTab({ language, onDataChange }: KnowledgeTabPro
         <div className="space-y-4">
           {/* Name */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Name
+            </label>
             <input
               type="text"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               value={formData.name || ''}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, name: e.target.value })
+              }
               placeholder="e.g., Company History, FAQ about Services"
             />
           </div>
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description
+            </label>
             <input
               type="text"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               value={formData.description || ''}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, description: e.target.value })
+              }
               placeholder="Brief description of this knowledge"
             />
           </div>
@@ -204,24 +223,34 @@ export default function KnowledgeTab({ language, onDataChange }: KnowledgeTabPro
           {/* Scope & Category */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Scope</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Scope
+              </label>
               <input
                 type="text"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={formData.scope || 'ALL'}
-                onChange={(e) => setFormData({ ...formData, scope: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, scope: e.target.value })
+                }
                 placeholder="e.g., ALL, COMPANY_NAME"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Category
+              </label>
               <select
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={formData.category || 'general'}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, category: e.target.value })
+                }
               >
                 {categories.map((cat) => (
-                  <option key={cat.value} value={cat.value}>{cat.label}</option>
+                  <option key={cat.value} value={cat.value}>
+                    {cat.label}
+                  </option>
                 ))}
               </select>
             </div>
@@ -230,13 +259,17 @@ export default function KnowledgeTab({ language, onDataChange }: KnowledgeTabPro
           {/* Content with Language Switcher */}
           <div>
             <div className="flex justify-between items-center mb-2">
-              <label className="block text-sm font-medium text-gray-700">Content</label>
+              <label className="block text-sm font-medium text-gray-700">
+                Content
+              </label>
               <LanguageSwitcher
                 currentLanguage={editLanguage}
                 onLanguageChange={setEditLanguage}
-                translatedLanguages={Object.keys(formData.content || {}).filter(
-                  (k) => formData.content?.[k as Language]
-                ) as Language[]}
+                translatedLanguages={
+                  Object.keys(formData.content || {}).filter(
+                    (k) => formData.content?.[k as Language],
+                  ) as Language[]
+                }
                 size="sm"
               />
             </div>
@@ -244,12 +277,18 @@ export default function KnowledgeTab({ language, onDataChange }: KnowledgeTabPro
             {/* File Upload */}
             <div className="mb-3 p-3 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
               {isExtracting ? (
-                <p className="text-blue-600 text-sm animate-pulse text-center">Extracting text...</p>
+                <p className="text-blue-600 text-sm animate-pulse text-center">
+                  Extracting text...
+                </p>
               ) : (
                 <label className="flex items-center justify-center gap-2 cursor-pointer text-sm text-gray-600 hover:text-blue-600">
                   <Upload className="h-4 w-4" />
                   <span>Upload file to extract text</span>
-                  <input type="file" className="hidden" onChange={handleFileUpload} />
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
                 </label>
               )}
             </div>
@@ -269,10 +308,14 @@ export default function KnowledgeTab({ language, onDataChange }: KnowledgeTabPro
               type="checkbox"
               id="isActive"
               checked={formData.isActive !== false}
-              onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+              onChange={(e) =>
+                setFormData({ ...formData, isActive: e.target.checked })
+              }
               className="h-4 w-4 text-blue-600 rounded"
             />
-            <label htmlFor="isActive" className="text-sm text-gray-700">Active (include in AI knowledge)</label>
+            <label htmlFor="isActive" className="text-sm text-gray-700">
+              Active (include in AI knowledge)
+            </label>
           </div>
 
           {/* Actions */}
@@ -300,7 +343,8 @@ export default function KnowledgeTab({ language, onDataChange }: KnowledgeTabPro
       {/* Header */}
       <div className="flex justify-between items-center mb-4">
         <p className="text-gray-600 text-sm">
-          Knowledge entries are used by the AI to answer user questions. Add company info, FAQs, policies, etc.
+          Knowledge entries are used by the AI to answer user questions. Add
+          company info, FAQs, policies, etc.
         </p>
         <button
           onClick={handleCreate}
@@ -315,7 +359,9 @@ export default function KnowledgeTab({ language, onDataChange }: KnowledgeTabPro
         <div className="text-center py-12 text-gray-500">
           <Database className="h-12 w-12 mx-auto mb-4 text-gray-300" />
           <p>No knowledge entries yet.</p>
-          <p className="text-sm">Click "Add Knowledge" to create your first entry.</p>
+          <p className="text-sm">
+            Click "Add Knowledge" to create your first entry.
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -333,20 +379,33 @@ export default function KnowledgeTab({ language, onDataChange }: KnowledgeTabPro
                     <div className="flex items-center gap-2">
                       <h3 className="font-medium text-gray-800">{item.name}</h3>
                       {item.isActive ? (
-                        <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">Active</span>
+                        <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">
+                          Active
+                        </span>
                       ) : (
-                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">Inactive</span>
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+                          Inactive
+                        </span>
                       )}
                     </div>
                     {item.description && (
-                      <p className="text-sm text-gray-500 mt-1">{item.description}</p>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {item.description}
+                      </p>
                     )}
                     <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
-                      <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded">{item.scope}</span>
-                      <span className="px-2 py-0.5 bg-purple-50 text-purple-600 rounded">{item.category}</span>
+                      <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded">
+                        {item.scope}
+                      </span>
+                      <span className="px-2 py-0.5 bg-purple-50 text-purple-600 rounded">
+                        {item.category}
+                      </span>
                       <div className="flex items-center gap-1">
                         {translated.map((lang) => (
-                          <span key={lang} className="px-1.5 py-0.5 bg-green-50 text-green-600 rounded">
+                          <span
+                            key={lang}
+                            className="px-1.5 py-0.5 bg-green-50 text-green-600 rounded"
+                          >
                             {lang.toUpperCase()}
                           </span>
                         ))}

@@ -6,22 +6,14 @@
       "id": "unit1",
       "name": "TechCorp Training",
       "description": "Vocational training institute",
-      "keywords": [
-        "training",
-        "skills",
-        "learn"
-      ],
+      "keywords": ["training", "skills", "learn"],
       "goal": "Skill development"
     },
     {
       "id": "unit2",
       "name": "TechCorp Recruitment",
       "description": "Foreign job placement",
-      "keywords": [
-        "jobs",
-        "abroad",
-        "visa"
-      ],
+      "keywords": ["jobs", "abroad", "visa"],
       "goal": "Job placement"
     }
   ],

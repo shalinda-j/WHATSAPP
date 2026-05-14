@@ -593,9 +593,10 @@ router.post('/:id/reset-usage', async (req, res) => {
 router.post('/session/test', async (req, res) => {
   const { providerType, sessionToken } = req.body || {};
   if (!providerType || !sessionToken) {
-    return res
-      .status(400)
-      .json({ valid: false, error: 'providerType and sessionToken are required' });
+    return res.status(400).json({
+      valid: false,
+      error: 'providerType and sessionToken are required',
+    });
   }
 
   try {
@@ -641,10 +642,7 @@ router.post('/session/save', async (req, res) => {
       .status(400)
       .json({ error: 'providerType and sessionToken are required' });
   }
-  if (
-    providerType !== 'openai-session' &&
-    providerType !== 'claude-session'
-  ) {
+  if (providerType !== 'openai-session' && providerType !== 'claude-session') {
     return res.status(400).json({ error: 'Invalid providerType' });
   }
 

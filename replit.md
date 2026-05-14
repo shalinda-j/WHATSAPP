@@ -46,6 +46,7 @@ Required environment variables (see `.env.example`):
 ## Development
 
 The `Start application` workflow runs both services concurrently:
+
 - Backend: `npm run dev` (ts-node-dev with hot reload)
 - Frontend: `npm run client` (Vite dev server on port 5000)
 
@@ -89,6 +90,7 @@ The `Start application` workflow runs both services concurrently:
 ## DB Bypass List (works without MongoDB)
 
 Routes in `src/server/app.ts` that bypass the MongoDB connectivity check:
+
 - `/api/auth` — login/token
 - `/api/marketing` — WhatsApp marketing
 - `/api/webhooks/inbound` — external webhook entry points

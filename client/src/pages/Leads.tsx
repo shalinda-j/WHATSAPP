@@ -1,11 +1,27 @@
 import { useState, useEffect } from 'react';
 import { api } from '../config';
 import {
-  Search, Download, Upload,
-  Eye, Trash2, X, FileText, CheckCircle,
-  XCircle, Clock, ChevronLeft, ChevronRight,
-  MessageSquare, UserPlus, Filter, RotateCcw,
-  Phone, Mail, MapPin, Briefcase, AlertCircle
+  Search,
+  Download,
+  Upload,
+  Eye,
+  Trash2,
+  X,
+  FileText,
+  CheckCircle,
+  XCircle,
+  Clock,
+  ChevronLeft,
+  ChevronRight,
+  MessageSquare,
+  UserPlus,
+  Filter,
+  RotateCcw,
+  Phone,
+  Mail,
+  MapPin,
+  Briefcase,
+  AlertCircle,
 } from 'lucide-react';
 
 interface Lead {
@@ -46,11 +62,31 @@ interface LeadMessage {
 }
 
 const statusConfig = {
-  new: { label: 'New', color: 'bg-blue-50 text-blue-700 border-blue-200', icon: Clock },
-  reviewed: { label: 'Reviewed', color: 'bg-yellow-50 text-yellow-700 border-yellow-200', icon: Eye },
-  contacted: { label: 'Contacted', color: 'bg-purple-50 text-purple-700 border-purple-200', icon: Phone },
-  accepted: { label: 'Accepted', color: 'bg-green-50 text-green-700 border-green-200', icon: CheckCircle },
-  rejected: { label: 'Rejected', color: 'bg-red-50 text-red-700 border-red-200', icon: XCircle }
+  new: {
+    label: 'New',
+    color: 'bg-blue-50 text-blue-700 border-blue-200',
+    icon: Clock,
+  },
+  reviewed: {
+    label: 'Reviewed',
+    color: 'bg-yellow-50 text-yellow-700 border-yellow-200',
+    icon: Eye,
+  },
+  contacted: {
+    label: 'Contacted',
+    color: 'bg-purple-50 text-purple-700 border-purple-200',
+    icon: Phone,
+  },
+  accepted: {
+    label: 'Accepted',
+    color: 'bg-green-50 text-green-700 border-green-200',
+    icon: CheckCircle,
+  },
+  rejected: {
+    label: 'Rejected',
+    color: 'bg-red-50 text-red-700 border-red-200',
+    icon: XCircle,
+  },
 };
 
 export default function Leads() {
@@ -66,11 +102,17 @@ export default function Leads() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [uploading, setUploading] = useState(false);
-  const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
+  const [notification, setNotification] = useState<{
+    message: string;
+    type: 'success' | 'error' | 'info';
+  } | null>(null);
   const [messages, setMessages] = useState<LeadMessage[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
 
-  const showNotify = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+  const showNotify = (
+    message: string,
+    type: 'success' | 'error' | 'info' = 'info',
+  ) => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
   };
@@ -81,7 +123,10 @@ export default function Leads() {
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `leads-export-${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute(
+        'download',
+        `leads-export-${new Date().toISOString().split('T')[0]}.csv`,
+      );
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -191,11 +236,18 @@ export default function Leads() {
     formData.append('documentType', 'qualification');
 
     try {
-      const res = await api.post(`/api/leads/${leadId}/qualifications`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const res = await api.post(
+        `/api/leads/${leadId}/qualifications`,
+        formData,
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        },
+      );
       if (selectedLead && selectedLead._id === leadId) {
-        setSelectedLead({ ...selectedLead, qualifications: res.data.qualifications });
+        setSelectedLead({
+          ...selectedLead,
+          qualifications: res.data.qualifications,
+        });
       }
       fetchLeads();
       showNotify('File uploaded successfully', 'success');
@@ -210,8 +262,12 @@ export default function Leads() {
     <div className="animate-in fade-in duration-500">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Leads & Registrations</h1>
-          <p className="text-gray-500 font-medium mt-1">Manage and track your incoming job applications</p>
+          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+            Leads & Registrations
+          </h1>
+          <p className="text-gray-500 font-medium mt-1">
+            Manage and track your incoming job applications
+          </p>
         </div>
         <button
           onClick={handleExportCSV}
@@ -227,7 +283,9 @@ export default function Leads() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-indigo-100 text-sm font-medium">Total Leads</p>
-              <p className="text-3xl font-extrabold mt-1">{stats?.totalLeads || stats?.total || 0}</p>
+              <p className="text-3xl font-extrabold mt-1">
+                {stats?.totalLeads || stats?.total || 0}
+              </p>
             </div>
             <div className="bg-white/20 p-2 rounded-xl">
               <UserPlus className="h-6 w-6 text-white" />
@@ -245,8 +303,12 @@ export default function Leads() {
             >
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-gray-500 text-sm font-medium">{config.label}</p>
-                  <p className="text-2xl font-bold mt-1 text-gray-900">{count}</p>
+                  <p className="text-gray-500 text-sm font-medium">
+                    {config.label}
+                  </p>
+                  <p className="text-2xl font-bold mt-1 text-gray-900">
+                    {count}
+                  </p>
                 </div>
                 <div className={`${config.color.split(' ')[0]} p-2 rounded-xl`}>
                   <Icon className={`h-6 w-6 ${config.color.split(' ')[1]}`} />
@@ -266,7 +328,10 @@ export default function Leads() {
               type="text"
               placeholder="Search by name, phone, email..."
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               className="pl-12 pr-4 py-3 w-full bg-gray-50 border-transparent focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 rounded-xl transition outline-none"
             />
           </div>
@@ -276,12 +341,17 @@ export default function Leads() {
               <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               <select
                 value={statusFilter}
-                onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPage(1);
+                }}
                 className="pl-9 pr-8 py-3 w-full appearance-none bg-gray-50 border-transparent focus:bg-white border focus:ring-2 focus:ring-indigo-500 rounded-xl transition outline-none text-sm font-medium text-gray-700"
               >
                 <option value="">Status: All</option>
                 {Object.entries(statusConfig).map(([key, config]) => (
-                  <option key={key} value={key}>{config.label}</option>
+                  <option key={key} value={key}>
+                    {config.label}
+                  </option>
                 ))}
               </select>
             </div>
@@ -290,19 +360,29 @@ export default function Leads() {
               <Briefcase className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               <select
                 value={jobFilter}
-                onChange={(e) => { setJobFilter(e.target.value); setPage(1); }}
+                onChange={(e) => {
+                  setJobFilter(e.target.value);
+                  setPage(1);
+                }}
                 className="pl-9 pr-8 py-3 w-full appearance-none bg-gray-50 border-transparent focus:bg-white border focus:ring-2 focus:ring-indigo-500 rounded-xl transition outline-none text-sm font-medium text-gray-700"
               >
                 <option value="">Job: All Types</option>
                 {jobTypes.map((type) => (
-                  <option key={type} value={type}>{type}</option>
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
                 ))}
               </select>
             </div>
 
             {(search || statusFilter || jobFilter) && (
               <button
-                onClick={() => { setSearch(''); setStatusFilter(''); setJobFilter(''); setPage(1); }}
+                onClick={() => {
+                  setSearch('');
+                  setStatusFilter('');
+                  setJobFilter('');
+                  setPage(1);
+                }}
                 className="p-3 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition"
                 title="Clear Filters"
               >
@@ -319,12 +399,24 @@ export default function Leads() {
           <table className="w-full">
             <thead>
               <tr className="bg-gray-50/50 border-b border-gray-100">
-                <th className="px-8 py-5 text-left text-xs font-bold text-gray-400 uppercase tracking-widest">Lead Information</th>
-                <th className="px-6 py-5 text-left text-xs font-bold text-gray-400 uppercase tracking-widest">Contact Details</th>
-                <th className="px-6 py-5 text-left text-xs font-bold text-gray-400 uppercase tracking-widest">Job Category</th>
-                <th className="px-6 py-5 text-left text-xs font-bold text-gray-400 uppercase tracking-widest">Current Status</th>
-                <th className="px-6 py-5 text-left text-xs font-bold text-gray-400 uppercase tracking-widest">Registration</th>
-                <th className="px-8 py-5 text-right text-xs font-bold text-gray-400 uppercase tracking-widest">Actions</th>
+                <th className="px-8 py-5 text-left text-xs font-bold text-gray-400 uppercase tracking-widest">
+                  Lead Information
+                </th>
+                <th className="px-6 py-5 text-left text-xs font-bold text-gray-400 uppercase tracking-widest">
+                  Contact Details
+                </th>
+                <th className="px-6 py-5 text-left text-xs font-bold text-gray-400 uppercase tracking-widest">
+                  Job Category
+                </th>
+                <th className="px-6 py-5 text-left text-xs font-bold text-gray-400 uppercase tracking-widest">
+                  Current Status
+                </th>
+                <th className="px-6 py-5 text-left text-xs font-bold text-gray-400 uppercase tracking-widest">
+                  Registration
+                </th>
+                <th className="px-8 py-5 text-right text-xs font-bold text-gray-400 uppercase tracking-widest">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -333,7 +425,9 @@ export default function Leads() {
                   <td colSpan={6} className="px-8 py-20 text-center">
                     <div className="flex flex-col items-center gap-4">
                       <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin shadow-inner"></div>
-                      <p className="text-gray-400 font-bold uppercase tracking-tighter text-sm">Synchronizing Leads...</p>
+                      <p className="text-gray-400 font-bold uppercase tracking-tighter text-sm">
+                        Synchronizing Leads...
+                      </p>
                     </div>
                   </td>
                 </tr>
@@ -344,21 +438,30 @@ export default function Leads() {
                       <div className="p-4 bg-gray-50 rounded-full">
                         <Search className="h-10 w-10 text-gray-200" />
                       </div>
-                      <p className="text-gray-400 font-bold text-sm">No leads found matching your criteria</p>
+                      <p className="text-gray-400 font-bold text-sm">
+                        No leads found matching your criteria
+                      </p>
                     </div>
                   </td>
                 </tr>
               ) : (
                 leads.map((lead) => (
-                  <tr key={lead._id} className="hover:bg-gray-50/50 transition-colors group">
+                  <tr
+                    key={lead._id}
+                    className="hover:bg-gray-50/50 transition-colors group"
+                  >
                     <td className="px-8 py-5">
                       <div className="flex items-center gap-4">
                         <div className="h-12 w-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-lg shadow-sm group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300">
                           {(lead.fullName || 'U').charAt(0)}
                         </div>
                         <div>
-                          <div className="font-bold text-gray-900 text-base">{lead.fullName}</div>
-                          <div className="text-[10px] font-bold text-gray-400 font-mono tracking-tighter uppercase">PID: {lead._id.slice(-8).toUpperCase()}</div>
+                          <div className="font-bold text-gray-900 text-base">
+                            {lead.fullName}
+                          </div>
+                          <div className="text-[10px] font-bold text-gray-400 font-mono tracking-tighter uppercase">
+                            PID: {lead._id.slice(-8).toUpperCase()}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -385,28 +488,49 @@ export default function Leads() {
                       <div className="relative inline-block w-full max-w-[140px]">
                         <select
                           value={lead.status}
-                          onChange={(e) => handleStatusChange(lead._id, e.target.value)}
-                          className={`w-full appearance-none text-xs font-bold px-4 py-2 rounded-2xl border-2 transition cursor-pointer outline-none ${statusConfig[lead.status as keyof typeof statusConfig]?.color}`}
+                          onChange={(e) =>
+                            handleStatusChange(lead._id, e.target.value)
+                          }
+                          className={`w-full appearance-none text-xs font-bold px-4 py-2 rounded-2xl border-2 transition cursor-pointer outline-none ${
+                            statusConfig[
+                              lead.status as keyof typeof statusConfig
+                            ]?.color
+                          }`}
                           style={{ textAlign: 'center' }}
                         >
                           {Object.entries(statusConfig).map(([key, config]) => (
-                            <option key={key} value={key} className="bg-white text-gray-900 font-bold">{config.label}</option>
+                            <option
+                              key={key}
+                              value={key}
+                              className="bg-white text-gray-900 font-bold"
+                            >
+                              {config.label}
+                            </option>
                           ))}
                         </select>
                       </div>
                     </td>
                     <td className="px-6 py-5">
                       <div className="text-sm text-gray-900 font-bold">
-                        {new Date(lead.registeredAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {new Date(lead.registeredAt).toLocaleDateString(
+                          undefined,
+                          { month: 'short', day: 'numeric', year: 'numeric' },
+                        )}
                       </div>
                       <div className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">
-                        {new Date(lead.registeredAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                        {new Date(lead.registeredAt).toLocaleTimeString(
+                          undefined,
+                          { hour: '2-digit', minute: '2-digit' },
+                        )}
                       </div>
                     </td>
                     <td className="px-8 py-5">
                       <div className="flex items-center justify-end gap-2">
                         <a
-                          href={`https://wa.me/${lead.phoneNumber.replace(/[^0-9]/g, '')}`}
+                          href={`https://wa.me/${lead.phoneNumber.replace(
+                            /[^0-9]/g,
+                            '',
+                          )}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-2.5 text-green-600 bg-green-50 hover:bg-green-600 hover:text-white rounded-xl transition duration-300 shadow-sm"
@@ -415,7 +539,10 @@ export default function Leads() {
                           <MessageSquare className="h-4.5 w-4.5" />
                         </a>
                         <button
-                          onClick={() => { setSelectedLead(lead); setShowModal(true); }}
+                          onClick={() => {
+                            setSelectedLead(lead);
+                            setShowModal(true);
+                          }}
                           className="p-2.5 text-indigo-600 bg-indigo-50 hover:bg-indigo-600 hover:text-white rounded-xl transition duration-300 shadow-sm"
                           title="View Details"
                         >
@@ -441,18 +568,19 @@ export default function Leads() {
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-8 py-6 bg-gray-50/50 border-t border-gray-100">
             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
-              Showing Page <span className="text-indigo-600">{page}</span> of {totalPages}
+              Showing Page <span className="text-indigo-600">{page}</span> of{' '}
+              {totalPages}
             </p>
             <div className="flex gap-3">
               <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
                 className="p-2 bg-white rounded-xl border border-gray-200 shadow-sm disabled:opacity-30 disabled:cursor-not-allowed hover:border-indigo-500 hover:text-indigo-600 transition"
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
               <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
                 className="p-2 bg-white rounded-xl border border-gray-200 shadow-sm disabled:opacity-30 disabled:cursor-not-allowed hover:border-indigo-500 hover:text-indigo-600 transition"
               >
@@ -474,8 +602,12 @@ export default function Leads() {
                   {(selectedLead.fullName || 'U').charAt(0)}
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900">{selectedLead.fullName}</h2>
-                  <p className="text-sm text-gray-400 font-medium font-mono uppercase">ID: {selectedLead._id}</p>
+                  <h2 className="text-xl font-bold text-gray-900">
+                    {selectedLead.fullName}
+                  </h2>
+                  <p className="text-sm text-gray-400 font-medium font-mono uppercase">
+                    ID: {selectedLead._id}
+                  </p>
                 </div>
               </div>
               <button
@@ -492,55 +624,87 @@ export default function Leads() {
                 {/* Left Column: Info */}
                 <div className="space-y-6">
                   <section>
-                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Personal Information</h3>
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">
+                      Personal Information
+                    </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                         <label className="flex items-center gap-2 text-xs font-semibold text-gray-400 mb-1">
                           <Mail className="h-3 w-3" /> Email Address
                         </label>
-                        <p className="font-bold text-gray-900 truncate text-sm">{selectedLead.email || 'N/A'}</p>
+                        <p className="font-bold text-gray-900 truncate text-sm">
+                          {selectedLead.email || 'N/A'}
+                        </p>
                       </div>
                       <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                         <label className="flex items-center gap-2 text-xs font-semibold text-gray-400 mb-1">
                           <Phone className="h-3 w-3" /> Phone Number
                         </label>
-                        <p className="font-bold text-gray-900 text-sm">{selectedLead.phoneNumber}</p>
+                        <p className="font-bold text-gray-900 text-sm">
+                          {selectedLead.phoneNumber}
+                        </p>
                       </div>
                       <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 sm:col-span-2">
                         <label className="flex items-center gap-2 text-xs font-semibold text-gray-400 mb-1">
                           <MapPin className="h-3 w-3" /> Home Address
                         </label>
-                        <p className="font-bold text-gray-900 text-sm leading-relaxed">{selectedLead.address}</p>
+                        <p className="font-bold text-gray-900 text-sm leading-relaxed">
+                          {selectedLead.address}
+                        </p>
                       </div>
                     </div>
                   </section>
 
                   <section>
-                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Application Review</h3>
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">
+                      Application Review
+                    </h3>
                     <div className="bg-indigo-50/50 p-5 rounded-2xl border border-indigo-100">
                       <div className="flex items-start gap-4 mb-4">
                         <div className="p-3 bg-white rounded-xl text-indigo-600 shadow-sm">
                           <Briefcase className="h-6 w-6" />
                         </div>
                         <div>
-                          <label className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block mb-1">Applying For</label>
-                          <p className="text-lg font-extrabold text-indigo-900 leading-tight">{selectedLead.jobVacancyType}</p>
+                          <label className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block mb-1">
+                            Applying For
+                          </label>
+                          <p className="text-lg font-extrabold text-indigo-900 leading-tight">
+                            {selectedLead.jobVacancyType}
+                          </p>
                         </div>
                       </div>
 
                       <div>
-                        <label className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block mb-2">Update Application Status</label>
+                        <label className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block mb-2">
+                          Update Application Status
+                        </label>
                         <select
                           value={selectedLead.status}
                           onChange={async (e) => {
-                            await handleStatusChange(selectedLead._id, e.target.value);
-                            setSelectedLead({ ...selectedLead, status: e.target.value as Lead['status'] });
+                            await handleStatusChange(
+                              selectedLead._id,
+                              e.target.value,
+                            );
+                            setSelectedLead({
+                              ...selectedLead,
+                              status: e.target.value as Lead['status'],
+                            });
                           }}
-                          className={`w-full appearance-none px-4 py-3 rounded-2xl border-2 font-bold transition outline-none ring-indigo-500/20 focus:ring-4 ${statusConfig[selectedLead.status as keyof typeof statusConfig]?.color}`}
+                          className={`w-full appearance-none px-4 py-3 rounded-2xl border-2 font-bold transition outline-none ring-indigo-500/20 focus:ring-4 ${
+                            statusConfig[
+                              selectedLead.status as keyof typeof statusConfig
+                            ]?.color
+                          }`}
                           style={{ textAlign: 'center' }}
                         >
                           {Object.entries(statusConfig).map(([key, config]) => (
-                            <option key={key} value={key} className="bg-white text-gray-900 font-bold">{config.label}</option>
+                            <option
+                              key={key}
+                              value={key}
+                              className="bg-white text-gray-900 font-bold"
+                            >
+                              {config.label}
+                            </option>
                           ))}
                         </select>
                       </div>
@@ -552,7 +716,9 @@ export default function Leads() {
                 <div className="space-y-6">
                   <section>
                     <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Qualifications & Transcripts</h3>
+                      <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                        Qualifications & Transcripts
+                      </h3>
                       <span className="text-[10px] font-bold bg-gray-100 text-gray-500 px-3 py-1 rounded-full uppercase">
                         {selectedLead.qualifications.length} Files
                       </span>
@@ -562,24 +728,36 @@ export default function Leads() {
                       {selectedLead.qualifications.length === 0 ? (
                         <div className="text-center py-10 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200">
                           <FileText className="h-10 w-10 text-gray-200 mx-auto mb-2" />
-                          <p className="text-gray-400 text-xs font-bold uppercase tracking-tight">No documents attached yet</p>
+                          <p className="text-gray-400 text-xs font-bold uppercase tracking-tight">
+                            No documents attached yet
+                          </p>
                         </div>
                       ) : (
                         selectedLead.qualifications.map((qual, idx) => (
-                          <div key={idx} className="group flex items-center justify-between p-4 bg-white border border-gray-100 rounded-2xl hover:border-indigo-200 hover:shadow-md transition duration-300">
+                          <div
+                            key={idx}
+                            className="group flex items-center justify-between p-4 bg-white border border-gray-100 rounded-2xl hover:border-indigo-200 hover:shadow-md transition duration-300"
+                          >
                             <div className="flex items-center gap-3">
                               <div className="h-10 w-10 rounded-xl bg-orange-50 text-orange-500 flex items-center justify-center">
                                 <FileText className="h-5 w-5" />
                               </div>
                               <div className="overflow-hidden max-w-[180px]">
-                                <p className="font-bold text-sm text-gray-900 truncate">{qual.fileName}</p>
+                                <p className="font-bold text-sm text-gray-900 truncate">
+                                  {qual.fileName}
+                                </p>
                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">
-                                  {(qual.fileSize / 1024).toFixed(1)} KB • {new Date(qual.uploadedAt).toLocaleDateString()}
+                                  {(qual.fileSize / 1024).toFixed(1)} KB •{' '}
+                                  {new Date(
+                                    qual.uploadedAt,
+                                  ).toLocaleDateString()}
                                 </p>
                               </div>
                             </div>
                             <a
-                              href={`${import.meta.env.VITE_API_URL || ''}${qual.filePath}`}
+                              href={`${import.meta.env.VITE_API_URL || ''}${
+                                qual.filePath
+                              }`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="p-3 bg-gray-50 text-gray-400 hover:bg-indigo-600 hover:text-white rounded-xl transition duration-200 shadow-sm"
@@ -598,7 +776,8 @@ export default function Leads() {
                             accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                             onChange={(e) => {
                               const file = e.target.files?.[0];
-                              if (file) handleFileUpload(selectedLead._id, file);
+                              if (file)
+                                handleFileUpload(selectedLead._id, file);
                             }}
                             disabled={uploading}
                             className="hidden"
@@ -607,7 +786,9 @@ export default function Leads() {
                             <Upload className="h-6 w-6" />
                           </div>
                           <span className="text-sm font-bold text-gray-500 group-hover:text-indigo-900 transition">
-                            {uploading ? 'Processing File...' : 'Attach Qualification'}
+                            {uploading
+                              ? 'Processing File...'
+                              : 'Attach Qualification'}
                           </span>
                           <span className="text-[10px] text-gray-400 mt-1 uppercase font-bold tracking-widest group-hover:text-indigo-400">
                             PDF, PNG, JPG (Max 5MB)
@@ -619,7 +800,9 @@ export default function Leads() {
 
                   <section className="mt-8 border-t border-gray-100 pt-8">
                     <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">WhatsApp Conversation</h3>
+                      <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                        WhatsApp Conversation
+                      </h3>
                       <span className="text-[10px] font-bold bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full uppercase">
                         {messages.length} Messages
                       </span>
@@ -627,18 +810,45 @@ export default function Leads() {
 
                     <div className="space-y-4 bg-gray-50 p-5 rounded-3xl max-h-[400px] overflow-y-auto border border-gray-100">
                       {loadingMessages ? (
-                        <p className="text-center text-sm font-bold text-gray-400 py-8 animate-pulse">Loading conversation...</p>
+                        <p className="text-center text-sm font-bold text-gray-400 py-8 animate-pulse">
+                          Loading conversation...
+                        </p>
                       ) : messages.length === 0 ? (
                         <div className="text-center py-10">
                           <MessageSquare className="h-10 w-10 text-gray-200 mx-auto mb-3" />
-                          <p className="text-gray-400 text-xs font-bold uppercase tracking-tight">No message history found</p>
+                          <p className="text-gray-400 text-xs font-bold uppercase tracking-tight">
+                            No message history found
+                          </p>
                         </div>
                       ) : (
                         messages.map((msg, idx) => (
-                          <div key={idx} className={`flex ${msg.role === 'assistant' || msg.role === 'system' ? 'justify-start' : 'justify-end'}`}>
-                            <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm ${msg.role === 'assistant' || msg.role === 'system' ? 'bg-white border border-gray-200 text-gray-800 rounded-tl-sm' : 'bg-indigo-600 text-white rounded-tr-sm'}`}>
-                              <p className="whitespace-pre-wrap font-medium">{msg.content}</p>
-                              <p className={`text-[9px] mt-1.5 font-bold tracking-wider uppercase ${msg.role === 'assistant' || msg.role === 'system' ? 'text-gray-400' : 'text-indigo-200'}`}>
+                          <div
+                            key={idx}
+                            className={`flex ${
+                              msg.role === 'assistant' || msg.role === 'system'
+                                ? 'justify-start'
+                                : 'justify-end'
+                            }`}
+                          >
+                            <div
+                              className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
+                                msg.role === 'assistant' ||
+                                msg.role === 'system'
+                                  ? 'bg-white border border-gray-200 text-gray-800 rounded-tl-sm'
+                                  : 'bg-indigo-600 text-white rounded-tr-sm'
+                              }`}
+                            >
+                              <p className="whitespace-pre-wrap font-medium">
+                                {msg.content}
+                              </p>
+                              <p
+                                className={`text-[9px] mt-1.5 font-bold tracking-wider uppercase ${
+                                  msg.role === 'assistant' ||
+                                  msg.role === 'system'
+                                    ? 'text-gray-400'
+                                    : 'text-indigo-200'
+                                }`}
+                              >
                                 {new Date(msg.timestamp).toLocaleString()}
                               </p>
                             </div>
@@ -655,7 +865,10 @@ export default function Leads() {
             <div className="px-8 py-6 bg-gray-50/80 border-t border-gray-100 flex flex-col sm:flex-row gap-4 justify-between items-center">
               <div className="flex gap-2">
                 <a
-                  href={`https://wa.me/${selectedLead.phoneNumber.replace(/[^0-9]/g, '')}`}
+                  href={`https://wa.me/${selectedLead.phoneNumber.replace(
+                    /[^0-9]/g,
+                    '',
+                  )}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-2xl font-bold shadow-lg shadow-green-200 hover:bg-green-700 hover:-translate-y-0.5 transition active:translate-y-0"
@@ -684,15 +897,29 @@ export default function Leads() {
 
       {/* Notification Toast */}
       {notification && (
-        <div className={`fixed bottom-8 right-8 flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl animate-in slide-in-from-right duration-300 z-[100] border ${notification.type === 'success' ? 'bg-green-600 text-white border-green-500' :
-          notification.type === 'error' ? 'bg-red-600 text-white border-red-500' :
-            'bg-indigo-600 text-white border-indigo-500'
-          }`}>
-          {notification.type === 'success' ? <CheckCircle className="h-5 w-5" /> :
-            notification.type === 'error' ? <AlertCircle className="h-5 w-5" /> :
-              <FileText className="h-5 w-5" />}
-          <p className="font-bold text-sm tracking-tight">{notification.message}</p>
-          <button onClick={() => setNotification(null)} className="ml-2 hover:opacity-70">
+        <div
+          className={`fixed bottom-8 right-8 flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl animate-in slide-in-from-right duration-300 z-[100] border ${
+            notification.type === 'success'
+              ? 'bg-green-600 text-white border-green-500'
+              : notification.type === 'error'
+              ? 'bg-red-600 text-white border-red-500'
+              : 'bg-indigo-600 text-white border-indigo-500'
+          }`}
+        >
+          {notification.type === 'success' ? (
+            <CheckCircle className="h-5 w-5" />
+          ) : notification.type === 'error' ? (
+            <AlertCircle className="h-5 w-5" />
+          ) : (
+            <FileText className="h-5 w-5" />
+          )}
+          <p className="font-bold text-sm tracking-tight">
+            {notification.message}
+          </p>
+          <button
+            onClick={() => setNotification(null)}
+            className="ml-2 hover:opacity-70"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>

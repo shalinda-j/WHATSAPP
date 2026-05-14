@@ -104,10 +104,7 @@ export class AgentRegistry {
 
     const scoringTasks = Array.from(this.agents.values())
       .filter(
-        (e) =>
-          e.config &&
-          e.config.isActive &&
-          e.config.mode !== 'disabled',
+        (e) => e.config && e.config.isActive && e.config.mode !== 'disabled',
       )
       .map(async (entry) => {
         try {

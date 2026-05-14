@@ -34,7 +34,9 @@ export class OpenAIService implements AIService {
         const defaultConfig = createCompanyConfig('default');
         formattedMessages.unshift({
           role: 'system',
-          content: `${AI_PERSONALITY(defaultConfig)}\n\n${JOB_KNOWLEDGE_BASE(defaultConfig)}`,
+          content: `${AI_PERSONALITY(defaultConfig)}\n\n${JOB_KNOWLEDGE_BASE(
+            defaultConfig,
+          )}`,
         });
       }
 

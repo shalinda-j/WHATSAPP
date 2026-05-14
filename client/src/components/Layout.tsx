@@ -2,10 +2,28 @@ import { useState, memo } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
-  LayoutDashboard, Database, Settings, LogOut, Smartphone,
-  Menu, X, Globe, AudioLines, Megaphone, Briefcase,
-  MessageSquare, FileText, Calendar, UserCheck, ChevronDown,
-  ChevronRight, Cpu, BarChart3, Bot, Inbox, Search
+  LayoutDashboard,
+  Database,
+  Settings,
+  LogOut,
+  Smartphone,
+  Menu,
+  X,
+  Globe,
+  AudioLines,
+  Megaphone,
+  Briefcase,
+  MessageSquare,
+  FileText,
+  Calendar,
+  UserCheck,
+  ChevronDown,
+  ChevronRight,
+  Cpu,
+  BarChart3,
+  Bot,
+  Inbox,
+  Search,
 } from 'lucide-react';
 
 interface NavItem {
@@ -24,9 +42,7 @@ interface NavSection {
 const NAV_SECTIONS: NavSection[] = [
   {
     title: 'Overview',
-    items: [
-      { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    ],
+    items: [{ to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' }],
   },
   {
     title: 'Communication',
@@ -48,7 +64,6 @@ const NAV_SECTIONS: NavSection[] = [
     title: 'AI & Automation',
     items: [
       { to: '/voice-agent-hub', icon: AudioLines, label: 'Voice Agent' },
-      { to: '/marketing', icon: BarChart3, label: 'Marketing' },
       { to: '/form-builder', icon: FileText, label: 'Form Builder' },
       { to: '/datasets', icon: Database, label: 'Datasets' },
       { to: '/webhooks', icon: Globe, label: 'Webhooks' },
@@ -81,7 +96,15 @@ interface NavLinkProps {
   onClick: () => void;
 }
 
-const NavLink = memo(function NavLink({ to, icon: Icon, label, badge, badgeColor, isActive, onClick }: NavLinkProps) {
+const NavLink = memo(function NavLink({
+  to,
+  icon: Icon,
+  label,
+  badge,
+  badgeColor,
+  isActive,
+  onClick,
+}: NavLinkProps) {
   return (
     <Link
       to={to}
@@ -92,10 +115,18 @@ const NavLink = memo(function NavLink({ to, icon: Icon, label, badge, badgeColor
           : 'text-gray-300 hover:bg-gray-700 hover:text-white'
       }`}
     >
-      <Icon className={`mr-3 h-4.5 w-4.5 flex-shrink-0 ${isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-200'}`} />
+      <Icon
+        className={`mr-3 h-4.5 w-4.5 flex-shrink-0 ${
+          isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-200'
+        }`}
+      />
       <span className="truncate flex-1">{label}</span>
       {badge && (
-        <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${badgeColor || 'bg-green-500 text-white'}`}>
+        <span
+          className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+            badgeColor || 'bg-green-500 text-white'
+          }`}
+        >
           {badge}
         </span>
       )}
@@ -111,7 +142,13 @@ interface SectionProps {
   onToggle: () => void;
 }
 
-const NavSection = memo(function NavSection({ section, activePath, closeSidebar, isCollapsed, onToggle }: SectionProps) {
+const NavSection = memo(function NavSection({
+  section,
+  activePath,
+  closeSidebar,
+  isCollapsed,
+  onToggle,
+}: SectionProps) {
   return (
     <div className="mb-1">
       <button
@@ -119,11 +156,15 @@ const NavSection = memo(function NavSection({ section, activePath, closeSidebar,
         className="flex items-center justify-between w-full px-3 py-1.5 text-[10px] font-bold text-gray-500 uppercase tracking-widest hover:text-gray-400 transition-colors"
       >
         <span>{section.title}</span>
-        {isCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        {isCollapsed ? (
+          <ChevronRight className="h-3 w-3" />
+        ) : (
+          <ChevronDown className="h-3 w-3" />
+        )}
       </button>
       {!isCollapsed && (
         <div className="space-y-0.5 mt-0.5">
-          {section.items.map(item => (
+          {section.items.map((item) => (
             <NavLink
               key={item.to}
               {...item}
@@ -142,7 +183,9 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
+    new Set(),
+  );
 
   const handleLogout = () => {
     logout();
@@ -152,7 +195,7 @@ export default function Layout() {
   const closeSidebar = () => setIsSidebarOpen(false);
 
   const toggleSection = (title: string) => {
-    setCollapsedSections(prev => {
+    setCollapsedSections((prev) => {
       const next = new Set(prev);
       if (next.has(title)) next.delete(title);
       else next.add(title);
@@ -173,23 +216,33 @@ export default function Layout() {
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
           className="p-2 rounded-lg hover:bg-gray-700 transition-colors"
         >
-          {isSidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          {isSidebarOpen ? (
+            <X className="h-5 w-5" />
+          ) : (
+            <Menu className="h-5 w-5" />
+          )}
         </button>
       </div>
 
       {/* Sidebar */}
-      <aside className={`
+      <aside
+        className={`
         fixed md:static inset-y-0 left-0 z-40 w-60 bg-gray-900 text-gray-100 flex flex-col
         transition-transform duration-300 ease-in-out
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+        ${
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        }
         shadow-xl md:shadow-none
-      `}>
+      `}
+      >
         {/* Logo */}
         <div className="hidden md:flex h-16 items-center px-4 border-b border-gray-700/50">
           <img src="/360ai.png" alt="360ai" className="h-10" />
           <div className="ml-2">
             <div className="text-xs text-gray-400 leading-tight">WhatsApp</div>
-            <div className="text-xs text-gray-400 leading-tight font-medium">Bot System</div>
+            <div className="text-xs text-gray-400 leading-tight font-medium">
+              Bot System
+            </div>
           </div>
         </div>
 
@@ -200,7 +253,7 @@ export default function Layout() {
 
         {/* Navigation */}
         <div className="flex-1 overflow-y-auto py-3 px-2 space-y-2 scrollbar-thin scrollbar-thumb-gray-700">
-          {NAV_SECTIONS.map(section => (
+          {NAV_SECTIONS.map((section) => (
             <NavSection
               key={section.title}
               section={section}

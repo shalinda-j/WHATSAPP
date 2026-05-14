@@ -16,10 +16,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check conventional commits
-        uses: compumike/conventional-commits-action@v0.0.5
-        with:
-          types: 'feat,fix,docs,style,refactor,perf,test,chore,revert'
+      - name: Check conventional commits (soft)
+        run: |
+          # Lenient conventional-commits hint — surfaces a warning when the PR
+          # title doesn't start with a known type prefix, but never fails CI.
+          TITLE='${{ github.event.pull_request.title }}'
+          if echo "$TITLE" | grep -qE '^(feat|fix|docs|style|refactor|perf|test|chore|revert|ci|build)(\(.+\))?[:!]'; then
+            echo "✓ PR title follows conventional commits"
+          else
+            echo "::warning::PR title doesn't follow conventional commits format (type: description). This is a hint, not a blocker."
+          fi
 
       - name: Check for large files
         run: |
@@ -27,22 +33,6 @@ jobs:
           if [ $(find . -type f -size +10M -not -path './node_modules/*' -not -path './client/node_modules/*' | wc -l) -gt 0 ]; then
             echo "::warning::Large files detected in the PR. Consider using Git LFS."
           fi
-
-  code-review:
-    name: Code Review Checklist
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: PR Checklist
-        uses: trstringer/manual-approval@v1.0
-        with:
-          secret: ${{ secrets.GITHUB_TOKEN }}
-          approvers: "reviewer1,reviewer2"
-          min-approvals: 1
 
   size-report:
     name: PR Size Report

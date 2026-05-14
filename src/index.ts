@@ -50,6 +50,8 @@ import { autoRegistrationService } from './services/AutoRegistrationService';
 import { usageResetService } from './services/UsageResetService';
 import { agentOrchestrator } from './services/AgentOrchestrator';
 import { agentReflectionService } from './services/AgentReflectionService';
+import { registerCoreAgents } from './agents/bootstrap';
+import { classifyIntent } from './services/IntentClassifierService';
 import { HumanizerService } from './services/HumanizerService';
 
 const PORT = process.env.PORT || 8080;
@@ -79,6 +81,9 @@ async function startServer() {
 
       // Start agent self-improvement scheduler (approval expiry + nightly promotion)
       agentReflectionService.start();
+
+      // Register specialist agents and seed their initial prompts
+      await registerCoreAgents();
     } catch (dbErr) {
       console.error(
         '❌ MongoDB Connection Failed. Server starting in LIMITED MODE.',
@@ -513,6 +518,7 @@ onMessage(async (message, sock, sessionId) => {
     // and pass their confidence threshold. Falls through to legacy AI fallback
     // on `no_handler`, so behaviour is unchanged until agents are wired in.
     try {
+      const intent = classifyIntent(text);
       const agentOutcome = await agentOrchestrator.handle({
         sessionId,
         userId: jid,
@@ -520,7 +526,7 @@ onMessage(async (message, sock, sessionId) => {
         language: 'si',
         inputMessage: text,
         conversationHistory: [],
-        metadata: {},
+        metadata: { intent },
       });
       if (agentOutcome.handled) {
         if (agentOutcome.outbound) {
@@ -540,7 +546,10 @@ onMessage(async (message, sock, sessionId) => {
         return;
       }
     } catch (err) {
-      console.error('   ❌ AgentOrchestrator error, falling back to legacy AI:', err);
+      console.error(
+        '   ❌ AgentOrchestrator error, falling back to legacy AI:',
+        err,
+      );
     }
 
     // For all other messages, respond with AI
@@ -633,8 +642,11 @@ onMessage(async (message, sock, sessionId) => {
         // Default language is SINHALA. If user writes in English only, reply in English.
         let finalPrompt = text;
         if (isVoiceMessage) {
-          const looksLikeEnglish = /^([a-zA-Z]+\s*){3,}$/.test(text.trim()) &&
-            /\b(the|is|are|I|you|he|she|we|they|my|your|it|and|or|but|what|how|can|could|please|hello|hi|thank|yes|no|okay|ok)\b/i.test(text);
+          const looksLikeEnglish =
+            /^([a-zA-Z]+\s*){3,}$/.test(text.trim()) &&
+            /\b(the|is|are|I|you|he|she|we|they|my|your|it|and|or|but|what|how|can|could|please|hello|hi|thank|yes|no|okay|ok)\b/i.test(
+              text,
+            );
           const hasSinhalaChars = /[\u0D80-\u0DFF]/.test(text);
           const hasTamilChars = /[\u0B80-\u0BFF]/.test(text);
 
@@ -651,7 +663,10 @@ onMessage(async (message, sock, sessionId) => {
           // Text message: detect language
           const hasSinhala = /[\u0D80-\u0DFF]/.test(text);
           const hasTamil = /[\u0B80-\u0BFF]/.test(text);
-          const isLikelyEnglish = /^[a-zA-Z0-9\s\p{P}!?.,;&'"()+\-*#@%$^\[\]{}|\\/<>=`~]+$/u.test(text.trim());
+          const isLikelyEnglish =
+            /^[a-zA-Z0-9\s\p{P}!?.,;&'"()+\-*#@%$^\[\]{}|\\/<>=`~]+$/u.test(
+              text.trim(),
+            );
 
           if (hasSinhala) {
             finalPrompt += `\n\n(SYSTEM: සිංහල භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න.)`;
@@ -688,8 +703,10 @@ onMessage(async (message, sock, sessionId) => {
         }
 
         // Simulate realistic typing delay
-        const typingDelay = chatPersonality.getTypingDelay(response ? response.length : 0);
-        await new Promise(resolve => setTimeout(resolve, typingDelay));
+        const typingDelay = chatPersonality.getTypingDelay(
+          response ? response.length : 0,
+        );
+        await new Promise((resolve) => setTimeout(resolve, typingDelay));
       } catch (aiError: any) {
         console.error('   ❌ Error in AI/NLP processing:', aiError);
         throw aiError;

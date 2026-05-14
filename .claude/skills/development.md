@@ -1,9 +1,11 @@
 # WhatsApp AI Bot Development Skill
 
 ## Overview
+
 This skill provides specialized assistance for developing and maintaining the WhatsApp AI Bot project. Use this for common development tasks, debugging, and feature implementation.
 
 ## Triggers
+
 - User asks about WhatsApp bot development
 - User mentions commands, voice processing, AI providers, or CRM
 - User needs help with message handling or workflows
@@ -28,7 +30,7 @@ export class MyCommand implements ICommand {
   async execute(
     message: proto.IWebMessageInfo,
     args: string[],
-    sessionId: string
+    sessionId: string,
   ): Promise<void> {
     const jid = getSenderJid(message);
     if (!jid) return;
@@ -66,7 +68,7 @@ export class NewProviderService implements AIService {
     const response = await fetch('https://api.newprovider.com/v1/chat', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
+        Authorization: `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -85,11 +87,13 @@ import { NewProviderService } from './NewProvider';
 
 // In loadServices():
 if (conf.providerType === 'newprovider') {
-  this.services.push(new NewProviderService({
-    apiKey: conf.apiKey,
-    model: conf.aiModel,
-    providerType: 'newprovider',
-  }));
+  this.services.push(
+    new NewProviderService({
+      apiKey: conf.apiKey,
+      model: conf.aiModel,
+      providerType: 'newprovider',
+    }),
+  );
 }
 
 // Step 3: Add to priority map
@@ -162,12 +166,12 @@ const MyModelSchema = new Schema(
     description: { type: String },
     isActive: { type: Boolean, default: true },
   } as any,
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export default mongoose.model(
   'MyModel',
-  MyModelSchema as any
+  MyModelSchema as any,
 ) as unknown as mongoose.Model<IMyModel>;
 ```
 
@@ -223,6 +227,7 @@ export default function MyPage() {
 ## Debugging Tips
 
 ### Message Flow Debugging
+
 ```typescript
 // Add logging in src/index.ts message handler
 console.log(`📩 Message: "${text}" from ${jid}`);
@@ -230,6 +235,7 @@ console.log(`   Processing step: ${stepName}`);
 ```
 
 ### AI Provider Debugging
+
 ```typescript
 // Enable debug logging in AILoadBalancer.ts
 console.log(`🤖 Loaded ${this.services.length} AI services`);
@@ -237,6 +243,7 @@ console.log(`   Primary: ${this.services[0]?.constructor.name}`);
 ```
 
 ### Database Connection Debugging
+
 ```bash
 # Check MongoDB connection
 curl http://localhost:8080/health
@@ -252,6 +259,7 @@ curl http://localhost:8080/health
 ```
 
 ### Voice Processing Debugging
+
 ```typescript
 // In src/services/voice.ts
 console.log(`   🎙️ Transcribing audio with ${provider}...`);
@@ -278,19 +286,23 @@ npx jest --watch
 ## Common Issues & Solutions
 
 ### Issue: MongoDB 503 Error
+
 **Solution**: Check MongoDB connection status and IP whitelist
+
 ```typescript
 // Check in middleware
 if (mongoose.connection.readyState !== 1) {
   return res.status(503).json({
     error: 'Service Unavailable',
-    message: 'Database not connected.'
+    message: 'Database not connected.',
   });
 }
 ```
 
 ### Issue: Voice Transcription Fails
+
 **Solution**: Check provider config and fallback
+
 ```typescript
 // Fallback chain: OpenAI -> Gemini
 if (!transcription) {
@@ -300,7 +312,9 @@ if (!transcription) {
 ```
 
 ### Issue: AI Provider Rate Limited
+
 **Solution**: Load balancer automatically falls back to next provider
+
 ```typescript
 // In AILoadBalancer.ts
 for (let i = 0; i < this.services.length; i++) {
@@ -313,11 +327,13 @@ for (let i = 0; i < this.services.length; i++) {
 ```
 
 ### Issue: TypeScript Deep Instantiation Error
+
 **Solution**: Use type assertion pattern
+
 ```typescript
 export default mongoose.model(
   'ModelName',
-  Schema as any
+  Schema as any,
 ) as unknown as mongoose.Model<IModel>;
 ```
 
@@ -333,17 +349,19 @@ export default mongoose.model(
 ## Quick Reference
 
 ### File Locations
-| Task | Location |
-|------|----------|
-| Add command | `src/app/commands/` |
-| Add route | `src/server/routes/` |
-| Add model | `src/models/` |
-| Add service | `src/services/` |
-| Add page | `client/src/pages/` |
-| Add component | `client/src/components/` |
-| AI config | `src/config/ai-personality.ts` |
+
+| Task          | Location                       |
+| ------------- | ------------------------------ |
+| Add command   | `src/app/commands/`            |
+| Add route     | `src/server/routes/`           |
+| Add model     | `src/models/`                  |
+| Add service   | `src/services/`                |
+| Add page      | `client/src/pages/`            |
+| Add component | `client/src/components/`       |
+| AI config     | `src/config/ai-personality.ts` |
 
 ### API Response Format
+
 ```typescript
 // Success
 res.json({ data, message: 'Success' });
@@ -356,6 +374,7 @@ res.json({ data, total, page, limit });
 ```
 
 ### Socket Events
+
 ```typescript
 // Emit
 io.emit('new-message', messageData);

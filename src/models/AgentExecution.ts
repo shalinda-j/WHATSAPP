@@ -101,7 +101,10 @@ AgentExecutionSchema.index({ agentName: 1, createdAt: -1 });
 AgentExecutionSchema.index({ userId: 1, createdAt: -1 });
 AgentExecutionSchema.index({ sessionId: 1, createdAt: -1 });
 // 90-day retention — TTL on createdAt avoids unbounded growth of trace data
-AgentExecutionSchema.index({ createdAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 90 });
+AgentExecutionSchema.index(
+  { createdAt: 1 },
+  { expireAfterSeconds: 60 * 60 * 24 * 90 },
+);
 
 export default mongoose.model(
   'AgentExecution',

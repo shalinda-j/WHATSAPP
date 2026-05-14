@@ -31,7 +31,8 @@ export class HumanizerService {
   // conservative values are tuned to stay well under WhatsApp's observed
   // anti-spam thresholds. In-memory only — sufficient for single-instance.
   private static sendTimestamps: Map<string, number[]> = new Map();
-  private static dailyCount: Map<string, { date: string; count: number }> = new Map();
+  private static dailyCount: Map<string, { date: string; count: number }> =
+    new Map();
   private static rateCapsCache: (RateCaps & { loadedAt: number }) | null = null;
   private static readonly RATE_CAPS_TTL = 60000;
   private static readonly DEFAULT_RATE_CAPS: RateCaps = {
@@ -42,7 +43,10 @@ export class HumanizerService {
 
   private static async getRateCaps(): Promise<RateCaps> {
     const now = Date.now();
-    if (this.rateCapsCache && now - this.rateCapsCache.loadedAt < this.RATE_CAPS_TTL) {
+    if (
+      this.rateCapsCache &&
+      now - this.rateCapsCache.loadedAt < this.RATE_CAPS_TTL
+    ) {
       return this.rateCapsCache;
     }
     try {
@@ -74,9 +78,10 @@ export class HumanizerService {
     this.rateCapsCache = null;
   }
 
-  private static async checkRateCap(
-    sessionId: string,
-  ): Promise<{ allowed: boolean; reason?: 'per_minute' | 'per_hour' | 'per_day' }> {
+  private static async checkRateCap(sessionId: string): Promise<{
+    allowed: boolean;
+    reason?: 'per_minute' | 'per_hour' | 'per_day';
+  }> {
     const caps = await this.getRateCaps();
     const now = Date.now();
     const minuteAgo = now - 60_000;
@@ -96,7 +101,8 @@ export class HumanizerService {
       this.dailyCount.set(sessionId, day);
     }
 
-    if (last1m >= caps.perMinute) return { allowed: false, reason: 'per_minute' };
+    if (last1m >= caps.perMinute)
+      return { allowed: false, reason: 'per_minute' };
     if (last1h >= caps.perHour) return { allowed: false, reason: 'per_hour' };
     if (day.count >= caps.perDay) return { allowed: false, reason: 'per_day' };
     return { allowed: true };
