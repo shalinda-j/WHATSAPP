@@ -16,7 +16,8 @@ export class AgentReflectionService {
   start(): void {
     if (this.promotionTimer || this.expiryTimer) return;
     this.expiryTimer = setInterval(
-      () => this.expireStaleApprovals().catch(this.logErr('expireStaleApprovals')),
+      () =>
+        this.expireStaleApprovals().catch(this.logErr('expireStaleApprovals')),
       EXPIRY_TICK_MS,
     );
     this.promotionTimer = setInterval(
@@ -77,7 +78,8 @@ export class AgentReflectionService {
     );
 
     // Update per-prompt-version counters
-    const counter = score > 0 ? 'metrics.positiveFeedback' : 'metrics.negativeFeedback';
+    const counter =
+      score > 0 ? 'metrics.positiveFeedback' : 'metrics.negativeFeedback';
     const grouped = new Map<string, number>();
     for (const ex of recent) {
       const key = `${ex.agentName}::${ex.promptVersion}`;
@@ -213,7 +215,9 @@ export class AgentReflectionService {
     if (cfg.promotionPolicy === 'auto') {
       await this.promote(agentName, candidate.version, current.version);
       console.log(
-        `🧠 Auto-promoted ${agentName} v${candidate.version} (net=${candidateNet.toFixed(3)} > current=${currentNet.toFixed(3)})`,
+        `🧠 Auto-promoted ${agentName} v${
+          candidate.version
+        } (net=${candidateNet.toFixed(3)} > current=${currentNet.toFixed(3)})`,
       );
     }
     // 'manual' policy: keep candidate as-is; admin sees the lead in UI and promotes manually

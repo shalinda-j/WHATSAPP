@@ -18,17 +18,20 @@ const PROMPT_SEEDS: PromptSeed[] = [
   {
     agentName: 'lead_qualifier',
     systemPrompt: LEAD_QUALIFIER_V1_PROMPT,
-    changelog: 'Initial production prompt (v1) — BANT extraction with strict no-hallucination rules and language-mirroring reply.',
+    changelog:
+      'Initial production prompt (v1) — BANT extraction with strict no-hallucination rules and language-mirroring reply.',
   },
   {
     agentName: 'personalization',
     systemPrompt: PERSONALIZATION_V1_PROMPT,
-    changelog: 'Initial production prompt (v1) — CRM-aware greeting with name/tag extraction.',
+    changelog:
+      'Initial production prompt (v1) — CRM-aware greeting with name/tag extraction.',
   },
   {
     agentName: 'deal_agent',
     systemPrompt: DEAL_AGENT_V1_PROMPT,
-    changelog: 'Initial production prompt (v1) — closing pitch with Lead-aware personalization and booking-intent extraction.',
+    changelog:
+      'Initial production prompt (v1) — closing pitch with Lead-aware personalization and booking-intent extraction.',
   },
 ];
 
@@ -54,7 +57,10 @@ async function seedPromptIfMissing(seed: PromptSeed): Promise<void> {
   // this is just a safety net) and that currentPromptVersion points to 1.
   await AgentConfig.updateOne(
     { name: seed.agentName },
-    { $setOnInsert: { name: seed.agentName, mode: 'disabled' }, $set: { currentPromptVersion: 1 } },
+    {
+      $setOnInsert: { name: seed.agentName, mode: 'disabled' },
+      $set: { currentPromptVersion: 1 },
+    },
     { upsert: true },
   );
 

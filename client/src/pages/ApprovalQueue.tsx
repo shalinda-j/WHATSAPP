@@ -18,12 +18,18 @@ export default function ApprovalQueue() {
   const [entries, setEntries] = useState<PendingEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
-  const [editing, setEditing] = useState<{ id: string; text: string; note: string } | null>(null);
+  const [editing, setEditing] = useState<{
+    id: string;
+    text: string;
+    note: string;
+  } | null>(null);
 
   const load = async () => {
     setLoading(true);
     try {
-      const res = await api.get<{ entries: PendingEntry[] }>('/api/agents/approvals/pending');
+      const res = await api.get<{ entries: PendingEntry[] }>(
+        '/api/agents/approvals/pending',
+      );
       setEntries(res.data.entries);
     } finally {
       setLoading(false);
@@ -86,11 +92,16 @@ export default function ApprovalQueue() {
             <Inbox className="h-6 w-6 text-amber-600" /> Approval queue
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Outbound agent messages awaiting operator review. Auto-refreshes every 15 s.
+            Outbound agent messages awaiting operator review. Auto-refreshes
+            every 15 s.
           </p>
         </div>
-        <button onClick={load} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50">
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
+        <button
+          onClick={load}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />{' '}
+          Refresh
         </button>
       </header>
 
@@ -100,20 +111,36 @@ export default function ApprovalQueue() {
         <div className="bg-white rounded-lg border border-dashed border-gray-300 p-10 text-center">
           <Inbox className="h-10 w-10 text-gray-300 mx-auto mb-3" />
           <h3 className="text-base font-semibold text-gray-900">Inbox zero</h3>
-          <p className="text-sm text-gray-500 mt-1">All caught up. No agent messages awaiting approval.</p>
+          <p className="text-sm text-gray-500 mt-1">
+            All caught up. No agent messages awaiting approval.
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
           {entries.map((e) => (
-            <div key={e._id} className="bg-white rounded-lg border border-gray-200 p-4">
+            <div
+              key={e._id}
+              className="bg-white rounded-lg border border-gray-200 p-4"
+            >
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-semibold text-gray-900">{e.agentName}</span>
-                  <span className="text-[10px] uppercase font-bold text-amber-700 bg-amber-100 ring-1 ring-amber-200 px-1.5 py-0.5 rounded">{e.channel}</span>
-                  <span className="text-xs text-gray-500 font-mono" title={e.userId}>{e.userId.slice(0, 32)}{e.userId.length > 32 ? '…' : ''}</span>
+                  <span className="text-sm font-semibold text-gray-900">
+                    {e.agentName}
+                  </span>
+                  <span className="text-[10px] uppercase font-bold text-amber-700 bg-amber-100 ring-1 ring-amber-200 px-1.5 py-0.5 rounded">
+                    {e.channel}
+                  </span>
+                  <span
+                    className="text-xs text-gray-500 font-mono"
+                    title={e.userId}
+                  >
+                    {e.userId.slice(0, 32)}
+                    {e.userId.length > 32 ? '…' : ''}
+                  </span>
                 </div>
                 <div className="text-[11px] text-gray-500">
-                  Created {new Date(e.createdAt).toLocaleTimeString()} · expires {new Date(e.expiresAt).toLocaleTimeString()}
+                  Created {new Date(e.createdAt).toLocaleTimeString()} · expires{' '}
+                  {new Date(e.expiresAt).toLocaleTimeString()}
                 </div>
               </div>
 
@@ -122,36 +149,66 @@ export default function ApprovalQueue() {
                   <textarea
                     rows={4}
                     value={editing.text}
-                    onChange={(ev) => setEditing({ ...editing, text: ev.target.value })}
+                    onChange={(ev) =>
+                      setEditing({ ...editing, text: ev.target.value })
+                    }
                     className="w-full rounded-md border-gray-300 text-sm font-mono"
                   />
                   <input
                     type="text"
                     placeholder="Why edited (optional)"
                     value={editing.note}
-                    onChange={(ev) => setEditing({ ...editing, note: ev.target.value })}
+                    onChange={(ev) =>
+                      setEditing({ ...editing, note: ev.target.value })
+                    }
                     className="w-full rounded-md border-gray-300 text-sm mt-2"
                   />
                   <div className="flex gap-2 mt-2">
-                    <button onClick={submitEdit} disabled={busy === e._id} className="px-3 py-1.5 rounded-md bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+                    <button
+                      onClick={submitEdit}
+                      disabled={busy === e._id}
+                      className="px-3 py-1.5 rounded-md bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+                    >
                       Save & send
                     </button>
-                    <button onClick={() => setEditing(null)} className="px-3 py-1.5 rounded-md bg-gray-100 text-gray-700 text-sm font-medium hover:bg-gray-200">
+                    <button
+                      onClick={() => setEditing(null)}
+                      className="px-3 py-1.5 rounded-md bg-gray-100 text-gray-700 text-sm font-medium hover:bg-gray-200"
+                    >
                       Cancel
                     </button>
                   </div>
                 </div>
               ) : (
                 <>
-                  <pre className="mt-3 p-3 bg-gray-50 rounded-md text-sm whitespace-pre-wrap text-gray-800">{e.proposedMessage}</pre>
+                  <pre className="mt-3 p-3 bg-gray-50 rounded-md text-sm whitespace-pre-wrap text-gray-800">
+                    {e.proposedMessage}
+                  </pre>
                   <div className="flex gap-2 mt-3">
-                    <button onClick={() => approve(e._id)} disabled={busy === e._id} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+                    <button
+                      onClick={() => approve(e._id)}
+                      disabled={busy === e._id}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+                    >
                       <Check className="h-4 w-4" /> Approve & send
                     </button>
-                    <button onClick={() => setEditing({ id: e._id, text: e.proposedMessage, note: '' })} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
+                    <button
+                      onClick={() =>
+                        setEditing({
+                          id: e._id,
+                          text: e.proposedMessage,
+                          note: '',
+                        })
+                      }
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+                    >
                       <Pencil className="h-4 w-4" /> Edit & send
                     </button>
-                    <button onClick={() => reject(e._id)} disabled={busy === e._id} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+                    <button
+                      onClick={() => reject(e._id)}
+                      disabled={busy === e._id}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                    >
                       <X className="h-4 w-4" /> Reject
                     </button>
                   </div>

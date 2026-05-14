@@ -1,19 +1,28 @@
 import { z } from 'zod';
 import { IAgent } from '../interfaces/IAgent';
-import {
-  AgentContext,
-  AgentResult,
-  AgentMode,
-} from '../types/agent';
+import { AgentContext, AgentResult, AgentMode } from '../types/agent';
 import { aiLoadBalancer } from '../services/AILoadBalancer';
 import { Contact } from '../models/CRM';
 import { PERSONALIZATION_V1_PROMPT } from './prompts/personalization-v1';
 
 const GREETING_TOKENS = [
-  'hi', 'hello', 'hey', 'halo',
-  'ayubowan', 'ayubvan', 'aaubowan',
-  'vandanai', 'vanakkam', 'namaste', 'namaskar',
-  'kohomada', 'kohomda', 'sup', 'good morning', 'good evening', 'gud',
+  'hi',
+  'hello',
+  'hey',
+  'halo',
+  'ayubowan',
+  'ayubvan',
+  'aaubowan',
+  'vandanai',
+  'vanakkam',
+  'namaste',
+  'namaskar',
+  'kohomada',
+  'kohomda',
+  'sup',
+  'good morning',
+  'good evening',
+  'gud',
 ];
 
 const PersonalizationOutputSchema = z.object({
@@ -68,26 +77,34 @@ export class PersonalizationAgent implements IAgent {
 
     const phone = phoneFromJid(ctx.userId);
     const contact = await Contact.findOne({
-      $or: [
-        { phone },
-        { whatsappNumber: phone },
-        { whatsappId: phone },
-      ],
+      $or: [{ phone }, { whatsappNumber: phone }, { whatsappId: phone }],
     });
 
     const crmContext = contact
       ? {
           name: contact.name || null,
           isReturning: true,
-          lastContactedAt: contact.lastContactedAt || contact.lastContact || null,
-          lastTopic: Array.isArray(contact.tags) && contact.tags.length
-            ? contact.tags[contact.tags.length - 1]
-            : null,
+          lastContactedAt:
+            contact.lastContactedAt || contact.lastContact || null,
+          lastTopic:
+            Array.isArray(contact.tags) && contact.tags.length
+              ? contact.tags[contact.tags.length - 1]
+              : null,
           tags: contact.tags || [],
         }
-      : { name: null, isReturning: false, lastContactedAt: null, lastTopic: null, tags: [] };
+      : {
+          name: null,
+          isReturning: false,
+          lastContactedAt: null,
+          lastTopic: null,
+          tags: [],
+        };
 
-    const augmentedInput = `${ctx.inputMessage}\n\n=== CRM_CONTEXT ===\n${JSON.stringify(crmContext)}\n=== END_CRM_CONTEXT ===`;
+    const augmentedInput = `${
+      ctx.inputMessage
+    }\n\n=== CRM_CONTEXT ===\n${JSON.stringify(
+      crmContext,
+    )}\n=== END_CRM_CONTEXT ===`;
 
     let raw;
     try {
@@ -100,7 +117,11 @@ export class PersonalizationAgent implements IAgent {
         })),
       });
     } catch (err: any) {
-      return this.failed(promptVersion, start, err?.message ?? 'LLM call failed');
+      return this.failed(
+        promptVersion,
+        start,
+        err?.message ?? 'LLM call failed',
+      );
     }
 
     let parsed: PersonalizationOutput;

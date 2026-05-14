@@ -1,26 +1,50 @@
 import { z } from 'zod';
 import { IAgent } from '../interfaces/IAgent';
-import {
-  AgentContext,
-  AgentResult,
-  AgentMode,
-} from '../types/agent';
+import { AgentContext, AgentResult, AgentMode } from '../types/agent';
 import { aiLoadBalancer } from '../services/AILoadBalancer';
 import Lead from '../models/Lead';
 import { DEAL_AGENT_V1_PROMPT } from './prompts/deal-agent-v1';
 
 const BOOKING_INTENT_TOKENS = [
-  'book', 'booking', 'schedule', 'appointment', 'interview',
-  'slot', 'slots', 'available', 'availability', 'when can',
-  'meet', 'meeting', 'visit', 'call me', 'arrange',
-  'kalanaya', 'kawadada', 'velaawa', 'vela', 'samaagama',
-  'haadda', 'hadanna', 'thiyenawa da',
-  'ready', 'yes please', 'lets do', "let's do", 'next step',
+  'book',
+  'booking',
+  'schedule',
+  'appointment',
+  'interview',
+  'slot',
+  'slots',
+  'available',
+  'availability',
+  'when can',
+  'meet',
+  'meeting',
+  'visit',
+  'call me',
+  'arrange',
+  'kalanaya',
+  'kawadada',
+  'velaawa',
+  'vela',
+  'samaagama',
+  'haadda',
+  'hadanna',
+  'thiyenawa da',
+  'ready',
+  'yes please',
+  'lets do',
+  "let's do",
+  'next step',
 ];
 
 const DealOutputSchema = z.object({
   reply: z.string().min(1).max(1000),
-  dealStage: z.enum(['new', 'qualified', 'proposal', 'negotiation', 'ready_to_book']),
+  dealStage: z.enum([
+    'new',
+    'qualified',
+    'proposal',
+    'negotiation',
+    'ready_to_book',
+  ]),
   shouldStartBookingFlow: z.boolean(),
   preferredTimeHint: z.string().nullable(),
 });
@@ -74,7 +98,11 @@ export class DealAgent implements IAgent {
         }
       : { exists: false };
 
-    const augmentedInput = `${ctx.inputMessage}\n\n=== LEAD_CONTEXT ===\n${JSON.stringify(leadContext)}\n=== END_LEAD_CONTEXT ===`;
+    const augmentedInput = `${
+      ctx.inputMessage
+    }\n\n=== LEAD_CONTEXT ===\n${JSON.stringify(
+      leadContext,
+    )}\n=== END_LEAD_CONTEXT ===`;
 
     let raw;
     try {
@@ -87,7 +115,11 @@ export class DealAgent implements IAgent {
         })),
       });
     } catch (err: any) {
-      return this.failed(promptVersion, start, err?.message ?? 'LLM call failed');
+      return this.failed(
+        promptVersion,
+        start,
+        err?.message ?? 'LLM call failed',
+      );
     }
 
     let parsed: DealOutput;
@@ -117,7 +149,12 @@ export class DealAgent implements IAgent {
     if (lead && parsed.dealStage === 'ready_to_book' && lead.status === 'new') {
       await Lead.updateOne(
         { _id: lead._id },
-        { $set: { status: 'reviewed', notes: appendNote(lead.notes, `DealStage: ready_to_book`) } },
+        {
+          $set: {
+            status: 'reviewed',
+            notes: appendNote(lead.notes, `DealStage: ready_to_book`),
+          },
+        },
       );
       sideEffects.push({
         kind: 'lead.update',
@@ -176,7 +213,10 @@ export class DealAgent implements IAgent {
   }
 }
 
-function appendNote(existing: string | null | undefined, addition: string): string {
+function appendNote(
+  existing: string | null | undefined,
+  addition: string,
+): string {
   if (!existing) return addition;
   if (existing.includes(addition)) return existing;
   return `${existing}\n${addition}`;

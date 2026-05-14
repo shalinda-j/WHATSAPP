@@ -15,13 +15,42 @@ import { LEAD_QUALIFIER_V1_PROMPT } from './prompts/lead-qualifier-v1';
 // types. canHandle() is intentionally a sub-ms keyword pass so the
 // orchestrator can score all agents in parallel without LLM cost.
 const TRIGGER_TOKENS = [
-  'job', 'jobs', 'vacancy', 'vacancies', 'apply', 'opportunity', 'work',
-  'rakiya', 'rakeeya', 'rakiyak', 'welada', 'wedek', 'wadak', 'wada',
-  'rassawak', 'rassawa',
-  'japan', 'korea', 'qatar', 'dubai', 'saudi', 'oman', 'kuwait',
-  'welding', 'caregiver', 'factory', 'construction', 'hotel',
-  'experience', 'salary', 'visa', 'training',
-  'interested', 'looking for', 'mata one', 'mata ona',
+  'job',
+  'jobs',
+  'vacancy',
+  'vacancies',
+  'apply',
+  'opportunity',
+  'work',
+  'rakiya',
+  'rakeeya',
+  'rakiyak',
+  'welada',
+  'wedek',
+  'wadak',
+  'wada',
+  'rassawak',
+  'rassawa',
+  'japan',
+  'korea',
+  'qatar',
+  'dubai',
+  'saudi',
+  'oman',
+  'kuwait',
+  'welding',
+  'caregiver',
+  'factory',
+  'construction',
+  'hotel',
+  'experience',
+  'salary',
+  'visa',
+  'training',
+  'interested',
+  'looking for',
+  'mata one',
+  'mata ona',
 ];
 
 const QualifyOutputSchema = z.object({
@@ -84,7 +113,12 @@ export class LeadQualifierAgent implements IAgent {
         })),
       });
     } catch (err: any) {
-      return this.failed(ctx, promptVersion, start, err?.message ?? 'LLM call failed');
+      return this.failed(
+        ctx,
+        promptVersion,
+        start,
+        err?.message ?? 'LLM call failed',
+      );
     }
 
     let parsed: QualifyOutput;
@@ -139,14 +173,9 @@ export class LeadQualifierAgent implements IAgent {
         bant.timing.timeframe
       ) {
         const note = `Timing: ${bant.timing.timeframe}`;
-        updates.notes = existing.notes
-          ? `${existing.notes}\n${note}`
-          : note;
+        updates.notes = existing.notes ? `${existing.notes}\n${note}` : note;
       }
-      if (
-        bant.overallScore >= 0.7 &&
-        existing.status === 'new'
-      ) {
+      if (bant.overallScore >= 0.7 && existing.status === 'new') {
         updates.status = 'reviewed';
       }
 
@@ -188,7 +217,9 @@ export class LeadQualifierAgent implements IAgent {
       notes.push('reply > 400 chars — may be too long for WhatsApp');
     }
     if (result.sideEffects.length === 0 && result.confidence > 0.7) {
-      notes.push('high confidence but no Lead updated — Lead may not exist yet');
+      notes.push(
+        'high confidence but no Lead updated — Lead may not exist yet',
+      );
     }
     return notes.length > 0 ? notes.join('; ') : null;
   }
