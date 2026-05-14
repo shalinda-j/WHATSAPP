@@ -1,6 +1,8 @@
 import { agentRegistry } from './AgentRegistry';
 import { LeadQualifierAgent } from './LeadQualifierAgent';
+import { PersonalizationAgent } from './PersonalizationAgent';
 import { LEAD_QUALIFIER_V1_PROMPT } from './prompts/lead-qualifier-v1';
+import { PERSONALIZATION_V1_PROMPT } from './prompts/personalization-v1';
 import AgentConfig from '../models/AgentConfig';
 import AgentPromptVersion from '../models/AgentPromptVersion';
 
@@ -15,6 +17,11 @@ const PROMPT_SEEDS: PromptSeed[] = [
     agentName: 'lead_qualifier',
     systemPrompt: LEAD_QUALIFIER_V1_PROMPT,
     changelog: 'Initial production prompt (v1) — BANT extraction with strict no-hallucination rules and language-mirroring reply.',
+  },
+  {
+    agentName: 'personalization',
+    systemPrompt: PERSONALIZATION_V1_PROMPT,
+    changelog: 'Initial production prompt (v1) — CRM-aware greeting with name/tag extraction.',
   },
 ];
 
@@ -49,6 +56,7 @@ async function seedPromptIfMissing(seed: PromptSeed): Promise<void> {
 
 export async function registerCoreAgents(): Promise<void> {
   agentRegistry.register(new LeadQualifierAgent());
+  agentRegistry.register(new PersonalizationAgent());
 
   for (const seed of PROMPT_SEEDS) {
     try {
