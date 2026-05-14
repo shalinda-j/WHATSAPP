@@ -13,12 +13,126 @@ interface QueuedMessage {
   timestamp: Date;
 }
 
+interface RateCaps {
+  perMinute: number;
+  perHour: number;
+  perDay: number;
+}
+
 export class HumanizerService {
   private static messageQueue: QueuedMessage[] = [];
   private static isProcessingQueue = false;
   private static cachedConfig: HumanizerConfig | null = null;
   private static configCacheTime = 0;
   private static readonly CONFIG_CACHE_TTL = 60000; // 1 minute cache
+
+  // Per-session send-rate tracking for Baileys ban-risk mitigation. Caps are
+  // hot-reloadable from MongoDB Config (key='humanizer.rateCaps') and default
+  // conservative values are tuned to stay well under WhatsApp's observed
+  // anti-spam thresholds. In-memory only — sufficient for single-instance.
+  private static sendTimestamps: Map<string, number[]> = new Map();
+  private static dailyCount: Map<string, { date: string; count: number }> = new Map();
+  private static rateCapsCache: (RateCaps & { loadedAt: number }) | null = null;
+  private static readonly RATE_CAPS_TTL = 60000;
+  private static readonly DEFAULT_RATE_CAPS: RateCaps = {
+    perMinute: 30,
+    perHour: 600,
+    perDay: 5000,
+  };
+
+  private static async getRateCaps(): Promise<RateCaps> {
+    const now = Date.now();
+    if (this.rateCapsCache && now - this.rateCapsCache.loadedAt < this.RATE_CAPS_TTL) {
+      return this.rateCapsCache;
+    }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const Config = require('../models/Config').default;
+      const row = await Config.findOne({ key: 'humanizer.rateCaps' });
+      let caps = { ...this.DEFAULT_RATE_CAPS };
+      if (row?.value) {
+        try {
+          const parsed = JSON.parse(row.value);
+          caps = {
+            perMinute: Number(parsed.perMinute ?? caps.perMinute),
+            perHour: Number(parsed.perHour ?? caps.perHour),
+            perDay: Number(parsed.perDay ?? caps.perDay),
+          };
+        } catch {
+          /* malformed JSON — keep defaults */
+        }
+      }
+      this.rateCapsCache = { ...caps, loadedAt: now };
+      return caps;
+    } catch {
+      this.rateCapsCache = { ...this.DEFAULT_RATE_CAPS, loadedAt: now };
+      return this.DEFAULT_RATE_CAPS;
+    }
+  }
+
+  public static clearRateCapsCache(): void {
+    this.rateCapsCache = null;
+  }
+
+  private static async checkRateCap(
+    sessionId: string,
+  ): Promise<{ allowed: boolean; reason?: 'per_minute' | 'per_hour' | 'per_day' }> {
+    const caps = await this.getRateCaps();
+    const now = Date.now();
+    const minuteAgo = now - 60_000;
+    const hourAgo = now - 3_600_000;
+    const todayKey = new Date(now).toISOString().slice(0, 10);
+
+    const ts = this.sendTimestamps.get(sessionId) ?? [];
+    const recent = ts.filter((t) => t > hourAgo);
+    this.sendTimestamps.set(sessionId, recent);
+
+    const last1m = recent.filter((t) => t > minuteAgo).length;
+    const last1h = recent.length;
+
+    let day = this.dailyCount.get(sessionId);
+    if (!day || day.date !== todayKey) {
+      day = { date: todayKey, count: 0 };
+      this.dailyCount.set(sessionId, day);
+    }
+
+    if (last1m >= caps.perMinute) return { allowed: false, reason: 'per_minute' };
+    if (last1h >= caps.perHour) return { allowed: false, reason: 'per_hour' };
+    if (day.count >= caps.perDay) return { allowed: false, reason: 'per_day' };
+    return { allowed: true };
+  }
+
+  private static recordSend(sessionId: string): void {
+    const now = Date.now();
+    const ts = this.sendTimestamps.get(sessionId) ?? [];
+    ts.push(now);
+    this.sendTimestamps.set(sessionId, ts);
+    const todayKey = new Date(now).toISOString().slice(0, 10);
+    let day = this.dailyCount.get(sessionId);
+    if (!day || day.date !== todayKey) {
+      day = { date: todayKey, count: 0 };
+      this.dailyCount.set(sessionId, day);
+    }
+    day.count++;
+  }
+
+  public static getRateStats(sessionId: string): {
+    last1m: number;
+    last1h: number;
+    today: number;
+  } {
+    const now = Date.now();
+    const minuteAgo = now - 60_000;
+    const hourAgo = now - 3_600_000;
+    const todayKey = new Date(now).toISOString().slice(0, 10);
+    const ts = this.sendTimestamps.get(sessionId) ?? [];
+    const day = this.dailyCount.get(sessionId);
+    return {
+      last1m: ts.filter((t) => t > minuteAgo).length,
+      last1h: ts.filter((t) => t > hourAgo).length,
+      today: day?.date === todayKey ? day.count : 0,
+    };
+  }
 
   // MEMORY LEAK FIX: Add cleanup interval and max age for queued messages
   private static cleanupInterval: NodeJS.Timeout | null = null;
@@ -270,6 +384,15 @@ export class HumanizerService {
     text: string,
     sessionId = 'default',
   ): Promise<boolean> {
+    const rate = await this.checkRateCap(sessionId);
+    if (!rate.allowed) {
+      console.warn(
+        `⚠️ Rate cap hit (${rate.reason}) for session '${sessionId}' — queueing for later delivery`,
+      );
+      await this.queueMessage(jid, text, sessionId);
+      return false;
+    }
+
     const sock = getSocket(sessionId);
 
     if (!sock) {
@@ -281,7 +404,9 @@ export class HumanizerService {
     }
 
     try {
-      return await this.sendDirectly(sock, jid, text, sessionId);
+      const sent = await this.sendDirectly(sock, jid, text, sessionId);
+      if (sent) this.recordSend(sessionId);
+      return sent;
     } catch (error) {
       console.error('❌ Error sending humanized message:', error);
       // Queue for retry on error
