@@ -8,6 +8,7 @@ import { addDays, setHours, setMinutes, format } from 'date-fns';
 import { configurationManager } from './ConfigurationManagerService';
 import sessionStateService from './SessionStateService';
 import Booking from '../models/Booking';
+import { agentReflectionService } from './AgentReflectionService';
 
 // Define the stages of the booking conversation
 export enum BookingInitState {
@@ -272,21 +273,32 @@ async function finalizeBooking(
 
     // 3. Save booking to MongoDB
     const timeStr24 = format(appointmentDate, 'HH:mm');
-    await Booking.create({
-      clientName: callerName || callerPhone,
-      clientPhone: callerPhone,
-      date: appointmentDate,
-      time: timeStr24,
-      duration: eventDuration * 60,
-      type: eventTitle,
-      notes: eventDescription,
-      status: 'confirmed',
-      sessionId,
-      location: campusLocation,
-      gcalLink: gcalLink || undefined,
-    }).catch((err: Error) =>
-      console.error('Failed to save booking to DB:', err),
-    );
+    try {
+      const booking = await Booking.create({
+        clientName: callerName || callerPhone,
+        clientPhone: callerPhone,
+        date: appointmentDate,
+        time: timeStr24,
+        duration: eventDuration * 60,
+        type: eventTitle,
+        notes: eventDescription,
+        status: 'confirmed',
+        sessionId,
+        location: campusLocation,
+        gcalLink: gcalLink || undefined,
+      });
+
+      // Outcome correlation: credit any agents that handled this user's
+      // recent conversation turns. Fire-and-forget so a slow reflection
+      // pass never delays the booking confirmation flow.
+      agentReflectionService
+        .correlateBookingOutcome(jid, booking._id, 'created')
+        .catch((err) =>
+          console.error('correlateBookingOutcome failed:', err),
+        );
+    } catch (err) {
+      console.error('Failed to save booking to DB:', err);
+    }
 
     // 4. Send confirmation text with full details
     const timeStr = format(appointmentDate, 'PPpp');
