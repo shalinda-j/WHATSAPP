@@ -556,7 +556,19 @@ router.delete('/registrations/:id/cv', async (req, res) => {
 
     // Delete file from disk
     if (registration.cvUrl) {
-      const filePath = path.join(__dirname, '../../..', registration.cvUrl);
+      const baseDir = path.resolve(__dirname, '../../..');
+      const filePath = path.resolve(
+        path.join(__dirname, '../../..', registration.cvUrl),
+      );
+
+      // SECURITY FIX: Prevent path traversal vulnerabilities
+      if (!filePath.startsWith(baseDir + path.sep)) {
+        console.warn(
+          `[SECURITY] Path traversal attempt detected: ${registration.cvUrl}`,
+        );
+        return res.status(403).json({ error: 'Invalid file path' });
+      }
+
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
