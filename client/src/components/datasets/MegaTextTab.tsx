@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../config';
-import { Plus, Trash, Edit, Save, X, FileText, Upload, RefreshCw } from 'lucide-react';
+import {
+  Plus,
+  Trash,
+  Edit,
+  Save,
+  X,
+  FileText,
+  Upload,
+  RefreshCw,
+} from 'lucide-react';
 import LanguageSwitcher, { type Language } from './LanguageSwitcher';
 
 interface MegaTextItem {
@@ -24,11 +33,22 @@ interface MegaTextTabProps {
 }
 
 const documentTypes = [
-  { id: 'knowledge', label: 'Knowledge Document', description: 'Large document for AI knowledge (policies, manuals, guides)' },
-  { id: 'template', label: 'Response Template', description: 'Pre-written response templates for common scenarios' },
+  {
+    id: 'knowledge',
+    label: 'Knowledge Document',
+    description: 'Large document for AI knowledge (policies, manuals, guides)',
+  },
+  {
+    id: 'template',
+    label: 'Response Template',
+    description: 'Pre-written response templates for common scenarios',
+  },
 ];
 
-export default function MegaTextTab({ language, onDataChange }: MegaTextTabProps) {
+export default function MegaTextTab({
+  language,
+  onDataChange,
+}: MegaTextTabProps) {
   const [items, setItems] = useState<MegaTextItem[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [editingItem, setEditingItem] = useState<MegaTextItem | null>(null);
@@ -40,7 +60,11 @@ export default function MegaTextTab({ language, onDataChange }: MegaTextTabProps
     setLoading(true);
     try {
       const res = await api.get('/api/datasets?type=megatext');
-      setItems(Array.isArray(res.data) ? res.data : (res.data?.datasets || res.data?.data || []));
+      setItems(
+        Array.isArray(res.data)
+          ? res.data
+          : res.data?.datasets || res.data?.data || [],
+      );
     } catch (error) {
       console.error('Failed to fetch mega text items:', error);
     } finally {
@@ -129,10 +153,11 @@ export default function MegaTextTab({ language, onDataChange }: MegaTextTabProps
               ...prev,
               content: {
                 ...prev.content,
-                [editLanguage]: (prev.content?.[editLanguage] || '') + '\n\n' + res.data.text,
+                [editLanguage]:
+                  (prev.content?.[editLanguage] || '') + '\n\n' + res.data.text,
               },
             }
-          : null
+          : null,
       );
     } catch (error) {
       console.error('Failed to extract text:', error);
@@ -165,7 +190,10 @@ export default function MegaTextTab({ language, onDataChange }: MegaTextTabProps
           <h2 className="text-xl font-semibold">
             {editingItem._id ? 'Edit' : 'New'} Mega Text
           </h2>
-          <button onClick={() => setIsEditing(false)} className="text-gray-500 hover:text-gray-700">
+          <button
+            onClick={() => setIsEditing(false)}
+            className="text-gray-500 hover:text-gray-700"
+          >
             <X className="h-6 w-6" />
           </button>
         </div>
@@ -174,24 +202,33 @@ export default function MegaTextTab({ language, onDataChange }: MegaTextTabProps
           {/* Name & Type */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Name
+              </label>
               <input
                 type="text"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 value={editingItem.name}
-                onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                onChange={(e) =>
+                  setEditingItem({ ...editingItem, name: e.target.value })
+                }
                 placeholder="e.g., Company Policy Manual, FAQ Template"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Type
+              </label>
               <select
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 value={editingItem.metadata?.documentType || 'knowledge'}
                 onChange={(e) =>
                   setEditingItem({
                     ...editingItem,
-                    metadata: { ...editingItem.metadata, documentType: e.target.value as 'knowledge' | 'template' },
+                    metadata: {
+                      ...editingItem.metadata,
+                      documentType: e.target.value as 'knowledge' | 'template',
+                    },
                   })
                 }
               >
@@ -206,12 +243,16 @@ export default function MegaTextTab({ language, onDataChange }: MegaTextTabProps
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description
+            </label>
             <input
               type="text"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               value={editingItem.description || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
+              onChange={(e) =>
+                setEditingItem({ ...editingItem, description: e.target.value })
+              }
               placeholder="Brief description"
             />
           </div>
@@ -230,12 +271,19 @@ export default function MegaTextTab({ language, onDataChange }: MegaTextTabProps
           {/* File Upload */}
           <div className="p-3 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
             {isExtracting ? (
-              <p className="text-blue-600 text-sm animate-pulse text-center">Extracting text from file...</p>
+              <p className="text-blue-600 text-sm animate-pulse text-center">
+                Extracting text from file...
+              </p>
             ) : (
               <label className="flex items-center justify-center gap-2 cursor-pointer text-sm text-gray-600 hover:text-blue-600">
                 <Upload className="h-4 w-4" />
                 <span>Upload document to extract text (PDF, Word, Text)</span>
-                <input type="file" className="hidden" onChange={handleFileUpload} accept=".pdf,.doc,.docx,.txt" />
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                  accept=".pdf,.doc,.docx,.txt"
+                />
               </label>
             )}
           </div>
@@ -252,7 +300,10 @@ export default function MegaTextTab({ language, onDataChange }: MegaTextTabProps
               onChange={(e) =>
                 setEditingItem({
                   ...editingItem,
-                  content: { ...editingItem.content, [editLanguage]: e.target.value },
+                  content: {
+                    ...editingItem.content,
+                    [editLanguage]: e.target.value,
+                  },
                 })
               }
               placeholder={`Enter large text content in ${editLanguage.toUpperCase()}...`}
@@ -270,7 +321,9 @@ export default function MegaTextTab({ language, onDataChange }: MegaTextTabProps
               type="checkbox"
               id="megaTextActive"
               checked={editingItem.isActive}
-              onChange={(e) => setEditingItem({ ...editingItem, isActive: e.target.checked })}
+              onChange={(e) =>
+                setEditingItem({ ...editingItem, isActive: e.target.checked })
+              }
               className="h-4 w-4 text-blue-600 rounded"
             />
             <label htmlFor="megaTextActive" className="text-sm text-gray-700">
@@ -302,7 +355,8 @@ export default function MegaTextTab({ language, onDataChange }: MegaTextTabProps
     <div>
       <div className="flex justify-between items-center mb-4">
         <p className="text-gray-600 text-sm">
-          Store large documents for AI knowledge or pre-written response templates.
+          Store large documents for AI knowledge or pre-written response
+          templates.
         </p>
         <button
           onClick={handleCreate}
@@ -316,16 +370,20 @@ export default function MegaTextTab({ language, onDataChange }: MegaTextTabProps
         <div className="text-center py-12 text-gray-500">
           <FileText className="h-12 w-12 mx-auto mb-4 text-gray-300" />
           <p>No documents yet.</p>
-          <p className="text-sm">Click "Add Document" to upload or create content.</p>
+          <p className="text-sm">
+            Click "Add Document" to upload or create content.
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
           {items.map((item) => {
             const translated = getTranslatedLanguages(item);
-            const docType = documentTypes.find((t) => t.id === item.metadata?.documentType);
+            const docType = documentTypes.find(
+              (t) => t.id === item.metadata?.documentType,
+            );
             const charCount = Object.values(item.content || {}).reduce(
               (sum, val) => sum + (typeof val === 'string' ? val.length : 0),
-              0
+              0,
             );
 
             return (
@@ -350,7 +408,9 @@ export default function MegaTextTab({ language, onDataChange }: MegaTextTabProps
                       ))}
                     </div>
                     {item.description && (
-                      <p className="text-sm text-gray-500 mt-1">{item.description}</p>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {item.description}
+                      </p>
                     )}
                     <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
                       <span>{charCount.toLocaleString()} characters</span>

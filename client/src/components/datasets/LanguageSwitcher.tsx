@@ -49,9 +49,10 @@ export default function LanguageSwitcher({
             className={`
               relative flex items-center gap-1.5 rounded-md font-medium transition-all
               ${sizeClasses}
-              ${isActive
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+              ${
+                isActive
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
               }
             `}
             title={config.fullLabel}

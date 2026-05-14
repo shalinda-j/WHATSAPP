@@ -1,4 +1,10 @@
-import { createContext, useContext, useReducer, useCallback, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useReducer,
+  useCallback,
+  type ReactNode,
+} from 'react';
 import type { Node, Edge } from 'reactflow';
 
 export interface WorkflowState {
@@ -19,7 +25,10 @@ export type WorkflowAction =
   | { type: 'SET_NODES'; payload: Node[] }
   | { type: 'SET_EDGES'; payload: Edge[] }
   | { type: 'ADD_NODE'; payload: Node }
-  | { type: 'UPDATE_NODE'; payload: { id: string; data: Partial<Node['data']> } }
+  | {
+      type: 'UPDATE_NODE';
+      payload: { id: string; data: Partial<Node['data']> };
+    }
   | { type: 'DELETE_NODE'; payload: string }
   | { type: 'SET_SELECTED_NODE'; payload: Node | null }
   | { type: 'SET_LOADING'; payload: boolean }
@@ -47,7 +56,10 @@ const initialState: WorkflowState = {
   historyIndex: -1,
 };
 
-const workflowReducer = (state: WorkflowState, action: WorkflowAction): WorkflowState => {
+const workflowReducer = (
+  state: WorkflowState,
+  action: WorkflowAction,
+): WorkflowState => {
   switch (action.type) {
     case 'SET_NODES':
       return { ...state, nodes: action.payload, isDirty: true };
@@ -56,7 +68,11 @@ const workflowReducer = (state: WorkflowState, action: WorkflowAction): Workflow
       return { ...state, edges: action.payload, isDirty: true };
 
     case 'ADD_NODE':
-      return { ...state, nodes: [...state.nodes, action.payload], isDirty: true };
+      return {
+        ...state,
+        nodes: [...state.nodes, action.payload],
+        isDirty: true,
+      };
 
     case 'UPDATE_NODE':
       return {
@@ -74,7 +90,8 @@ const workflowReducer = (state: WorkflowState, action: WorkflowAction): Workflow
         ...state,
         nodes: state.nodes.filter((node) => node.id !== action.payload),
         edges: state.edges.filter(
-          (edge) => edge.source !== action.payload && edge.target !== action.payload,
+          (edge) =>
+            edge.source !== action.payload && edge.target !== action.payload,
         ),
         isDirty: true,
       };
@@ -113,7 +130,11 @@ const workflowReducer = (state: WorkflowState, action: WorkflowAction): Workflow
       const newHistory = state.history.slice(0, state.historyIndex + 1);
       newHistory.push({ nodes: state.nodes, edges: state.edges });
       if (newHistory.length > 50) newHistory.shift();
-      return { ...state, history: newHistory, historyIndex: newHistory.length - 1 };
+      return {
+        ...state,
+        history: newHistory,
+        historyIndex: newHistory.length - 1,
+      };
     }
 
     case 'UNDO':
@@ -177,9 +198,18 @@ export const WorkflowProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(workflowReducer, initialState);
 
   const actions = {
-    setNodes: useCallback((nodes: Node[]) => dispatch({ type: 'SET_NODES', payload: nodes }), []),
-    setEdges: useCallback((edges: Edge[]) => dispatch({ type: 'SET_EDGES', payload: edges }), []),
-    addNode: useCallback((node: Node) => dispatch({ type: 'ADD_NODE', payload: node }), []),
+    setNodes: useCallback(
+      (nodes: Node[]) => dispatch({ type: 'SET_NODES', payload: nodes }),
+      [],
+    ),
+    setEdges: useCallback(
+      (edges: Edge[]) => dispatch({ type: 'SET_EDGES', payload: edges }),
+      [],
+    ),
+    addNode: useCallback(
+      (node: Node) => dispatch({ type: 'ADD_NODE', payload: node }),
+      [],
+    ),
     updateNode: useCallback(
       (id: string, data: Partial<Node['data']>) =>
         dispatch({ type: 'UPDATE_NODE', payload: { id, data } }),
@@ -190,7 +220,8 @@ export const WorkflowProvider = ({ children }: { children: ReactNode }) => {
       [],
     ),
     setSelectedNode: useCallback(
-      (node: Node | null) => dispatch({ type: 'SET_SELECTED_NODE', payload: node }),
+      (node: Node | null) =>
+        dispatch({ type: 'SET_SELECTED_NODE', payload: node }),
       [],
     ),
     setLoading: useCallback(
@@ -202,11 +233,13 @@ export const WorkflowProvider = ({ children }: { children: ReactNode }) => {
       [],
     ),
     setLastSaved: useCallback(
-      (date: Date | null) => dispatch({ type: 'SET_LAST_SAVED', payload: date }),
+      (date: Date | null) =>
+        dispatch({ type: 'SET_LAST_SAVED', payload: date }),
       [],
     ),
     setSavedWorkflowId: useCallback(
-      (id: string | null) => dispatch({ type: 'SET_SAVED_WORKFLOW_ID', payload: id }),
+      (id: string | null) =>
+        dispatch({ type: 'SET_SAVED_WORKFLOW_ID', payload: id }),
       [],
     ),
     loadWorkflow: useCallback(
@@ -214,7 +247,10 @@ export const WorkflowProvider = ({ children }: { children: ReactNode }) => {
         dispatch({ type: 'LOAD_WORKFLOW', payload }),
       [],
     ),
-    clearPendingLoad: useCallback(() => dispatch({ type: 'CLEAR_PENDING_LOAD' }), []),
+    clearPendingLoad: useCallback(
+      () => dispatch({ type: 'CLEAR_PENDING_LOAD' }),
+      [],
+    ),
     saveToHistory: useCallback(() => dispatch({ type: 'SAVE_TO_HISTORY' }), []),
     undo: useCallback(() => dispatch({ type: 'UNDO' }), []),
     redo: useCallback(() => dispatch({ type: 'REDO' }), []),

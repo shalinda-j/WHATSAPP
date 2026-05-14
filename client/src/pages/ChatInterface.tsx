@@ -2,9 +2,24 @@ import { useState, useEffect, useRef } from 'react';
 import { api } from '../config';
 import { io, Socket } from 'socket.io-client';
 import {
-  Search, Send, MoreVertical, Phone, ChevronLeft,
-  CheckCheck, Circle, Bot, User, Mic, Smile, Languages,
-  Tag, Globe, Info, X, RefreshCw, MessageSquare
+  Search,
+  Send,
+  MoreVertical,
+  Phone,
+  ChevronLeft,
+  CheckCheck,
+  Circle,
+  Bot,
+  User,
+  Mic,
+  Smile,
+  Languages,
+  Tag,
+  Globe,
+  Info,
+  X,
+  RefreshCw,
+  MessageSquare,
 } from 'lucide-react';
 
 interface Message {
@@ -37,7 +52,10 @@ interface Conversation {
 type ToneMode = 'auto' | 'formal' | 'casual' | 'professional' | 'friendly';
 type LangFilter = 'all' | 'en' | 'si' | 'ta';
 
-const LANG_LABELS: Record<string, { label: string; color: string; bg: string }> = {
+const LANG_LABELS: Record<
+  string,
+  { label: string; color: string; bg: string }
+> = {
   en: { label: 'EN', color: 'text-blue-700', bg: 'bg-blue-100' },
   si: { label: 'SI', color: 'text-purple-700', bg: 'bg-purple-100' },
   ta: { label: 'TA', color: 'text-orange-700', bg: 'bg-orange-100' },
@@ -46,8 +64,16 @@ const LANG_LABELS: Record<string, { label: string; color: string; bg: string }> 
 const TONE_MODES: { value: ToneMode; label: string; desc: string }[] = [
   { value: 'auto', label: '🤖 Auto', desc: 'AI chooses tone automatically' },
   { value: 'formal', label: '👔 Formal', desc: 'Professional, polished tone' },
-  { value: 'casual', label: '😊 Casual', desc: 'Relaxed, friendly conversation' },
-  { value: 'professional', label: '💼 Professional', desc: 'Business-focused responses' },
+  {
+    value: 'casual',
+    label: '😊 Casual',
+    desc: 'Relaxed, friendly conversation',
+  },
+  {
+    value: 'professional',
+    label: '💼 Professional',
+    desc: 'Business-focused responses',
+  },
   { value: 'friendly', label: '🤝 Friendly', desc: 'Warm, approachable style' },
 ];
 
@@ -93,27 +119,54 @@ export default function ChatInterface() {
       const enriched = { ...data, language: lang };
 
       if (selectedUser === data.userId) {
-        setMessages(prev => [...prev, enriched]);
+        setMessages((prev) => [...prev, enriched]);
       }
-      setConversations(prev => {
-        const existing = prev.find(c => c.userId === data.userId);
+      setConversations((prev) => {
+        const existing = prev.find((c) => c.userId === data.userId);
         if (existing) {
-          return prev.map(c => c.userId === data.userId
-            ? { ...c, lastMessage: enriched, unreadCount: c.userId !== selectedUser ? c.unreadCount + 1 : 0, detectedLanguage: lang }
-            : c
-          ).sort((a, b) => new Date(b.lastMessage?.timestamp || 0).getTime() - new Date(a.lastMessage?.timestamp || 0).getTime());
+          return prev
+            .map((c) =>
+              c.userId === data.userId
+                ? {
+                    ...c,
+                    lastMessage: enriched,
+                    unreadCount:
+                      c.userId !== selectedUser ? c.unreadCount + 1 : 0,
+                    detectedLanguage: lang,
+                  }
+                : c,
+            )
+            .sort(
+              (a, b) =>
+                new Date(b.lastMessage?.timestamp || 0).getTime() -
+                new Date(a.lastMessage?.timestamp || 0).getTime(),
+            );
         } else {
-          return [{ userId: data.userId, lastMessage: enriched, unreadCount: 1, detectedLanguage: lang }, ...prev];
+          return [
+            {
+              userId: data.userId,
+              lastMessage: enriched,
+              unreadCount: 1,
+              detectedLanguage: lang,
+            },
+            ...prev,
+          ];
         }
       });
     });
 
     newSocket.on('messages-read', (data: { userId: string }) => {
-      setConversations(prev => prev.map(c => c.userId === data.userId ? { ...c, unreadCount: 0 } : c));
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.userId === data.userId ? { ...c, unreadCount: 0 } : c,
+        ),
+      );
     });
 
     setSocket(newSocket);
-    return () => { newSocket.disconnect(); };
+    return () => {
+      newSocket.disconnect();
+    };
   }, [selectedUser]);
 
   const fetchConversations = async () => {
@@ -122,7 +175,9 @@ export default function ChatInterface() {
       const res = await api.get('/api/chat/conversations');
       const convs = (res.data.conversations || []).map((c: Conversation) => ({
         ...c,
-        detectedLanguage: c.lastMessage ? detectLanguage(c.lastMessage.content) : 'en',
+        detectedLanguage: c.lastMessage
+          ? detectLanguage(c.lastMessage.content)
+          : 'en',
       }));
       setConversations(convs);
     } catch (error) {
@@ -135,7 +190,9 @@ export default function ChatInterface() {
   const fetchMessages = async (userId: string) => {
     setIsRefreshing(true);
     try {
-      const res = await api.get(`/api/chat/messages/${encodeURIComponent(userId)}`);
+      const res = await api.get(
+        `/api/chat/messages/${encodeURIComponent(userId)}`,
+      );
       const msgs = (res.data.messages || []).map((m: Message) => ({
         ...m,
         language: m.metadata?.detectedLanguage || detectLanguage(m.content),
@@ -143,8 +200,12 @@ export default function ChatInterface() {
       setMessages(msgs);
       try {
         await api.post(`/api/chat/mark-read/${encodeURIComponent(userId)}`);
-        setConversations(prev => prev.map(c => c.userId === userId ? { ...c, unreadCount: 0 } : c));
-      } catch { /* ignore mark read errors */ }
+        setConversations((prev) =>
+          prev.map((c) => (c.userId === userId ? { ...c, unreadCount: 0 } : c)),
+        );
+      } catch {
+        /* ignore mark read errors */
+      }
     } catch (error) {
       console.error('Failed to fetch messages:', error);
       setMessages([]);
@@ -153,7 +214,9 @@ export default function ChatInterface() {
     }
   };
 
-  useEffect(() => { fetchConversations(); }, []);
+  useEffect(() => {
+    fetchConversations();
+  }, []);
 
   useEffect(() => {
     if (selectedUser) fetchMessages(selectedUser);
@@ -191,7 +254,10 @@ export default function ChatInterface() {
   };
 
   const formatTime = (date: Date | string) =>
-    new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    new Date(date).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
 
   const formatDate = (date: Date | string) => {
     const d = new Date(date);
@@ -205,26 +271,32 @@ export default function ChatInterface() {
 
   const getUserDisplayName = (userId: string) => {
     const phone = userId.split('@')[0];
-    const conv = conversations.find(c => c.userId === userId);
+    const conv = conversations.find((c) => c.userId === userId);
     return conv?.userInfo?.name || conv?.userInfo?.phone || `+${phone}`;
   };
 
-  const filteredConversations = conversations.filter(c => {
-    const matchSearch = c.userId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.userInfo?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredConversations = conversations.filter((c) => {
+    const matchSearch =
+      c.userId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.userInfo?.name || '')
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase());
     const matchLang = langFilter === 'all' || c.detectedLanguage === langFilter;
     return matchSearch && matchLang;
   });
 
-  const selectedConv = conversations.find(c => c.userId === selectedUser);
+  const selectedConv = conversations.find((c) => c.userId === selectedUser);
 
-  const currentToneInfo = TONE_MODES.find(t => t.value === toneMode);
+  const currentToneInfo = TONE_MODES.find((t) => t.value === toneMode);
 
   return (
     <div className="flex h-[calc(100vh-100px)] bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
       {/* Left Sidebar */}
-      <div className={`${showMobileChat ? 'hidden md:flex' : 'flex'} w-full md:w-80 flex-col border-r border-gray-200 bg-gray-50`}>
-
+      <div
+        className={`${
+          showMobileChat ? 'hidden md:flex' : 'flex'
+        } w-full md:w-80 flex-col border-r border-gray-200 bg-gray-50`}
+      >
         {/* Header */}
         <div className="px-4 py-3 bg-white border-b border-gray-200 shadow-sm">
           <div className="flex items-center justify-between mb-3">
@@ -233,7 +305,10 @@ export default function ChatInterface() {
               Live Chat
             </h1>
             <div className="flex items-center gap-2">
-              <button onClick={fetchConversations} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+              <button
+                onClick={fetchConversations}
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"
+              >
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
               <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
@@ -256,7 +331,7 @@ export default function ChatInterface() {
 
           {/* Language Filter */}
           <div className="flex gap-1">
-            {(['all', 'en', 'si', 'ta'] as LangFilter[]).map(l => (
+            {(['all', 'en', 'si', 'ta'] as LangFilter[]).map((l) => (
               <button
                 key={l}
                 onClick={() => setLangFilter(l)}
@@ -293,7 +368,11 @@ export default function ChatInterface() {
                   onClick={() => {
                     setSelectedUser(conv.userId);
                     setShowMobileChat(true);
-                    setConversations(prev => prev.map(c => c.userId === conv.userId ? { ...c, unreadCount: 0 } : c));
+                    setConversations((prev) =>
+                      prev.map((c) =>
+                        c.userId === conv.userId ? { ...c, unreadCount: 0 } : c,
+                      ),
+                    );
                   }}
                   className={`flex items-center gap-3 px-3 py-3 cursor-pointer transition-colors border-b border-gray-100 ${
                     selectedUser === conv.userId
@@ -321,12 +400,16 @@ export default function ChatInterface() {
                       </h3>
                       <div className="flex items-center gap-1 flex-shrink-0 ml-1">
                         {langInfo && (
-                          <span className={`text-[9px] px-1 py-0.5 rounded font-bold ${langInfo.bg} ${langInfo.color}`}>
+                          <span
+                            className={`text-[9px] px-1 py-0.5 rounded font-bold ${langInfo.bg} ${langInfo.color}`}
+                          >
                             {langInfo.label}
                           </span>
                         )}
                         {conv.lastMessage && (
-                          <span className="text-[10px] text-gray-400">{formatDate(conv.lastMessage.timestamp)}</span>
+                          <span className="text-[10px] text-gray-400">
+                            {formatDate(conv.lastMessage.timestamp)}
+                          </span>
                         )}
                       </div>
                     </div>
@@ -347,13 +430,19 @@ export default function ChatInterface() {
       </div>
 
       {/* Right Panel - Chat Area */}
-      <div className={`${showMobileChat ? 'flex' : 'hidden md:flex'} flex-1 flex-col`}>
-
+      <div
+        className={`${
+          showMobileChat ? 'flex' : 'hidden md:flex'
+        } flex-1 flex-col`}
+      >
         {selectedUser ? (
           <>
             {/* Chat Header */}
             <div className="px-4 py-3 bg-white border-b border-gray-200 shadow-sm flex items-center gap-3">
-              <button onClick={() => setShowMobileChat(false)} className="md:hidden p-1.5 hover:bg-gray-100 rounded-lg">
+              <button
+                onClick={() => setShowMobileChat(false)}
+                className="md:hidden p-1.5 hover:bg-gray-100 rounded-lg"
+              >
                 <ChevronLeft className="h-5 w-5 text-gray-600" />
               </button>
 
@@ -362,16 +451,23 @@ export default function ChatInterface() {
               </div>
 
               <div className="flex-1 min-w-0">
-                <h2 className="font-semibold text-gray-900 text-sm">{getUserDisplayName(selectedUser)}</h2>
+                <h2 className="font-semibold text-gray-900 text-sm">
+                  {getUserDisplayName(selectedUser)}
+                </h2>
                 <div className="flex items-center gap-2">
                   <p className="text-xs text-green-600 flex items-center gap-1">
                     <Circle className="h-1.5 w-1.5 fill-green-500" /> Online
                   </p>
-                  {selectedConv?.detectedLanguage && LANG_LABELS[selectedConv.detectedLanguage] && (
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${LANG_LABELS[selectedConv.detectedLanguage].bg} ${LANG_LABELS[selectedConv.detectedLanguage].color}`}>
-                      {LANG_LABELS[selectedConv.detectedLanguage].label}
-                    </span>
-                  )}
+                  {selectedConv?.detectedLanguage &&
+                    LANG_LABELS[selectedConv.detectedLanguage] && (
+                      <span
+                        className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                          LANG_LABELS[selectedConv.detectedLanguage].bg
+                        } ${LANG_LABELS[selectedConv.detectedLanguage].color}`}
+                      >
+                        {LANG_LABELS[selectedConv.detectedLanguage].label}
+                      </span>
+                    )}
                 </div>
               </div>
 
@@ -383,21 +479,34 @@ export default function ChatInterface() {
                     className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-xs text-gray-700 font-medium"
                   >
                     <Languages className="h-3.5 w-3.5" />
-                    <span className="hidden sm:block">{currentToneInfo?.label || 'Auto'}</span>
+                    <span className="hidden sm:block">
+                      {currentToneInfo?.label || 'Auto'}
+                    </span>
                   </button>
                   {showToneMenu && (
                     <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-gray-200 z-50 min-w-[200px] overflow-hidden">
                       <div className="p-2 border-b border-gray-100">
-                        <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider px-2">Response Tone</p>
+                        <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider px-2">
+                          Response Tone
+                        </p>
                       </div>
-                      {TONE_MODES.map(t => (
+                      {TONE_MODES.map((t) => (
                         <button
                           key={t.value}
-                          onClick={() => { setToneMode(t.value); setShowToneMenu(false); }}
-                          className={`w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors ${toneMode === t.value ? 'bg-green-50' : ''}`}
+                          onClick={() => {
+                            setToneMode(t.value);
+                            setShowToneMenu(false);
+                          }}
+                          className={`w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors ${
+                            toneMode === t.value ? 'bg-green-50' : ''
+                          }`}
                         >
-                          <div className="text-sm font-medium text-gray-800">{t.label}</div>
-                          <div className="text-[10px] text-gray-400">{t.desc}</div>
+                          <div className="text-sm font-medium text-gray-800">
+                            {t.label}
+                          </div>
+                          <div className="text-[10px] text-gray-400">
+                            {t.desc}
+                          </div>
                         </button>
                       ))}
                     </div>
@@ -424,11 +533,21 @@ export default function ChatInterface() {
               <div className="px-4 py-3 bg-blue-50 border-b border-blue-100 flex items-start gap-3">
                 <Info className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
                 <div className="flex-1 text-xs text-blue-700">
-                  <p><strong>User ID:</strong> {selectedUser}</p>
-                  <p className="mt-0.5"><strong>Messages:</strong> {messages.length} total</p>
-                  <p className="mt-0.5"><strong>Tone:</strong> {currentToneInfo?.label} — {currentToneInfo?.desc}</p>
+                  <p>
+                    <strong>User ID:</strong> {selectedUser}
+                  </p>
+                  <p className="mt-0.5">
+                    <strong>Messages:</strong> {messages.length} total
+                  </p>
+                  <p className="mt-0.5">
+                    <strong>Tone:</strong> {currentToneInfo?.label} —{' '}
+                    {currentToneInfo?.desc}
+                  </p>
                 </div>
-                <button onClick={() => setShowInfo(false)} className="text-blue-400 hover:text-blue-600">
+                <button
+                  onClick={() => setShowInfo(false)}
+                  className="text-blue-400 hover:text-blue-600"
+                >
                   <X className="h-4 w-4" />
                 </button>
               </div>
@@ -453,7 +572,12 @@ export default function ChatInterface() {
                   const isUser = msg.role === 'user';
 
                   return (
-                    <div key={msg._id} className={`flex ${isUser ? 'justify-start' : 'justify-end'} items-end gap-2`}>
+                    <div
+                      key={msg._id}
+                      className={`flex ${
+                        isUser ? 'justify-start' : 'justify-end'
+                      } items-end gap-2`}
+                    >
                       {isUser && (
                         <div className="w-7 h-7 rounded-full bg-gradient-to-br from-gray-400 to-gray-500 flex items-center justify-center text-white text-xs flex-shrink-0">
                           <User className="h-3.5 w-3.5" />
@@ -462,9 +586,15 @@ export default function ChatInterface() {
 
                       <div className={`max-w-[70%]`}>
                         {/* Language badge */}
-                        <div className={`flex ${isUser ? 'justify-start' : 'justify-end'} mb-1`}>
+                        <div
+                          className={`flex ${
+                            isUser ? 'justify-start' : 'justify-end'
+                          } mb-1`}
+                        >
                           {langInfo && lang !== 'en' && (
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${langInfo.bg} ${langInfo.color}`}>
+                            <span
+                              className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${langInfo.bg} ${langInfo.color}`}
+                            >
                               {langInfo.label}
                             </span>
                           )}
@@ -475,23 +605,41 @@ export default function ChatInterface() {
                           )}
                         </div>
 
-                        <div className={`px-4 py-2.5 rounded-2xl shadow-sm ${
-                          isUser
-                            ? 'bg-white text-gray-800 rounded-bl-sm'
-                            : 'bg-green-600 text-white rounded-br-sm'
-                        }`}>
-                          <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                          <div className={`flex items-center gap-1 mt-1 ${isUser ? 'justify-start' : 'justify-end'}`}>
-                            <span className={`text-[10px] ${isUser ? 'text-gray-400' : 'text-green-200'}`}>
+                        <div
+                          className={`px-4 py-2.5 rounded-2xl shadow-sm ${
+                            isUser
+                              ? 'bg-white text-gray-800 rounded-bl-sm'
+                              : 'bg-green-600 text-white rounded-br-sm'
+                          }`}
+                        >
+                          <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                            {msg.content}
+                          </p>
+                          <div
+                            className={`flex items-center gap-1 mt-1 ${
+                              isUser ? 'justify-start' : 'justify-end'
+                            }`}
+                          >
+                            <span
+                              className={`text-[10px] ${
+                                isUser ? 'text-gray-400' : 'text-green-200'
+                              }`}
+                            >
                               {formatTime(msg.timestamp)}
                             </span>
-                            {!isUser && <CheckCheck className="h-3 w-3 text-green-300" />}
+                            {!isUser && (
+                              <CheckCheck className="h-3 w-3 text-green-300" />
+                            )}
                           </div>
                         </div>
 
                         {/* Intent badge */}
                         {msg.metadata?.intent && (
-                          <div className={`flex ${isUser ? 'justify-start' : 'justify-end'} mt-1`}>
+                          <div
+                            className={`flex ${
+                              isUser ? 'justify-start' : 'justify-end'
+                            } mt-1`}
+                          >
                             <span className="text-[9px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full flex items-center gap-1">
                               <Tag className="h-2 w-2" />
                               {msg.metadata.intent}
@@ -519,10 +667,17 @@ export default function ChatInterface() {
                 <div className="mb-2 flex items-center gap-2">
                   <Globe className="h-3 w-3 text-gray-400" />
                   <span className="text-[10px] text-gray-400">
-                    Detected: {typingLang === 'si' ? '🇱🇰 Sinhala' : typingLang === 'ta' ? '🇮🇳 Tamil' : '🇬🇧 English'}
+                    Detected:{' '}
+                    {typingLang === 'si'
+                      ? '🇱🇰 Sinhala'
+                      : typingLang === 'ta'
+                      ? '🇮🇳 Tamil'
+                      : '🇬🇧 English'}
                   </span>
                   <span className="text-[10px] text-gray-300">·</span>
-                  <span className="text-[10px] text-gray-400">Tone: {currentToneInfo?.label}</span>
+                  <span className="text-[10px] text-gray-400">
+                    Tone: {currentToneInfo?.label}
+                  </span>
                 </div>
               )}
 
@@ -563,30 +718,41 @@ export default function ChatInterface() {
             <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mb-4">
               <Bot className="h-10 w-10 text-gray-300" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-600 mb-2">WhatsApp Live Chat</h3>
+            <h3 className="text-lg font-semibold text-gray-600 mb-2">
+              WhatsApp Live Chat
+            </h3>
             <p className="text-sm text-gray-400 text-center max-w-sm px-4">
-              Select a conversation from the sidebar to view and send messages to users in real-time.
+              Select a conversation from the sidebar to view and send messages
+              to users in real-time.
             </p>
             <div className="mt-6 grid grid-cols-3 gap-3 text-center">
               {[
                 { flag: '🇬🇧', lang: 'English' },
                 { flag: '🇱🇰', lang: 'Sinhala' },
                 { flag: '🇮🇳', lang: 'Tamil' },
-              ].map(l => (
-                <div key={l.lang} className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
+              ].map((l) => (
+                <div
+                  key={l.lang}
+                  className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm"
+                >
                   <div className="text-2xl mb-1">{l.flag}</div>
                   <div className="text-xs text-gray-500">{l.lang}</div>
                 </div>
               ))}
             </div>
-            <p className="text-xs text-gray-400 mt-4">Multi-language auto-detection enabled</p>
+            <p className="text-xs text-gray-400 mt-4">
+              Multi-language auto-detection enabled
+            </p>
           </div>
         )}
       </div>
 
       {/* Click outside to close tone menu */}
       {showToneMenu && (
-        <div className="fixed inset-0 z-40" onClick={() => setShowToneMenu(false)} />
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setShowToneMenu(false)}
+        />
       )}
     </div>
   );

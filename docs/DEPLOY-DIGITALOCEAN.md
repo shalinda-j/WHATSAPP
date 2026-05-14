@@ -13,7 +13,7 @@ In the DO App Platform dashboard:
 1. **Apps → your app → Settings → Components → `api` (or whatever the
    service is called)**.
 2. Under **Source → Build & Deploy**:
-   - **Build method:** *Dockerfile*
+   - **Build method:** _Dockerfile_
    - **Dockerfile path:** `Dockerfile`
    - **Source directory:** `/`
 3. Save. The next push to `main` will rebuild using the Dockerfile.
@@ -30,17 +30,17 @@ doctl apps update <APP_ID> --spec .do/app.yaml
 
 Set these under **Settings → App-Level Environment Variables** (type: `SECRET`):
 
-| Var | Required? | Notes |
-|-----|-----------|-------|
-| `MONGODB_URI` | yes | Atlas connection string |
-| `JWT_SECRET` | yes (prod) | 32+ char random |
-| `ENCRYPTION_KEY` | yes (prod) | Exactly 32 chars, used by `CryptoService` |
-| `GEMINI_API_KEY` | one of these | At least one AI provider |
-| `OPENAI_API_KEY` | one of these | |
-| `GROQ_API_KEY` | one of these | |
-| `OPENROUTER_API_KEY` | one of these | |
-| `ALLOWED_ORIGINS` | recommended | CORS list, comma-separated |
-| `WEBHOOK_SECRET` | recommended | Required to authenticate inbound webhooks |
+| Var                  | Required?    | Notes                                     |
+| -------------------- | ------------ | ----------------------------------------- |
+| `MONGODB_URI`        | yes          | Atlas connection string                   |
+| `JWT_SECRET`         | yes (prod)   | 32+ char random                           |
+| `ENCRYPTION_KEY`     | yes (prod)   | Exactly 32 chars, used by `CryptoService` |
+| `GEMINI_API_KEY`     | one of these | At least one AI provider                  |
+| `OPENAI_API_KEY`     | one of these |                                           |
+| `GROQ_API_KEY`       | one of these |                                           |
+| `OPENROUTER_API_KEY` | one of these |                                           |
+| `ALLOWED_ORIGINS`    | recommended  | CORS list, comma-separated                |
+| `WEBHOOK_SECRET`     | recommended  | Required to authenticate inbound webhooks |
 
 ## Health check
 

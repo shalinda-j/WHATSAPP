@@ -408,9 +408,7 @@ router.put('/:id', validateObjectId(), async (req, res) => {
       const jid = `${previous.phoneNumber}@s.whatsapp.net`;
       agentReflectionService
         .correlateLeadOutcome(jid, lead._id, req.body.status)
-        .catch((err) =>
-          console.error('correlateLeadOutcome failed:', err),
-        );
+        .catch((err) => console.error('correlateLeadOutcome failed:', err));
     }
 
     res.json(lead);

@@ -68,9 +68,7 @@ export class ClaudeSessionService implements AIService {
     this.name = `Claude-Session (${this.modelName})`;
   }
 
-  static async validateSession(
-    sessionKey: string,
-  ): Promise<ClaudeSessionInfo> {
+  static async validateSession(sessionKey: string): Promise<ClaudeSessionInfo> {
     try {
       const res = await axios.get(`${CLAUDE_BASE}/api/organizations`, {
         headers: {
@@ -91,16 +89,13 @@ export class ClaudeSessionService implements AIService {
 
       const orgs = res.data;
       if (!Array.isArray(orgs) || orgs.length === 0) {
-        throw new Error(
-          'No organizations found for this Claude account',
-        );
+        throw new Error('No organizations found for this Claude account');
       }
 
       // Prefer claude_pro org if multiple
       const preferred =
-        orgs.find((o: any) =>
-          (o.capabilities || []).includes('claude_pro'),
-        ) || orgs[0];
+        orgs.find((o: any) => (o.capabilities || []).includes('claude_pro')) ||
+        orgs[0];
 
       return {
         organizationId: preferred.uuid,
@@ -155,9 +150,7 @@ export class ClaudeSessionService implements AIService {
       throw new ClaudeSessionExpiredError();
     }
     if (res.status >= 400) {
-      throw new Error(
-        `Claude conversation create failed (HTTP ${res.status})`,
-      );
+      throw new Error(`Claude conversation create failed (HTTP ${res.status})`);
     }
     return res.data?.uuid || uuid;
   }

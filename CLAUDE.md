@@ -37,12 +37,14 @@ npm run start
 ### Core Layers
 
 1. **WhatsApp Layer** (`src/services/whatsapp.ts`)
+
    - Session management via `WhatsAppSessionManager` class
    - Multi-session support with MongoDB auth state storage
    - Message handlers registered via `onMessage()` callback
    - Voice message queuing with retry on connection failure
 
 2. **Message Processing** (`src/index.ts`)
+
    - Main entry point and message handler
    - Flow: Security check → Booking/Lead/Form flows → Commands → AI response
    - Rate limiting (1s between messages per user)
@@ -51,18 +53,21 @@ npm run start
    - Voice response generation with TTS
 
 3. **Command System** (`src/app/commands/`)
+
    - Interface-based: All commands implement `ICommand` interface
    - Dispatcher pattern: `commandDispatcher` registers and routes commands
    - Class-based commands: `!help`, `!ping`, `!register`, `!jobs`, `!book`, etc.
    - Legacy switch-case fallback in `handleCommand()` for script commands
 
 4. **AI Layer** (`src/services/AILoadBalancer.ts`)
+
    - Priority-based fallback: Groq → Gemini → OpenRouter → OpenAI
    - Persistent conversation history via `ConversationHistoryService`
    - Auto-learning from conversations via `KnowledgeTrainingService`
    - Usage tracking in MongoDB Config collection
 
 5. **Admin API** (`src/server/app.ts`)
+
    - Express 5.x with CORS, JSON parsing
    - MongoDB connection middleware with retry
    - Protected routes via `authenticateToken` JWT middleware
@@ -75,16 +80,16 @@ npm run start
 
 ### Key Services
 
-| Service | Purpose |
-|---------|---------|
+| Service                       | Purpose                                  |
+| ----------------------------- | ---------------------------------------- |
 | `ConfigurationManagerService` | Centralized config from MongoDB Datasets |
-| `HumanizerService` | Message delay/queue for natural feel |
-| `FormService` | Dynamic multi-field form flows |
-| `BookingService` | Appointment scheduling flow |
-| `LeadService` | Lead registration workflow |
-| `NLPService` | Local NLP cache for quick answers |
-| `VoiceCallAgentService` | Auto-response to incoming calls |
-| `WebhookService` | External webhook triggers |
+| `HumanizerService`            | Message delay/queue for natural feel     |
+| `FormService`                 | Dynamic multi-field form flows           |
+| `BookingService`              | Appointment scheduling flow              |
+| `LeadService`                 | Lead registration workflow               |
+| `NLPService`                  | Local NLP cache for quick answers        |
+| `VoiceCallAgentService`       | Auto-response to incoming calls          |
+| `WebhookService`              | External webhook triggers                |
 
 ### MongoDB Models
 
@@ -105,7 +110,11 @@ export class NewCommand implements ICommand {
   description = 'Description';
   aliases = ['alias1'];
 
-  async execute(message: proto.IWebMessageInfo, args: string[], sessionId: string): Promise<void> {
+  async execute(
+    message: proto.IWebMessageInfo,
+    args: string[],
+    sessionId: string,
+  ): Promise<void> {
     const jid = getSenderJid(message);
     if (!jid) return;
     await sendMessage(jid, 'Response', sessionId);
@@ -132,6 +141,7 @@ commandDispatcher.register(new NewCommand());
 ## Environment Variables
 
 Required in `.env`:
+
 - `MONGODB_URI` - MongoDB connection string (required for admin panel)
 - `JWT_SECRET` - Admin panel authentication
 - `ENCRYPTION_KEY` - 32-char key for encrypting stored API keys
@@ -140,6 +150,7 @@ Required in `.env`:
 ## Session Management
 
 Sessions are stored in MongoDB with auth state. Key behaviors:
+
 - Auto-starts all non-deleted sessions on boot
 - QR code stored in DB, displayed in admin panel
 - Conflict (440) handled with exponential backoff, NOT state wipe
@@ -184,6 +195,7 @@ Text? → Text Response
 Health check: `curl http://localhost:8080/health`
 
 Key log markers:
+
 - `📩` Message received
 - `🤖` AI provider activity
 - `✅` Success
@@ -197,11 +209,16 @@ Key log markers:
 ## TypeScript Patterns
 
 Use type assertion for Mongoose models to avoid deep instantiation errors:
+
 ```typescript
-export default mongoose.model('Model', Schema as any) as unknown as mongoose.Model<IModel>;
+export default mongoose.model(
+  'Model',
+  Schema as any,
+) as unknown as mongoose.Model<IModel>;
 ```
 
 Always check JID before use:
+
 ```typescript
 const jid = message.key?.remoteJid;
 if (!jid) return;

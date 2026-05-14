@@ -30,7 +30,10 @@ router.post('/inbound', async (req, res) => {
       }
 
       const expectedSecret = process.env.WEBHOOK_SECRET;
-      const expectedHash = crypto.createHash('sha256').update(expectedSecret).digest();
+      const expectedHash = crypto
+        .createHash('sha256')
+        .update(expectedSecret)
+        .digest();
       const providedHash = crypto.createHash('sha256').update(secret).digest();
 
       if (!crypto.timingSafeEqual(expectedHash, providedHash)) {

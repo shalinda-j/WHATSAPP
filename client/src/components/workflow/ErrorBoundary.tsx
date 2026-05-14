@@ -25,12 +25,12 @@ class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     this.setState({
       error,
-      errorInfo
+      errorInfo,
     });
 
     // Log error to monitoring service in production
     console.error('Workflow Builder Error:', error, errorInfo);
-    
+
     // In production, you would send this to your error tracking service
     if (import.meta.env.PROD) {
       // Example: Sentry.captureException(error, { contexts: { react: { componentStack: errorInfo.componentStack } } });
@@ -55,9 +55,10 @@ class ErrorBoundary extends Component<Props, State> {
               Workflow Builder Error
             </h2>
             <p className="text-red-600 mb-4">
-              Something went wrong while building your workflow. We've been notified and are working on a fix.
+              Something went wrong while building your workflow. We've been
+              notified and are working on a fix.
             </p>
-            
+
             {import.meta.env.DEV && this.state.error && (
               <details className="w-full mb-4 text-left">
                 <summary className="cursor-pointer text-sm font-mono bg-red-100 p-2 rounded">
@@ -69,7 +70,7 @@ class ErrorBoundary extends Component<Props, State> {
                 </pre>
               </details>
             )}
-            
+
             <button
               onClick={this.handleReset}
               className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"

@@ -24,11 +24,12 @@ import Layout from './components/Layout';
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   const { token, loading } = useAuth();
-  if (loading) return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <div className="animate-spin rounded-full h-10 w-10 border-4 border-green-200 border-t-green-600"></div>
-    </div>
-  );
+  if (loading)
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+        <div className="animate-spin rounded-full h-10 w-10 border-4 border-green-200 border-t-green-600"></div>
+      </div>
+    );
   if (!token) return <Navigate to="/login" />;
   return children;
 };
@@ -38,7 +39,14 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
 
-      <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <Layout />
+          </ProtectedRoute>
+        }
+      >
         <Route index element={<Navigate to="/dashboard" />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="crm" element={<CRM />} />

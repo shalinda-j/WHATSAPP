@@ -1,15 +1,39 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../config';
 import {
-  MessageCircle, Users, TrendingUp, BarChart3,
-  FileText, Mic, Download, Bot
+  MessageCircle,
+  Users,
+  TrendingUp,
+  BarChart3,
+  FileText,
+  Mic,
+  Download,
+  Bot,
 } from 'lucide-react';
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
 } from 'recharts';
 
-const COLORS = ['#3b82f6', '#22c55e', '#eab308', '#a855f7', '#ef4444', '#6366f1', '#ec4899', '#06b6d4'];
+const COLORS = [
+  '#3b82f6',
+  '#22c55e',
+  '#eab308',
+  '#a855f7',
+  '#ef4444',
+  '#6366f1',
+  '#ec4899',
+  '#06b6d4',
+];
 
 interface OverviewStats {
   totalMessages: number;
@@ -68,13 +92,20 @@ export default function Analytics() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [overviewRes, questionsRes, topRes, trendsRes, leadsRes, repliesRes] = await Promise.all([
+      const [
+        overviewRes,
+        questionsRes,
+        topRes,
+        trendsRes,
+        leadsRes,
+        repliesRes,
+      ] = await Promise.all([
         api.get('/api/analytics/overview'),
         api.get('/api/analytics/questions'),
         api.get('/api/analytics/top-questions?limit=15'),
         api.get(`/api/analytics/trends?days=${selectedPeriod}`),
         api.get('/api/analytics/leads'),
-        api.get('/api/analytics/recent-replies?limit=10')
+        api.get('/api/analytics/recent-replies?limit=10'),
       ]);
 
       setOverview(overviewRes.data);
@@ -100,7 +131,10 @@ export default function Analytics() {
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `leads-export-${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute(
+        'download',
+        `leads-export-${new Date().toISOString().split('T')[0]}.csv`,
+      );
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -119,13 +153,17 @@ export default function Analytics() {
       location: 'Location & Address',
       services: 'Services & Help',
       hello: 'Greetings',
-      language: 'Language'
+      language: 'Language',
     };
     return labels[cat] || cat;
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64"><span className="text-gray-500">Loading analytics...</span></div>;
+    return (
+      <div className="flex items-center justify-center h-64">
+        <span className="text-gray-500">Loading analytics...</span>
+      </div>
+    );
   }
 
   return (
@@ -157,7 +195,9 @@ export default function Analytics() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Today</p>
-              <p className="text-2xl font-bold">{overview?.todayMessages || 0}</p>
+              <p className="text-2xl font-bold">
+                {overview?.todayMessages || 0}
+              </p>
             </div>
             <MessageCircle className="h-8 w-8 text-blue-500" />
           </div>
@@ -166,7 +206,9 @@ export default function Analytics() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">This Week</p>
-              <p className="text-2xl font-bold">{overview?.weekMessages || 0}</p>
+              <p className="text-2xl font-bold">
+                {overview?.weekMessages || 0}
+              </p>
             </div>
             <TrendingUp className="h-8 w-8 text-green-500" />
           </div>
@@ -184,7 +226,9 @@ export default function Analytics() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Avg/User</p>
-              <p className="text-2xl font-bold">{overview?.avgMessagesPerUser || 0}</p>
+              <p className="text-2xl font-bold">
+                {overview?.avgMessagesPerUser || 0}
+              </p>
             </div>
             <BarChart3 className="h-8 w-8 text-orange-500" />
           </div>
@@ -199,9 +243,18 @@ export default function Analytics() {
             <p className="text-gray-500 text-center py-8">No data available</p>
           ) : (
             <ResponsiveContainer width="100%" height="80%">
-              <AreaChart data={trends} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+              <AreaChart
+                data={trends}
+                margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+              >
                 <defs>
-                  <linearGradient id="colorMessages" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient
+                    id="colorMessages"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
                     <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                   </linearGradient>
@@ -210,7 +263,13 @@ export default function Analytics() {
                 <YAxis />
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <RechartsTooltip />
-                <Area type="monotone" dataKey="messages" stroke="#3b82f6" fillOpacity={1} fill="url(#colorMessages)" />
+                <Area
+                  type="monotone"
+                  dataKey="messages"
+                  stroke="#3b82f6"
+                  fillOpacity={1}
+                  fill="url(#colorMessages)"
+                />
               </AreaChart>
             </ResponsiveContainer>
           )}
@@ -236,10 +295,18 @@ export default function Analytics() {
                   label
                 >
                   {questions.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={COLORS[index % COLORS.length]}
+                    />
                   ))}
                 </Pie>
-                <RechartsTooltip formatter={(value, name) => [value, getCategoryLabel(name as string)]} />
+                <RechartsTooltip
+                  formatter={(value, name) => [
+                    value,
+                    getCategoryLabel(name as string),
+                  ]}
+                />
                 <Legend formatter={(value) => getCategoryLabel(value)} />
               </PieChart>
             </ResponsiveContainer>
@@ -256,8 +323,13 @@ export default function Analytics() {
               <p className="text-gray-500 text-center py-8">No questions yet</p>
             ) : (
               topQuestions.map((q, idx) => (
-                <div key={idx} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                  <span className="text-xs font-medium text-gray-400 w-6">#{idx + 1}</span>
+                <div
+                  key={idx}
+                  className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg"
+                >
+                  <span className="text-xs font-medium text-gray-400 w-6">
+                    #{idx + 1}
+                  </span>
                   <span className="flex-1 text-sm">{q.question}</span>
                   <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
                     {q.count}x
@@ -277,14 +349,18 @@ export default function Analytics() {
                 <FileText className="h-6 w-6 text-blue-600" />
                 <span className="font-medium">Text Messages</span>
               </div>
-              <span className="text-xl font-bold">{overview?.textMessages || 0}</span>
+              <span className="text-xl font-bold">
+                {overview?.textMessages || 0}
+              </span>
             </div>
             <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg">
               <div className="flex items-center gap-3">
                 <Mic className="h-6 w-6 text-purple-600" />
                 <span className="font-medium">Voice Messages Replied</span>
               </div>
-              <span className="text-xl font-bold">{overview?.voiceMessages || 0}</span>
+              <span className="text-xl font-bold">
+                {overview?.voiceMessages || 0}
+              </span>
             </div>
           </div>
 
@@ -292,19 +368,27 @@ export default function Analytics() {
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Total Interactions</span>
-              <span className="font-medium">{overview?.totalMessages || 0}</span>
+              <span className="font-medium">
+                {overview?.totalMessages || 0}
+              </span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Chatbot Messages Sent</span>
-              <span className="font-medium text-blue-600">{overview?.botMessages || 0}</span>
+              <span className="font-medium text-blue-600">
+                {overview?.botMessages || 0}
+              </span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Questions Asked</span>
-              <span className="font-medium text-purple-600">{overview?.userMessages || 0}</span>
+              <span className="font-medium text-purple-600">
+                {overview?.userMessages || 0}
+              </span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">This Month</span>
-              <span className="font-medium">{overview?.monthMessages || 0}</span>
+              <span className="font-medium">
+                {overview?.monthMessages || 0}
+              </span>
             </div>
           </div>
         </div>
@@ -318,7 +402,10 @@ export default function Analytics() {
             <p className="text-gray-500 text-center py-8">No recent replies</p>
           ) : (
             recentReplies.map((reply) => (
-              <div key={reply.id} className="p-4 bg-gray-50 rounded-lg border border-gray-100 flex gap-4">
+              <div
+                key={reply.id}
+                className="p-4 bg-gray-50 rounded-lg border border-gray-100 flex gap-4"
+              >
                 <div className="flex-shrink-0 mt-1">
                   <Bot className="h-6 w-6 text-purple-600" />
                 </div>
@@ -331,14 +418,17 @@ export default function Analytics() {
                       {new Date(reply.timestamp).toLocaleString()}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{reply.content}</p>
-                  {typeof reply.metadata?.intent === 'string' && reply.metadata.intent !== 'General' && (
-                    <div className="mt-2 flex gap-2">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                        {reply.metadata.intent as string}
-                      </span>
-                    </div>
-                  )}
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                    {reply.content}
+                  </p>
+                  {typeof reply.metadata?.intent === 'string' &&
+                    reply.metadata.intent !== 'General' && (
+                      <div className="mt-2 flex gap-2">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                          {reply.metadata.intent as string}
+                        </span>
+                      </div>
+                    )}
                 </div>
               </div>
             ))
@@ -360,11 +450,15 @@ export default function Analytics() {
           </div>
           <div className="p-4 bg-yellow-50 rounded-lg">
             <p className="text-sm text-yellow-600">New</p>
-            <p className="text-2xl font-bold">{leadStats?.byStatus?.new || 0}</p>
+            <p className="text-2xl font-bold">
+              {leadStats?.byStatus?.new || 0}
+            </p>
           </div>
           <div className="p-4 bg-purple-50 rounded-lg">
             <p className="text-sm text-purple-600">Accepted</p>
-            <p className="text-2xl font-bold">{leadStats?.byStatus?.accepted || 0}</p>
+            <p className="text-2xl font-bold">
+              {leadStats?.byStatus?.accepted || 0}
+            </p>
           </div>
         </div>
 
@@ -373,7 +467,10 @@ export default function Analytics() {
             <p className="text-sm text-gray-500 mb-2">By Job Type</p>
             <div className="flex flex-wrap gap-2">
               {Object.entries(leadStats.byJobType).map(([type, count]) => (
-                <span key={type} className="px-3 py-1 bg-gray-100 rounded-full text-sm">
+                <span
+                  key={type}
+                  className="px-3 py-1 bg-gray-100 rounded-full text-sm"
+                >
                   {type}: <strong>{count}</strong>
                 </span>
               ))}

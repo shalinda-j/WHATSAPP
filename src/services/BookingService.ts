@@ -293,9 +293,7 @@ async function finalizeBooking(
       // pass never delays the booking confirmation flow.
       agentReflectionService
         .correlateBookingOutcome(jid, booking._id, 'created')
-        .catch((err) =>
-          console.error('correlateBookingOutcome failed:', err),
-        );
+        .catch((err) => console.error('correlateBookingOutcome failed:', err));
     } catch (err) {
       console.error('Failed to save booking to DB:', err);
     }

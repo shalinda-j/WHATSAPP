@@ -361,7 +361,9 @@ export class WhatsAppSessionManager {
               call.id,
               call.from,
               sessionId,
-              async (callId, from) => { await sock.rejectCall(callId, from); }
+              async (callId, from) => {
+                await sock.rejectCall(callId, from);
+              },
             );
           }
         }

@@ -114,8 +114,7 @@ export class ChatGPTSessionService implements AIService {
     const info = await ChatGPTSessionService.validateSession(this.sessionToken);
     this.accessToken = info.accessToken;
     // Refresh 5 minutes before expiry
-    this.accessTokenExpiry =
-      new Date(info.expires).getTime() - 5 * 60 * 1000;
+    this.accessTokenExpiry = new Date(info.expires).getTime() - 5 * 60 * 1000;
     return info.accessToken;
   }
 

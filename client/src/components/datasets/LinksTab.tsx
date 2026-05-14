@@ -1,6 +1,14 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../config';
-import { Plus, Trash, Edit, Save, X, ExternalLink, RefreshCw } from 'lucide-react';
+import {
+  Plus,
+  Trash,
+  Edit,
+  Save,
+  X,
+  ExternalLink,
+  RefreshCw,
+} from 'lucide-react';
 import LanguageSwitcher, { type Language } from './LanguageSwitcher';
 
 interface LinkConfig {
@@ -25,9 +33,21 @@ interface LinksTabProps {
 }
 
 const linkTypes = [
-  { id: 'registration', name: 'Registration Link', description: 'Link for user registration' },
-  { id: 'payment', name: 'Payment Link', description: 'Link for payment processing' },
-  { id: 'cv', name: 'CV Upload Link', description: 'Link for CV/document upload' },
+  {
+    id: 'registration',
+    name: 'Registration Link',
+    description: 'Link for user registration',
+  },
+  {
+    id: 'payment',
+    name: 'Payment Link',
+    description: 'Link for payment processing',
+  },
+  {
+    id: 'cv',
+    name: 'CV Upload Link',
+    description: 'Link for CV/document upload',
+  },
   { id: 'support', name: 'Support Link', description: 'Link to support page' },
   { id: 'custom', name: 'Custom Link', description: 'Any other custom link' },
 ];
@@ -43,7 +63,11 @@ export default function LinksTab({ language, onDataChange }: LinksTabProps) {
     setLoading(true);
     try {
       const res = await api.get('/api/datasets?type=link');
-      setLinks(Array.isArray(res.data) ? res.data : (res.data?.datasets || res.data?.data || []));
+      setLinks(
+        Array.isArray(res.data)
+          ? res.data
+          : res.data?.datasets || res.data?.data || [],
+      );
     } catch (error) {
       console.error('Failed to fetch links:', error);
     } finally {
@@ -60,7 +84,11 @@ export default function LinksTab({ language, onDataChange }: LinksTabProps) {
       _id: '',
       name: type || 'custom',
       description: linkTypes.find((t) => t.id === type)?.description || '',
-      content: { en: { message: '' }, si: { message: '' }, ta: { message: '' } },
+      content: {
+        en: { message: '' },
+        si: { message: '' },
+        ta: { message: '' },
+      },
       isActive: true,
       metadata: { url: '' },
     };
@@ -152,7 +180,10 @@ export default function LinksTab({ language, onDataChange }: LinksTabProps) {
           <h2 className="text-xl font-semibold">
             {editingLink._id ? 'Edit Link' : 'New Link'}
           </h2>
-          <button onClick={() => setIsEditing(false)} className="text-gray-500 hover:text-gray-700">
+          <button
+            onClick={() => setIsEditing(false)}
+            className="text-gray-500 hover:text-gray-700"
+          >
             <X className="h-6 w-6" />
           </button>
         </div>
@@ -160,7 +191,9 @@ export default function LinksTab({ language, onDataChange }: LinksTabProps) {
         <div className="space-y-4">
           {/* Link Type */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Link Type</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Link Type
+            </label>
             <select
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               value={editingLink.name}
@@ -168,7 +201,9 @@ export default function LinksTab({ language, onDataChange }: LinksTabProps) {
                 setEditingLink({
                   ...editingLink,
                   name: e.target.value,
-                  description: linkTypes.find((t) => t.id === e.target.value)?.description || '',
+                  description:
+                    linkTypes.find((t) => t.id === e.target.value)
+                      ?.description || '',
                 })
               }
             >
@@ -182,7 +217,9 @@ export default function LinksTab({ language, onDataChange }: LinksTabProps) {
 
           {/* URL */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">URL</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              URL
+            </label>
             <input
               type="url"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -234,7 +271,9 @@ export default function LinksTab({ language, onDataChange }: LinksTabProps) {
               onChange={(e) => handleUpdateContent('message', e.target.value)}
               placeholder={`Enter the message to show when this link is requested in ${editLanguage.toUpperCase()}...`}
             />
-            <p className="text-xs text-gray-500 mt-1">Use {'{URL}'} as a placeholder for the link URL</p>
+            <p className="text-xs text-gray-500 mt-1">
+              Use {'{URL}'} as a placeholder for the link URL
+            </p>
           </div>
 
           {/* Active Toggle */}
@@ -277,7 +316,8 @@ export default function LinksTab({ language, onDataChange }: LinksTabProps) {
     <div>
       <div className="flex justify-between items-center mb-4">
         <p className="text-gray-600 text-sm">
-          Configure links for registration, payment, CV upload, etc. with localized messages.
+          Configure links for registration, payment, CV upload, etc. with
+          localized messages.
         </p>
         <button
           onClick={() => handleCreate()}
@@ -291,7 +331,9 @@ export default function LinksTab({ language, onDataChange }: LinksTabProps) {
         <div className="text-center py-12 text-gray-500">
           <ExternalLink className="h-12 w-12 mx-auto mb-4 text-gray-300" />
           <p>No links configured yet.</p>
-          <p className="text-sm">Click "Add Link" to create your first link configuration.</p>
+          <p className="text-sm">
+            Click "Add Link" to create your first link configuration.
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -326,7 +368,9 @@ export default function LinksTab({ language, onDataChange }: LinksTabProps) {
                       ))}
                     </div>
                     {link.description && (
-                      <p className="text-sm text-gray-500 mt-1">{link.description}</p>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {link.description}
+                      </p>
                     )}
                     {link.metadata?.url && (
                       <a

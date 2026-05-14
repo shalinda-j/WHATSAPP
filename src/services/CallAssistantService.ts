@@ -108,7 +108,10 @@ class CallAssistantService {
    */
   private async detectUserLanguage(jid: string): Promise<'si' | 'en' | 'ta'> {
     try {
-      const recentMessages = await ChatMessage.find({ userId: jid, role: 'user' })
+      const recentMessages = await ChatMessage.find({
+        userId: jid,
+        role: 'user',
+      })
         .sort({ createdAt: -1 })
         .limit(5);
 
@@ -122,8 +125,8 @@ class CallAssistantService {
     return process.env.DEFAULT_LANGUAGE === 'english'
       ? 'en'
       : process.env.DEFAULT_LANGUAGE === 'tamil'
-        ? 'ta'
-        : 'si';
+      ? 'ta'
+      : 'si';
   }
 
   /**
@@ -170,7 +173,9 @@ class CallAssistantService {
     if (this.callLogs.length > 1000) {
       this.callLogs = this.callLogs.slice(-500);
     }
-    console.log(`📞 Call logged: ${log.from} -> ${log.action} (${log.responseType})`);
+    console.log(
+      `📞 Call logged: ${log.from} -> ${log.action} (${log.responseType})`,
+    );
   }
 
   getCallLogs(): CallLog[] {
