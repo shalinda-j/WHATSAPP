@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import { z } from 'zod';
-import { nanoid } from 'nanoid';
+import { randomUUID } from 'crypto';
 import MarketingCampaign, {
   IMarketingCampaign,
 } from '../models/MarketingCampaign';
@@ -54,12 +54,12 @@ const GeneratorOutputSchema = z.object({
 
 type GeneratorOutput = z.infer<typeof GeneratorOutputSchema>;
 
-function stripJsonFences(text: string): string {
+export function stripJsonFences(text: string): string {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   return (fenced ? fenced[1] : text).trim();
 }
 
-function pickRecipientHandle(
+export function pickRecipientHandle(
   contact: any,
   channel: Channel,
 ): string | undefined {
@@ -80,7 +80,7 @@ function pickRecipientHandle(
   }
 }
 
-function weightedPickVariantId(
+export function weightedPickVariantId(
   variants: Array<{ variantId: string; weight?: number }>,
 ): string | undefined {
   if (variants.length === 0) return undefined;
@@ -94,7 +94,10 @@ function weightedPickVariantId(
   return variants[variants.length - 1].variantId;
 }
 
-function isInQuietHours(campaign: IMarketingCampaign): boolean {
+export function isInQuietHours(
+  campaign: Pick<IMarketingCampaign, 'quietHours'>,
+  now: Date = new Date(),
+): boolean {
   const qh = campaign.quietHours;
   if (
     !qh ||
@@ -103,7 +106,7 @@ function isInQuietHours(campaign: IMarketingCampaign): boolean {
   ) {
     return false;
   }
-  const hour = new Date().getHours();
+  const hour = now.getHours();
   if (qh.startHour <= qh.endHour) {
     return hour >= qh.startHour && hour < qh.endHour;
   }
@@ -207,7 +210,7 @@ export class CampaignService {
       (v) => v.generatedBy !== 'campaign_generator_agent',
     );
     const newVariants = parsed.variants.map((v) => ({
-      variantId: v.variantId || `ai-${nanoid(8)}`,
+      variantId: v.variantId || `ai-${randomUUID().slice(0, 8)}`,
       weight: Math.floor(100 / parsed.variants.length),
       messageBody: v.messageBody,
       generatedBy: 'campaign_generator_agent' as const,
