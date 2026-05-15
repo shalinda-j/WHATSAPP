@@ -262,26 +262,42 @@ export class CampaignService {
     const channels = (campaign.channels as Channel[]) ?? ['whatsapp'];
     if (channels.length === 0) throw new Error('no_channels');
 
-    // Eligible contacts. Production deployments will compile the linked
-    // ContactSegment's rules; until that's wired, fall back to all
-    // contacts whose channel handle is non-empty for at least one of
-    // the campaign's channels.
-    const channelHandleQuery: Record<string, any>[] = [];
-    if (channels.includes('whatsapp')) {
-      channelHandleQuery.push({ whatsappNumber: { $exists: true, $ne: '' } });
-      channelHandleQuery.push({ whatsappId: { $exists: true, $ne: '' } });
-      channelHandleQuery.push({ phone: { $exists: true, $ne: '' } });
+    // Eligible contacts. Priority order:
+    //   1. If campaign.segmentId is set, materialise via the
+    //      SegmentationService rule engine (compile-to-Mongo, intersect
+    //      Lead-scoped rules through phone numbers).
+    //   2. Else, find any Contact with at least one usable handle for
+    //      one of the campaign's channels. This is the "broadcast"
+    //      fallback for campaigns that haven't been narrowed yet.
+    let contacts: any[];
+    if (campaign.segmentId) {
+      const { segmentationService } = await import('./SegmentationService');
+      const materialised = await segmentationService.materialise(
+        opts.tenantId,
+        String(campaign.segmentId),
+      );
+      if (materialised.length === 0) {
+        throw new Error('segment_empty');
+      }
+      const ids = materialised.map(
+        (r) => new mongoose.Types.ObjectId(r.contactId),
+      );
+      contacts = await Contact.find({ _id: { $in: ids } });
+    } else {
+      const channelHandleQuery: Record<string, any>[] = [];
+      if (channels.includes('whatsapp')) {
+        channelHandleQuery.push({ whatsappNumber: { $exists: true, $ne: '' } });
+        channelHandleQuery.push({ whatsappId: { $exists: true, $ne: '' } });
+        channelHandleQuery.push({ phone: { $exists: true, $ne: '' } });
+      }
+      if (channels.includes('email')) {
+        channelHandleQuery.push({ email: { $exists: true, $ne: '' } });
+      }
+      if (channelHandleQuery.length === 0) {
+        throw new Error('no_routable_channel');
+      }
+      contacts = await Contact.find({ $or: channelHandleQuery }).limit(10_000);
     }
-    if (channels.includes('email')) {
-      channelHandleQuery.push({ email: { $exists: true, $ne: '' } });
-    }
-    if (channelHandleQuery.length === 0) {
-      throw new Error('no_routable_channel');
-    }
-
-    const contacts = await Contact.find({
-      $or: channelHandleQuery,
-    }).limit(10_000);
 
     const docs: any[] = [];
     for (const contact of contacts) {
