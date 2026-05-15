@@ -104,6 +104,85 @@ router.post('/inbound', async (req, res) => {
   }
 });
 
+// --- Channel inbound webhooks (public; per-adapter signature/secret check) ---
+//
+// Telegram webhook: when the operator prefers webhook mode over long-poll
+// (e.g. serverless deployments), they configure the bot's webhook URL on
+// Telegram pointing at /api/webhooks/telegram/:tenantSlug. We verify the
+// X-Telegram-Bot-Api-Secret-Token header against the stored ChannelConnection
+// to defend against unauthenticated webhook spam.
+router.post('/telegram/:tenantSlug', async (req, res) => {
+  try {
+    const { tenantSlug } = req.params;
+    const Tenant = (await import('../../models/Tenant')).default;
+    const ChannelConnection = (await import('../../models/ChannelConnection'))
+      .default;
+    const { channelRouter } = await import('../../channels');
+
+    const tenant = await Tenant.findOne({ slug: tenantSlug });
+    if (!tenant) return res.status(404).json({ error: 'tenant_not_found' });
+    const conn = await ChannelConnection.findOne({
+      tenantId: tenant._id,
+      channel: 'telegram',
+    });
+    if (!conn) return res.status(404).json({ error: 'connection_not_found' });
+
+    const expectedSecret = (conn.config as any)?.webhookSecret as
+      | string
+      | undefined;
+    if (expectedSecret) {
+      const got = req.headers['x-telegram-bot-api-secret-token'] as
+        | string
+        | undefined;
+      if (!got || got !== expectedSecret) {
+        return res.status(401).json({ error: 'bad_secret' });
+      }
+    }
+
+    // Pipe into channelRouter inbound dispatch through the same path
+    // the long-poller uses. We do this by surfacing an InboundMessage
+    // directly to handlers — no need to expose the channelRouter
+    // internal API.
+    const update = req.body;
+    const message = update?.message;
+    if (message) {
+      // Use the orchestrator path directly so this works even if the
+      // TelegramAdapter for this tenant wasn't long-polling. Same
+      // shape the channelRouter inbound handler builds in src/index.ts.
+      const { agentOrchestrator } =
+        await import('../../services/AgentOrchestrator');
+      const text = typeof message.text === 'string' ? message.text : '';
+      const externalUserId = String(message.from?.id ?? '');
+      const externalThreadId = String(message.chat?.id ?? '');
+      try {
+        const outcome = await agentOrchestrator.handle({
+          sessionId: String(tenant._id),
+          userId: externalUserId,
+          channel: 'telegram',
+          language: tenant.brand?.primaryLanguage ?? 'si',
+          inputMessage: text,
+          conversationHistory: [],
+          metadata: { externalThreadId },
+        });
+        if (outcome.handled && outcome.outbound) {
+          await channelRouter.send({
+            channel: 'telegram',
+            tenantId: String(tenant._id),
+            recipient: externalThreadId,
+            text: outcome.outbound,
+          });
+        }
+      } catch (err) {
+        console.error('telegram webhook orchestrator failed:', err);
+      }
+    }
+    return res.status(200).json({ ok: true });
+  } catch (err: any) {
+    console.error('telegram webhook error:', err);
+    return res.status(500).json({ error: err?.message ?? 'server_error' });
+  }
+});
+
 // --- CRUD for Admin Panel ---
 // SECURITY FIX: All CRUD routes require authentication
 router.use(authenticateToken);

@@ -52,7 +52,6 @@ import { agentOrchestrator } from './services/AgentOrchestrator';
 import { agentReflectionService } from './services/AgentReflectionService';
 import { registerCoreAgents } from './agents/bootstrap';
 import { registerCoreChannels, channelRouter } from './channels';
-import Tenant from './models/Tenant';
 import { classifyIntent } from './services/IntentClassifierService';
 import { HumanizerService } from './services/HumanizerService';
 
@@ -121,19 +120,12 @@ async function startServer() {
         }
       });
 
-      // Ensure a default tenant exists so single-tenant deployments keep
-      // working without a migration, then boot every registered adapter
-      // against that tenant.
-      let defaultTenant = await Tenant.findOne({ slug: 'default' });
-      if (!defaultTenant) {
-        defaultTenant = await Tenant.create({
-          slug: 'default',
-          name: 'Default Tenant',
-          plan: 'free',
-          status: 'active',
-        });
-        console.log('🏢 Created default tenant');
-      }
+      // Ensure a default tenant exists AND backfill tenantId on every
+      // pre-multi-tenant collection. Idempotent — on subsequent boots
+      // the migration is a no-op because every row already has tenantId.
+      const { ensureDefaultTenantAndMigrate } =
+        await import('./services/TenantBootstrapService');
+      const { tenant: defaultTenant } = await ensureDefaultTenantAndMigrate();
       await channelRouter.startAll(String(defaultTenant._id));
 
       // Boot the periodic campaign sender. Idempotent — only one timer
