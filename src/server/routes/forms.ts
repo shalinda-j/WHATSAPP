@@ -2,6 +2,7 @@ import { Router } from 'express';
 import FormTemplate, { FormField } from '../../models/FormTemplate';
 import FormSubmission from '../../models/FormSubmission';
 import { authenticateToken } from '../middleware/auth';
+import { resolveTenant } from '../middleware/tenantContext';
 import { standardRateLimit } from '../middleware/rateLimit';
 import { validateObjectId } from '../middleware/validation';
 
@@ -12,7 +13,7 @@ const router = Router();
 // ============================================
 
 // Get all form templates
-router.get('/templates', authenticateToken, async (req, res) => {
+router.get('/templates', authenticateToken, resolveTenant, async (req, res) => {
   try {
     const templates = await FormTemplate.find().sort({ createdAt: -1 });
     res.json(templates);
@@ -25,6 +26,7 @@ router.get('/templates', authenticateToken, async (req, res) => {
 router.get(
   '/templates/:id',
   authenticateToken,
+  resolveTenant,
   validateObjectId(),
   async (req, res) => {
     try {
@@ -60,47 +62,53 @@ router.get('/default', standardRateLimit, async (req, res) => {
 });
 
 // Create form template
-router.post('/templates', authenticateToken, async (req, res) => {
-  try {
-    const {
-      name,
-      description,
-      fields,
-      triggerMode,
-      triggerDelay,
-      welcomeMessage,
-      completionMessage,
-      isDefault,
-    } = req.body;
+router.post(
+  '/templates',
+  authenticateToken,
+  resolveTenant,
+  async (req, res) => {
+    try {
+      const {
+        name,
+        description,
+        fields,
+        triggerMode,
+        triggerDelay,
+        welcomeMessage,
+        completionMessage,
+        isDefault,
+      } = req.body;
 
-    // If setting as default, unset other defaults
-    if (isDefault) {
-      await FormTemplate.updateMany({}, { isDefault: false });
+      // If setting as default, unset other defaults
+      if (isDefault) {
+        await FormTemplate.updateMany({}, { isDefault: false });
+      }
+
+      const template = new FormTemplate({
+        name,
+        description,
+        fields: fields || [],
+        triggerMode: triggerMode || 'both',
+        triggerDelay: triggerDelay || 10,
+        welcomeMessage,
+        completionMessage,
+        isDefault: isDefault || false,
+        isActive: true,
+      });
+
+      await template.save();
+      res.status(201).json(template);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-
-    const template = new FormTemplate({
-      name,
-      description,
-      fields: fields || [],
-      triggerMode: triggerMode || 'both',
-      triggerDelay: triggerDelay || 10,
-      welcomeMessage,
-      completionMessage,
-      isDefault: isDefault || false,
-      isActive: true,
-    });
-
-    await template.save();
-    res.status(201).json(template);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
+  },
+);
 
 // Update form template
 router.put(
   '/templates/:id',
   authenticateToken,
+  resolveTenant,
   validateObjectId(),
   async (req, res) => {
     try {
@@ -155,6 +163,7 @@ router.put(
 router.delete(
   '/templates/:id',
   authenticateToken,
+  resolveTenant,
   validateObjectId(),
   async (req, res) => {
     try {
@@ -173,6 +182,7 @@ router.delete(
 router.post(
   '/templates/:id/set-default',
   authenticateToken,
+  resolveTenant,
   validateObjectId(),
   async (req, res) => {
     try {
@@ -196,6 +206,7 @@ router.post(
 router.post(
   '/templates/:id/duplicate',
   authenticateToken,
+  resolveTenant,
   validateObjectId(),
   async (req, res) => {
     try {
@@ -229,51 +240,57 @@ router.post(
 // ============================================
 
 // Get submissions with filtering
-router.get('/submissions', authenticateToken, async (req, res) => {
-  try {
-    const { formId, status, search, page = 1, limit = 20 } = req.query;
+router.get(
+  '/submissions',
+  authenticateToken,
+  resolveTenant,
+  async (req, res) => {
+    try {
+      const { formId, status, search, page = 1, limit = 20 } = req.query;
 
-    const query: any = {};
-    if (formId) query.formId = formId;
-    if (status) query.status = status;
-    if (search) {
-      // SECURITY FIX: Escape regex to prevent injection
-      const escapedSearch = (search as string).replace(
-        /[.*+?^${}()|[\]\\]/g,
-        '\\$&',
-      );
-      query.phoneNumber = { $regex: escapedSearch, $options: 'i' };
+      const query: any = {};
+      if (formId) query.formId = formId;
+      if (status) query.status = status;
+      if (search) {
+        // SECURITY FIX: Escape regex to prevent injection
+        const escapedSearch = (search as string).replace(
+          /[.*+?^${}()|[\]\\]/g,
+          '\\$&',
+        );
+        query.phoneNumber = { $regex: escapedSearch, $options: 'i' };
+      }
+
+      const total = await FormSubmission.countDocuments(query);
+      const submissions = await FormSubmission.find(query)
+        .sort({ submittedAt: -1 })
+        .skip((Number(page) - 1) * Number(limit))
+        .limit(Number(limit))
+        .populate('formId', 'name')
+        .lean();
+
+      // Convert Map to object for JSON serialization
+      const processedSubmissions = submissions.map((s: any) => ({
+        ...s,
+        data: s.data instanceof Map ? Object.fromEntries(s.data) : s.data,
+      }));
+
+      res.json({
+        submissions: processedSubmissions,
+        total,
+        page: Number(page),
+        totalPages: Math.ceil(total / Number(limit)),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-
-    const total = await FormSubmission.countDocuments(query);
-    const submissions = await FormSubmission.find(query)
-      .sort({ submittedAt: -1 })
-      .skip((Number(page) - 1) * Number(limit))
-      .limit(Number(limit))
-      .populate('formId', 'name')
-      .lean();
-
-    // Convert Map to object for JSON serialization
-    const processedSubmissions = submissions.map((s: any) => ({
-      ...s,
-      data: s.data instanceof Map ? Object.fromEntries(s.data) : s.data,
-    }));
-
-    res.json({
-      submissions: processedSubmissions,
-      total,
-      page: Number(page),
-      totalPages: Math.ceil(total / Number(limit)),
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
+  },
+);
 
 // Get single submission
 router.get(
   '/submissions/:id',
   authenticateToken,
+  resolveTenant,
   validateObjectId(),
   async (req, res) => {
     try {
@@ -324,6 +341,7 @@ router.post('/submissions', standardRateLimit, async (req, res) => {
 router.put(
   '/submissions/:id/status',
   authenticateToken,
+  resolveTenant,
   validateObjectId(),
   async (req, res) => {
     try {
@@ -351,65 +369,71 @@ router.put(
 );
 
 // Export submissions to CSV
-router.get('/submissions/export', authenticateToken, async (req, res) => {
-  try {
-    const { formId } = req.query;
+router.get(
+  '/submissions/export',
+  authenticateToken,
+  resolveTenant,
+  async (req, res) => {
+    try {
+      const { formId } = req.query;
 
-    const query: any = {};
-    if (formId) query.formId = formId;
+      const query: any = {};
+      if (formId) query.formId = formId;
 
-    const submissions = await FormSubmission.find(query)
-      .sort({ submittedAt: -1 })
-      .populate('formId', 'name fields')
-      .lean();
+      const submissions = await FormSubmission.find(query)
+        .sort({ submittedAt: -1 })
+        .populate('formId', 'name fields')
+        .lean();
 
-    if (submissions.length === 0) {
-      return res.status(400).json({ error: 'No submissions to export' });
+      if (submissions.length === 0) {
+        return res.status(400).json({ error: 'No submissions to export' });
+      }
+
+      // Get all field labels from the first form
+      const form = submissions[0].formId as any;
+      const fieldLabels = form?.fields?.map((f: FormField) => f.label) || [];
+
+      const headers = ['ID', 'Phone', 'Status', 'Submitted At', ...fieldLabels];
+
+      const csvRows = submissions.map((s: any) => {
+        const data =
+          s.data instanceof Map ? Object.fromEntries(s.data) : s.data;
+        const values =
+          form?.fields?.map((f: FormField) => {
+            const val = data?.[f.id];
+            return `"${(val || '').toString().replace(/"/g, '""')}"`;
+          }) || [];
+
+        return [
+          s._id,
+          `"${s.phoneNumber}"`,
+          `"${s.status}"`,
+          new Date(s.submittedAt).toISOString(),
+          ...values,
+        ].join(',');
+      });
+
+      const csvContent = [headers.join(','), ...csvRows].join('\n');
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="form-submissions-${
+          new Date().toISOString().split('T')[0]
+        }.csv"`,
+      );
+      res.send(csvContent);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-
-    // Get all field labels from the first form
-    const form = submissions[0].formId as any;
-    const fieldLabels = form?.fields?.map((f: FormField) => f.label) || [];
-
-    const headers = ['ID', 'Phone', 'Status', 'Submitted At', ...fieldLabels];
-
-    const csvRows = submissions.map((s: any) => {
-      const data = s.data instanceof Map ? Object.fromEntries(s.data) : s.data;
-      const values =
-        form?.fields?.map((f: FormField) => {
-          const val = data?.[f.id];
-          return `"${(val || '').toString().replace(/"/g, '""')}"`;
-        }) || [];
-
-      return [
-        s._id,
-        `"${s.phoneNumber}"`,
-        `"${s.status}"`,
-        new Date(s.submittedAt).toISOString(),
-        ...values,
-      ].join(',');
-    });
-
-    const csvContent = [headers.join(','), ...csvRows].join('\n');
-
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="form-submissions-${
-        new Date().toISOString().split('T')[0]
-      }.csv"`,
-    );
-    res.send(csvContent);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
+  },
+);
 
 // ============================================
 // STATISTICS
 // ============================================
 
-router.get('/stats', authenticateToken, async (req, res) => {
+router.get('/stats', authenticateToken, resolveTenant, async (req, res) => {
   try {
     const [
       totalTemplates,

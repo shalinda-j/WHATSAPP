@@ -6,12 +6,19 @@ import Lead from '../../models/Lead';
 import { authenticateToken } from '../middleware/auth';
 import { strictRateLimit } from '../middleware/rateLimit';
 import { validateObjectId } from '../middleware/validation';
+import { resolveTenant } from '../middleware/tenantContext';
 import pdf from 'pdf-parse';
 import ChatMessage from '../../models/ChatMessage';
 import { configurationManager } from '../../services/ConfigurationManagerService';
 import { agentReflectionService } from '../../services/AgentReflectionService';
 
 const router = Router();
+
+// Resolve the active tenant on every Lead request so list/get/update
+// operations naturally scope to the current tenant. Backwards-compatible
+// for single-tenant deployments: resolveTenant falls back to the
+// auto-created 'default' tenant.
+router.use(resolveTenant);
 
 const UPLOAD_DIR = path.join(__dirname, '../../../uploads/qualifications');
 if (!fs.existsSync(UPLOAD_DIR)) {
@@ -104,6 +111,11 @@ router.get('/', async (req, res) => {
     } = req.query;
 
     const query: any = {};
+    // Tenant scoping: tenantId is auto-created and back-filled on boot
+    // by TenantBootstrapService, so this is safe for legacy deployments.
+    if (req.tenant?._id) {
+      query.tenantId = req.tenant._id;
+    }
 
     if (status) query.status = status;
     if (jobVacancyType) query.jobVacancyType = jobVacancyType;

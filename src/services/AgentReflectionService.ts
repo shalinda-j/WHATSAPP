@@ -49,8 +49,8 @@ export class AgentReflectionService {
       newStatus === 'accepted' || newStatus === 'interviewed'
         ? 1
         : newStatus === 'rejected'
-        ? -1
-        : 0;
+          ? -1
+          : 0;
     if (score === 0) return;
 
     const since = new Date(

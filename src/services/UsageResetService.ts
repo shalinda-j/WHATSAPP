@@ -22,11 +22,14 @@ class UsageResetService {
     );
 
     // Check every hour whether a reset is due
-    this.schedulerInterval = setInterval(() => {
-      this.checkAndReset().catch((err) =>
-        console.error('UsageResetService check error:', err),
-      );
-    }, 60 * 60 * 1000); // every hour
+    this.schedulerInterval = setInterval(
+      () => {
+        this.checkAndReset().catch((err) =>
+          console.error('UsageResetService check error:', err),
+        );
+      },
+      60 * 60 * 1000,
+    ); // every hour
 
     // Also run an immediate check on startup
     this.checkAndReset().catch((err) =>

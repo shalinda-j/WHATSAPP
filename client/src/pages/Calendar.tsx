@@ -319,8 +319,8 @@ export default function Calendar() {
                       !day
                         ? 'bg-gray-50/50'
                         : isSel
-                        ? 'bg-blue-50'
-                        : 'hover:bg-gray-50'
+                          ? 'bg-blue-50'
+                          : 'hover:bg-gray-50'
                     }`}
                   >
                     {day && (
@@ -330,8 +330,8 @@ export default function Calendar() {
                             isT
                               ? 'bg-blue-600 text-white'
                               : isSel
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'text-gray-700'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'text-gray-700'
                           }`}
                         >
                           {day}

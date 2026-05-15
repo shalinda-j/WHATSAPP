@@ -150,9 +150,12 @@ export class HumanizerService {
   public static initializeCleanup(): void {
     if (this.cleanupInterval) return;
 
-    this.cleanupInterval = setInterval(() => {
-      this.cleanupOldMessages();
-    }, 5 * 60 * 1000); // Clean every 5 minutes
+    this.cleanupInterval = setInterval(
+      () => {
+        this.cleanupOldMessages();
+      },
+      5 * 60 * 1000,
+    ); // Clean every 5 minutes
   }
 
   /**

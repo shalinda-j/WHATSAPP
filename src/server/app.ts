@@ -24,6 +24,11 @@ import formsRouter from './routes/forms';
 import knowledgeRouter from './routes/knowledge';
 import callAgentRouter from './routes/call-agent';
 import agentsRouter from './routes/agents';
+import channelsRouter from './routes/channels';
+import campaignsRouter from './routes/campaigns';
+import segmentsRouter from './routes/segments';
+import tenantsRouter from './routes/tenants';
+import marketingInsightsRouter from './routes/marketingInsights';
 
 import mongoose from 'mongoose';
 import { authenticateToken } from './middleware/auth';
@@ -135,6 +140,11 @@ app.use('/api/forms', authenticateToken, formsRouter);
 app.use('/api/knowledge', authenticateToken, knowledgeRouter);
 app.use('/api/call-agent', callAgentRouter);
 app.use('/api/agents', agentsRouter);
+app.use('/api/channels', channelsRouter);
+app.use('/api/campaigns', campaignsRouter);
+app.use('/api/segments', segmentsRouter);
+app.use('/api/tenants', tenantsRouter);
+app.use('/api/marketing-insights', marketingInsightsRouter);
 
 // Public forms endpoint (for bot)
 app.use('/api/forms/default', async (req, res, next) => {
@@ -195,6 +205,59 @@ app.get('/health', async (req, res) => {
       health.database.host = mongoose.connection.host;
     } catch (e) {
       health.database.warning = 'Could not fetch server info';
+    }
+  }
+
+  // Enrich with per-channel + agent readiness when DB is up. This is what
+  // the operator's deploy health-check should green on — not just Mongo
+  // connectivity but the actual end-to-end serving surface.
+  if (
+    dbStatus === mongoose.ConnectionStates.connected &&
+    mongoose.connection.db
+  ) {
+    try {
+      const { channelRouter } = await import('../channels');
+      const Tenant = (await import('../models/Tenant')).default;
+      const AgentConfig = (await import('../models/AgentConfig')).default;
+      const defaultTenant = await Tenant.findOne({ slug: 'default' });
+      const channelStatuses: Record<string, unknown> = {};
+      if (defaultTenant) {
+        for (const ch of channelRouter.list()) {
+          const adapter = channelRouter.get(ch);
+          if (!adapter) continue;
+          try {
+            const s = await adapter.status(String(defaultTenant._id));
+            channelStatuses[ch] = {
+              connected: s.connected,
+              detail: s.detail,
+            };
+          } catch (e: any) {
+            channelStatuses[ch] = { connected: false, detail: e?.message };
+          }
+        }
+      }
+      health.channels = channelStatuses;
+
+      const agents = await AgentConfig.find(
+        {},
+        { name: 1, mode: 1, isActive: 1 },
+      );
+      health.agents = {
+        total: agents.length,
+        autonomous: agents.filter((a) => a.isActive && a.mode === 'autonomous')
+          .length,
+        approval: agents.filter((a) => a.isActive && a.mode === 'approval')
+          .length,
+        disabled: agents.filter((a) => !a.isActive || a.mode === 'disabled')
+          .length,
+        names: agents.map((a) => ({
+          name: a.name,
+          mode: a.mode,
+          active: a.isActive,
+        })),
+      };
+    } catch (e: any) {
+      health.diagnosticsError = e?.message ?? 'health diagnostics threw';
     }
   }
 

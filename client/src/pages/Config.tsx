@@ -497,10 +497,10 @@ export default function Config() {
         providerName === 'google-cloud'
           ? 'en-US-Neural2-F'
           : providerName === 'gemini-tts'
-          ? 'Kore'
-          : providerName === 'elevenlabs'
-          ? ''
-          : 'nova',
+            ? 'Kore'
+            : providerName === 'elevenlabs'
+              ? ''
+              : 'nova',
     };
   };
 
@@ -1166,8 +1166,8 @@ export default function Config() {
                                 usagePct >= 90
                                   ? 'bg-red-500'
                                   : usagePct >= 80
-                                  ? 'bg-amber-500'
-                                  : 'bg-indigo-500'
+                                    ? 'bg-amber-500'
+                                    : 'bg-indigo-500'
                               }`}
                               style={{ width: `${usagePct}%` }}
                             />
@@ -1206,8 +1206,8 @@ export default function Config() {
                                 isOverBudget
                                   ? 'bg-red-500'
                                   : costPct >= 80
-                                  ? 'bg-amber-500'
-                                  : 'bg-green-500'
+                                    ? 'bg-amber-500'
+                                    : 'bg-green-500'
                               }`}
                               style={{ width: `${Math.min(100, costPct)}%` }}
                             />

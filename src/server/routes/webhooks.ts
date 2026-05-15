@@ -6,8 +6,22 @@ import { sendMessage, getSocket } from '../../services/whatsapp';
 import { WebhookService } from '../../services/WebhookService';
 import { configurationManager } from '../../services/ConfigurationManagerService';
 import { authenticateToken } from '../middleware/auth';
+import { rateLimit, lenientRateLimit } from '../middleware/rateLimit';
 
 const router = express.Router();
+
+// Public webhook endpoints (Telegram / Meta / SendGrid) need anti-abuse
+// rate limiting. Each provider has its own legitimate burst pattern:
+//   Telegram: long-poll mode replays updates if our 200 is slow; webhook
+//             mode is one event per message. 300/min/IP is generous.
+//   Meta: batches up to ~100 events per POST. 60/min/IP is fine.
+//   SendGrid: ~once-per-minute event batches. 60/min/IP.
+const webhookRateLimit = lenientRateLimit;
+const metaEventRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: 'Webhook rate limit exceeded',
+});
 
 // --- INBOUND ---
 // Note: /inbound endpoint remains public for external systems to trigger actions
@@ -101,6 +115,227 @@ router.post('/inbound', async (req, res) => {
   } catch (error: any) {
     console.error('Inbound webhook error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Channel inbound webhooks (public; per-adapter signature/secret check) ---
+//
+// Telegram webhook: when the operator prefers webhook mode over long-poll
+// (e.g. serverless deployments), they configure the bot's webhook URL on
+// Telegram pointing at /api/webhooks/telegram/:tenantSlug. We verify the
+// X-Telegram-Bot-Api-Secret-Token header against the stored ChannelConnection
+// to defend against unauthenticated webhook spam.
+router.post('/telegram/:tenantSlug', webhookRateLimit, async (req, res) => {
+  try {
+    const { tenantSlug } = req.params;
+    const Tenant = (await import('../../models/Tenant')).default;
+    const ChannelConnection = (await import('../../models/ChannelConnection'))
+      .default;
+    const { channelRouter } = await import('../../channels');
+
+    const tenant = await Tenant.findOne({ slug: tenantSlug });
+    if (!tenant) return res.status(404).json({ error: 'tenant_not_found' });
+    const conn = await ChannelConnection.findOne({
+      tenantId: tenant._id,
+      channel: 'telegram',
+    });
+    if (!conn) return res.status(404).json({ error: 'connection_not_found' });
+
+    const expectedSecret = (conn.config as any)?.webhookSecret as
+      | string
+      | undefined;
+    if (expectedSecret) {
+      const got = req.headers['x-telegram-bot-api-secret-token'] as
+        | string
+        | undefined;
+      if (!got || got !== expectedSecret) {
+        return res.status(401).json({ error: 'bad_secret' });
+      }
+    }
+
+    // Pipe into channelRouter inbound dispatch through the same path
+    // the long-poller uses. We do this by surfacing an InboundMessage
+    // directly to handlers — no need to expose the channelRouter
+    // internal API.
+    const update = req.body;
+    const message = update?.message;
+    if (message) {
+      // Use the orchestrator path directly so this works even if the
+      // TelegramAdapter for this tenant wasn't long-polling. Same
+      // shape the channelRouter inbound handler builds in src/index.ts.
+      const { agentOrchestrator } =
+        await import('../../services/AgentOrchestrator');
+      const text = typeof message.text === 'string' ? message.text : '';
+      const externalUserId = String(message.from?.id ?? '');
+      const externalThreadId = String(message.chat?.id ?? '');
+      try {
+        const outcome = await agentOrchestrator.handle({
+          sessionId: String(tenant._id),
+          userId: externalUserId,
+          channel: 'telegram',
+          language: tenant.brand?.primaryLanguage ?? 'si',
+          inputMessage: text,
+          conversationHistory: [],
+          metadata: { externalThreadId },
+        });
+        if (outcome.handled && outcome.outbound) {
+          await channelRouter.send({
+            channel: 'telegram',
+            tenantId: String(tenant._id),
+            recipient: externalThreadId,
+            text: outcome.outbound,
+          });
+        }
+      } catch (err) {
+        console.error('telegram webhook orchestrator failed:', err);
+      }
+    }
+    return res.status(200).json({ ok: true });
+  } catch (err: any) {
+    console.error('telegram webhook error:', err);
+    return res.status(500).json({ error: err?.message ?? 'server_error' });
+  }
+});
+
+// Meta Messenger / Instagram webhook handshake: Meta sends a GET request
+// with hub.verify_token + hub.challenge during app review setup. We echo
+// the challenge back if the verify token matches the value the operator
+// stored on the ChannelConnection.config.verifyToken.
+async function metaWebhookHandshake(
+  req: express.Request,
+  res: express.Response,
+  channel: 'instagram' | 'facebook',
+) {
+  try {
+    const tenantSlug = req.params.tenantSlug;
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
+    if (mode !== 'subscribe') return res.status(400).send('bad_mode');
+
+    const Tenant = (await import('../../models/Tenant')).default;
+    const ChannelConnection = (await import('../../models/ChannelConnection'))
+      .default;
+
+    const tenant = await Tenant.findOne({ slug: tenantSlug });
+    if (!tenant) return res.status(404).send('tenant_not_found');
+    const conn = await ChannelConnection.findOne({
+      tenantId: tenant._id,
+      channel,
+    });
+    const expected = (conn?.config as any)?.verifyToken as string | undefined;
+    if (!expected || token !== expected)
+      return res.status(403).send('forbidden');
+
+    return res.status(200).send(String(challenge ?? ''));
+  } catch (err: any) {
+    console.error(`${channel} webhook handshake error:`, err);
+    return res.status(500).send('server_error');
+  }
+}
+
+// Meta webhook POST receiver: forwards to the adapter's ingestWebhook
+// method, which normalises Meta's batch shape into InboundMessage and
+// runs them through the channelRouter handlers — same orchestrator
+// path Telegram + WhatsApp use.
+async function metaWebhookIngest(
+  req: express.Request,
+  res: express.Response,
+  channel: 'instagram' | 'facebook',
+) {
+  try {
+    const tenantSlug = req.params.tenantSlug;
+    const Tenant = (await import('../../models/Tenant')).default;
+    const tenant = await Tenant.findOne({ slug: tenantSlug });
+    if (!tenant) return res.status(404).json({ error: 'tenant_not_found' });
+
+    const { channelRouter } = await import('../../channels');
+    const adapter = channelRouter.get(channel) as any;
+    if (adapter?.ingestWebhook) {
+      await adapter.ingestWebhook(String(tenant._id), req.body);
+    }
+    return res.status(200).json({ ok: true });
+  } catch (err: any) {
+    console.error(`${channel} webhook ingest error:`, err);
+    return res.status(500).json({ error: err?.message ?? 'server_error' });
+  }
+}
+
+router.get('/instagram/:tenantSlug', metaEventRateLimit, (req, res) =>
+  metaWebhookHandshake(req, res, 'instagram'),
+);
+router.post('/instagram/:tenantSlug', metaEventRateLimit, (req, res) =>
+  metaWebhookIngest(req, res, 'instagram'),
+);
+router.get('/facebook/:tenantSlug', metaEventRateLimit, (req, res) =>
+  metaWebhookHandshake(req, res, 'facebook'),
+);
+router.post('/facebook/:tenantSlug', metaEventRateLimit, (req, res) =>
+  metaWebhookIngest(req, res, 'facebook'),
+);
+
+// SendGrid event webhook: delivery / bounce / open / click / spam reports
+// arrive here in batches. We map externalMessageId → CampaignExecution
+// row → update its status so the marketing insights pipeline sees real
+// delivery + reply rates instead of just queue → sent counts.
+//
+// SendGrid sends a JSON array; each event has sg_message_id (matches our
+// stored externalMessageId), event ('delivered' / 'bounce' / 'open' /
+// 'click' / 'spamreport' / 'dropped' / 'deferred'), and a timestamp.
+router.post('/sendgrid', metaEventRateLimit, async (req, res) => {
+  try {
+    const events = Array.isArray(req.body) ? req.body : [];
+    const CampaignExecution = (await import('../../models/CampaignExecution'))
+      .default;
+
+    for (const ev of events) {
+      const sgId = ev?.sg_message_id as string | undefined;
+      if (!sgId) continue;
+      // SendGrid's sg_message_id format: '<base>.<delivery-uuid>'.
+      // Our stored externalMessageId is the X-Message-Id header which
+      // is the same base prefix.
+      const base = sgId.split('.')[0];
+
+      const update: Record<string, unknown> = {};
+      const now = new Date(
+        ev.timestamp ? Number(ev.timestamp) * 1000 : Date.now(),
+      );
+      switch (ev.event) {
+        case 'delivered':
+          update.status = 'delivered';
+          update.deliveredAt = now;
+          break;
+        case 'open':
+          update.status = 'read';
+          update.readAt = now;
+          break;
+        case 'bounce':
+        case 'dropped':
+          update.status = 'bounced';
+          update.errorMessage = `sendgrid:${ev.event}:${ev.reason ?? 'no_reason'}`;
+          break;
+        case 'spamreport':
+          update.outcome = 'opt_out';
+          break;
+        default:
+          // 'click' / 'deferred' / 'processed' don't change our state
+          // model — recorded but not persisted to keep status meaningful.
+          continue;
+      }
+
+      try {
+        await CampaignExecution.updateOne(
+          { externalMessageId: { $regex: `^${base}` } },
+          { $set: update },
+        );
+      } catch (err) {
+        console.error('sendgrid webhook updateOne failed:', err);
+      }
+    }
+    res.status(200).json({ ok: true, received: events.length });
+  } catch (err: any) {
+    console.error('sendgrid webhook error:', err);
+    res.status(500).json({ error: err?.message ?? 'server_error' });
   }
 });
 

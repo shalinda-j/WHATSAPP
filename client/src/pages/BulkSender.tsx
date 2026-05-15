@@ -349,8 +349,8 @@ const BulkSender = () => {
             statusMsg.type === 'success'
               ? 'bg-green-50 text-green-800 border border-green-200'
               : statusMsg.type === 'error'
-              ? 'bg-red-50 text-red-800 border border-red-200'
-              : 'bg-blue-50 text-blue-800 border border-blue-200'
+                ? 'bg-red-50 text-red-800 border border-red-200'
+                : 'bg-blue-50 text-blue-800 border border-blue-200'
           }`}
         >
           {statusMsg.type === 'success' && (

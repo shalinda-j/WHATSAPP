@@ -5,6 +5,7 @@ const pdf = require('pdf-parse');
 import * as xlsx from 'xlsx';
 import Dataset, { DatasetType, Language } from '../../models/Dataset';
 import { authenticateToken } from '../middleware/auth';
+import { resolveTenant } from '../middleware/tenantContext';
 import { validateObjectId } from '../middleware/validation';
 import { extractTextFromImage } from '../../services/gemini';
 
@@ -17,8 +18,9 @@ const upload = multer({
 });
 
 // Public read (for bot) - though bot likely imports model directly
-// Keeping this authenticated for admin panel
+// Keeping this authenticated for admin panel + tenant-scoped.
 router.use(authenticateToken);
+router.use(resolveTenant);
 
 // Get all datasets (with optional type filter)
 router.get('/', async (req, res) => {

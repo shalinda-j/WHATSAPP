@@ -2,11 +2,13 @@ import { Router, Request, Response } from 'express';
 import Workflow from '../../models/Workflow';
 import { aiLoadBalancer } from '../../services/AILoadBalancer';
 import { authenticateToken } from '../middleware/auth';
+import { resolveTenant } from '../middleware/tenantContext';
 
 const router = Router();
 
-// SECURITY FIX: All workflow routes require authentication
+// SECURITY FIX: All workflow routes require authentication + tenant context.
 router.use(authenticateToken);
+router.use(resolveTenant);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Safe Expression Evaluator — replaces dangerous new Function() code injection

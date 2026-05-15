@@ -22,6 +22,15 @@ export class CRMService {
       status?: string;
       source?: string;
       tags?: string[];
+      /**
+       * Multi-tenant scope. Routes that go through resolveTenant
+       * middleware should pass this so the list narrows to the active
+       * tenant's contacts only. Backwards-compatible: callers that
+       * don't pass it get the unfiltered behaviour (used by tooling
+       * and migration scripts that legitimately need cross-tenant
+       * visibility).
+       */
+      tenantId?: string;
     } = {},
   ) {
     const {
@@ -32,9 +41,14 @@ export class CRMService {
       status,
       source,
       tags,
+      tenantId,
     } = options;
 
     const query: any = {};
+
+    // Multi-tenant scoping — applied first so all other filters compose
+    // on top of the tenant slice rather than ignoring it.
+    if (tenantId) query.tenantId = tenantId;
 
     // Filters
     if (type) query.type = type;

@@ -51,6 +51,7 @@ import { usageResetService } from './services/UsageResetService';
 import { agentOrchestrator } from './services/AgentOrchestrator';
 import { agentReflectionService } from './services/AgentReflectionService';
 import { registerCoreAgents } from './agents/bootstrap';
+import { registerCoreChannels, channelRouter } from './channels';
 import { classifyIntent } from './services/IntentClassifierService';
 import { HumanizerService } from './services/HumanizerService';
 
@@ -84,6 +85,60 @@ async function startServer() {
 
       // Register specialist agents and seed their initial prompts
       await registerCoreAgents();
+
+      // Register channel adapters. WhatsApp inbound stays on the legacy
+      // onMessage chain (further down in this file) to avoid double-
+      // processing; the channelRouter pipe only handles inbound from
+      // adapters that aren't WhatsApp (Telegram today, Instagram /
+      // Facebook / Email once their webhooks land).
+      registerCoreChannels();
+      channelRouter.onInbound(async (msg) => {
+        if (msg.channel === 'whatsapp') return; // owned by legacy handler
+        try {
+          const outcome = await agentOrchestrator.handle({
+            sessionId: msg.tenantId,
+            userId: msg.externalUserId,
+            channel: msg.channel,
+            language: 'si',
+            inputMessage: msg.text ?? '',
+            conversationHistory: [],
+            metadata: { externalThreadId: msg.externalThreadId ?? '' },
+          });
+          if (outcome.handled && outcome.outbound) {
+            await channelRouter.send({
+              channel: msg.channel,
+              tenantId: msg.tenantId,
+              recipient: msg.externalThreadId ?? msg.externalUserId,
+              text: outcome.outbound,
+            });
+          }
+        } catch (err) {
+          console.error(
+            `channelRouter inbound (${msg.channel}) processing failed:`,
+            err,
+          );
+        }
+      });
+
+      // Ensure a default tenant exists AND backfill tenantId on every
+      // pre-multi-tenant collection. Idempotent — on subsequent boots
+      // the migration is a no-op because every row already has tenantId.
+      const { ensureDefaultTenantAndMigrate } =
+        await import('./services/TenantBootstrapService');
+      const { tenant: defaultTenant } = await ensureDefaultTenantAndMigrate();
+      await channelRouter.startAll(String(defaultTenant._id));
+
+      // Boot the periodic campaign sender. Idempotent — only one timer
+      // per process, automatically unref'd so it never blocks shutdown.
+      const { startCampaignSender } =
+        await import('./services/CampaignService');
+      startCampaignSender(String(defaultTenant._id));
+
+      // Boot the follow-up scheduler so FollowUpAgent fires on cron
+      // against dormant leads (>= 5 days since last update).
+      const { startFollowUpScheduler } =
+        await import('./services/FollowUpScheduler');
+      startFollowUpScheduler();
     } catch (dbErr) {
       console.error(
         '❌ MongoDB Connection Failed. Server starting in LIMITED MODE.',
@@ -119,6 +174,19 @@ const gracefulShutdown = async (signal: string) => {
   try {
     // 0. Stop background schedulers
     agentReflectionService.stop();
+    try {
+      const { stopCampaignSender } = await import('./services/CampaignService');
+      stopCampaignSender();
+    } catch (err) {
+      console.error('   ⚠️ stopCampaignSender failed:', err);
+    }
+    try {
+      const { stopFollowUpScheduler } =
+        await import('./services/FollowUpScheduler');
+      stopFollowUpScheduler();
+    } catch (err) {
+      console.error('   ⚠️ stopFollowUpScheduler failed:', err);
+    }
 
     // 1. Close WhatsApp Socket
     console.log('   🔌 Disconnecting WhatsApp...');
@@ -385,9 +453,8 @@ onMessage(async (message, sock, sessionId) => {
 
       if (audioBuffer) {
         // Transcription — NEVER throws (voice.ts handles all failures gracefully)
-        const transcriptionResult = await transcribeAudioWithLanguage(
-          audioBuffer,
-        );
+        const transcriptionResult =
+          await transcribeAudioWithLanguage(audioBuffer);
 
         if (
           !transcriptionResult.text ||
@@ -592,7 +659,7 @@ onMessage(async (message, sock, sessionId) => {
       let intentAnalysis: any = null;
       let answeredViaNLP = false;
       let autoresearchIntent: string | null = null;
-      let responseLanguage = 'si'; // Default to Sinhala - accessible outside try block
+      const responseLanguage = 'si'; // Default to Sinhala - accessible outside try block
 
       try {
         // Autoresearch NLP Intent Classification (fast, under 200ms)

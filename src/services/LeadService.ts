@@ -187,9 +187,9 @@ export async function handleLeadMessage(
   const cleanText = text.trim();
 
   // Get configuration from session (stored during startLeadRegistration)
-  let jobTypes = session.jobTypes || [];
-  let countries = session.countries || [];
-  let experienceLevels = session.experienceLevels || [];
+  const jobTypes = session.jobTypes || [];
+  const countries = session.countries || [];
+  const experienceLevels = session.experienceLevels || [];
 
   // Validate configuration exists
   if (

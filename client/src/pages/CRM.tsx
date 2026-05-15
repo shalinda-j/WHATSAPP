@@ -1205,8 +1205,8 @@ export default function CRM() {
                           contact.status === 'active'
                             ? 'bg-green-100 text-green-700'
                             : contact.status === 'inactive'
-                            ? 'bg-gray-100 text-gray-700'
-                            : 'bg-red-100 text-red-700'
+                              ? 'bg-gray-100 text-gray-700'
+                              : 'bg-red-100 text-red-700'
                         }`}
                       >
                         {contact.status}
@@ -1392,14 +1392,14 @@ export default function CRM() {
                       activity.type === 'call'
                         ? 'bg-blue-100 text-blue-600'
                         : activity.type === 'meeting'
-                        ? 'bg-purple-100 text-purple-600'
-                        : activity.type === 'email'
-                        ? 'bg-green-100 text-green-600'
-                        : activity.type === 'whatsapp'
-                        ? 'bg-emerald-100 text-emerald-600'
-                        : activity.type === 'task'
-                        ? 'bg-orange-100 text-orange-600'
-                        : 'bg-gray-100 text-gray-600'
+                          ? 'bg-purple-100 text-purple-600'
+                          : activity.type === 'email'
+                            ? 'bg-green-100 text-green-600'
+                            : activity.type === 'whatsapp'
+                              ? 'bg-emerald-100 text-emerald-600'
+                              : activity.type === 'task'
+                                ? 'bg-orange-100 text-orange-600'
+                                : 'bg-gray-100 text-gray-600'
                     }`}
                   >
                     {activity.type === 'call' ? (
@@ -1424,8 +1424,8 @@ export default function CRM() {
                           activity.status === 'completed'
                             ? 'bg-green-100 text-green-700'
                             : activity.status === 'cancelled'
-                            ? 'bg-gray-100 text-gray-700'
-                            : 'bg-yellow-100 text-yellow-700'
+                              ? 'bg-gray-100 text-gray-700'
+                              : 'bg-yellow-100 text-yellow-700'
                         }`}
                       >
                         {activity.status}
@@ -1435,8 +1435,8 @@ export default function CRM() {
                           activity.priority === 'high'
                             ? 'bg-red-100 text-red-700'
                             : activity.priority === 'medium'
-                            ? 'bg-yellow-100 text-yellow-700'
-                            : 'bg-gray-100 text-gray-700'
+                              ? 'bg-yellow-100 text-yellow-700'
+                              : 'bg-gray-100 text-gray-700'
                         }`}
                       >
                         {activity.priority}
@@ -2313,8 +2313,8 @@ export default function CRM() {
             registrationNotification.type === 'success'
               ? 'bg-green-600 text-white'
               : registrationNotification.type === 'error'
-              ? 'bg-red-600 text-white'
-              : 'bg-indigo-600 text-white'
+                ? 'bg-red-600 text-white'
+                : 'bg-indigo-600 text-white'
           }`}
         >
           {registrationNotification.type === 'success' ? (

@@ -369,8 +369,8 @@ export default function AgentDetail() {
                   v.isCurrent
                     ? 'border-green-300 bg-green-50/30'
                     : v.isCandidate
-                    ? 'border-purple-300 bg-purple-50/30'
-                    : 'border-gray-200'
+                      ? 'border-purple-300 bg-purple-50/30'
+                      : 'border-gray-200'
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">

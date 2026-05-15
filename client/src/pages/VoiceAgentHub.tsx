@@ -497,10 +497,10 @@ export default function VoiceAgentHub() {
           provider === 'google-cloud'
             ? 'en-US-Neural2-F'
             : provider === 'gemini-tts'
-            ? 'Kore'
-            : provider === 'elevenlabs'
-            ? ''
-            : 'nova',
+              ? 'Kore'
+              : provider === 'elevenlabs'
+                ? ''
+                : 'nova',
         ttsModel:
           provider === 'elevenlabs' ? 'eleven_multilingual_v2' : 'tts-1',
       },
@@ -521,10 +521,10 @@ export default function VoiceAgentHub() {
         providerName === 'google-cloud'
           ? 'en-US-Neural2-F'
           : providerName === 'gemini-tts'
-          ? 'Kore'
-          : providerName === 'elevenlabs'
-          ? ''
-          : 'nova',
+            ? 'Kore'
+            : providerName === 'elevenlabs'
+              ? ''
+              : 'nova',
       ttsModel:
         providerName === 'elevenlabs' ? 'eleven_multilingual_v2' : 'tts-1',
       isActive: false,
@@ -597,8 +597,8 @@ export default function VoiceAgentHub() {
             message.type === 'success'
               ? 'bg-green-50 text-green-800 border border-green-200'
               : message.type === 'info'
-              ? 'bg-blue-50 text-blue-800 border border-blue-200'
-              : 'bg-red-50 text-red-800 border border-red-200'
+                ? 'bg-blue-50 text-blue-800 border border-blue-200'
+                : 'bg-red-50 text-red-800 border border-red-200'
           }`}
         >
           {message.type === 'success' ? (
@@ -967,8 +967,8 @@ export default function VoiceAgentHub() {
                               {provider === 'google-cloud'
                                 ? '(EN & Tamil — Sinhala auto-routes to Google Free)'
                                 : provider === 'gemini-tts'
-                                ? '(Sinhala: use Sulafat — Warm)'
-                                : ''}
+                                  ? '(Sinhala: use Sulafat — Warm)'
+                                  : ''}
                             </label>
                             <select
                               value={editFormData.voiceId || info.voices[0]?.id}
@@ -1645,8 +1645,8 @@ export default function VoiceAgentHub() {
                           lead.status === 'New'
                             ? 'bg-green-100 text-green-800'
                             : lead.status === 'Contacted'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-gray-100 text-gray-800'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-gray-100 text-gray-800'
                         }`}
                       >
                         {lead.status || 'New'}

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { CRMService } from '../../services/CRMService';
 import { authenticateToken } from '../middleware/auth';
 import { validateObjectId } from '../middleware/validation';
+import { resolveTenant } from '../middleware/tenantContext';
 import Lead from '../../models/Lead';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -44,8 +45,11 @@ const upload = multer({
   },
 });
 
-// All CRM routes require authentication
+// All CRM routes require authentication AND a resolved tenant.
+// The tenant filter is applied at the service / aggregation layer for
+// stats endpoints; list endpoints rely on req.tenant being available.
 router.use(authenticateToken);
+router.use(resolveTenant);
 
 // ==================== DASHBOARD ====================
 
@@ -86,6 +90,7 @@ router.get('/contacts', async (req, res) => {
       status: status as string,
       source: source as string,
       tags: tags ? (tags as string).split(',') : undefined,
+      tenantId: req.tenant?._id ? String(req.tenant._id) : undefined,
     });
     res.json(result);
   } catch (err: any) {

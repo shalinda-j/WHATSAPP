@@ -125,8 +125,8 @@ class CallAssistantService {
     return process.env.DEFAULT_LANGUAGE === 'english'
       ? 'en'
       : process.env.DEFAULT_LANGUAGE === 'tamil'
-      ? 'ta'
-      : 'si';
+        ? 'ta'
+        : 'si';
   }
 
   /**

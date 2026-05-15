@@ -34,7 +34,7 @@ export class AILoadBalancer {
   private totalRequests = 0;
 
   // Cache for loaded services
-  private lastServiceLoad: number = 0;
+  private lastServiceLoad = 0;
   private serviceLoadPromise: Promise<void> | null = null;
 
   // MEMORY LEAK FIX: Add limits and cleanup for caches
@@ -305,9 +305,8 @@ export class AILoadBalancer {
       history = cachedHistory;
     } else {
       // Get from persistent storage
-      const persistedMessages = await conversationHistoryService.getHistory(
-        userId,
-      );
+      const persistedMessages =
+        await conversationHistoryService.getHistory(userId);
       if (persistedMessages.length > 0) {
         history = persistedMessages.map((m) => ({
           role: m.role,
