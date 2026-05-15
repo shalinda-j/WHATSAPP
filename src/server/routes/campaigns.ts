@@ -1,7 +1,9 @@
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { authenticateToken } from '../middleware/auth';
 import { resolveTenant } from '../middleware/tenantContext';
 import { campaignService } from '../../services/CampaignService';
+import { ChannelSchema } from '../../types/agent';
 
 const router = Router();
 router.use(authenticateToken);
@@ -61,13 +63,36 @@ router.post(
   },
 );
 
+const GenerateVariantsRequestSchema = z.object({
+  audienceDescription: z.string().min(3).max(2000),
+  goal: z.string().min(3).max(500),
+  channels: z.array(ChannelSchema).optional(),
+  variantCount: z.number().int().min(1).max(5).optional(),
+  languageHint: z.string().max(20).optional(),
+});
+
 router.post(
   '/:id/generate-variants',
-  async (_req: Request<{ id: string }>, res: Response) => {
-    // Phase 2: invoke CampaignGeneratorAgent via orchestrator
-    res
-      .status(501)
-      .json({ error: 'not_implemented', detail: 'Phase 2 wires this up' });
+  async (req: Request<{ id: string }>, res: Response) => {
+    const tenantId = String(req.tenant?._id);
+    const parsed = GenerateVariantsRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: 'validation_failed', detail: parsed.error.message });
+    }
+    try {
+      const result = await campaignService.generateVariants({
+        tenantId,
+        campaignId: req.params.id,
+        ...parsed.data,
+      });
+      res.json(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const status = msg === 'campaign_not_found' ? 404 : 500;
+      res.status(status).json({ error: msg });
+    }
   },
 );
 
