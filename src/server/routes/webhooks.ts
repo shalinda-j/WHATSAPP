@@ -183,6 +183,71 @@ router.post('/telegram/:tenantSlug', async (req, res) => {
   }
 });
 
+// SendGrid event webhook: delivery / bounce / open / click / spam reports
+// arrive here in batches. We map externalMessageId → CampaignExecution
+// row → update its status so the marketing insights pipeline sees real
+// delivery + reply rates instead of just queue → sent counts.
+//
+// SendGrid sends a JSON array; each event has sg_message_id (matches our
+// stored externalMessageId), event ('delivered' / 'bounce' / 'open' /
+// 'click' / 'spamreport' / 'dropped' / 'deferred'), and a timestamp.
+router.post('/sendgrid', async (req, res) => {
+  try {
+    const events = Array.isArray(req.body) ? req.body : [];
+    const CampaignExecution = (await import('../../models/CampaignExecution'))
+      .default;
+
+    for (const ev of events) {
+      const sgId = ev?.sg_message_id as string | undefined;
+      if (!sgId) continue;
+      // SendGrid's sg_message_id format: '<base>.<delivery-uuid>'.
+      // Our stored externalMessageId is the X-Message-Id header which
+      // is the same base prefix.
+      const base = sgId.split('.')[0];
+
+      const update: Record<string, unknown> = {};
+      const now = new Date(
+        ev.timestamp ? Number(ev.timestamp) * 1000 : Date.now(),
+      );
+      switch (ev.event) {
+        case 'delivered':
+          update.status = 'delivered';
+          update.deliveredAt = now;
+          break;
+        case 'open':
+          update.status = 'read';
+          update.readAt = now;
+          break;
+        case 'bounce':
+        case 'dropped':
+          update.status = 'bounced';
+          update.errorMessage = `sendgrid:${ev.event}:${ev.reason ?? 'no_reason'}`;
+          break;
+        case 'spamreport':
+          update.outcome = 'opt_out';
+          break;
+        default:
+          // 'click' / 'deferred' / 'processed' don't change our state
+          // model — recorded but not persisted to keep status meaningful.
+          continue;
+      }
+
+      try {
+        await CampaignExecution.updateOne(
+          { externalMessageId: { $regex: `^${base}` } },
+          { $set: update },
+        );
+      } catch (err) {
+        console.error('sendgrid webhook updateOne failed:', err);
+      }
+    }
+    res.status(200).json({ ok: true, received: events.length });
+  } catch (err: any) {
+    console.error('sendgrid webhook error:', err);
+    res.status(500).json({ error: err?.message ?? 'server_error' });
+  }
+});
+
 // --- CRUD for Admin Panel ---
 // SECURITY FIX: All CRUD routes require authentication
 router.use(authenticateToken);

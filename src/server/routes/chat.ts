@@ -4,11 +4,13 @@ import Session from '../../models/Session';
 import { sendMessage, getSocket } from '../../services/whatsapp';
 import { getIO } from '../socket';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { resolveTenant } from '../middleware/tenantContext';
 
 const router = Router();
 
-// SECURITY FIX: All chat routes require authentication
+// SECURITY FIX: All chat routes require authentication + tenant context.
 router.use(authenticateToken);
+router.use(resolveTenant);
 
 /**
  * GET /api/chat/conversations

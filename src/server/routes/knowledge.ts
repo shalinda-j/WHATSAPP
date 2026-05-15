@@ -2,11 +2,13 @@ import { Router } from 'express';
 import { knowledgeTrainingService } from '../../services/KnowledgeTrainingService';
 import KnowledgeEntry from '../../models/KnowledgeEntry';
 import { authenticateToken } from '../middleware/auth';
+import { resolveTenant } from '../middleware/tenantContext';
 
 const router = Router();
 
-// All routes require authentication
+// All routes require authentication + tenant context
 router.use(authenticateToken);
+router.use(resolveTenant);
 
 /**
  * GET /api/knowledge

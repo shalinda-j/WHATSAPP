@@ -3,10 +3,12 @@ import ChatMessage from '../../models/ChatMessage';
 import Lead from '../../models/Lead';
 import Booking from '../../models/Booking';
 import { authenticateToken } from '../middleware/auth';
+import { resolveTenant } from '../middleware/tenantContext';
 
 const router = Router();
 
 router.use(authenticateToken);
+router.use(resolveTenant);
 
 router.get('/', async (req, res) => {
   try {
