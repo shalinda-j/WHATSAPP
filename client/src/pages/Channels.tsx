@@ -9,6 +9,8 @@ import {
   Mail,
   RefreshCw,
   Plus,
+  X,
+  Trash2,
 } from 'lucide-react';
 
 type Channel =
@@ -57,10 +59,50 @@ const STATUS_BADGE = {
   disconnected: 'bg-gray-100 text-gray-600 ring-1 ring-gray-200',
 };
 
+// Per-channel credential field definitions. Drives the Connect wizard.
+const CREDENTIAL_FIELDS: Partial<
+  Record<
+    Channel,
+    Array<{ key: string; label: string; type: 'text' | 'password' }>
+  >
+> = {
+  telegram: [
+    { key: 'botToken', label: 'Bot Token (BotFather)', type: 'password' },
+  ],
+  email: [
+    { key: 'provider', label: 'Provider (sendgrid|ses|smtp)', type: 'text' },
+    { key: 'apiKey', label: 'API Key', type: 'password' },
+    { key: 'fromAddress', label: 'From address', type: 'text' },
+  ],
+  instagram: [
+    { key: 'businessAccountId', label: 'Business Account ID', type: 'text' },
+    { key: 'accessToken', label: 'Page Access Token', type: 'password' },
+  ],
+  facebook: [
+    { key: 'pageId', label: 'Page ID', type: 'text' },
+    { key: 'accessToken', label: 'Page Access Token', type: 'password' },
+  ],
+};
+
+const CONNECTABLE_CHANNELS: Channel[] = [
+  'telegram',
+  'instagram',
+  'facebook',
+  'email',
+];
+
 export default function Channels() {
   const [rows, setRows] = useState<ChannelConnectionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Connect wizard state
+  const [showConnect, setShowConnect] = useState(false);
+  const [pickChannel, setPickChannel] = useState<Channel>('telegram');
+  const [label, setLabel] = useState('');
+  const [creds, setCreds] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -78,6 +120,58 @@ export default function Channels() {
   useEffect(() => {
     load();
   }, []);
+
+  const testConnection = async (id: string) => {
+    try {
+      await api.post(`/api/channels/${id}/test`);
+      await load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Test failed');
+    }
+  };
+
+  const removeConnection = async (id: string, lbl: string) => {
+    if (!window.confirm(`Remove channel "${lbl}"?`)) return;
+    try {
+      await api.delete(`/api/channels/${id}`);
+      await load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Remove failed');
+    }
+  };
+
+  const openConnect = () => {
+    setShowConnect(true);
+    setPickChannel('telegram');
+    setLabel('');
+    setCreds({});
+    setSaveError(null);
+  };
+
+  const saveConnection = async () => {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await api.post('/api/channels', {
+        channel: pickChannel,
+        label: label || `My ${pickChannel}`,
+        credentials: creds,
+        config: {},
+      });
+      setShowConnect(false);
+      await load();
+    } catch (err) {
+      const ax = err as { response?: { data?: { error?: string } } };
+      setSaveError(
+        ax.response?.data?.error ||
+          (err instanceof Error ? err.message : 'Save failed'),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const fields = CREDENTIAL_FIELDS[pickChannel] ?? [];
 
   return (
     <div>
@@ -99,9 +193,8 @@ export default function Channels() {
             <RefreshCw className="h-4 w-4" /> Refresh
           </button>
           <button
-            disabled
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm bg-green-600 text-white opacity-50 cursor-not-allowed"
-            title="Connection wizard arrives in Phase 1 implementation"
+            onClick={openConnect}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm bg-green-600 text-white hover:bg-green-700"
           >
             <Plus className="h-4 w-4" /> Connect channel
           </button>
@@ -120,9 +213,9 @@ export default function Channels() {
         <div className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center">
           <p className="text-gray-700 font-medium">No channels connected yet</p>
           <p className="text-sm text-gray-500 mt-1">
-            The connection wizard for each platform is delivered in Phase 1 of
-            the multi-channel rollout. Until then, the legacy WhatsApp session
-            manager continues to handle inbound messages.
+            WhatsApp is wired by default via the QR-code session manager. Click{' '}
+            <strong>Connect channel</strong> to add Telegram, Instagram,
+            Facebook Messenger or Email.
           </p>
         </div>
       ) : (
@@ -154,9 +247,121 @@ export default function Channels() {
                 {c.lastError && (
                   <p className="mt-2 text-xs text-red-600">{c.lastError}</p>
                 )}
+                <div className="mt-3 flex items-center justify-end gap-3">
+                  <button
+                    onClick={() => testConnection(c._id)}
+                    className="text-xs text-gray-600 hover:text-gray-900"
+                  >
+                    Test
+                  </button>
+                  <button
+                    onClick={() => removeConnection(c._id, c.label)}
+                    className="text-xs text-red-600 hover:text-red-800 inline-flex items-center gap-1"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Remove
+                  </button>
+                </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {showConnect && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                <Plus className="h-5 w-5 text-green-600" /> Connect a channel
+              </h3>
+              <button
+                onClick={() => setShowConnect(false)}
+                className="text-gray-500 hover:text-gray-700"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-600 mb-1 block">
+                  Channel
+                </label>
+                <select
+                  value={pickChannel}
+                  onChange={(e) => {
+                    setPickChannel(e.target.value as Channel);
+                    setCreds({});
+                  }}
+                  className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm bg-white"
+                >
+                  {CONNECTABLE_CHANNELS.map((ch) => (
+                    <option key={ch} value={ch}>
+                      {ch}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  WhatsApp connects automatically via the QR-code session
+                  manager on the Linked Devices page.
+                </p>
+              </div>
+              <div>
+                <label className="text-xs text-gray-600 mb-1 block">
+                  Label
+                </label>
+                <input
+                  className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm"
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  placeholder={`My ${pickChannel}`}
+                />
+              </div>
+              {fields.length === 0 ? (
+                <p className="text-xs text-gray-500">
+                  No credential fields registered for this channel. Save to
+                  create a stub connection.
+                </p>
+              ) : (
+                fields.map((f) => (
+                  <div key={f.key}>
+                    <label className="text-xs text-gray-600 mb-1 block">
+                      {f.label}
+                    </label>
+                    <input
+                      type={f.type}
+                      className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm"
+                      value={creds[f.key] ?? ''}
+                      onChange={(e) =>
+                        setCreds({ ...creds, [f.key]: e.target.value })
+                      }
+                      autoComplete="off"
+                    />
+                  </div>
+                ))
+              )}
+              {saveError && (
+                <div className="rounded-md bg-red-50 ring-1 ring-red-200 text-red-700 px-3 py-2 text-xs">
+                  {saveError}
+                </div>
+              )}
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setShowConnect(false)}
+                className="px-3 py-1.5 rounded-md text-sm border border-gray-200 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveConnection}
+                disabled={saving}
+                className="px-3 py-1.5 rounded-md text-sm bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Connect'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

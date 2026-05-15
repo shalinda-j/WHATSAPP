@@ -43,13 +43,24 @@ router.post('/', async (req: Request, res: Response) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.message });
   }
-  // Phase 1: encrypt every credential value before persisting.
+  // Phase 4: encrypt every credential value before persisting via CryptoService.
   // const encrypted = mapValues(parsed.data.credentials, cryptoService.encrypt)
   const conn = await ChannelConnection.create({
     tenantId,
     ...parsed.data,
     status: 'pending',
   });
+
+  // Kick the adapter for this tenant so the new credentials take effect
+  // without a server restart. Fire-and-forget — the adapter records its
+  // own status/error onto the ChannelConnection row.
+  const adapter = channelRouter.get(parsed.data.channel);
+  if (adapter) {
+    adapter.start(String(tenantId)).catch((err) => {
+      console.error(`adapter.start for ${parsed.data.channel} failed:`, err);
+    });
+  }
+
   res.status(201).json({ _id: conn._id });
 });
 
