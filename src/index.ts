@@ -141,6 +141,12 @@ async function startServer() {
       const { startCampaignSender } =
         await import('./services/CampaignService');
       startCampaignSender(String(defaultTenant._id));
+
+      // Boot the follow-up scheduler so FollowUpAgent fires on cron
+      // against dormant leads (>= 5 days since last update).
+      const { startFollowUpScheduler } =
+        await import('./services/FollowUpScheduler');
+      startFollowUpScheduler();
     } catch (dbErr) {
       console.error(
         '❌ MongoDB Connection Failed. Server starting in LIMITED MODE.',
@@ -181,6 +187,13 @@ const gracefulShutdown = async (signal: string) => {
       stopCampaignSender();
     } catch (err) {
       console.error('   ⚠️ stopCampaignSender failed:', err);
+    }
+    try {
+      const { stopFollowUpScheduler } =
+        await import('./services/FollowUpScheduler');
+      stopFollowUpScheduler();
+    } catch (err) {
+      console.error('   ⚠️ stopFollowUpScheduler failed:', err);
     }
 
     // 1. Close WhatsApp Socket
