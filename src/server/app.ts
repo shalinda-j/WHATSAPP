@@ -208,6 +208,59 @@ app.get('/health', async (req, res) => {
     }
   }
 
+  // Enrich with per-channel + agent readiness when DB is up. This is what
+  // the operator's deploy health-check should green on — not just Mongo
+  // connectivity but the actual end-to-end serving surface.
+  if (
+    dbStatus === mongoose.ConnectionStates.connected &&
+    mongoose.connection.db
+  ) {
+    try {
+      const { channelRouter } = await import('../channels');
+      const Tenant = (await import('../models/Tenant')).default;
+      const AgentConfig = (await import('../models/AgentConfig')).default;
+      const defaultTenant = await Tenant.findOne({ slug: 'default' });
+      const channelStatuses: Record<string, unknown> = {};
+      if (defaultTenant) {
+        for (const ch of channelRouter.list()) {
+          const adapter = channelRouter.get(ch);
+          if (!adapter) continue;
+          try {
+            const s = await adapter.status(String(defaultTenant._id));
+            channelStatuses[ch] = {
+              connected: s.connected,
+              detail: s.detail,
+            };
+          } catch (e: any) {
+            channelStatuses[ch] = { connected: false, detail: e?.message };
+          }
+        }
+      }
+      health.channels = channelStatuses;
+
+      const agents = await AgentConfig.find(
+        {},
+        { name: 1, mode: 1, isActive: 1 },
+      );
+      health.agents = {
+        total: agents.length,
+        autonomous: agents.filter((a) => a.isActive && a.mode === 'autonomous')
+          .length,
+        approval: agents.filter((a) => a.isActive && a.mode === 'approval')
+          .length,
+        disabled: agents.filter((a) => !a.isActive || a.mode === 'disabled')
+          .length,
+        names: agents.map((a) => ({
+          name: a.name,
+          mode: a.mode,
+          active: a.isActive,
+        })),
+      };
+    } catch (e: any) {
+      health.diagnosticsError = e?.message ?? 'health diagnostics threw';
+    }
+  }
+
   // Return 503 if database is not connected
   if (dbStatus !== mongoose.ConnectionStates.connected) {
     return res.status(503).json({
