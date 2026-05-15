@@ -2,8 +2,11 @@ import mongoose from 'mongoose';
 import { z } from 'zod';
 import ContactSegment, { IContactSegment } from '../models/ContactSegment';
 import AgentPromptVersion from '../models/AgentPromptVersion';
+import { Contact } from '../models/CRM';
+import Lead from '../models/Lead';
 import { aiLoadBalancer } from './AILoadBalancer';
 import { SEGMENTATION_V1_PROMPT } from '../agents/prompts/segmentation-v1';
+import { compileSegmentRules, SegmentRule } from './SegmentRuleCompiler';
 
 export interface MaterialisedRecipient {
   contactId: string;
@@ -190,8 +193,11 @@ export class SegmentationService {
 
   /**
    * Compile rules → Mongo filter → count of matching contacts.
-   * Phase 3 wiring writes against the actual Contact/Lead collections;
-   * for now returns the current memberCount.
+   *
+   * The segment's rule list may contain a mix of 'contact.*' and 'lead.*'
+   * paths. The compiler returns one filter per scope; the count returned
+   * is the size of the contact set, with any lead-scoped rule narrowing
+   * it down via an intermediate Lead.distinct('phoneNumber') lookup.
    */
   async recompute(tenantId: string, segmentId: string): Promise<number> {
     const segment = await ContactSegment.findOne({
@@ -199,20 +205,110 @@ export class SegmentationService {
       tenantId,
     });
     if (!segment) return 0;
-    // Phase 3: const filter = compileRulesToMongoFilter(segment.rules, segment.or)
-    //          const count = await Contact.countDocuments({ tenantId, ...filter })
+
+    const allRules: SegmentRule[] = (segment.rules ?? []) as SegmentRule[];
+    const orGroups: SegmentRule[][] | undefined = segment.or as
+      | SegmentRule[][]
+      | undefined;
+
+    const contactCompile = compileSegmentRules(allRules, orGroups, {
+      scope: 'contact',
+    });
+    const leadCompile = compileSegmentRules(allRules, orGroups, {
+      scope: 'lead',
+    });
+
+    const contactFilter: Record<string, unknown> = {
+      ...contactCompile.filter,
+    };
+
+    // If any lead-scoped rules exist, intersect contacts by phoneNumber.
+    if (Object.keys(leadCompile.filter).length > 0) {
+      const phones = await Lead.distinct('phoneNumber', leadCompile.filter);
+      const phoneStrings = phones
+        .filter((p: unknown): p is string => typeof p === 'string')
+        .map((p: string) => p.replace(/\D/g, ''))
+        .filter((p: string) => p.length > 0);
+      const phoneRegexes = phoneStrings.map((p: string) => new RegExp(`${p}$`));
+      if (phoneRegexes.length === 0) {
+        // No matching leads → segment is empty.
+        await ContactSegment.updateOne(
+          { _id: segmentId, tenantId },
+          { $set: { memberCount: 0, lastComputedAt: new Date() } },
+        );
+        return 0;
+      }
+      const existing = (contactFilter.$or as unknown[]) ?? [];
+      contactFilter.$or = [
+        ...existing,
+        { phone: { $in: phoneRegexes } },
+        { whatsappNumber: { $in: phoneRegexes } },
+        { whatsappId: { $in: phoneRegexes } },
+      ];
+    }
+
+    const count = await Contact.countDocuments(contactFilter);
     await ContactSegment.updateOne(
       { _id: segmentId, tenantId },
-      { $set: { lastComputedAt: new Date() } },
+      { $set: { memberCount: count, lastComputedAt: new Date() } },
     );
-    return segment.memberCount;
+    return count;
   }
 
+  /**
+   * Expand a segment to a list of MaterialisedRecipient rows that the
+   * campaign sender can address. Reuses the same compile path as
+   * recompute() so a launched campaign targets the exact same set the
+   * operator saw in /segments.
+   */
   async materialise(
-    _tenantId: string,
-    _segmentId: string,
+    tenantId: string,
+    segmentId: string,
   ): Promise<MaterialisedRecipient[]> {
-    return [];
+    const segment = await ContactSegment.findOne({
+      _id: segmentId,
+      tenantId,
+    });
+    if (!segment) return [];
+
+    const allRules = (segment.rules ?? []) as SegmentRule[];
+    const orGroups = segment.or as SegmentRule[][] | undefined;
+
+    const contactCompile = compileSegmentRules(allRules, orGroups, {
+      scope: 'contact',
+    });
+    const leadCompile = compileSegmentRules(allRules, orGroups, {
+      scope: 'lead',
+    });
+
+    const contactFilter: Record<string, unknown> = {
+      ...contactCompile.filter,
+    };
+    if (Object.keys(leadCompile.filter).length > 0) {
+      const phones = await Lead.distinct('phoneNumber', leadCompile.filter);
+      const phoneStrings = phones
+        .filter((p: unknown): p is string => typeof p === 'string')
+        .map((p: string) => p.replace(/\D/g, ''))
+        .filter((p: string) => p.length > 0);
+      if (phoneStrings.length === 0) return [];
+      const phoneRegexes = phoneStrings.map((p: string) => new RegExp(`${p}$`));
+      const existing = (contactFilter.$or as unknown[]) ?? [];
+      contactFilter.$or = [
+        ...existing,
+        { phone: { $in: phoneRegexes } },
+        { whatsappNumber: { $in: phoneRegexes } },
+        { whatsappId: { $in: phoneRegexes } },
+      ];
+    }
+
+    const contacts = await Contact.find(contactFilter).limit(10_000);
+    return contacts.map((c: any) => ({
+      contactId: String(c._id),
+      handles: {
+        whatsapp: c.whatsappNumber || c.whatsappId || c.phone,
+        email: c.email,
+      },
+    }));
   }
 }
 

@@ -107,9 +107,13 @@ export class AgentRegistry {
         (e) => e.config && e.config.isActive && e.config.mode !== 'disabled',
       )
       .map(async (entry) => {
+        const config = entry.config;
+        // The filter above guarantees config is present, but the compiler
+        // can't see across .filter() so we re-check rather than !-assert.
+        if (!config) return;
         try {
           const score = await entry.instance.canHandle(ctx);
-          if (score >= (entry.config!.confidenceThreshold ?? 0.5)) {
+          if (score >= (config.confidenceThreshold ?? 0.5)) {
             candidates.push({ entry, score });
           }
         } catch (err) {
@@ -126,9 +130,11 @@ export class AgentRegistry {
 
     candidates.sort((a, b) => b.score - a.score);
     const best = candidates[0];
+    const bestConfig = best.entry.config;
+    if (!bestConfig) return null;
     return {
       agent: best.entry.instance,
-      config: best.entry.config!,
+      config: bestConfig,
       confidence: best.score,
     };
   }

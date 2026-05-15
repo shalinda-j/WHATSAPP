@@ -240,13 +240,15 @@ export class AgentOrchestrator {
   private async pickPrompt(
     config: IAgentConfig,
   ): Promise<AssignedPrompt | null> {
+    const candidateVersion = config.candidatePromptVersion;
     const useCandidate =
-      config.candidatePromptVersion != null &&
+      candidateVersion != null &&
       Math.random() * 100 < (config.candidateTrafficPercent ?? 0);
 
-    const targetVersion = useCandidate
-      ? config.candidatePromptVersion!
-      : config.currentPromptVersion;
+    const targetVersion =
+      useCandidate && candidateVersion != null
+        ? candidateVersion
+        : config.currentPromptVersion;
 
     const prompt: IAgentPromptVersion | null = await AgentPromptVersion.findOne(
       { agentName: config.name, version: targetVersion },
