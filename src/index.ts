@@ -87,10 +87,39 @@ async function startServer() {
       // Register specialist agents and seed their initial prompts
       await registerCoreAgents();
 
-      // Register channel adapters (only WhatsApp is wired live today;
-      // Telegram/Instagram/Facebook/Email start as stubs and become
-      // active per-tenant once ChannelConnection rows are configured).
+      // Register channel adapters. WhatsApp inbound stays on the legacy
+      // onMessage chain (further down in this file) to avoid double-
+      // processing; the channelRouter pipe only handles inbound from
+      // adapters that aren't WhatsApp (Telegram today, Instagram /
+      // Facebook / Email once their webhooks land).
       registerCoreChannels();
+      channelRouter.onInbound(async (msg) => {
+        if (msg.channel === 'whatsapp') return; // owned by legacy handler
+        try {
+          const outcome = await agentOrchestrator.handle({
+            sessionId: msg.tenantId,
+            userId: msg.externalUserId,
+            channel: msg.channel,
+            language: 'si',
+            inputMessage: msg.text ?? '',
+            conversationHistory: [],
+            metadata: { externalThreadId: msg.externalThreadId ?? '' },
+          });
+          if (outcome.handled && outcome.outbound) {
+            await channelRouter.send({
+              channel: msg.channel,
+              tenantId: msg.tenantId,
+              recipient: msg.externalThreadId ?? msg.externalUserId,
+              text: outcome.outbound,
+            });
+          }
+        } catch (err) {
+          console.error(
+            `channelRouter inbound (${msg.channel}) processing failed:`,
+            err,
+          );
+        }
+      });
 
       // Ensure a default tenant exists so single-tenant deployments keep
       // working without a migration, then boot every registered adapter
