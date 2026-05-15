@@ -24,6 +24,10 @@ import {
   Bot,
   Inbox,
   Search,
+  Radio,
+  Users,
+  LineChart,
+  Building2,
 } from 'lucide-react';
 
 interface NavItem {
@@ -78,8 +82,18 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    title: 'Marketing',
+    items: [
+      { to: '/channels', icon: Radio, label: 'Channels' },
+      { to: '/campaigns', icon: Megaphone, label: 'Campaigns' },
+      { to: '/segments', icon: Users, label: 'Segments' },
+      { to: '/marketing-insights', icon: LineChart, label: 'Insights' },
+    ],
+  },
+  {
     title: 'System',
     items: [
+      { to: '/tenants', icon: Building2, label: 'Tenants' },
       { to: '/config', icon: Settings, label: 'Configuration' },
       { to: '/system', icon: Cpu, label: 'System Health' },
     ],

@@ -19,6 +19,11 @@ import AgentsHub from './pages/AgentsHub';
 import AgentDetail from './pages/AgentDetail';
 import ApprovalQueue from './pages/ApprovalQueue';
 import AgentTraces from './pages/AgentTraces';
+import Channels from './pages/Channels';
+import Campaigns from './pages/Campaigns';
+import Segments from './pages/Segments';
+import Tenants from './pages/Tenants';
+import MarketingInsights from './pages/MarketingInsights';
 import Layout from './components/Layout';
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
@@ -64,6 +69,11 @@ function AppRoutes() {
         <Route path="agents/approvals" element={<ApprovalQueue />} />
         <Route path="agents/traces" element={<AgentTraces />} />
         <Route path="agents/:name" element={<AgentDetail />} />
+        <Route path="channels" element={<Channels />} />
+        <Route path="campaigns" element={<Campaigns />} />
+        <Route path="segments" element={<Segments />} />
+        <Route path="marketing-insights" element={<MarketingInsights />} />
+        <Route path="tenants" element={<Tenants />} />
         {/* Legacy redirects */}
         <Route path="analytics" element={<Navigate to="/crm" replace />} />
         <Route path="leads" element={<Navigate to="/crm" replace />} />

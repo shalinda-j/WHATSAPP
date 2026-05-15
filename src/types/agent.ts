@@ -5,6 +5,7 @@ export type AgentMode = z.infer<typeof AgentModeSchema>;
 
 export const ChannelSchema = z.enum([
   'whatsapp',
+  'telegram',
   'instagram',
   'facebook',
   'linkedin',

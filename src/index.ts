@@ -51,6 +51,7 @@ import { usageResetService } from './services/UsageResetService';
 import { agentOrchestrator } from './services/AgentOrchestrator';
 import { agentReflectionService } from './services/AgentReflectionService';
 import { registerCoreAgents } from './agents/bootstrap';
+import { registerCoreChannels } from './channels';
 import { classifyIntent } from './services/IntentClassifierService';
 import { HumanizerService } from './services/HumanizerService';
 
@@ -84,6 +85,11 @@ async function startServer() {
 
       // Register specialist agents and seed their initial prompts
       await registerCoreAgents();
+
+      // Register channel adapters (skeleton — only WhatsApp is wired live;
+      // Telegram/Instagram/Facebook/Email start in stub mode and become
+      // active per-tenant once ChannelConnection rows are configured.
+      registerCoreChannels();
     } catch (dbErr) {
       console.error(
         '❌ MongoDB Connection Failed. Server starting in LIMITED MODE.',

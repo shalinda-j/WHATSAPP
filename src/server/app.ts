@@ -24,6 +24,11 @@ import formsRouter from './routes/forms';
 import knowledgeRouter from './routes/knowledge';
 import callAgentRouter from './routes/call-agent';
 import agentsRouter from './routes/agents';
+import channelsRouter from './routes/channels';
+import campaignsRouter from './routes/campaigns';
+import segmentsRouter from './routes/segments';
+import tenantsRouter from './routes/tenants';
+import marketingInsightsRouter from './routes/marketingInsights';
 
 import mongoose from 'mongoose';
 import { authenticateToken } from './middleware/auth';
@@ -135,6 +140,11 @@ app.use('/api/forms', authenticateToken, formsRouter);
 app.use('/api/knowledge', authenticateToken, knowledgeRouter);
 app.use('/api/call-agent', callAgentRouter);
 app.use('/api/agents', agentsRouter);
+app.use('/api/channels', channelsRouter);
+app.use('/api/campaigns', campaignsRouter);
+app.use('/api/segments', segmentsRouter);
+app.use('/api/tenants', tenantsRouter);
+app.use('/api/marketing-insights', marketingInsightsRouter);
 
 // Public forms endpoint (for bot)
 app.use('/api/forms/default', async (req, res, next) => {
