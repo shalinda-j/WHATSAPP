@@ -322,27 +322,31 @@ export default function Campaigns() {
                   Channels
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  {['whatsapp', 'telegram', 'instagram', 'facebook', 'email'].map(
-                    (ch) => (
-                      <label
-                        key={ch}
-                        className="inline-flex items-center gap-1 text-xs text-gray-700"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={newChannels.includes(ch)}
-                          onChange={(e) =>
-                            setNewChannels(
-                              e.target.checked
-                                ? [...newChannels, ch]
-                                : newChannels.filter((c) => c !== ch),
-                            )
-                          }
-                        />
-                        {ch}
-                      </label>
-                    ),
-                  )}
+                  {[
+                    'whatsapp',
+                    'telegram',
+                    'instagram',
+                    'facebook',
+                    'email',
+                  ].map((ch) => (
+                    <label
+                      key={ch}
+                      className="inline-flex items-center gap-1 text-xs text-gray-700"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={newChannels.includes(ch)}
+                        onChange={(e) =>
+                          setNewChannels(
+                            e.target.checked
+                              ? [...newChannels, ch]
+                              : newChannels.filter((c) => c !== ch),
+                          )
+                        }
+                      />
+                      {ch}
+                    </label>
+                  ))}
                 </div>
               </div>
             </div>
@@ -472,7 +476,9 @@ export default function Campaigns() {
               <button
                 onClick={runGenerate}
                 disabled={
-                  generating || audience.trim().length < 3 || goal.trim().length < 3
+                  generating ||
+                  audience.trim().length < 3 ||
+                  goal.trim().length < 3
                 }
                 className="px-3 py-1.5 rounded-md text-sm bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50"
               >
