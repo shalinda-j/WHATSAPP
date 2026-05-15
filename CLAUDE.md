@@ -37,14 +37,12 @@ npm run start
 ### Core Layers
 
 1. **WhatsApp Layer** (`src/services/whatsapp.ts`)
-
    - Session management via `WhatsAppSessionManager` class
    - Multi-session support with MongoDB auth state storage
    - Message handlers registered via `onMessage()` callback
    - Voice message queuing with retry on connection failure
 
 2. **Message Processing** (`src/index.ts`)
-
    - Main entry point and message handler
    - Flow: Security check → Booking/Lead/Form flows → Commands → AI response
    - Rate limiting (1s between messages per user)
@@ -53,21 +51,18 @@ npm run start
    - Voice response generation with TTS
 
 3. **Command System** (`src/app/commands/`)
-
    - Interface-based: All commands implement `ICommand` interface
    - Dispatcher pattern: `commandDispatcher` registers and routes commands
    - Class-based commands: `!help`, `!ping`, `!register`, `!jobs`, `!book`, etc.
    - Legacy switch-case fallback in `handleCommand()` for script commands
 
 4. **AI Layer** (`src/services/AILoadBalancer.ts`)
-
    - Priority-based fallback: Groq → Gemini → OpenRouter → OpenAI
    - Persistent conversation history via `ConversationHistoryService`
    - Auto-learning from conversations via `KnowledgeTrainingService`
    - Usage tracking in MongoDB Config collection
 
 5. **Admin API** (`src/server/app.ts`)
-
    - Express 5.x with CORS, JSON parsing
    - MongoDB connection middleware with retry
    - Protected routes via `authenticateToken` JWT middleware

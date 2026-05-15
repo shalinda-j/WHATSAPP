@@ -51,7 +51,8 @@ import { usageResetService } from './services/UsageResetService';
 import { agentOrchestrator } from './services/AgentOrchestrator';
 import { agentReflectionService } from './services/AgentReflectionService';
 import { registerCoreAgents } from './agents/bootstrap';
-import { registerCoreChannels } from './channels';
+import { registerCoreChannels, channelRouter } from './channels';
+import Tenant from './models/Tenant';
 import { classifyIntent } from './services/IntentClassifierService';
 import { HumanizerService } from './services/HumanizerService';
 
@@ -86,10 +87,25 @@ async function startServer() {
       // Register specialist agents and seed their initial prompts
       await registerCoreAgents();
 
-      // Register channel adapters (skeleton — only WhatsApp is wired live;
-      // Telegram/Instagram/Facebook/Email start in stub mode and become
-      // active per-tenant once ChannelConnection rows are configured.
+      // Register channel adapters (only WhatsApp is wired live today;
+      // Telegram/Instagram/Facebook/Email start as stubs and become
+      // active per-tenant once ChannelConnection rows are configured).
       registerCoreChannels();
+
+      // Ensure a default tenant exists so single-tenant deployments keep
+      // working without a migration, then boot every registered adapter
+      // against that tenant.
+      let defaultTenant = await Tenant.findOne({ slug: 'default' });
+      if (!defaultTenant) {
+        defaultTenant = await Tenant.create({
+          slug: 'default',
+          name: 'Default Tenant',
+          plan: 'free',
+          status: 'active',
+        });
+        console.log('🏢 Created default tenant');
+      }
+      await channelRouter.startAll(String(defaultTenant._id));
     } catch (dbErr) {
       console.error(
         '❌ MongoDB Connection Failed. Server starting in LIMITED MODE.',
