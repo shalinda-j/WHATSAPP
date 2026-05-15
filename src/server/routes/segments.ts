@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { authenticateToken } from '../middleware/auth';
 import { resolveTenant } from '../middleware/tenantContext';
+import { strictRateLimit } from '../middleware/rateLimit';
 import { segmentationService } from '../../services/SegmentationService';
 
 const router = Router();
@@ -44,24 +45,30 @@ const DescribeSegmentRequestSchema = z.object({
   description: z.string().min(3).max(2000),
 });
 
-router.post('/from-description', async (req: Request, res: Response) => {
-  const tenantId = String(req.tenant?._id);
-  const parsed = DescribeSegmentRequestSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res
-      .status(400)
-      .json({ error: 'validation_failed', detail: parsed.error.message });
-  }
-  try {
-    const result = await segmentationService.describeSegment({
-      tenantId,
-      description: parsed.data.description,
-    });
-    res.json(result);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: msg });
-  }
-});
+router.post(
+  '/from-description',
+  // LLM call — strictly rate-limited so the segmentation describe-modal
+  // can't be hammered into a token-budget overrun.
+  strictRateLimit,
+  async (req: Request, res: Response) => {
+    const tenantId = String(req.tenant?._id);
+    const parsed = DescribeSegmentRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: 'validation_failed', detail: parsed.error.message });
+    }
+    try {
+      const result = await segmentationService.describeSegment({
+        tenantId,
+        description: parsed.data.description,
+      });
+      res.json(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: msg });
+    }
+  },
+);
 
 export default router;

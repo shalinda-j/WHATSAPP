@@ -6,8 +6,22 @@ import { sendMessage, getSocket } from '../../services/whatsapp';
 import { WebhookService } from '../../services/WebhookService';
 import { configurationManager } from '../../services/ConfigurationManagerService';
 import { authenticateToken } from '../middleware/auth';
+import { rateLimit, lenientRateLimit } from '../middleware/rateLimit';
 
 const router = express.Router();
+
+// Public webhook endpoints (Telegram / Meta / SendGrid) need anti-abuse
+// rate limiting. Each provider has its own legitimate burst pattern:
+//   Telegram: long-poll mode replays updates if our 200 is slow; webhook
+//             mode is one event per message. 300/min/IP is generous.
+//   Meta: batches up to ~100 events per POST. 60/min/IP is fine.
+//   SendGrid: ~once-per-minute event batches. 60/min/IP.
+const webhookRateLimit = lenientRateLimit;
+const metaEventRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: 'Webhook rate limit exceeded',
+});
 
 // --- INBOUND ---
 // Note: /inbound endpoint remains public for external systems to trigger actions
@@ -111,7 +125,7 @@ router.post('/inbound', async (req, res) => {
 // Telegram pointing at /api/webhooks/telegram/:tenantSlug. We verify the
 // X-Telegram-Bot-Api-Secret-Token header against the stored ChannelConnection
 // to defend against unauthenticated webhook spam.
-router.post('/telegram/:tenantSlug', async (req, res) => {
+router.post('/telegram/:tenantSlug', webhookRateLimit, async (req, res) => {
   try {
     const { tenantSlug } = req.params;
     const Tenant = (await import('../../models/Tenant')).default;
@@ -247,16 +261,16 @@ async function metaWebhookIngest(
   }
 }
 
-router.get('/instagram/:tenantSlug', (req, res) =>
+router.get('/instagram/:tenantSlug', metaEventRateLimit, (req, res) =>
   metaWebhookHandshake(req, res, 'instagram'),
 );
-router.post('/instagram/:tenantSlug', (req, res) =>
+router.post('/instagram/:tenantSlug', metaEventRateLimit, (req, res) =>
   metaWebhookIngest(req, res, 'instagram'),
 );
-router.get('/facebook/:tenantSlug', (req, res) =>
+router.get('/facebook/:tenantSlug', metaEventRateLimit, (req, res) =>
   metaWebhookHandshake(req, res, 'facebook'),
 );
-router.post('/facebook/:tenantSlug', (req, res) =>
+router.post('/facebook/:tenantSlug', metaEventRateLimit, (req, res) =>
   metaWebhookIngest(req, res, 'facebook'),
 );
 
@@ -268,7 +282,7 @@ router.post('/facebook/:tenantSlug', (req, res) =>
 // SendGrid sends a JSON array; each event has sg_message_id (matches our
 // stored externalMessageId), event ('delivered' / 'bounce' / 'open' /
 // 'click' / 'spamreport' / 'dropped' / 'deferred'), and a timestamp.
-router.post('/sendgrid', async (req, res) => {
+router.post('/sendgrid', metaEventRateLimit, async (req, res) => {
   try {
     const events = Array.isArray(req.body) ? req.body : [];
     const CampaignExecution = (await import('../../models/CampaignExecution'))

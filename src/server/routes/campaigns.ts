@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { authenticateToken } from '../middleware/auth';
 import { resolveTenant } from '../middleware/tenantContext';
+import { strictRateLimit } from '../middleware/rateLimit';
 import { campaignService } from '../../services/CampaignService';
 import { ChannelSchema } from '../../types/agent';
 
@@ -73,6 +74,9 @@ const GenerateVariantsRequestSchema = z.object({
 
 router.post(
   '/:id/generate-variants',
+  // LLM call — strictly rate-limit per-IP so a misconfigured operator
+  // doesn't burn the daily token budget by spamming the button.
+  strictRateLimit,
   async (req: Request<{ id: string }>, res: Response) => {
     const tenantId = String(req.tenant?._id);
     const parsed = GenerateVariantsRequestSchema.safeParse(req.body);
