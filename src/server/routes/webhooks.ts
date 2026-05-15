@@ -183,6 +183,83 @@ router.post('/telegram/:tenantSlug', async (req, res) => {
   }
 });
 
+// Meta Messenger / Instagram webhook handshake: Meta sends a GET request
+// with hub.verify_token + hub.challenge during app review setup. We echo
+// the challenge back if the verify token matches the value the operator
+// stored on the ChannelConnection.config.verifyToken.
+async function metaWebhookHandshake(
+  req: express.Request,
+  res: express.Response,
+  channel: 'instagram' | 'facebook',
+) {
+  try {
+    const tenantSlug = req.params.tenantSlug;
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
+    if (mode !== 'subscribe') return res.status(400).send('bad_mode');
+
+    const Tenant = (await import('../../models/Tenant')).default;
+    const ChannelConnection = (await import('../../models/ChannelConnection'))
+      .default;
+
+    const tenant = await Tenant.findOne({ slug: tenantSlug });
+    if (!tenant) return res.status(404).send('tenant_not_found');
+    const conn = await ChannelConnection.findOne({
+      tenantId: tenant._id,
+      channel,
+    });
+    const expected = (conn?.config as any)?.verifyToken as string | undefined;
+    if (!expected || token !== expected)
+      return res.status(403).send('forbidden');
+
+    return res.status(200).send(String(challenge ?? ''));
+  } catch (err: any) {
+    console.error(`${channel} webhook handshake error:`, err);
+    return res.status(500).send('server_error');
+  }
+}
+
+// Meta webhook POST receiver: forwards to the adapter's ingestWebhook
+// method, which normalises Meta's batch shape into InboundMessage and
+// runs them through the channelRouter handlers — same orchestrator
+// path Telegram + WhatsApp use.
+async function metaWebhookIngest(
+  req: express.Request,
+  res: express.Response,
+  channel: 'instagram' | 'facebook',
+) {
+  try {
+    const tenantSlug = req.params.tenantSlug;
+    const Tenant = (await import('../../models/Tenant')).default;
+    const tenant = await Tenant.findOne({ slug: tenantSlug });
+    if (!tenant) return res.status(404).json({ error: 'tenant_not_found' });
+
+    const { channelRouter } = await import('../../channels');
+    const adapter = channelRouter.get(channel) as any;
+    if (adapter?.ingestWebhook) {
+      await adapter.ingestWebhook(String(tenant._id), req.body);
+    }
+    return res.status(200).json({ ok: true });
+  } catch (err: any) {
+    console.error(`${channel} webhook ingest error:`, err);
+    return res.status(500).json({ error: err?.message ?? 'server_error' });
+  }
+}
+
+router.get('/instagram/:tenantSlug', (req, res) =>
+  metaWebhookHandshake(req, res, 'instagram'),
+);
+router.post('/instagram/:tenantSlug', (req, res) =>
+  metaWebhookIngest(req, res, 'instagram'),
+);
+router.get('/facebook/:tenantSlug', (req, res) =>
+  metaWebhookHandshake(req, res, 'facebook'),
+);
+router.post('/facebook/:tenantSlug', (req, res) =>
+  metaWebhookIngest(req, res, 'facebook'),
+);
+
 // SendGrid event webhook: delivery / bounce / open / click / spam reports
 // arrive here in batches. We map externalMessageId → CampaignExecution
 // row → update its status so the marketing insights pipeline sees real
