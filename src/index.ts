@@ -176,6 +176,14 @@ const gracefulShutdown = async (signal: string) => {
   try {
     // 0. Stop background schedulers
     agentReflectionService.stop();
+    try {
+      const { stopCampaignSender } = await import(
+        './services/CampaignService'
+      );
+      stopCampaignSender();
+    } catch (err) {
+      console.error('   ⚠️ stopCampaignSender failed:', err);
+    }
 
     // 1. Close WhatsApp Socket
     console.log('   🔌 Disconnecting WhatsApp...');
