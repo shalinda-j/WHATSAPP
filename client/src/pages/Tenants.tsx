@@ -59,8 +59,8 @@ export default function Tenants() {
             <Building2 className="h-6 w-6 text-green-600" /> Tenants
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Super-admin view of every company using the platform.
-            Plans, brand voice, status, and budget caps.
+            Super-admin view of every company using the platform. Plans, brand
+            voice, status, and budget caps.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -92,8 +92,8 @@ export default function Tenants() {
         <div className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center">
           <p className="text-gray-700 font-medium">No tenants yet</p>
           <p className="text-sm text-gray-500 mt-1">
-            A "default" tenant is auto-created on the first authenticated
-            API request. The multi-tenant onboarding wizard and per-tenant
+            A "default" tenant is auto-created on the first authenticated API
+            request. The multi-tenant onboarding wizard and per-tenant
             super-admin role gate arrive in Phase 4.
           </p>
         </div>

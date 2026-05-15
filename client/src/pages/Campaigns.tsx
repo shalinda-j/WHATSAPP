@@ -5,7 +5,13 @@ import { Megaphone, Plus, Play, Pause, RefreshCw } from 'lucide-react';
 interface CampaignRow {
   _id: string;
   name: string;
-  status: 'draft' | 'scheduled' | 'running' | 'paused' | 'completed' | 'cancelled';
+  status:
+    | 'draft'
+    | 'scheduled'
+    | 'running'
+    | 'paused'
+    | 'completed'
+    | 'cancelled';
   channels: string[];
   trigger: { kind: string; scheduledAt?: string };
   stats: {
@@ -65,8 +71,7 @@ export default function Campaigns() {
       <header className="mb-6 flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Megaphone className="h-6 w-6 text-green-600" /> Marketing
-            Campaigns
+            <Megaphone className="h-6 w-6 text-green-600" /> Marketing Campaigns
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Build, schedule and track multi-channel campaigns. AI-generated
@@ -139,9 +144,7 @@ export default function Campaigns() {
                   </td>
                   <td className="px-3 py-2 text-right">{c.stats.sent}</td>
                   <td className="px-3 py-2 text-right">{c.stats.replied}</td>
-                  <td className="px-3 py-2 text-right">
-                    {c.stats.converted}
-                  </td>
+                  <td className="px-3 py-2 text-right">{c.stats.converted}</td>
                   <td className="px-3 py-2 text-right">
                     {(c.status === 'running' || c.status === 'paused') && (
                       <button

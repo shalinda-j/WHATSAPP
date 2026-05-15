@@ -391,9 +391,8 @@ onMessage(async (message, sock, sessionId) => {
 
       if (audioBuffer) {
         // Transcription — NEVER throws (voice.ts handles all failures gracefully)
-        const transcriptionResult = await transcribeAudioWithLanguage(
-          audioBuffer,
-        );
+        const transcriptionResult =
+          await transcribeAudioWithLanguage(audioBuffer);
 
         if (
           !transcriptionResult.text ||

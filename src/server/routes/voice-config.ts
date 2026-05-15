@@ -112,8 +112,8 @@ router.post('/test', async (req: Request, res: Response) => {
       (language === 'si'
         ? 'ආයුබෝවන්! ඔබේ ඇමතුම ගැන ස්තූතියි.'
         : language === 'ta'
-        ? 'வணக்கம்! அழைத்ததற்கு நன்றி.'
-        : 'Hello! Thank you for calling. How can I help you today?');
+          ? 'வணக்கம்! அழைத்ததற்கு நன்றி.'
+          : 'Hello! Thank you for calling. How can I help you today?');
 
     const audioBuffer = await generateSpeech(testText, language || 'en');
 

@@ -671,8 +671,8 @@ export default function ChatInterface() {
                     {typingLang === 'si'
                       ? '🇱🇰 Sinhala'
                       : typingLang === 'ta'
-                      ? '🇮🇳 Tamil'
-                      : '🇬🇧 English'}
+                        ? '🇮🇳 Tamil'
+                        : '🇬🇧 English'}
                   </span>
                   <span className="text-[10px] text-gray-300">·</span>
                   <span className="text-[10px] text-gray-400">

@@ -73,13 +73,10 @@ router.post(
   },
 );
 
-router.delete(
-  '/:id',
-  async (req: Request<{ id: string }>, res: Response) => {
-    const tenantId = req.tenant?._id;
-    await ChannelConnection.deleteOne({ _id: req.params.id, tenantId });
-    res.status(204).end();
-  },
-);
+router.delete('/:id', async (req: Request<{ id: string }>, res: Response) => {
+  const tenantId = req.tenant?._id;
+  await ChannelConnection.deleteOne({ _id: req.params.id, tenantId });
+  res.status(204).end();
+});
 
 export default router;

@@ -305,9 +305,8 @@ export class AILoadBalancer {
       history = cachedHistory;
     } else {
       // Get from persistent storage
-      const persistedMessages = await conversationHistoryService.getHistory(
-        userId,
-      );
+      const persistedMessages =
+        await conversationHistoryService.getHistory(userId);
       if (persistedMessages.length > 0) {
         history = persistedMessages.map((m) => ({
           role: m.role,

@@ -462,21 +462,22 @@ export default function Analytics() {
           </div>
         </div>
 
-        {leadStats?.byJobType && Object.keys(leadStats.byJobType).length > 0 && (
-          <div className="mt-4">
-            <p className="text-sm text-gray-500 mb-2">By Job Type</p>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(leadStats.byJobType).map(([type, count]) => (
-                <span
-                  key={type}
-                  className="px-3 py-1 bg-gray-100 rounded-full text-sm"
-                >
-                  {type}: <strong>{count}</strong>
-                </span>
-              ))}
+        {leadStats?.byJobType &&
+          Object.keys(leadStats.byJobType).length > 0 && (
+            <div className="mt-4">
+              <p className="text-sm text-gray-500 mb-2">By Job Type</p>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(leadStats.byJobType).map(([type, count]) => (
+                  <span
+                    key={type}
+                    className="px-3 py-1 bg-gray-100 rounded-full text-sm"
+                  >
+                    {type}: <strong>{count}</strong>
+                  </span>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
       </div>
     </div>
   );

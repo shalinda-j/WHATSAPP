@@ -69,12 +69,11 @@ export default function MarketingInsights() {
       <header className="mb-6 flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <LineChart className="h-6 w-6 text-green-600" /> Marketing
-            Insights
+            <LineChart className="h-6 w-6 text-green-600" /> Marketing Insights
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Per-channel funnel, top campaigns, and AI-generated
-            recommendations from the MarketingInsightsAgent.
+            Per-channel funnel, top campaigns, and AI-generated recommendations
+            from the MarketingInsightsAgent.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -112,8 +111,8 @@ export default function MarketingInsights() {
             </h2>
             {report.perChannel.length === 0 ? (
               <div className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
-                No campaign data in the selected window. Once Phase 3 lands
-                and campaigns start sending, this populates automatically.
+                No campaign data in the selected window. Once Phase 3 lands and
+                campaigns start sending, this populates automatically.
               </div>
             ) : (
               <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
@@ -135,14 +134,10 @@ export default function MarketingInsights() {
                       <tr key={c.channel} className="border-t border-gray-100">
                         <td className="px-3 py-2 capitalize">{c.channel}</td>
                         <td className="px-3 py-2 text-right">{c.sent}</td>
-                        <td className="px-3 py-2 text-right">
-                          {c.delivered}
-                        </td>
+                        <td className="px-3 py-2 text-right">{c.delivered}</td>
                         <td className="px-3 py-2 text-right">{c.read}</td>
                         <td className="px-3 py-2 text-right">{c.replied}</td>
-                        <td className="px-3 py-2 text-right">
-                          {c.converted}
-                        </td>
+                        <td className="px-3 py-2 text-right">{c.converted}</td>
                         <td className="px-3 py-2 text-right">
                           {(c.conversionRate * 100).toFixed(1)}%
                         </td>
@@ -163,8 +158,8 @@ export default function MarketingInsights() {
             </h2>
             {report.recommendations.length === 0 ? (
               <div className="rounded-lg border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-500">
-                The MarketingInsightsAgent (Phase 6) writes recommendations
-                here once it has enough campaign data to analyse.
+                The MarketingInsightsAgent (Phase 6) writes recommendations here
+                once it has enough campaign data to analyse.
               </div>
             ) : (
               <ul className="space-y-2">

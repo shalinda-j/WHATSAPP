@@ -51,8 +51,8 @@ export default function Segments() {
             <Users className="h-6 w-6 text-green-600" /> Contact Segments
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Group contacts by behaviour or attributes. Use them as
-            targeting for campaigns and follow-ups.
+            Group contacts by behaviour or attributes. Use them as targeting for
+            campaigns and follow-ups.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -93,9 +93,8 @@ export default function Segments() {
           <p className="text-sm text-gray-500 mt-1">
             Two ways to author segments arrive in upcoming phases:
             <br />
-            <strong>Phase 2:</strong> describe in plain language ("Japan
-            jobs dormant 30d") and the SegmentationAgent translates it
-            to rules.
+            <strong>Phase 2:</strong> describe in plain language ("Japan jobs
+            dormant 30d") and the SegmentationAgent translates it to rules.
             <br />
             <strong>Phase 3:</strong> manual rule builder.
           </p>

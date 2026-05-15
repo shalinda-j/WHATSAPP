@@ -653,26 +653,29 @@ let voiceCleanupInterval: NodeJS.Timeout | null = null;
 function initializeVoiceCleanup(): void {
   if (voiceCleanupInterval) return;
 
-  voiceCleanupInterval = setInterval(() => {
-    const now = Date.now();
-    const cutoff = now - MAX_VOICE_QUEUE_AGE_MS;
+  voiceCleanupInterval = setInterval(
+    () => {
+      const now = Date.now();
+      const cutoff = now - MAX_VOICE_QUEUE_AGE_MS;
 
-    const oldCount = voiceMessageQueue.length;
-    // Filter out old messages and clear buffers to free memory
-    for (let i = voiceMessageQueue.length - 1; i >= 0; i--) {
-      if (voiceMessageQueue[i].timestamp.getTime() < cutoff) {
-        voiceMessageQueue.splice(i, 1);
+      const oldCount = voiceMessageQueue.length;
+      // Filter out old messages and clear buffers to free memory
+      for (let i = voiceMessageQueue.length - 1; i >= 0; i--) {
+        if (voiceMessageQueue[i].timestamp.getTime() < cutoff) {
+          voiceMessageQueue.splice(i, 1);
+        }
       }
-    }
 
-    if (voiceMessageQueue.length < oldCount) {
-      console.log(
-        `🧹 VoiceQueue: Removed ${
-          oldCount - voiceMessageQueue.length
-        } old voice messages`,
-      );
-    }
-  }, 5 * 60 * 1000); // Clean every 5 minutes
+      if (voiceMessageQueue.length < oldCount) {
+        console.log(
+          `🧹 VoiceQueue: Removed ${
+            oldCount - voiceMessageQueue.length
+          } old voice messages`,
+        );
+      }
+    },
+    5 * 60 * 1000,
+  ); // Clean every 5 minutes
 }
 
 // Initialize cleanup on module load

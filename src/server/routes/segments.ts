@@ -19,19 +19,16 @@ router.post('/', async (req: Request, res: Response) => {
   res.status(201).json(created);
 });
 
-router.patch(
-  '/:id',
-  async (req: Request<{ id: string }>, res: Response) => {
-    const tenantId = String(req.tenant?._id);
-    const updated = await segmentationService.update(
-      tenantId,
-      req.params.id,
-      req.body,
-    );
-    if (!updated) return res.status(404).json({ error: 'not_found' });
-    res.json(updated);
-  },
-);
+router.patch('/:id', async (req: Request<{ id: string }>, res: Response) => {
+  const tenantId = String(req.tenant?._id);
+  const updated = await segmentationService.update(
+    tenantId,
+    req.params.id,
+    req.body,
+  );
+  if (!updated) return res.status(404).json({ error: 'not_found' });
+  res.json(updated);
+});
 
 router.post(
   '/:id/recompute',

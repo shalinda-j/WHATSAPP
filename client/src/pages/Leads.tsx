@@ -902,8 +902,8 @@ export default function Leads() {
             notification.type === 'success'
               ? 'bg-green-600 text-white border-green-500'
               : notification.type === 'error'
-              ? 'bg-red-600 text-white border-red-500'
-              : 'bg-indigo-600 text-white border-indigo-500'
+                ? 'bg-red-600 text-white border-red-500'
+                : 'bg-indigo-600 text-white border-indigo-500'
           }`}
         >
           {notification.type === 'success' ? (

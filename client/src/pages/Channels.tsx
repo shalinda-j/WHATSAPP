@@ -87,8 +87,8 @@ export default function Channels() {
             <Radio className="h-6 w-6 text-green-600" /> Channels
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Connect WhatsApp, Telegram, Instagram, Facebook Messenger and
-            Email — one place to manage every messaging surface.
+            Connect WhatsApp, Telegram, Instagram, Facebook Messenger and Email
+            — one place to manage every messaging surface.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -120,9 +120,9 @@ export default function Channels() {
         <div className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center">
           <p className="text-gray-700 font-medium">No channels connected yet</p>
           <p className="text-sm text-gray-500 mt-1">
-            The connection wizard for each platform is delivered in
-            Phase 1 of the multi-channel rollout. Until then, the legacy
-            WhatsApp session manager continues to handle inbound messages.
+            The connection wizard for each platform is delivered in Phase 1 of
+            the multi-channel rollout. Until then, the legacy WhatsApp session
+            manager continues to handle inbound messages.
           </p>
         </div>
       ) : (
@@ -139,9 +139,7 @@ export default function Channels() {
                   <div className="flex items-center gap-2">
                     <Icon className={`h-5 w-5 ${Meta.color}`} />
                     <div>
-                      <div className="font-medium text-gray-900">
-                        {c.label}
-                      </div>
+                      <div className="font-medium text-gray-900">{c.label}</div>
                       <div className="text-xs text-gray-500 capitalize">
                         {c.channel}
                       </div>
