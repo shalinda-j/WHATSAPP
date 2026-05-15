@@ -90,6 +90,7 @@ router.get('/contacts', async (req, res) => {
       status: status as string,
       source: source as string,
       tags: tags ? (tags as string).split(',') : undefined,
+      tenantId: req.tenant?._id ? String(req.tenant._id) : undefined,
     });
     res.json(result);
   } catch (err: any) {
