@@ -7,6 +7,7 @@ import MarketingCampaign, {
 import CampaignExecution from '../models/CampaignExecution';
 import Tenant from '../models/Tenant';
 import AgentPromptVersion from '../models/AgentPromptVersion';
+import { Contact } from '../models/CRM';
 import { aiLoadBalancer } from './AILoadBalancer';
 import { channelRouter } from '../channels';
 import { Channel } from '../types/agent';
@@ -56,6 +57,58 @@ type GeneratorOutput = z.infer<typeof GeneratorOutputSchema>;
 function stripJsonFences(text: string): string {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   return (fenced ? fenced[1] : text).trim();
+}
+
+function pickRecipientHandle(
+  contact: any,
+  channel: Channel,
+): string | undefined {
+  switch (channel) {
+    case 'whatsapp': {
+      const raw = contact.whatsappNumber || contact.whatsappId || contact.phone;
+      if (!raw) return undefined;
+      const digits = String(raw).replace(/\D/g, '');
+      if (!digits) return undefined;
+      return `${digits}@s.whatsapp.net`;
+    }
+    case 'email':
+      return contact.email || undefined;
+    default:
+      // Other channels need their own handle field on Contact (e.g.
+      // telegramChatId, instagramId) which is a Phase 5 schema add.
+      return undefined;
+  }
+}
+
+function weightedPickVariantId(
+  variants: Array<{ variantId: string; weight?: number }>,
+): string | undefined {
+  if (variants.length === 0) return undefined;
+  const total = variants.reduce((s, v) => s + Math.max(0, v.weight ?? 1), 0);
+  if (total <= 0) return variants[0].variantId;
+  let pick = Math.random() * total;
+  for (const v of variants) {
+    pick -= Math.max(0, v.weight ?? 1);
+    if (pick <= 0) return v.variantId;
+  }
+  return variants[variants.length - 1].variantId;
+}
+
+function isInQuietHours(campaign: IMarketingCampaign): boolean {
+  const qh = campaign.quietHours;
+  if (
+    !qh ||
+    typeof qh.startHour !== 'number' ||
+    typeof qh.endHour !== 'number'
+  ) {
+    return false;
+  }
+  const hour = new Date().getHours();
+  if (qh.startHour <= qh.endHour) {
+    return hour >= qh.startHour && hour < qh.endHour;
+  }
+  // Wraps midnight.
+  return hour >= qh.startHour || hour < qh.endHour;
 }
 
 export class CampaignService {
@@ -187,28 +240,177 @@ export class CampaignService {
     };
   }
 
-  async launch(_opts: CampaignLaunchOptions): Promise<{ queued: number }> {
-    // Phase 3 sender pipeline — kept as a stub deliberately:
-    //   const campaign = await MarketingCampaign.findOne(...)
-    //   const recipients = await segmentationService.materialise(campaign.segmentId)
-    //   const docs = recipients.flatMap(r =>
-    //     campaign.channels.map(ch => ({
-    //       tenantId, campaignId, variantId: weightedPick(campaign.variants),
-    //       channel: ch, recipientExternalId: r.handles[ch], status: 'queued'
-    //     }))
-    //   )
-    //   await CampaignExecution.insertMany(docs)
-    //   await MarketingCampaign.updateOne({ _id }, { $set: { status: 'running' }})
-    return { queued: 0 };
+  /**
+   * Expand the campaign to a concrete list of CampaignExecution rows
+   * (one per recipient × channel pair) and flip the campaign to
+   * 'running'. WhatsApp-first: for any other channel listed on the
+   * campaign we still create executions, but they'll only actually send
+   * once that channel has an active ChannelConnection.
+   */
+  async launch(opts: CampaignLaunchOptions): Promise<{ queued: number }> {
+    const campaign = await MarketingCampaign.findOne({
+      _id: opts.campaignId,
+      tenantId: opts.tenantId,
+    });
+    if (!campaign) throw new Error('campaign_not_found');
+    if (!campaign.variants || campaign.variants.length === 0) {
+      throw new Error('no_variants');
+    }
+    const channels = (campaign.channels as Channel[]) ?? ['whatsapp'];
+    if (channels.length === 0) throw new Error('no_channels');
+
+    // Eligible contacts. Production deployments will compile the linked
+    // ContactSegment's rules; until that's wired, fall back to all
+    // contacts whose channel handle is non-empty for at least one of
+    // the campaign's channels.
+    const channelHandleQuery: Record<string, any>[] = [];
+    if (channels.includes('whatsapp')) {
+      channelHandleQuery.push({ whatsappNumber: { $exists: true, $ne: '' } });
+      channelHandleQuery.push({ whatsappId: { $exists: true, $ne: '' } });
+      channelHandleQuery.push({ phone: { $exists: true, $ne: '' } });
+    }
+    if (channels.includes('email')) {
+      channelHandleQuery.push({ email: { $exists: true, $ne: '' } });
+    }
+    if (channelHandleQuery.length === 0) {
+      throw new Error('no_routable_channel');
+    }
+
+    const contacts = await Contact.find({
+      $or: channelHandleQuery,
+    }).limit(10_000);
+
+    const docs: any[] = [];
+    for (const contact of contacts) {
+      for (const channel of channels) {
+        const recipient = pickRecipientHandle(contact, channel);
+        if (!recipient) continue;
+        const variantId = weightedPickVariantId(campaign.variants ?? []);
+        if (!variantId) continue;
+        docs.push({
+          tenantId: campaign.tenantId,
+          campaignId: campaign._id,
+          variantId,
+          channel,
+          recipientExternalId: recipient,
+          contactId: contact._id,
+          status: 'queued',
+        });
+      }
+    }
+    if (docs.length > 0) {
+      await CampaignExecution.insertMany(docs, { ordered: false });
+    }
+    await MarketingCampaign.updateOne(
+      { _id: campaign._id },
+      {
+        $set: { status: 'running' },
+        $inc: { 'stats.queued': docs.length },
+      },
+    );
+    return { queued: docs.length };
   }
 
   /**
-   * Worker loop tick — pulls next batch of queued executions, sends them via
-   * channelRouter, updates stats. Phase 3 will run this on setInterval.
+   * Worker loop tick — pulls the next batch of queued executions for the
+   * tenant, respects per-campaign rate limits and quiet hours, and sends
+   * each via channelRouter. Idempotent: a CampaignExecution moves out of
+   * 'queued' before send() so a crashed worker can re-pick its row
+   * without double-sending (the in-flight 'sending' status is the
+   * single-writer guard).
    */
-  async tickSender(_tenantId: string): Promise<void> {
-    // Phase 3 implementation; left intentionally empty.
-    void channelRouter;
+  async tickSender(tenantId: string): Promise<{ sent: number }> {
+    const BATCH = 25;
+    const queued = await CampaignExecution.find({
+      tenantId,
+      status: 'queued',
+    }).limit(BATCH);
+    if (queued.length === 0) return { sent: 0 };
+
+    // Group by campaignId so we can apply per-campaign rate limits.
+    const byCampaign = new Map<string, typeof queued>();
+    for (const exec of queued) {
+      const k = String(exec.campaignId);
+      const bucket = byCampaign.get(k);
+      if (bucket) bucket.push(exec as any);
+      else byCampaign.set(k, [exec] as any);
+    }
+
+    let sent = 0;
+    for (const [campaignKey, execs] of byCampaign.entries()) {
+      const campaign = await MarketingCampaign.findById(campaignKey);
+      if (!campaign || campaign.status !== 'running') continue;
+      if (isInQuietHours(campaign)) continue;
+
+      const limit = Math.max(1, campaign.rateLimitPerMinute ?? 30);
+      // Convert per-minute limit to a per-tick cap; the loop runs roughly
+      // every 30 seconds, so half the per-minute cap is the slice.
+      const slice = Math.max(1, Math.floor(limit / 2));
+      const subset = execs.slice(0, slice);
+
+      const variantById = new Map(
+        (campaign.variants ?? []).map((v) => [v.variantId, v]),
+      );
+      for (const exec of subset) {
+        // Single-writer guard: only the worker that successfully moves
+        // queued → sending may proceed.
+        const claimed = await CampaignExecution.findOneAndUpdate(
+          { _id: exec._id, status: 'queued' },
+          { $set: { status: 'sending' }, $inc: { attemptCount: 1 } },
+          { new: true },
+        );
+        if (!claimed) continue;
+
+        const variant = variantById.get(exec.variantId);
+        if (!variant) {
+          await CampaignExecution.updateOne(
+            { _id: claimed._id },
+            {
+              $set: {
+                status: 'failed',
+                errorMessage: 'variant_not_found_on_campaign',
+              },
+            },
+          );
+          continue;
+        }
+        const result = await channelRouter.send({
+          channel: exec.channel,
+          tenantId,
+          recipient: exec.recipientExternalId,
+          text: variant.messageBody,
+        });
+        const now = new Date();
+        if (result.ok) {
+          await CampaignExecution.updateOne(
+            { _id: claimed._id },
+            {
+              $set: {
+                status: 'sent',
+                sentAt: now,
+                externalMessageId: result.externalMessageId,
+              },
+            },
+          );
+          await MarketingCampaign.updateOne(
+            { _id: campaign._id },
+            { $inc: { 'stats.sent': 1 } },
+          );
+          sent++;
+        } else {
+          await CampaignExecution.updateOne(
+            { _id: claimed._id },
+            {
+              $set: {
+                status: 'failed',
+                errorMessage: result.error,
+              },
+            },
+          );
+        }
+      }
+    }
+    return { sent };
   }
 
   async recordReply(
@@ -250,5 +452,33 @@ export class CampaignService {
 
 export const campaignService = new CampaignService();
 // silence unused import (kept for downstream Phase 3 wiring)
-void CampaignExecution;
 void CHANNEL_VALUES;
+
+let senderInterval: NodeJS.Timeout | null = null;
+
+/**
+ * Boots the periodic campaign sender for a single tenant. Safe to call
+ * multiple times — only one timer per process. Stop via stopCampaignSender().
+ */
+export function startCampaignSender(
+  tenantId: string,
+  intervalMs = 30_000,
+): void {
+  if (senderInterval) return;
+  senderInterval = setInterval(async () => {
+    try {
+      await campaignService.tickSender(tenantId);
+    } catch (err) {
+      console.error('campaignService.tickSender failed:', err);
+    }
+  }, intervalMs);
+  // Don't keep the event loop alive solely for this timer.
+  senderInterval.unref?.();
+}
+
+export function stopCampaignSender(): void {
+  if (senderInterval) {
+    clearInterval(senderInterval);
+    senderInterval = null;
+  }
+}

@@ -135,6 +135,12 @@ async function startServer() {
         console.log('🏢 Created default tenant');
       }
       await channelRouter.startAll(String(defaultTenant._id));
+
+      // Boot the periodic campaign sender. Idempotent — only one timer
+      // per process, automatically unref'd so it never blocks shutdown.
+      const { startCampaignSender } =
+        await import('./services/CampaignService');
+      startCampaignSender(String(defaultTenant._id));
     } catch (dbErr) {
       console.error(
         '❌ MongoDB Connection Failed. Server starting in LIMITED MODE.',
