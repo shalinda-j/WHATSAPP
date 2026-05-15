@@ -613,7 +613,7 @@ onMessage(async (message, sock, sessionId) => {
       let intentAnalysis: any = null;
       let answeredViaNLP = false;
       let autoresearchIntent: string | null = null;
-      let responseLanguage = 'si'; // Default to Sinhala - accessible outside try block
+      const responseLanguage = 'si'; // Default to Sinhala - accessible outside try block
 
       try {
         // Autoresearch NLP Intent Classification (fast, under 200ms)

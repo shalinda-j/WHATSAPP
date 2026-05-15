@@ -20,7 +20,6 @@ import {
   ChevronDown,
   ChevronRight,
   Cpu,
-  BarChart3,
   Bot,
   Inbox,
   Search,

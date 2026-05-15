@@ -59,7 +59,7 @@ export class TelegramAdapter implements IChannelAdapter {
     this.handlers.push(handler);
   }
 
-  // @ts-expect-error reserved for Phase 1 wire-up
+  // Reserved for Phase 1 wire-up — invoked once telegraf listeners land.
   private async _normaliseAndDispatch(
     tenantId: string,
     rawUpdate: any,

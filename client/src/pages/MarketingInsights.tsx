@@ -62,6 +62,8 @@ export default function MarketingInsights() {
 
   useEffect(() => {
     load();
+    // load is stable enough — refetch only on windowDays change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowDays]);
 
   return (

@@ -55,7 +55,9 @@ export class WhatsAppAdapter implements IChannelAdapter {
       const s = await getConnectionStatus();
       return {
         connected: s?.status === 'connected',
-        detail: `WhatsApp status=${s?.status ?? 'unknown'}, activeSessions=${s?.activeSessions ?? 0}`,
+        detail: `WhatsApp status=${s?.status ?? 'unknown'}, activeSessions=${
+          s?.activeSessions ?? 0
+        }`,
         lastCheckedAt: new Date(),
       };
     } catch (err: any) {

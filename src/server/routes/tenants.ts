@@ -22,7 +22,7 @@ const TenantCreateSchema = z.object({
       timezone: z.string().default('Asia/Colombo'),
       websiteUrl: z.string().url().optional(),
     })
-    .default({}),
+    .optional(),
 });
 
 router.get('/', async (_req: Request, res: Response) => {

@@ -34,7 +34,7 @@ export class AILoadBalancer {
   private totalRequests = 0;
 
   // Cache for loaded services
-  private lastServiceLoad: number = 0;
+  private lastServiceLoad = 0;
   private serviceLoadPromise: Promise<void> | null = null;
 
   // MEMORY LEAK FIX: Add limits and cleanup for caches

@@ -1,11 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import Tenant, { ITenant } from '../../models/Tenant';
 
-declare global {
-  namespace Express {
-    interface Request {
-      tenant?: ITenant;
-    }
+declare module 'express-serve-static-core' {
+  interface Request {
+    tenant?: ITenant;
   }
 }
 
