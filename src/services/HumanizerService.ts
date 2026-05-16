@@ -33,8 +33,30 @@ export class HumanizerService {
   private static sendTimestamps: Map<string, number[]> = new Map();
   private static dailyCount: Map<string, { date: string; count: number }> =
     new Map();
+  // Hard cap so a deployment churning through unique sessionIds can't grow
+  // these Maps unbounded. When exceeded we drop the oldest entry first
+  // (insertion order is preserved by Map iteration). 50k sessions is well
+  // above any realistic concurrent-tenant load on a single instance.
+  private static readonly MAX_TRACKED_SESSIONS = 50_000;
   private static rateCapsCache: (RateCaps & { loadedAt: number }) | null = null;
   private static readonly RATE_CAPS_TTL = 60000;
+
+  private static evictIfOversized(): void {
+    while (
+      HumanizerService.sendTimestamps.size > HumanizerService.MAX_TRACKED_SESSIONS
+    ) {
+      const oldest = HumanizerService.sendTimestamps.keys().next().value;
+      if (!oldest) break;
+      HumanizerService.sendTimestamps.delete(oldest);
+    }
+    while (
+      HumanizerService.dailyCount.size > HumanizerService.MAX_TRACKED_SESSIONS
+    ) {
+      const oldest = HumanizerService.dailyCount.keys().next().value;
+      if (!oldest) break;
+      HumanizerService.dailyCount.delete(oldest);
+    }
+  }
   private static readonly DEFAULT_RATE_CAPS: RateCaps = {
     perMinute: 30,
     perHour: 600,
@@ -120,6 +142,10 @@ export class HumanizerService {
       this.dailyCount.set(sessionId, day);
     }
     day.count++;
+    // Cheap evict-on-write; the LRU-ish drop of the first-inserted key is
+    // safe because the only consumers of these maps are rate caps + stats,
+    // and a long-dormant session being evicted just resets its rate window.
+    HumanizerService.evictIfOversized();
   }
 
   public static getRateStats(sessionId: string): {

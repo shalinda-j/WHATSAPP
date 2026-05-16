@@ -58,7 +58,12 @@ export async function resolveTenant(
     req.tenant = tenant;
     next();
   } catch (err) {
+    // Previously this silently fell through to next() with req.tenant
+    // undefined, which downstream routes interpret as "no tenant scope"
+    // and then leak cross-tenant data. Surface the failure so the global
+    // error middleware returns a clean 503 with diagnostics, rather than
+    // pretending everything is fine.
     console.error('tenantContext middleware failed:', err);
-    next();
+    next(err);
   }
 }
