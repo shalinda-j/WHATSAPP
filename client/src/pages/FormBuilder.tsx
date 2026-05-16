@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { api } from '../config';
 import {
   Plus,
   Edit2,
@@ -75,13 +76,10 @@ export default function FormBuilder() {
 
   const fetchTemplates = async () => {
     try {
-      const res = await fetch('/api/forms/templates', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      const data = await res.json();
-      setTemplates(data);
+      // Use shared axios instance so 401/403 routes through the global
+      // auth-failure handler instead of silently dropping the response.
+      const res = await api.get('/api/forms/templates');
+      setTemplates(res.data);
     } catch (error) {
       console.error('Error fetching templates:', error);
     } finally {
@@ -148,30 +146,23 @@ export default function FormBuilder() {
       const url = editingTemplate
         ? `/api/forms/templates/${editingTemplate._id}`
         : '/api/forms/templates';
-      const method = editingTemplate ? 'PUT' : 'POST';
-
-      const res = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({
-          name: formName,
-          description: formDescription,
-          fields: formFields,
-          triggerMode,
-          triggerDelay,
-          welcomeMessage,
-          completionMessage,
-          isActive: true,
-        }),
-      });
-
-      if (res.ok) {
-        fetchTemplates();
-        resetForm();
+      const body = {
+        name: formName,
+        description: formDescription,
+        fields: formFields,
+        triggerMode,
+        triggerDelay,
+        welcomeMessage,
+        completionMessage,
+        isActive: true,
+      };
+      if (editingTemplate) {
+        await api.put(url, body);
+      } else {
+        await api.post(url, body);
       }
+      fetchTemplates();
+      resetForm();
     } catch (error) {
       console.error('Error saving template:', error);
     }
@@ -181,12 +172,7 @@ export default function FormBuilder() {
     if (!confirm('Are you sure you want to delete this form template?')) return;
 
     try {
-      await fetch(`/api/forms/templates/${id}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
+      await api.delete(`/api/forms/templates/${id}`);
       fetchTemplates();
     } catch (error) {
       console.error('Error deleting template:', error);
@@ -195,12 +181,7 @@ export default function FormBuilder() {
 
   const duplicateTemplate = async (id: string) => {
     try {
-      await fetch(`/api/forms/templates/${id}/duplicate`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
+      await api.post(`/api/forms/templates/${id}/duplicate`);
       fetchTemplates();
     } catch (error) {
       console.error('Error duplicating template:', error);
@@ -209,12 +190,7 @@ export default function FormBuilder() {
 
   const setDefault = async (id: string) => {
     try {
-      await fetch(`/api/forms/templates/${id}/set-default`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
+      await api.post(`/api/forms/templates/${id}/set-default`);
       fetchTemplates();
     } catch (error) {
       console.error('Error setting default:', error);

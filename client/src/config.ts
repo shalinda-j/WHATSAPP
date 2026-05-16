@@ -25,14 +25,32 @@ api.interceptors.response.use(
   (error) => {
     const status = error.response?.status;
     if (status === 401 || status === 403) {
-      console.log(
-        'Token expired or invalid, clearing token and redirecting to login',
-      );
-      localStorage.removeItem('token');
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
+      handleAuthFailure();
     }
     return Promise.reject(error);
   },
 );
+
+/**
+ * Centralised auth-failure handler — shared by the axios interceptor and
+ * by raw-fetch call sites (streaming endpoints like /api/bulk/send that
+ * can't go through axios). Idempotent: safe to call repeatedly without
+ * double-clearing storage or double-redirecting.
+ */
+let _authFailureFired = false;
+export function handleAuthFailure(): void {
+  if (_authFailureFired) return;
+  _authFailureFired = true;
+  console.log(
+    'Token expired or invalid, clearing token and redirecting to login',
+  );
+  localStorage.removeItem('token');
+  if (window.location.pathname !== '/login') {
+    window.location.href = '/login';
+  }
+  // Reset the latch after a tick so a later navigation back into the
+  // app still triggers properly on subsequent 401s.
+  setTimeout(() => {
+    _authFailureFired = false;
+  }, 5000);
+}

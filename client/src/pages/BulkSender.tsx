@@ -257,6 +257,14 @@ const BulkSender = () => {
       });
 
       if (!response.ok) {
+        // Raw fetch bypasses the axios interceptor, so route auth failures
+        // through the shared handler explicitly. Without this the operator
+        // gets a generic "HTTP 401" error and stays on the page with a
+        // dead token.
+        if (response.status === 401 || response.status === 403) {
+          const { handleAuthFailure } = await import('../config');
+          handleAuthFailure();
+        }
         const errBody = await response.json().catch(() => ({}));
         throw new Error(errBody.error || `HTTP ${response.status}`);
       }

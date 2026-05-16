@@ -96,11 +96,17 @@ function detectLanguage(text: string): string {
 export default function ChatInterface() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  // Refs mirror selectedUser + sessionFilter so the long-lived socket
+  // listener always reads the *current* values instead of capturing the
+  // mount-time closure. Without these the socket only ever sees the
+  // initial filter / selection and incoming messages route incorrectly.
+  const selectedUserRef = useRef<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [langFilter, setLangFilter] = useState<LangFilter>('all');
   const [sessionFilter, setSessionFilter] = useState<SessionFilter>('all');
+  const sessionFilterRef = useRef<SessionFilter>('all');
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -123,6 +129,15 @@ export default function ChatInterface() {
   // Detect language of the message being typed
   const typingLang = detectLanguage(newMessage);
 
+  // Keep refs synced so the long-lived socket handler below sees the
+  // current values without needing to re-subscribe on every change.
+  useEffect(() => {
+    selectedUserRef.current = selectedUser;
+  }, [selectedUser]);
+  useEffect(() => {
+    sessionFilterRef.current = sessionFilter;
+  }, [sessionFilter]);
+
   useEffect(() => {
     const API_URL = import.meta.env.VITE_API_URL || window.location.origin;
     const token = localStorage.getItem('token');
@@ -137,14 +152,18 @@ export default function ChatInterface() {
       const lang = detectLanguage(data.content);
       const enriched = { ...data, language: lang };
 
+      // Read the latest values via refs to avoid the stale-closure trap.
+      const activeFilter = sessionFilterRef.current;
+      const activeSelectedUser = selectedUserRef.current;
+
       // Honour the session filter — drop events from other devices when the
       // operator has scoped the view to a specific one.
       const msgSessionId = data.metadata && (data.metadata as { sessionId?: string }).sessionId;
-      if (sessionFilter !== 'all' && msgSessionId && msgSessionId !== sessionFilter) {
+      if (activeFilter !== 'all' && msgSessionId && msgSessionId !== activeFilter) {
         return;
       }
 
-      if (selectedUser === data.userId) {
+      if (activeSelectedUser === data.userId) {
         setMessages((prev) => [...prev, enriched]);
       }
       setConversations((prev) => {
@@ -193,7 +212,12 @@ export default function ChatInterface() {
     return () => {
       newSocket.disconnect();
     };
-  }, [selectedUser, sessionFilter]);
+    // Empty deps on purpose: the socket lifecycle is now decoupled from
+    // selectedUser/sessionFilter changes (we use refs inside the handler),
+    // so we don't churn the websocket every time the operator switches
+    // tabs or scopes. Previously this reconnected on every selection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchSessions = async () => {
     try {
