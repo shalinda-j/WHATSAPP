@@ -7,6 +7,32 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * Build a query that scopes results to a tenant while still surfacing
+ * legacy documents created before the tenantId field existed. Returns
+ * `{}` when no tenantId is supplied (admin / migration scripts).
+ */
+function buildTenantFilter(tenantId?: string): Record<string, unknown> {
+  if (!tenantId) return {};
+  return { $or: [{ tenantId }, { tenantId: { $exists: false } }] };
+}
+
+/**
+ * Combine a base filter, an optional tenant filter and an optional search
+ * filter (each of which may itself use $or) into a single Mongo query
+ * without one $or overwriting another. The $and form is used whenever two
+ * or more $or-bearing clauses need to coexist.
+ */
+function combineQuery(
+  base: Record<string, unknown>,
+  ...clauses: Array<Record<string, unknown>>
+): Record<string, unknown> {
+  const nonEmpty = clauses.filter((c) => Object.keys(c).length > 0);
+  if (nonEmpty.length === 0) return base;
+  if (nonEmpty.length === 1) return { ...base, ...nonEmpty[0] };
+  return { ...base, $and: nonEmpty };
+}
+
 export class CRMService {
   // ==================== CONTACTS ====================
 
@@ -44,30 +70,29 @@ export class CRMService {
       tenantId,
     } = options;
 
-    const query: any = {};
+    const base: Record<string, unknown> = {};
+    if (type) base.type = type;
+    if (status) base.status = status;
+    if (source) base.source = source;
+    if (tags && tags.length > 0) base.tags = { $in: tags };
 
-    // Multi-tenant scoping — applied first so all other filters compose
-    // on top of the tenant slice rather than ignoring it.
-    if (tenantId) query.tenantId = tenantId;
-
-    // Filters
-    if (type) query.type = type;
-    if (status) query.status = status;
-    if (source) query.source = source;
-    if (tags && tags.length > 0) query.tags = { $in: tags };
+    const tenantFilter = buildTenantFilter(tenantId);
 
     // Search - SECURITY FIX: Escape regex to prevent injection
-    if (search) {
-      const escapedSearch = escapeRegex(search);
-      query.$or = [
-        { name: { $regex: escapedSearch, $options: 'i' } },
-        { firstName: { $regex: escapedSearch, $options: 'i' } },
-        { lastName: { $regex: escapedSearch, $options: 'i' } },
-        { email: { $regex: escapedSearch, $options: 'i' } },
-        { phone: { $regex: escapedSearch, $options: 'i' } },
-        { company: { $regex: escapedSearch, $options: 'i' } },
-      ];
-    }
+    const searchFilter: Record<string, unknown> = search
+      ? {
+          $or: [
+            { name: { $regex: escapeRegex(search), $options: 'i' } },
+            { firstName: { $regex: escapeRegex(search), $options: 'i' } },
+            { lastName: { $regex: escapeRegex(search), $options: 'i' } },
+            { email: { $regex: escapeRegex(search), $options: 'i' } },
+            { phone: { $regex: escapeRegex(search), $options: 'i' } },
+            { company: { $regex: escapeRegex(search), $options: 'i' } },
+          ],
+        }
+      : {};
+
+    const query = combineQuery(base, tenantFilter, searchFilter);
 
     const total = await Contact.countDocuments(query);
     const contacts = await Contact.find(query)
@@ -92,7 +117,9 @@ export class CRMService {
   }
 
   /**
-   * Create a new contact
+   * Create a new contact. `data.tenantId` should be supplied by the route
+   * (from req.tenant._id) so the row is scoped on insert. Without it the
+   * contact will be invisible to tenant-scoped list queries.
    */
   static async createContact(data: any) {
     // Auto-populate name from firstName/lastName if not provided
@@ -184,24 +211,35 @@ export class CRMService {
       stage?: string;
       contact?: string;
       owner?: string;
+      tenantId?: string;
     } = {},
   ) {
-    const { page = 1, limit = 20, search, stage, contact, owner } = options;
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      stage,
+      contact,
+      owner,
+      tenantId,
+    } = options;
 
-    const query: any = {};
+    const base: Record<string, unknown> = {};
+    if (stage) base.stage = stage;
+    if (contact) base.contact = contact;
+    if (owner) base.owner = owner;
 
-    if (stage) query.stage = stage;
-    if (contact) query.contact = contact;
-    if (owner) query.owner = owner;
+    const tenantFilter = buildTenantFilter(tenantId);
+    const searchFilter: Record<string, unknown> = search
+      ? {
+          $or: [
+            { title: { $regex: escapeRegex(search), $options: 'i' } },
+            { description: { $regex: escapeRegex(search), $options: 'i' } },
+          ],
+        }
+      : {};
 
-    if (search) {
-      // SECURITY FIX: Escape regex to prevent injection
-      const escapedSearch = escapeRegex(search);
-      query.$or = [
-        { title: { $regex: escapedSearch, $options: 'i' } },
-        { description: { $regex: escapedSearch, $options: 'i' } },
-      ];
-    }
+    const query = combineQuery(base, tenantFilter, searchFilter);
 
     const total = await Deal.countDocuments(query);
     const deals = await Deal.find(query)
@@ -220,10 +258,12 @@ export class CRMService {
   }
 
   /**
-   * Get deals grouped by stage (for Kanban)
+   * Get deals grouped by stage (for Kanban). Pass `tenantId` to scope to a
+   * single tenant's pipeline; omit it for cross-tenant admin views.
    */
-  static async getDealsByStage() {
-    const deals = await Deal.find()
+  static async getDealsByStage(tenantId?: string) {
+    const query = buildTenantFilter(tenantId);
+    const deals = await Deal.find(query)
       .sort({ createdAt: -1 })
       .populate('contact', 'name firstName lastName email phone company')
       .populate('owner', 'username email');
@@ -338,6 +378,7 @@ export class CRMService {
       status?: string;
       owner?: string;
       upcoming?: boolean;
+      tenantId?: string;
     } = {},
   ) {
     const {
@@ -349,19 +390,22 @@ export class CRMService {
       status,
       owner,
       upcoming,
+      tenantId,
     } = options;
 
-    const query: any = {};
-
-    if (type) query.type = type;
-    if (contact) query.contact = contact;
-    if (deal) query.deal = deal;
-    if (status) query.status = status;
-    if (owner) query.owner = owner;
+    const base: Record<string, unknown> = {};
+    if (type) base.type = type;
+    if (contact) base.contact = contact;
+    if (deal) base.deal = deal;
+    if (status) base.status = status;
+    if (owner) base.owner = owner;
     if (upcoming) {
-      query.dueDate = { $gte: new Date() };
-      query.status = 'pending';
+      base.dueDate = { $gte: new Date() };
+      base.status = 'pending';
     }
+
+    const tenantFilter = buildTenantFilter(tenantId);
+    const query = combineQuery(base, tenantFilter);
 
     const total = await Activity.countDocuments(query);
     const activities = await Activity.find(query)

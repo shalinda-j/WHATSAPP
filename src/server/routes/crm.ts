@@ -121,7 +121,14 @@ router.get('/contacts/:id', validateObjectId(), async (req, res) => {
 
 router.post('/contacts', async (req, res) => {
   try {
-    const contact = await CRMService.createContact(req.body);
+    // Stamp the active tenant on insert so subsequent tenant-scoped list
+    // queries surface the row. Without this the contact saves but is
+    // invisible from the Contacts tab.
+    const payload = {
+      ...req.body,
+      tenantId: req.tenant?._id,
+    };
+    const contact = await CRMService.createContact(payload);
     res.status(201).json(contact);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -203,24 +210,27 @@ router.delete('/contacts/:id', validateObjectId(), async (req, res) => {
 
 router.get('/deals', async (req, res) => {
   try {
-    const { page, limit, search, stage, contact, owner } = req.query;
+    const { stage, contact, owner, search, page, limit } = req.query;
     const result = await CRMService.getDeals({
       page: Number(page) || 1,
       limit: Number(limit) || 20,
-      search: search as string,
       stage: stage as string,
       contact: contact as string,
       owner: owner as string,
+      search: search as string,
+      tenantId: req.tenant?._id ? String(req.tenant._id) : undefined,
     });
-    res.json(result);
+    return res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 });
 
 router.get('/deals/kanban', async (req, res) => {
   try {
-    const deals = await CRMService.getDealsByStage();
+    const deals = await CRMService.getDealsByStage(
+      req.tenant?._id ? String(req.tenant._id) : undefined,
+    );
     res.json(deals);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -250,7 +260,10 @@ router.get('/deals/:id', validateObjectId(), async (req, res) => {
 
 router.post('/deals', async (req, res) => {
   try {
-    const deal = await CRMService.createDeal(req.body);
+    const deal = await CRMService.createDeal({
+      ...req.body,
+      tenantId: req.tenant?._id,
+    });
     res.status(201).json(deal);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -296,6 +309,7 @@ router.get('/activities', async (req, res) => {
       status: status as string,
       owner: owner as string,
       upcoming: upcoming === 'true',
+      tenantId: req.tenant?._id ? String(req.tenant._id) : undefined,
     });
     res.json(result);
   } catch (err: any) {
@@ -329,7 +343,10 @@ router.get('/activities/:id', validateObjectId(), async (req, res) => {
 
 router.post('/activities', async (req, res) => {
   try {
-    const activity = await CRMService.createActivity(req.body);
+    const activity = await CRMService.createActivity({
+      ...req.body,
+      tenantId: req.tenant?._id,
+    });
     res.status(201).json(activity);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -414,21 +431,46 @@ router.get('/registrations', async (req, res) => {
   try {
     const { page, limit, search, status, country, jobType } = req.query;
 
-    const query: any = {};
-    if (status) query.status = status;
-    if (country) query.interestedCountry = country;
-    if (jobType) query.jobVacancyType = jobType;
+    const base: Record<string, unknown> = {};
+    if (status) base.status = status;
+    if (country) base.interestedCountry = country;
+    if (jobType) base.jobVacancyType = jobType;
+
+    // Tenant scope: match this tenant's leads + any legacy leads created
+    // before the tenantId field was added. Without the legacy clause the
+    // Registrations tab would suddenly empty out post-migration.
+    const tenantId = req.tenant?._id ? String(req.tenant._id) : null;
+    const tenantClause = tenantId
+      ? {
+          $or: [{ tenantId }, { tenantId: { $exists: false } }],
+        }
+      : null;
+
+    let searchClause: Record<string, unknown> | null = null;
     if (search) {
-      // SECURITY FIX: Escape regex special characters
       const escapedSearch = (search as string).replace(
         /[.*+?^${}()|[\]\\]/g,
         '\\$&',
       );
-      query.$or = [
-        { fullName: { $regex: escapedSearch, $options: 'i' } },
-        { phoneNumber: { $regex: escapedSearch, $options: 'i' } },
-      ];
+      searchClause = {
+        $or: [
+          { fullName: { $regex: escapedSearch, $options: 'i' } },
+          { phoneNumber: { $regex: escapedSearch, $options: 'i' } },
+        ],
+      };
     }
+
+    // Combine clauses safely — both tenant filter and search use $or, so
+    // a flat merge would clobber one. Wrap in $and when both are present.
+    const subClauses = [tenantClause, searchClause].filter(
+      (c): c is Record<string, unknown> => c !== null,
+    );
+    const query: Record<string, unknown> =
+      subClauses.length === 0
+        ? base
+        : subClauses.length === 1
+          ? { ...base, ...subClauses[0] }
+          : { ...base, $and: subClauses };
 
     const total = await Lead.countDocuments(query);
     const registrations = await Lead.find(query)
