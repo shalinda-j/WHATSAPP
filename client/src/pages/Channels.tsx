@@ -42,6 +42,22 @@ interface AgentSummary {
   mode: 'autonomous' | 'approval' | 'disabled';
 }
 
+interface OAuthProvider {
+  provider: string;
+  channel: Channel;
+  ready: boolean;
+  missing: string[];
+}
+
+// Channels that support one-click OAuth on the backend. Used to pair a UI
+// channel with the matching /api/auth/oauth/:provider/start path.
+const OAUTH_PROVIDER_FOR_CHANNEL: Partial<Record<Channel, string>> = {
+  facebook: 'facebook',
+  instagram: 'instagram',
+  linkedin: 'linkedin',
+  tiktok: 'tiktok',
+};
+
 const CHANNEL_META: Record<
   Channel,
   { icon: React.ComponentType<{ className?: string }>; color: string }
@@ -260,6 +276,7 @@ const CHANNEL_TILES: ChannelTile[] = [
 export default function Channels() {
   const [rows, setRows] = useState<ChannelConnectionRow[]>([]);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
+  const [oauthProviders, setOauthProviders] = useState<OAuthProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [bindingsOpenId, setBindingsOpenId] = useState<string | null>(null);
@@ -276,14 +293,18 @@ export default function Channels() {
     setLoading(true);
     setError(null);
     try {
-      const [rowsRes, agentsRes] = await Promise.all([
+      const [rowsRes, agentsRes, providersRes] = await Promise.all([
         api.get<ChannelConnectionRow[]>('/api/channels'),
         api
           .get<{ agents?: AgentSummary[] }>('/api/agents')
           .catch(() => ({ data: { agents: [] } })),
+        api
+          .get<{ providers?: OAuthProvider[] }>('/api/auth/oauth/providers')
+          .catch(() => ({ data: { providers: [] } })),
       ]);
       setRows(rowsRes.data);
       setAgents(agentsRes.data?.agents ?? []);
+      setOauthProviders(providersRes.data?.providers ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load');
     } finally {
@@ -696,6 +717,39 @@ export default function Channels() {
                   </>
                 )}
               </div>
+
+              {/* One-click OAuth shortcut — visible only when the backend has
+                  credentials configured for this channel's provider. Buffer-
+                  style auth, server handles the round-trip and inserts the
+                  ChannelConnection. */}
+              {(() => {
+                const oauthProvider = OAUTH_PROVIDER_FOR_CHANNEL[pickChannel];
+                if (!oauthProvider) return null;
+                const info = oauthProviders.find(
+                  (p) => p.provider === oauthProvider,
+                );
+                if (!info) return null;
+                if (info.ready) {
+                  return (
+                    <a
+                      href={`/api/auth/oauth/${oauthProvider}/start`}
+                      className="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-md bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700"
+                    >
+                      Connect with{' '}
+                      {pickChannel.charAt(0).toUpperCase() +
+                        pickChannel.slice(1)}{' '}
+                      →
+                    </a>
+                  );
+                }
+                return (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                    <strong>One-click OAuth not configured.</strong> Set{' '}
+                    {info.missing.join(' + ')} in the server environment to
+                    enable it, or paste the access token manually below.
+                  </div>
+                );
+              })()}
               <div>
                 <label className="text-xs text-gray-600 mb-1 block">
                   Label
