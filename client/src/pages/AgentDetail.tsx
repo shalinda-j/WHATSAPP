@@ -10,6 +10,7 @@ import {
   FlaskConical,
 } from 'lucide-react';
 import AgentTrainingPanel from '../components/agents/AgentTrainingPanel';
+import VersionComparisonPanel from '../components/agents/VersionComparisonPanel';
 
 interface PromptMetrics {
   uses: number;
@@ -630,6 +631,7 @@ export default function AgentDetail() {
         </div>
       </section>
 
+      <VersionComparisonPanel agentName={name} />
       <AgentTrainingPanel agentName={name} />
     </div>
   );

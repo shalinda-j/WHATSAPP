@@ -273,6 +273,185 @@ router.patch(
   }),
 );
 
+/**
+ * Side-by-side metrics for current vs candidate prompt versions over the
+ * trailing N days. Sourced from AgentExecution (the durable record) +
+ * AgentFeedback (operator/lead/booking outcomes) rather than the cumulative
+ * counters on AgentPromptVersion.metrics, so the window is honest even when
+ * versions have been around for months.
+ */
+router.get(
+  '/:name/comparison',
+  asyncHandler(async (req, res) => {
+    const name = String(req.params.name);
+    const days = Math.max(1, Math.min(Number(req.query.days) || 7, 90));
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const config = await AgentConfig.findOne({ name });
+    if (!config) throw new Error('Agent not found');
+
+    const versions = [config.currentPromptVersion];
+    if (config.candidatePromptVersion != null) {
+      versions.push(config.candidatePromptVersion);
+    }
+
+    const stats = await AgentExecution.aggregate([
+      {
+        $match: {
+          agentName: name,
+          promptVersion: { $in: versions },
+          createdAt: { $gte: since },
+        },
+      },
+      {
+        $group: {
+          _id: '$promptVersion',
+          executions: { $sum: 1 },
+          successes: {
+            $sum: { $cond: [{ $eq: ['$outcome', 'success'] }, 1, 0] },
+          },
+          failures: {
+            $sum: { $cond: [{ $eq: ['$outcome', 'failed'] }, 1, 0] },
+          },
+          queuedForApproval: {
+            $sum: {
+              $cond: [{ $eq: ['$outcome', 'queued_for_approval'] }, 1, 0],
+            },
+          },
+          rejectedByAdmin: {
+            $sum: {
+              $cond: [{ $eq: ['$outcome', 'rejected_by_admin'] }, 1, 0],
+            },
+          },
+          totalTokens: { $sum: '$tokensUsed' },
+          totalCostUsd: { $sum: '$costUsd' },
+          totalLatencyMs: { $sum: '$latencyMs' },
+          avgConfidence: { $avg: '$confidence' },
+        },
+      },
+    ]);
+
+    // Per-day series so the UI can sparkline / chart it later. Kept as a
+    // sibling aggregation rather than $unwind-ing for clarity.
+    const daily = await AgentExecution.aggregate([
+      {
+        $match: {
+          agentName: name,
+          promptVersion: { $in: versions },
+          createdAt: { $gte: since },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            version: '$promptVersion',
+            date: {
+              $dateToString: { format: '%Y-%m-%d', date: '$createdAt' },
+            },
+          },
+          executions: { $sum: 1 },
+          costUsd: { $sum: '$costUsd' },
+        },
+      },
+      { $sort: { '_id.date': 1 } },
+    ]);
+
+    const feedback = await AgentFeedback.aggregate([
+      {
+        $match: {
+          agentName: name,
+          promptVersion: { $in: versions },
+          createdAt: { $gte: since },
+        },
+      },
+      {
+        $group: {
+          _id: '$promptVersion',
+          positive: {
+            $sum: { $cond: [{ $eq: ['$score', 1] }, 1, 0] },
+          },
+          negative: {
+            $sum: { $cond: [{ $eq: ['$score', -1] }, 1, 0] },
+          },
+          neutral: {
+            $sum: { $cond: [{ $eq: ['$score', 0] }, 1, 0] },
+          },
+        },
+      },
+    ]);
+
+    type RawStat = {
+      _id: number;
+      executions: number;
+      successes: number;
+      failures: number;
+      queuedForApproval: number;
+      rejectedByAdmin: number;
+      totalTokens: number;
+      totalCostUsd: number;
+      totalLatencyMs: number;
+      avgConfidence: number | null;
+    };
+    type RawFb = {
+      _id: number;
+      positive: number;
+      negative: number;
+      neutral: number;
+    };
+
+    const statsByVersion = new Map<number, RawStat>(
+      (stats as RawStat[]).map((s) => [s._id, s]),
+    );
+    const fbByVersion = new Map<number, RawFb>(
+      (feedback as RawFb[]).map((f) => [f._id, f]),
+    );
+
+    const build = (version: number) => {
+      const s = statsByVersion.get(version);
+      const f = fbByVersion.get(version);
+      const executions = s?.executions ?? 0;
+      return {
+        version,
+        executions,
+        successes: s?.successes ?? 0,
+        failures: s?.failures ?? 0,
+        queuedForApproval: s?.queuedForApproval ?? 0,
+        rejectedByAdmin: s?.rejectedByAdmin ?? 0,
+        totalTokens: s?.totalTokens ?? 0,
+        totalCostUsd: s?.totalCostUsd ?? 0,
+        avgLatencyMs:
+          executions > 0 && s ? Math.round(s.totalLatencyMs / executions) : 0,
+        avgConfidence: s?.avgConfidence ?? null,
+        positiveFeedback: f?.positive ?? 0,
+        negativeFeedback: f?.negative ?? 0,
+        neutralFeedback: f?.neutral ?? 0,
+        // Net favourability — proxy for "is the candidate actually better"
+        netScore:
+          executions > 0
+            ? ((f?.positive ?? 0) - (f?.negative ?? 0)) / executions
+            : 0,
+        avgCostPerExecution:
+          executions > 0 ? (s?.totalCostUsd ?? 0) / executions : 0,
+        rejectRate:
+          executions > 0 ? (s?.rejectedByAdmin ?? 0) / executions : 0,
+      };
+    };
+
+    res.json({
+      success: true,
+      days,
+      since,
+      current: build(config.currentPromptVersion),
+      candidate:
+        config.candidatePromptVersion != null
+          ? build(config.candidatePromptVersion)
+          : null,
+      candidateTrafficPercent: config.candidateTrafficPercent,
+      daily,
+    });
+  }),
+);
+
 router.get(
   '/approvals/pending',
   asyncHandler(async (req, res) => {
