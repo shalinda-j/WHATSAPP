@@ -101,6 +101,9 @@ ContactSchema.index({ priority: 1 });
 ContactSchema.index({ phone: 1 }, { sparse: true });
 ContactSchema.index({ whatsappNumber: 1 }, { sparse: true });
 ContactSchema.index({ whatsappId: 1 }, { sparse: true });
+// Campaign launches frequently filter out opted-out contacts. Without
+// this index the filter triggers a collection scan on every send.
+ContactSchema.index({ whatsappOptIn: 1 });
 
 // Pre-save hook to auto-sync fields
 ContactSchema.pre('save', function () {

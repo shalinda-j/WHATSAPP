@@ -69,7 +69,11 @@ export class StabilityImageProvider implements IImageGenProvider {
     form.append('output_format', 'png');
     if (input.size) form.append('aspect_ratio', mapAspect(input.size));
 
-    const res = await axios.post(
+    // Hard deadline: axios `timeout` is read-timeout only and won't fire
+    // while the connect/DNS phase stalls. Promise.race guarantees we
+    // never hold a request handler longer than 90s no matter what the
+    // provider's network does.
+    const apiCall = axios.post(
       'https://api.stability.ai/v2beta/stable-image/generate/core',
       form,
       {
@@ -80,6 +84,14 @@ export class StabilityImageProvider implements IImageGenProvider {
         timeout: 60000,
       },
     );
+    const deadline = new Promise<never>((_, reject) =>
+      setTimeout(
+        () =>
+          reject(new Error('Stability image gen exceeded 90s hard deadline')),
+        90_000,
+      ).unref(),
+    );
+    const res = await Promise.race([apiCall, deadline]);
 
     const data = res.data ?? {};
     return {
