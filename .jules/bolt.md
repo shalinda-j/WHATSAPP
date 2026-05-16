@@ -7,3 +7,7 @@
 
 **Learning:** When using Mongoose to fetch read-only queries, not using `.lean()` adds unnecessary overhead since documents are hydrated as Mongoose objects. In performance-sensitive routes where we only need plain objects for serialization or simple reading, this overhead is noticeable, especially for analytics endpoints which fetch large volumes of chat messages or datasets.
 **Action:** Always append `.lean()` to Mongoose read-only queries (e.g., `ChatMessage.find().lean()`) to bypass document hydration and improve performance.
+
+## 2024-05-20 - Batch Database Operations for Webhook Arrays
+**Learning:** Webhooks that receive data in batches (e.g., SendGrid events arriving as an array) can suffer from an N+1 queries issue if we execute database updates sequentially inside a loop. This creates a severe performance bottleneck and connection pool saturation under high traffic.
+**Action:** When handling arrays of events in webhooks, always accumulate the database commands in an array and use Mongoose's `bulkWrite` with `{ ordered: false }` instead of using individual `.updateOne()` calls inside a `for` loop.

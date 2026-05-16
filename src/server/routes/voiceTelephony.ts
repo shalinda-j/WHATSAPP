@@ -31,57 +31,61 @@ const InitiateCallSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
-router.post('/calls/initiate', asyncHandler(async (req: Request, res: Response) => {
-  const tenantId = req.tenant?._id;
-  if (!tenantId) return res.status(401).json({ error: 'no_tenant' });
+router.post(
+  '/calls/initiate',
+  asyncHandler(async (req: Request, res: Response) => {
+    const tenantId = req.tenant?._id;
+    if (!tenantId) return res.status(401).json({ error: 'no_tenant' });
 
-  const parsed = InitiateCallSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.message });
-  }
+    const parsed = InitiateCallSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.message });
+    }
 
-  const provider = voiceTelephonyRegistry.pickReady(parsed.data.provider);
-  if (!provider) {
-    return res.status(503).json({
-      error: 'no_provider_ready',
-      providers: voiceTelephonyRegistry.list(),
-      hint: 'Set credentials for one of the listed providers (Twilio is the fastest path) and try again.',
-    });
-  }
+    const provider = voiceTelephonyRegistry.pickReady(parsed.data.provider);
+    if (!provider) {
+      return res.status(503).json({
+        error: 'no_provider_ready',
+        providers: voiceTelephonyRegistry.list(),
+        hint: 'Set credentials for one of the listed providers (Twilio is the fastest path) and try again.',
+      });
+    }
 
-  if (!provider.supportsOutbound) {
-    return res
-      .status(400)
-      .json({ error: 'provider_does_not_support_outbound', provider: provider.name });
-  }
+    if (!provider.supportsOutbound) {
+      return res.status(400).json({
+        error: 'provider_does_not_support_outbound',
+        provider: provider.name,
+      });
+    }
 
-  try {
-    const result = await provider.initiateCall({
-      to: parsed.data.to,
-      from: parsed.data.from,
-      metadata: parsed.data.metadata,
-    });
-    const log = await CallLog.create({
-      sessionId: 'voice-telephony',
-      callerId: parsed.data.from ?? 'system',
-      callerPhone: parsed.data.to,
-      startTime: new Date(),
-      status: result.status === 'answered' ? 'answered' : 'missed',
-      direction: 'outgoing',
-    });
-    res.status(201).json({
-      success: true,
-      providerCallId: result.providerCallId,
-      status: result.status,
-      logId: log._id,
-    });
-  } catch (err) {
-    res.status(502).json({
-      error: 'provider_call_failed',
-      detail: err instanceof Error ? err.message : 'unknown',
-      provider: provider.name,
-    });
-  }
-}));
+    try {
+      const result = await provider.initiateCall({
+        to: parsed.data.to,
+        from: parsed.data.from,
+        metadata: parsed.data.metadata,
+      });
+      const log = await CallLog.create({
+        sessionId: 'voice-telephony',
+        callerId: parsed.data.from ?? 'system',
+        callerPhone: parsed.data.to,
+        startTime: new Date(),
+        status: result.status === 'answered' ? 'answered' : 'missed',
+        direction: 'outgoing',
+      });
+      res.status(201).json({
+        success: true,
+        providerCallId: result.providerCallId,
+        status: result.status,
+        logId: log._id,
+      });
+    } catch (err) {
+      res.status(502).json({
+        error: 'provider_call_failed',
+        detail: err instanceof Error ? err.message : 'unknown',
+        provider: provider.name,
+      });
+    }
+  }),
+);
 
 export default router;
