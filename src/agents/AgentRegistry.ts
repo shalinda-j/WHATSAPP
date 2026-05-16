@@ -102,9 +102,18 @@ export class AgentRegistry {
       score: number;
     }> = [];
 
+    // Honour per-channel-account binding allowlist if the caller supplied one.
+    // An empty array from the caller means "no agents bound" — also a valid
+    // explicit choice; we treat only `undefined` as "any agent eligible".
+    const allowlist = ctx.agentBindings;
     const scoringTasks = Array.from(this.agents.values())
       .filter(
         (e) => e.config && e.config.isActive && e.config.mode !== 'disabled',
+      )
+      .filter((e) =>
+        allowlist === undefined || allowlist.length === 0
+          ? true
+          : allowlist.includes(e.instance.name),
       )
       .map(async (entry) => {
         const config = entry.config;

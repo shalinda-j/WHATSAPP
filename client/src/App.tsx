@@ -24,6 +24,7 @@ import Campaigns from './pages/Campaigns';
 import Segments from './pages/Segments';
 import Tenants from './pages/Tenants';
 import MarketingInsights from './pages/MarketingInsights';
+import ContentStudio from './pages/ContentStudio';
 import Layout from './components/Layout';
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
@@ -73,6 +74,7 @@ function AppRoutes() {
         <Route path="campaigns" element={<Campaigns />} />
         <Route path="segments" element={<Segments />} />
         <Route path="marketing-insights" element={<MarketingInsights />} />
+        <Route path="content-studio" element={<ContentStudio />} />
         <Route path="tenants" element={<Tenants />} />
         {/* Legacy redirects */}
         <Route path="analytics" element={<Navigate to="/crm" replace />} />

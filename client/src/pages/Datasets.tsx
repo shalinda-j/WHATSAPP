@@ -1,5 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Database, Terminal, Link, FileText, Bot } from 'lucide-react';
+import {
+  Database,
+  Terminal,
+  Link,
+  FileText,
+  Bot,
+  MessageSquare,
+} from 'lucide-react';
 import { api } from '../config';
 import LanguageSwitcher, {
   type Language,
@@ -10,8 +17,15 @@ import LinksTab from '../components/datasets/LinksTab';
 // Marketing tab removed
 import MegaTextTab from '../components/datasets/MegaTextTab';
 import AIPersonalityTab from '../components/datasets/AIPersonalityTab';
+import AcknowledgementsTab from '../components/datasets/AcknowledgementsTab';
 
-type TabType = 'knowledge' | 'commands' | 'links' | 'megatext' | 'personality';
+type TabType =
+  | 'knowledge'
+  | 'commands'
+  | 'links'
+  | 'megatext'
+  | 'personality'
+  | 'acknowledgements';
 
 interface Tab {
   id: TabType;
@@ -26,6 +40,7 @@ const tabs: Tab[] = [
   // Marketing tab removed
   { id: 'megatext', label: 'Mega Text', icon: FileText },
   { id: 'personality', label: 'AI Personality', icon: Bot },
+  { id: 'acknowledgements', label: 'Acknowledgements', icon: MessageSquare },
 ];
 
 export default function Datasets() {
@@ -37,6 +52,7 @@ export default function Datasets() {
     links: 0,
     megatext: 0,
     personality: 0,
+    acknowledgements: 0,
   });
 
   // Fetch counts for each tab
@@ -53,6 +69,7 @@ export default function Datasets() {
         links: 0,
         megatext: 0,
         personality: 0,
+        acknowledgements: 0,
       };
 
       // Filter out 'config' type (internal configuration items, not displayed in tabs)
@@ -67,6 +84,15 @@ export default function Datasets() {
             megatext: 'megatext',
             personality: 'personality',
           };
+          // Acknowledgements live under type='personality' but with key='ACKNOWLEDGEMENTS'.
+          // Route them to the acknowledgements tab so the count is accurate.
+          if (
+            type === 'personality' &&
+            (ds.key as string) === 'ACKNOWLEDGEMENTS'
+          ) {
+            newCounts.acknowledgements++;
+            return;
+          }
           const tabType = typeMap[type];
           if (tabType) {
             newCounts[tabType]++;
@@ -124,6 +150,13 @@ export default function Datasets() {
       case 'personality':
         return (
           <AIPersonalityTab
+            language={currentLanguage}
+            onDataChange={handleDataChange}
+          />
+        );
+      case 'acknowledgements':
+        return (
+          <AcknowledgementsTab
             language={currentLanguage}
             onDataChange={handleDataChange}
           />

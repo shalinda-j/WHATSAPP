@@ -25,6 +25,9 @@ import knowledgeRouter from './routes/knowledge';
 import callAgentRouter from './routes/call-agent';
 import agentsRouter from './routes/agents';
 import channelsRouter from './routes/channels';
+import oauthRouter from './routes/oauth';
+import contentRouter from './routes/content';
+import agentTrainingRouter from './routes/agentTraining';
 import campaignsRouter from './routes/campaigns';
 import segmentsRouter from './routes/segments';
 import tenantsRouter from './routes/tenants';
@@ -141,6 +144,11 @@ app.use('/api/knowledge', authenticateToken, knowledgeRouter);
 app.use('/api/call-agent', callAgentRouter);
 app.use('/api/agents', agentsRouter);
 app.use('/api/channels', channelsRouter);
+// OAuth lives under /api/auth/oauth — provider list is public so the
+// Channels UI can show readiness state without holding an admin session.
+app.use('/api/auth/oauth', oauthRouter);
+app.use('/api/content', contentRouter);
+app.use('/api/agent-training', agentTrainingRouter);
 app.use('/api/campaigns', campaignsRouter);
 app.use('/api/segments', segmentsRouter);
 app.use('/api/tenants', tenantsRouter);

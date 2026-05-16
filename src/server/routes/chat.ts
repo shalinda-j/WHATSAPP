@@ -14,12 +14,25 @@ router.use(resolveTenant);
 
 /**
  * GET /api/chat/conversations
- * Get list of unique conversations with last message and unread count
+ * Get list of unique conversations with last message and unread count.
+ * Optional `?sessionId=X` scopes the result to a specific device when an
+ * operator wants to see only one WhatsApp session's chats at a time.
  */
 router.get('/conversations', async (req: AuthRequest, res: Response) => {
   try {
+    const sessionId =
+      typeof req.query.sessionId === 'string' &&
+      req.query.sessionId !== 'all' &&
+      req.query.sessionId !== ''
+        ? req.query.sessionId
+        : null;
+
+    const baseMatch: Record<string, unknown> = {};
+    if (sessionId) baseMatch['metadata.sessionId'] = sessionId;
+
     // Aggregate to get unique users with their last message
     const conversations = await ChatMessage.aggregate([
+      ...(sessionId ? [{ $match: baseMatch }] : []),
       {
         $sort: { timestamp: -1 },
       },
@@ -41,7 +54,11 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
     // Get unread counts (messages from user that haven't been read by admin)
     const unreadCounts = await ChatMessage.aggregate([
       {
-        $match: { role: 'user', read: { $ne: true } },
+        $match: {
+          role: 'user',
+          read: { $ne: true },
+          ...(sessionId ? { 'metadata.sessionId': sessionId } : {}),
+        },
       },
       {
         $group: {
@@ -59,6 +76,7 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
     // Format response
     const formattedConversations = conversations.map((conv: any) => ({
       userId: conv._id,
+      sessionId: conv.lastMessage.metadata?.sessionId ?? null,
       lastMessage: {
         _id: conv.lastMessage._id,
         userId: conv.lastMessage.userId,
@@ -86,13 +104,20 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
 router.get('/messages/:userId', async (req: Request, res: Response) => {
   try {
     const userId = req.params.userId as string;
-    const { limit = 100, before } = req.query;
+    const { limit = 100, before, sessionId } = req.query;
 
     // Build query
     const query: any = { userId: decodeURIComponent(userId) };
 
     if (before) {
       query.timestamp = { $lt: new Date(before as string) };
+    }
+    if (
+      typeof sessionId === 'string' &&
+      sessionId !== 'all' &&
+      sessionId !== ''
+    ) {
+      query['metadata.sessionId'] = sessionId;
     }
 
     const messages = await ChatMessage.find(query)

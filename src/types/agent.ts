@@ -117,6 +117,10 @@ export const AgentContextSchema = z.object({
   // Populated by the Orchestrator before execute() based on A/B selection;
   // canHandle() runs without this since scoring should be cheap and prompt-independent.
   assignedPrompt: AssignedPromptSchema.optional(),
+  // Per-channel-account agent allowlist. Loaded by the caller from
+  // ChannelConnection.agentBindings before invoking the orchestrator.
+  // Empty/undefined = every registered agent eligible (legacy default).
+  agentBindings: z.array(z.string()).optional(),
   metadata: z.record(z.string(), z.unknown()).default({}),
 });
 export type AgentContext = z.infer<typeof AgentContextSchema>;

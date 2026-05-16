@@ -20,6 +20,7 @@ import {
   X,
   RefreshCw,
   MessageSquare,
+  Smartphone,
 } from 'lucide-react';
 
 interface Message {
@@ -40,6 +41,7 @@ interface Message {
 
 interface Conversation {
   userId: string;
+  sessionId?: string | null;
   lastMessage?: Message;
   unreadCount: number;
   detectedLanguage?: string;
@@ -49,8 +51,15 @@ interface Conversation {
   };
 }
 
+interface SessionSummary {
+  sessionId: string;
+  sessionName?: string;
+  status?: string;
+}
+
 type ToneMode = 'auto' | 'formal' | 'casual' | 'professional' | 'friendly';
 type LangFilter = 'all' | 'en' | 'si' | 'ta';
+type SessionFilter = string; // 'all' | sessionId
 
 const LANG_LABELS: Record<
   string,
@@ -91,6 +100,8 @@ export default function ChatInterface() {
   const [newMessage, setNewMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [langFilter, setLangFilter] = useState<LangFilter>('all');
+  const [sessionFilter, setSessionFilter] = useState<SessionFilter>('all');
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [, setSocket] = useState<Socket | null>(null);
@@ -100,6 +111,14 @@ export default function ChatInterface() {
   const [showToneMenu, setShowToneMenu] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Derive a friendly label for a session id — falls back to the id when we
+  // haven't loaded session metadata yet.
+  const sessionLabel = (id?: string | null): string => {
+    if (!id) return 'Unknown';
+    const found = sessions.find((s) => s.sessionId === id);
+    return found?.sessionName || id;
+  };
 
   // Detect language of the message being typed
   const typingLang = detectLanguage(newMessage);
@@ -117,6 +136,13 @@ export default function ChatInterface() {
     newSocket.on('new-message', (data: Message) => {
       const lang = detectLanguage(data.content);
       const enriched = { ...data, language: lang };
+
+      // Honour the session filter — drop events from other devices when the
+      // operator has scoped the view to a specific one.
+      const msgSessionId = data.metadata && (data.metadata as { sessionId?: string }).sessionId;
+      if (sessionFilter !== 'all' && msgSessionId && msgSessionId !== sessionFilter) {
+        return;
+      }
 
       if (selectedUser === data.userId) {
         setMessages((prev) => [...prev, enriched]);
@@ -167,12 +193,25 @@ export default function ChatInterface() {
     return () => {
       newSocket.disconnect();
     };
-  }, [selectedUser]);
+  }, [selectedUser, sessionFilter]);
+
+  const fetchSessions = async () => {
+    try {
+      const res = await api.get('/api/sessions');
+      setSessions(res.data.sessions || []);
+    } catch (err) {
+      console.error('Failed to fetch sessions:', err);
+    }
+  };
 
   const fetchConversations = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/api/chat/conversations');
+      const params =
+        sessionFilter && sessionFilter !== 'all'
+          ? `?sessionId=${encodeURIComponent(sessionFilter)}`
+          : '';
+      const res = await api.get(`/api/chat/conversations${params}`);
       const convs = (res.data.conversations || []).map((c: Conversation) => ({
         ...c,
         detectedLanguage: c.lastMessage
@@ -190,8 +229,12 @@ export default function ChatInterface() {
   const fetchMessages = async (userId: string) => {
     setIsRefreshing(true);
     try {
+      const params =
+        sessionFilter && sessionFilter !== 'all'
+          ? `?sessionId=${encodeURIComponent(sessionFilter)}`
+          : '';
       const res = await api.get(
-        `/api/chat/messages/${encodeURIComponent(userId)}`,
+        `/api/chat/messages/${encodeURIComponent(userId)}${params}`,
       );
       const msgs = (res.data.messages || []).map((m: Message) => ({
         ...m,
@@ -215,12 +258,19 @@ export default function ChatInterface() {
   };
 
   useEffect(() => {
-    fetchConversations();
+    fetchSessions();
   }, []);
 
   useEffect(() => {
+    fetchConversations();
+    // Refetch when the operator switches device scope.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionFilter]);
+
+  useEffect(() => {
     if (selectedUser) fetchMessages(selectedUser);
-  }, [selectedUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedUser, sessionFilter]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -232,11 +282,14 @@ export default function ChatInterface() {
     const msgLang = detectLanguage(newMessage);
     setSending(true);
     try {
+      // If the operator is scoped to a specific device, use that session for
+      // the outbound. Falls back to 'default' on the backend when omitted.
       await api.post('/api/chat/send', {
         userId: selectedUser,
         message: newMessage.trim(),
         tone: toneMode !== 'auto' ? toneMode : undefined,
         language: msgLang,
+        ...(sessionFilter !== 'all' ? { sessionId: sessionFilter } : {}),
       });
       setNewMessage('');
     } catch (error) {
@@ -328,6 +381,29 @@ export default function ChatInterface() {
               className="w-full pl-9 pr-3 py-1.5 bg-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
             />
           </div>
+
+          {/* Device / session picker — only relevant when more than one
+              WhatsApp session is connected. Defaults to "All devices". */}
+          {sessions.length > 1 && (
+            <div className="relative mb-2">
+              <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+              <select
+                value={sessionFilter}
+                onChange={(e) => setSessionFilter(e.target.value)}
+                className="w-full pl-9 pr-7 py-1.5 bg-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 appearance-none cursor-pointer"
+              >
+                <option value="all">All devices ({sessions.length})</option>
+                {sessions.map((s) => (
+                  <option key={s.sessionId} value={s.sessionId}>
+                    {s.sessionName || s.sessionId}
+                    {s.status && s.status !== 'connected'
+                      ? ` (${s.status})`
+                      : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Language Filter */}
           <div className="flex gap-1">
@@ -421,6 +497,18 @@ export default function ChatInterface() {
                         {conv.lastMessage?.content || 'No messages yet'}
                       </p>
                     </div>
+                    {/* Device label — only renders when there is more than one
+                        session AND the operator isn't already scoped to one. */}
+                    {sessions.length > 1 &&
+                      sessionFilter === 'all' &&
+                      conv.sessionId && (
+                        <div className="mt-0.5 flex items-center gap-1 text-[10px] text-gray-500">
+                          <Smartphone className="h-2.5 w-2.5" />
+                          <span className="truncate">
+                            {sessionLabel(conv.sessionId)}
+                          </span>
+                        </div>
+                      )}
                   </div>
                 </div>
               );
