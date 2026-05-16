@@ -315,7 +315,12 @@ router.put('/:id', validateObjectId(), async (req, res) => {
     // Stale `_id` recovery: if the doc the frontend thought it had has been
     // deleted, fall back to the unique `key` to locate the live record and
     // update that one instead of returning a confusing 404.
-    if (!updatedDataset && key && typeof key === 'string' && key.trim() !== '') {
+    if (
+      !updatedDataset &&
+      key &&
+      typeof key === 'string' &&
+      key.trim() !== ''
+    ) {
       const byKey = await Dataset.findOne({ key });
       if (byKey) {
         updatedDataset = await Dataset.findByIdAndUpdate(

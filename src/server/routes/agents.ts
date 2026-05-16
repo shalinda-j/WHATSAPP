@@ -432,8 +432,7 @@ router.get(
             : 0,
         avgCostPerExecution:
           executions > 0 ? (s?.totalCostUsd ?? 0) / executions : 0,
-        rejectRate:
-          executions > 0 ? (s?.rejectedByAdmin ?? 0) / executions : 0,
+        rejectRate: executions > 0 ? (s?.rejectedByAdmin ?? 0) / executions : 0,
       };
     };
 

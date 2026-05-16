@@ -163,7 +163,8 @@ class CallAssistantService {
         userId: opts.from,
         channel: 'whatsapp',
         language: opts.language,
-        inputMessage: '[VOICE_CALL_ATTEMPT] The user attempted a live voice call.',
+        inputMessage:
+          '[VOICE_CALL_ATTEMPT] The user attempted a live voice call.',
         conversationHistory: [],
         traceId: randomUUID(),
         metadata: {

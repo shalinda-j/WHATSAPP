@@ -83,7 +83,7 @@ async function tick(
   let fired = 0;
   for (const lead of dormantLeads) {
     const phone = lead.phoneNumber;
-    const contact = phone ? contactsByPhone.get(phone) ?? null : null;
+    const contact = phone ? (contactsByPhone.get(phone) ?? null) : null;
 
     const daysSinceLastInteraction = Math.floor(
       (Date.now() - new Date(lead.updatedAt).getTime()) / (24 * 60 * 60 * 1000),

@@ -43,7 +43,8 @@ export class HumanizerService {
 
   private static evictIfOversized(): void {
     while (
-      HumanizerService.sendTimestamps.size > HumanizerService.MAX_TRACKED_SESSIONS
+      HumanizerService.sendTimestamps.size >
+      HumanizerService.MAX_TRACKED_SESSIONS
     ) {
       const oldest = HumanizerService.sendTimestamps.keys().next().value;
       if (!oldest) break;

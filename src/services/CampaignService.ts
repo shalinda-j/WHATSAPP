@@ -525,4 +525,3 @@ export function stopCampaignSender(tenantId?: string): void {
     senderIntervals.delete(id);
   }
 }
-
