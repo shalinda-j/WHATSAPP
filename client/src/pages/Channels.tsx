@@ -34,6 +34,12 @@ interface ChannelConnectionRow {
   lastConnectedAt?: string;
   hasCredentials: boolean;
   config: Record<string, unknown>;
+  agentBindings: string[];
+}
+
+interface AgentSummary {
+  name: string;
+  mode: 'autonomous' | 'approval' | 'disabled';
 }
 
 const CHANNEL_META: Record<
@@ -253,8 +259,10 @@ const CHANNEL_TILES: ChannelTile[] = [
 
 export default function Channels() {
   const [rows, setRows] = useState<ChannelConnectionRow[]>([]);
+  const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [bindingsOpenId, setBindingsOpenId] = useState<string | null>(null);
 
   // Connect wizard state
   const [showConnect, setShowConnect] = useState(false);
@@ -268,8 +276,14 @@ export default function Channels() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get<ChannelConnectionRow[]>('/api/channels');
-      setRows(res.data);
+      const [rowsRes, agentsRes] = await Promise.all([
+        api.get<ChannelConnectionRow[]>('/api/channels'),
+        api
+          .get<{ agents?: AgentSummary[] }>('/api/agents')
+          .catch(() => ({ data: { agents: [] } })),
+      ]);
+      setRows(rowsRes.data);
+      setAgents(agentsRes.data?.agents ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load');
     } finally {
@@ -280,6 +294,28 @@ export default function Channels() {
   useEffect(() => {
     load();
   }, []);
+
+  const toggleBinding = async (
+    connectionId: string,
+    agentName: string,
+    currentBindings: string[],
+  ) => {
+    const next = currentBindings.includes(agentName)
+      ? currentBindings.filter((a) => a !== agentName)
+      : [...currentBindings, agentName];
+    try {
+      await api.patch(`/api/channels/${connectionId}/bindings`, {
+        agentBindings: next,
+      });
+      setRows((prev) =>
+        prev.map((r) =>
+          r._id === connectionId ? { ...r, agentBindings: next } : r,
+        ),
+      );
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Binding update failed');
+    }
+  };
 
   const testConnection = async (id: string) => {
     try {
@@ -432,52 +468,185 @@ export default function Channels() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {rows.map((c) => {
-            const Meta = CHANNEL_META[c.channel] ?? CHANNEL_META.web;
-            const Icon = Meta.icon;
-            return (
-              <div
-                key={c._id}
-                className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Icon className={`h-5 w-5 ${Meta.color}`} />
-                    <div>
-                      <div className="font-medium text-gray-900">{c.label}</div>
-                      <div className="text-xs text-gray-500 capitalize">
-                        {c.channel}
+        <section>
+          <h2 className="text-sm font-semibold text-gray-700 mb-2 uppercase tracking-wide">
+            Connected accounts
+          </h2>
+          <div className="space-y-4">
+            {(() => {
+              // Group connections by channel so an operator with 3 Facebook
+              // pages + 2 Instagram accounts sees a clean per-channel header
+              // and an "Add another" CTA right where they expect it.
+              const byChannel = new Map<Channel, ChannelConnectionRow[]>();
+              for (const r of rows) {
+                const arr = byChannel.get(r.channel) ?? [];
+                arr.push(r);
+                byChannel.set(r.channel, arr);
+              }
+              const ordered: Channel[] = [
+                'whatsapp',
+                'telegram',
+                'facebook',
+                'instagram',
+                'linkedin',
+                'tiktok',
+                'email',
+              ];
+              const channels = [
+                ...ordered.filter((c) => byChannel.has(c)),
+                ...Array.from(byChannel.keys()).filter(
+                  (c) => !ordered.includes(c),
+                ),
+              ];
+              return channels.map((channel) => {
+                const Meta = CHANNEL_META[channel] ?? CHANNEL_META.web;
+                const Icon = Meta.icon;
+                const tile = CHANNEL_TILES.find((t) => t.channel === channel);
+                const conns = byChannel.get(channel) ?? [];
+                return (
+                  <div
+                    key={channel}
+                    className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden"
+                  >
+                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50">
+                      <div className="flex items-center gap-2">
+                        <Icon className={`h-5 w-5 ${Meta.color}`} />
+                        <span className="font-semibold text-gray-900">
+                          {tile?.title ?? channel}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          ({conns.length}{' '}
+                          {conns.length === 1 ? 'account' : 'accounts'})
+                        </span>
                       </div>
+                      {channel !== 'whatsapp' && (
+                        <button
+                          onClick={() => openConnect(channel)}
+                          className="text-xs font-medium text-green-700 hover:text-green-800 flex items-center gap-1"
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Add another
+                        </button>
+                      )}
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {conns.map((c) => {
+                        const isOpen = bindingsOpenId === c._id;
+                        const bindings = c.agentBindings ?? [];
+                        return (
+                          <div key={c._id} className="px-4 py-3">
+                            <div className="flex items-center justify-between gap-3 flex-wrap">
+                              <div className="min-w-0">
+                                <div className="font-medium text-gray-900 truncate">
+                                  {c.label}
+                                </div>
+                                {c.lastError && (
+                                  <p className="text-xs text-red-600 mt-0.5">
+                                    {c.lastError}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span
+                                  className={`text-xs font-medium px-2 py-0.5 rounded ${STATUS_BADGE[c.status]}`}
+                                >
+                                  {c.status}
+                                </span>
+                                <button
+                                  onClick={() =>
+                                    setBindingsOpenId(isOpen ? null : c._id)
+                                  }
+                                  className="text-xs text-gray-700 hover:text-gray-900 border border-gray-200 rounded px-2 py-0.5"
+                                  title="Agents that can handle inbound on this account"
+                                >
+                                  Agents:{' '}
+                                  {bindings.length === 0
+                                    ? 'all'
+                                    : `${bindings.length} bound`}
+                                </button>
+                                <button
+                                  onClick={() => testConnection(c._id)}
+                                  className="text-xs text-gray-600 hover:text-gray-900"
+                                >
+                                  Test
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    removeConnection(c._id, c.label)
+                                  }
+                                  className="text-xs text-red-600 hover:text-red-800 inline-flex items-center gap-1"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" /> Remove
+                                </button>
+                              </div>
+                            </div>
+                            {isOpen && (
+                              <div className="mt-2 rounded-md border border-gray-100 bg-gray-50 p-2.5">
+                                {agents.length === 0 ? (
+                                  <p className="text-xs text-gray-500">
+                                    No agents registered yet. Add agents on the{' '}
+                                    <a
+                                      href="/agents"
+                                      className="text-green-700 hover:underline"
+                                    >
+                                      Agents Hub
+                                    </a>{' '}
+                                    first.
+                                  </p>
+                                ) : (
+                                  <>
+                                    <p className="text-xs text-gray-600 mb-1.5">
+                                      Pick which agents are eligible to handle
+                                      inbound on this account. Empty = every
+                                      agent eligible (legacy behaviour).
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {agents.map((a) => {
+                                        const checked = bindings.includes(
+                                          a.name,
+                                        );
+                                        const disabled = a.mode === 'disabled';
+                                        return (
+                                          <button
+                                            key={a.name}
+                                            onClick={() =>
+                                              toggleBinding(
+                                                c._id,
+                                                a.name,
+                                                bindings,
+                                              )
+                                            }
+                                            disabled={disabled}
+                                            className={`text-xs px-2 py-1 rounded border transition ${
+                                              checked
+                                                ? 'bg-green-600 text-white border-green-600'
+                                                : 'bg-white text-gray-700 border-gray-200 hover:border-green-400'
+                                            } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            title={
+                                              disabled
+                                                ? 'Agent is disabled in Agents Hub'
+                                                : ''
+                                            }
+                                          >
+                                            {a.name}
+                                            {disabled && ' (disabled)'}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                  <span
-                    className={`text-xs font-medium px-2 py-0.5 rounded ${STATUS_BADGE[c.status]}`}
-                  >
-                    {c.status}
-                  </span>
-                </div>
-                {c.lastError && (
-                  <p className="mt-2 text-xs text-red-600">{c.lastError}</p>
-                )}
-                <div className="mt-3 flex items-center justify-end gap-3">
-                  <button
-                    onClick={() => testConnection(c._id)}
-                    className="text-xs text-gray-600 hover:text-gray-900"
-                  >
-                    Test
-                  </button>
-                  <button
-                    onClick={() => removeConnection(c._id, c.label)}
-                    className="text-xs text-red-600 hover:text-red-800 inline-flex items-center gap-1"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" /> Remove
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                );
+              });
+            })()}
+          </div>
+        </section>
       )}
 
       {showConnect && (

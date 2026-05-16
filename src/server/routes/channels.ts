@@ -15,6 +15,11 @@ const ConnectionCreateSchema = z.object({
   label: z.string().min(1).max(80),
   credentials: z.record(z.string(), z.string()).default({}),
   config: z.record(z.string(), z.unknown()).default({}),
+  agentBindings: z.array(z.string()).default([]),
+});
+
+const BindingsUpdateSchema = z.object({
+  agentBindings: z.array(z.string()),
 });
 
 router.get('/', async (req: Request, res: Response) => {
@@ -33,6 +38,7 @@ router.get('/', async (req: Request, res: Response) => {
     lastConnectedAt: c.lastConnectedAt,
     hasCredentials: Object.keys(c.credentials ?? {}).length > 0,
     config: c.config,
+    agentBindings: c.agentBindings ?? [],
   }));
   res.json(safe);
 });
@@ -81,6 +87,27 @@ router.post(
     }
     const status = await adapter.status(String(tenantId));
     res.json({ adapter: conn.channel, ...status });
+  },
+);
+
+router.patch(
+  '/:id/bindings',
+  async (req: Request<{ id: string }>, res: Response) => {
+    const tenantId = req.tenant?._id;
+    const parsed = BindingsUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.message });
+    }
+    const conn = await ChannelConnection.findOneAndUpdate(
+      { _id: req.params.id, tenantId },
+      { agentBindings: parsed.data.agentBindings },
+      { new: true },
+    );
+    if (!conn) return res.status(404).json({ error: 'not_found' });
+    res.json({
+      _id: conn._id,
+      agentBindings: conn.agentBindings ?? [],
+    });
   },
 );
 

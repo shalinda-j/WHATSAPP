@@ -10,6 +10,13 @@ export interface IChannelConnection extends Document {
   credentials: Record<string, string>;
   /** Connection-level metadata — page IDs, account IDs, webhook tokens. */
   config: Record<string, unknown>;
+  /**
+   * Which agents are allowed to handle inbound messages on this connection.
+   * Empty array = every registered agent eligible (legacy default). Otherwise
+   * the orchestrator filters its agent pool to this allowlist for this
+   * specific channel/account.
+   */
+  agentBindings: string[];
   status: 'pending' | 'active' | 'failed' | 'disconnected';
   lastError?: string;
   lastConnectedAt?: Date;
@@ -29,6 +36,7 @@ const ChannelConnectionSchema = new Schema(
     label: { type: String, required: true },
     credentials: { type: Schema.Types.Mixed, default: {} },
     config: { type: Schema.Types.Mixed, default: {} },
+    agentBindings: { type: [String], default: [] },
     status: {
       type: String,
       enum: ['pending', 'active', 'failed', 'disconnected'],
