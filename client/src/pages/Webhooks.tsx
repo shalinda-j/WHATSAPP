@@ -50,6 +50,10 @@ export default function Webhooks() {
   const handleCreateWebhook = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName || !newUrl) return;
+    // Double-submit guard: button's disabled prop only updates on the
+    // next render, so a quick double-click can fire twice before the
+    // state change takes effect. Bail out synchronously here.
+    if (creating) return;
 
     setCreating(true);
     try {

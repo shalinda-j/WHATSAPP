@@ -75,13 +75,24 @@ export default function Dashboard() {
     try {
       const res = await api.get('/api/sessions');
       setSessions(res.data.sessions || []);
-      // Auto add default if none exist (legacy support)
+      // Auto add default if none exist (legacy support).
+      // Guard: never recurse from inside the same call. The previous
+      // implementation called fetchSessions() unconditionally after the
+      // POST, which under a misbehaving backend could loop forever. We
+      // now seed once and read the result back via a single follow-up
+      // GET; if THAT still shows total===0 we surface the issue rather
+      // than retry indefinitely.
       if (res.data.total === 0) {
-        await api.post('/api/sessions', {
-          sessionId: 'default',
-          sessionName: 'Primary Device',
-        });
-        fetchSessions();
+        try {
+          await api.post('/api/sessions', {
+            sessionId: 'default',
+            sessionName: 'Primary Device',
+          });
+          const next = await api.get('/api/sessions');
+          setSessions(next.data.sessions || []);
+        } catch (seedErr) {
+          console.error('Failed to seed default session:', seedErr);
+        }
       }
     } catch (err) {
       console.error(err);

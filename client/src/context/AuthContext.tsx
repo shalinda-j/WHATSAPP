@@ -37,21 +37,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   useEffect(() => {
+    // Guard against the double-logout race: the axios interceptor in
+    // src/config.ts already calls logout()+ redirects on a 401, which
+    // setToken(null), which re-triggers this effect. Without the
+    // `cancelled` latch the second pass could log a confusing error
+    // and re-clear localStorage during the redirect.
+    let cancelled = false;
     if (token) {
       localStorage.setItem('token', token);
-      // api instance already handles variable base URL and Authorization header
       api
         .get('/api/auth/me')
-        .then((res) => setUser(res.data))
-        .catch(() => {
-          logout();
+        .then((res) => {
+          if (!cancelled) setUser(res.data);
         })
-        .finally(() => setLoading(false));
+        .catch(() => {
+          if (!cancelled) logout();
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
     } else {
       localStorage.removeItem('token');
       setUser(null);
       setLoading(false);
     }
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   return (
