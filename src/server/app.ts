@@ -283,11 +283,25 @@ app.get('/health', async (req, res) => {
 
 // Serve Frontend
 const CLIENT_BUILD_PATH = path.join(__dirname, '../../client/dist');
-app.use(express.static(CLIENT_BUILD_PATH));
+// Hashed assets are immutable — safe to cache forever. index.html below is
+// served with no-cache so the browser always learns the new asset hashes
+// after a deploy.
+app.use(
+  express.static(CLIENT_BUILD_PATH, {
+    maxAge: '1y',
+    immutable: true,
+    index: false,
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-store, must-revalidate');
+      }
+    },
+  }),
+);
 
 // SPA Fallback - Use middleware instead of route pattern for Express 5.x compatibility
 app.use((req, res, next) => {
-  // Skip API routes, static files, and health check
+  // Skip API routes, uploads and health check entirely.
   if (
     req.path.startsWith('/api') ||
     req.path.startsWith('/uploads') ||
@@ -295,7 +309,21 @@ app.use((req, res, next) => {
   ) {
     return next();
   }
-  // Serve index.html for SPA routes
+
+  // CRITICAL: never serve index.html for a missing asset. Vite hashes every
+  // asset URL, so a request for /assets/<hash>.js with no matching file on
+  // disk means the browser has cached a stale index.html. Returning the
+  // SPA shell here triggers "Failed to load module script" because the JS
+  // bundle is silently replaced by HTML. Surface a real 404 instead so the
+  // browser errors loudly and a hard refresh picks up the new hash.
+  if (req.path.startsWith('/assets/') || /\.[a-z0-9]{2,5}$/i.test(req.path)) {
+    return next();
+  }
+
+  // For all other paths (real SPA routes like /dashboard, /channels), serve
+  // index.html so React Router takes over. Don't cache — the asset hashes
+  // inside change every deploy.
+  res.setHeader('Cache-Control', 'no-store, must-revalidate');
   res.sendFile(path.join(CLIENT_BUILD_PATH, 'index.html'));
 });
 
