@@ -69,16 +69,28 @@ export class AgentApprovalQueueService {
     approvalId: string,
     reviewer: string,
   ): Promise<{ outbound: string; entry: IAgentApprovalQueue }> {
-    const entry = await AgentApprovalQueue.findById(approvalId);
-    if (!entry) throw new Error('Approval not found');
-    if (entry.status !== 'pending') {
-      throw new Error(`Approval already ${entry.status}`);
+    // Atomic conditional update — guarantees only one approve() wins when
+    // two operators (or duplicate clicks) race. Without this, both calls
+    // could read status='pending' and both .save() with status='approved',
+    // causing a double-send downstream.
+    const entry = await AgentApprovalQueue.findOneAndUpdate(
+      { _id: approvalId, status: 'pending' },
+      {
+        $set: {
+          status: 'approved',
+          reviewedBy: reviewer,
+          reviewedAt: new Date(),
+        },
+      },
+      { new: true },
+    );
+    if (!entry) {
+      // Differentiate "doesn't exist" vs "already resolved" so the
+      // operator gets a useful error message.
+      const existing = await AgentApprovalQueue.findById(approvalId).lean();
+      if (!existing) throw new Error('Approval not found');
+      throw new Error(`Approval already ${existing.status}`);
     }
-
-    entry.status = 'approved';
-    entry.reviewedBy = reviewer;
-    entry.reviewedAt = new Date();
-    await entry.save();
 
     await AgentExecution.updateOne(
       { _id: entry.executionId },
@@ -98,17 +110,24 @@ export class AgentApprovalQueueService {
     reviewer: string,
     note: string | null,
   ): Promise<IAgentApprovalQueue> {
-    const entry = await AgentApprovalQueue.findById(approvalId);
-    if (!entry) throw new Error('Approval not found');
-    if (entry.status !== 'pending') {
-      throw new Error(`Approval already ${entry.status}`);
+    // Atomic conditional update — same race-condition reasoning as approve().
+    const entry = await AgentApprovalQueue.findOneAndUpdate(
+      { _id: approvalId, status: 'pending' },
+      {
+        $set: {
+          status: 'rejected',
+          reviewedBy: reviewer,
+          reviewedAt: new Date(),
+          reviewerNotes: note,
+        },
+      },
+      { new: true },
+    );
+    if (!entry) {
+      const existing = await AgentApprovalQueue.findById(approvalId).lean();
+      if (!existing) throw new Error('Approval not found');
+      throw new Error(`Approval already ${existing.status}`);
     }
-
-    entry.status = 'rejected';
-    entry.reviewedBy = reviewer;
-    entry.reviewedAt = new Date();
-    entry.reviewerNotes = note;
-    await entry.save();
 
     const execution = await AgentExecution.findById(entry.executionId);
     if (execution) {

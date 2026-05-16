@@ -94,6 +94,13 @@ ContactSchema.index({
 ContactSchema.index({ type: 1, status: 1 });
 ContactSchema.index({ nextFollowUp: 1 });
 ContactSchema.index({ priority: 1 });
+// Campaign launch + follow-up resolve contacts by phone via an $or across
+// these three columns. Sparse so contacts with no phone field don't bloat
+// the index. Drops the per-contact lookup from a collection scan to an
+// index hit even at 100k+ contacts.
+ContactSchema.index({ phone: 1 }, { sparse: true });
+ContactSchema.index({ whatsappNumber: 1 }, { sparse: true });
+ContactSchema.index({ whatsappId: 1 }, { sparse: true });
 
 // Pre-save hook to auto-sync fields
 ContactSchema.pre('save', function () {
