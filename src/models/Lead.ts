@@ -73,6 +73,10 @@ LeadSchema.index({ fullName: 'text', phoneNumber: 'text', email: 'text' });
 LeadSchema.index({ jobVacancyType: 1, status: 1 });
 LeadSchema.index({ interestedCountry: 1, status: 1 });
 LeadSchema.index({ registeredAt: -1 });
+// FollowUpScheduler queries dormant leads by status + updatedAt range and
+// sorts by updatedAt. Without this compound index the lookup degenerated
+// to a collection scan on bigger datasets.
+LeadSchema.index({ status: 1, updatedAt: 1 });
 
 const Lead = (mongoose as any).model('Lead', LeadSchema);
 

@@ -98,7 +98,13 @@ router.post('/', async (req, res) => {
     const configToSave = { ...newConfig } as Record<string, unknown>;
     delete configToSave.getSystemPrompt;
 
-    fs.writeFileSync(filePath, JSON.stringify(configToSave, null, 2));
+    // Use the async fs.promises API so this doesn't block the event loop
+    // under load — synchronous disk I/O in a request handler stalls every
+    // other in-flight HTTP request on this Node instance.
+    await fs.promises.writeFile(
+      filePath,
+      JSON.stringify(configToSave, null, 2),
+    );
 
     res.status(201).json({ id, name });
   } catch (err: any) {

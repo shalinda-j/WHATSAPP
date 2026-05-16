@@ -48,16 +48,42 @@ async function tick(
     .sort({ updatedAt: 1 })
     .limit(DEFAULT_BATCH_SIZE);
 
+  // Batch the Contact lookup instead of N+1 queries. For BATCH_SIZE=10
+  // dormant leads this collapses 10 round-trips into 1, and keeps Mongo's
+  // load proportional to the tick size rather than to the contact base.
+  const phoneNumbers = Array.from(
+    new Set(
+      dormantLeads
+        .map((l: { phoneNumber?: string }) => l.phoneNumber)
+        .filter((p: string | undefined): p is string => Boolean(p)),
+    ),
+  );
+  const contactsByPhone = new Map<string, unknown>();
+  if (phoneNumbers.length > 0) {
+    const matchingContacts = await Contact.find({
+      $or: [
+        { phone: { $in: phoneNumbers } },
+        { whatsappNumber: { $in: phoneNumbers } },
+        { whatsappId: { $in: phoneNumbers } },
+      ],
+    }).lean();
+    for (const c of matchingContacts as Array<{
+      phone?: string;
+      whatsappNumber?: string;
+      whatsappId?: string;
+    }>) {
+      // Stamp the contact under every phone-shaped field it matches on so
+      // the lookup inside the loop is O(1) regardless of which column hit.
+      if (c.phone) contactsByPhone.set(c.phone, c);
+      if (c.whatsappNumber) contactsByPhone.set(c.whatsappNumber, c);
+      if (c.whatsappId) contactsByPhone.set(c.whatsappId, c);
+    }
+  }
+
   let fired = 0;
   for (const lead of dormantLeads) {
-    // Find a matching Contact if there is one — purely informational
-    // metadata, never required.
     const phone = lead.phoneNumber;
-    const contact = phone
-      ? await Contact.findOne({
-          $or: [{ phone }, { whatsappNumber: phone }, { whatsappId: phone }],
-        })
-      : null;
+    const contact = phone ? contactsByPhone.get(phone) ?? null : null;
 
     const daysSinceLastInteraction = Math.floor(
       (Date.now() - new Date(lead.updatedAt).getTime()) / (24 * 60 * 60 * 1000),
@@ -74,8 +100,12 @@ async function tick(
         metadata: {
           kind: 'follow_up_cron',
           lead: lead.toObject(),
-          contact: contact ? contact.toObject() : null,
-          contactId: contact ? String(contact._id) : undefined,
+          // .lean() result is already a plain object — no toObject() call.
+          contact: contact ?? null,
+          contactId:
+            contact && (contact as { _id?: unknown })._id
+              ? String((contact as { _id: unknown })._id)
+              : undefined,
           daysSinceLastInteraction,
           forceAgent: 'follow_up',
         },
