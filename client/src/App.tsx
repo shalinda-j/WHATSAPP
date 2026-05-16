@@ -1,31 +1,38 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
+import { lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import Datasets from './pages/Datasets';
-import Webhooks from './pages/Webhooks';
-import Config from './pages/Config';
-import SystemMaintenance from './pages/SystemMaintenance';
-import BulkSender from './pages/BulkSender';
-import VoiceAgentHub from './pages/VoiceAgentHub';
-import CRM from './pages/CRM';
-import ChatInterface from './pages/ChatInterface';
-import Sessions from './pages/Sessions';
-import FormBuilder from './pages/FormBuilder';
-import Calendar from './pages/Calendar';
-import FollowUp from './pages/FollowUp';
-import AgentsHub from './pages/AgentsHub';
-import AgentDetail from './pages/AgentDetail';
-import ApprovalQueue from './pages/ApprovalQueue';
-import AgentTraces from './pages/AgentTraces';
-import Channels from './pages/Channels';
-import Campaigns from './pages/Campaigns';
-import Segments from './pages/Segments';
-import Tenants from './pages/Tenants';
-import MarketingInsights from './pages/MarketingInsights';
-import ContentStudio from './pages/ContentStudio';
 import Layout from './components/Layout';
+
+// Login stays eager — it's the entry point and renders before bundles load.
+import Login from './pages/Login';
+
+// Every other page is lazy so the initial bundle is just the shell + Login.
+// On a cold visit this drops the JS payload from ~1MB to ~300KB and only the
+// page the user actually navigates to is fetched after.
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Datasets = lazy(() => import('./pages/Datasets'));
+const Webhooks = lazy(() => import('./pages/Webhooks'));
+const Config = lazy(() => import('./pages/Config'));
+const SystemMaintenance = lazy(() => import('./pages/SystemMaintenance'));
+const BulkSender = lazy(() => import('./pages/BulkSender'));
+const VoiceAgentHub = lazy(() => import('./pages/VoiceAgentHub'));
+const CRM = lazy(() => import('./pages/CRM'));
+const ChatInterface = lazy(() => import('./pages/ChatInterface'));
+const Sessions = lazy(() => import('./pages/Sessions'));
+const FormBuilder = lazy(() => import('./pages/FormBuilder'));
+const Calendar = lazy(() => import('./pages/Calendar'));
+const FollowUp = lazy(() => import('./pages/FollowUp'));
+const AgentsHub = lazy(() => import('./pages/AgentsHub'));
+const AgentDetail = lazy(() => import('./pages/AgentDetail'));
+const ApprovalQueue = lazy(() => import('./pages/ApprovalQueue'));
+const AgentTraces = lazy(() => import('./pages/AgentTraces'));
+const Channels = lazy(() => import('./pages/Channels'));
+const Campaigns = lazy(() => import('./pages/Campaigns'));
+const Segments = lazy(() => import('./pages/Segments'));
+const Tenants = lazy(() => import('./pages/Tenants'));
+const MarketingInsights = lazy(() => import('./pages/MarketingInsights'));
+const ContentStudio = lazy(() => import('./pages/ContentStudio'));
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   const { token, loading } = useAuth();
@@ -38,6 +45,14 @@ const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   if (!token) return <Navigate to="/login" />;
   return children;
 };
+
+function RouteSpinner() {
+  return (
+    <div className="flex items-center justify-center py-16">
+      <div className="animate-spin rounded-full h-8 w-8 border-4 border-green-200 border-t-green-600"></div>
+    </div>
+  );
+}
 
 function AppRoutes() {
   return (
@@ -52,30 +67,194 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/dashboard" />} />
-        <Route path="dashboard" element={<Dashboard />} />
-        <Route path="crm" element={<CRM />} />
-        <Route path="chat" element={<ChatInterface />} />
-        <Route path="calendar" element={<Calendar />} />
-        <Route path="follow-up" element={<FollowUp />} />
-        <Route path="datasets" element={<Datasets />} />
-        <Route path="webhooks" element={<Webhooks />} />
-        <Route path="config" element={<Config />} />
-        <Route path="bulk-message" element={<BulkSender />} />
-        <Route path="system" element={<SystemMaintenance />} />
-        <Route path="voice-agent-hub" element={<VoiceAgentHub />} />
-        <Route path="sessions" element={<Sessions />} />
-        <Route path="form-builder" element={<FormBuilder />} />
-        <Route path="agents" element={<AgentsHub />} />
-        <Route path="agents/approvals" element={<ApprovalQueue />} />
-        <Route path="agents/traces" element={<AgentTraces />} />
-        <Route path="agents/:name" element={<AgentDetail />} />
-        <Route path="channels" element={<Channels />} />
-        <Route path="campaigns" element={<Campaigns />} />
-        <Route path="segments" element={<Segments />} />
-        <Route path="marketing-insights" element={<MarketingInsights />} />
-        <Route path="content-studio" element={<ContentStudio />} />
-        <Route path="tenants" element={<Tenants />} />
+        <Route
+          index
+          element={<Navigate to="/dashboard" />}
+        />
+        <Route
+          path="dashboard"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <Dashboard />
+            </Suspense>
+          }
+        />
+        <Route
+          path="crm"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <CRM />
+            </Suspense>
+          }
+        />
+        <Route
+          path="chat"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <ChatInterface />
+            </Suspense>
+          }
+        />
+        <Route
+          path="calendar"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <Calendar />
+            </Suspense>
+          }
+        />
+        <Route
+          path="follow-up"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <FollowUp />
+            </Suspense>
+          }
+        />
+        <Route
+          path="datasets"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <Datasets />
+            </Suspense>
+          }
+        />
+        <Route
+          path="webhooks"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <Webhooks />
+            </Suspense>
+          }
+        />
+        <Route
+          path="config"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <Config />
+            </Suspense>
+          }
+        />
+        <Route
+          path="bulk-message"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <BulkSender />
+            </Suspense>
+          }
+        />
+        <Route
+          path="system"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <SystemMaintenance />
+            </Suspense>
+          }
+        />
+        <Route
+          path="voice-agent-hub"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <VoiceAgentHub />
+            </Suspense>
+          }
+        />
+        <Route
+          path="sessions"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <Sessions />
+            </Suspense>
+          }
+        />
+        <Route
+          path="form-builder"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <FormBuilder />
+            </Suspense>
+          }
+        />
+        <Route
+          path="agents"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <AgentsHub />
+            </Suspense>
+          }
+        />
+        <Route
+          path="agents/approvals"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <ApprovalQueue />
+            </Suspense>
+          }
+        />
+        <Route
+          path="agents/traces"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <AgentTraces />
+            </Suspense>
+          }
+        />
+        <Route
+          path="agents/:name"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <AgentDetail />
+            </Suspense>
+          }
+        />
+        <Route
+          path="channels"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <Channels />
+            </Suspense>
+          }
+        />
+        <Route
+          path="campaigns"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <Campaigns />
+            </Suspense>
+          }
+        />
+        <Route
+          path="segments"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <Segments />
+            </Suspense>
+          }
+        />
+        <Route
+          path="marketing-insights"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <MarketingInsights />
+            </Suspense>
+          }
+        />
+        <Route
+          path="content-studio"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <ContentStudio />
+            </Suspense>
+          }
+        />
+        <Route
+          path="tenants"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <Tenants />
+            </Suspense>
+          }
+        />
         {/* Legacy redirects */}
         <Route path="analytics" element={<Navigate to="/crm" replace />} />
         <Route path="leads" element={<Navigate to="/crm" replace />} />

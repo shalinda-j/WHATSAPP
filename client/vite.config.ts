@@ -20,4 +20,23 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    // Split heavy/rarely-changing libraries into their own chunks so the
+    // browser can cache them independently and the per-page route chunks
+    // stay small.
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          socket: ['socket.io-client'],
+          icons: ['lucide-react'],
+          qr: ['qrcode.react'],
+        },
+      },
+    },
+    // Bumped because main vendor chunks are still naturally >500KB and the
+    // warning is alarmist for a multi-app admin panel.
+    chunkSizeWarningLimit: 800,
+  },
 });
+

@@ -198,7 +198,26 @@ export default function ChatInterface() {
   const fetchSessions = async () => {
     try {
       const res = await api.get('/api/sessions');
-      setSessions(res.data.sessions || []);
+      const incoming: SessionSummary[] = res.data.sessions || [];
+
+      // Detect a newly-connected device that didn't exist on the previous
+      // poll and auto-focus its tab. We do this in the setter callback so
+      // the comparison sees the *previous* state without an effect race.
+      setSessions((prev) => {
+        const prevIds = new Set(prev.map((s) => s.sessionId));
+        const fresh = incoming.find(
+          (s) =>
+            !prevIds.has(s.sessionId) &&
+            (s.status === 'connected' || s.status === 'scan_qr'),
+        );
+        if (fresh && prev.length > 0) {
+          // Only auto-jump after the first load — on the very first fetch
+          // (prev.length === 0) we don't yank the operator off "All" they
+          // intentionally picked.
+          setSessionFilter(fresh.sessionId);
+        }
+        return incoming;
+      });
     } catch (err) {
       console.error('Failed to fetch sessions:', err);
     }
@@ -259,6 +278,11 @@ export default function ChatInterface() {
 
   useEffect(() => {
     fetchSessions();
+    // Poll every 10s so a freshly-paired device shows up as a new tab
+    // (and auto-focuses) without the operator having to refresh.
+    const t = setInterval(fetchSessions, 10000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -382,26 +406,62 @@ export default function ChatInterface() {
             />
           </div>
 
-          {/* Device / session picker — only relevant when more than one
-              WhatsApp session is connected. Defaults to "All devices". */}
-          {sessions.length > 1 && (
-            <div className="relative mb-2">
-              <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
-              <select
-                value={sessionFilter}
-                onChange={(e) => setSessionFilter(e.target.value)}
-                className="w-full pl-9 pr-7 py-1.5 bg-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 appearance-none cursor-pointer"
+          {/* Device tabs — one tab per WhatsApp session, plus "All". New
+              tabs appear automatically as devices pair (polled every 10s)
+              and a freshly-connected device auto-focuses its tab. */}
+          {sessions.length >= 1 && (
+            <div className="flex gap-1 mb-2 overflow-x-auto pb-1 -mb-1 scrollbar-thin">
+              <button
+                onClick={() => setSessionFilter('all')}
+                className={`flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition border ${
+                  sessionFilter === 'all'
+                    ? 'bg-green-600 text-white border-green-600 shadow-sm'
+                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                }`}
               >
-                <option value="all">All devices ({sessions.length})</option>
-                {sessions.map((s) => (
-                  <option key={s.sessionId} value={s.sessionId}>
-                    {s.sessionName || s.sessionId}
-                    {s.status && s.status !== 'connected'
-                      ? ` (${s.status})`
-                      : ''}
-                  </option>
-                ))}
-              </select>
+                All
+                <span
+                  className={`text-[10px] px-1 py-0 rounded-full ${
+                    sessionFilter === 'all'
+                      ? 'bg-white/20'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {sessions.length}
+                </span>
+              </button>
+              {sessions.map((s) => {
+                const active = sessionFilter === s.sessionId;
+                const isLive = s.status === 'connected';
+                return (
+                  <button
+                    key={s.sessionId}
+                    onClick={() => setSessionFilter(s.sessionId)}
+                    title={s.status ? `Status: ${s.status}` : ''}
+                    className={`flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition border ${
+                      active
+                        ? 'bg-green-600 text-white border-green-600 shadow-sm'
+                        : isLive
+                          ? 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                          : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Smartphone className="h-3 w-3" />
+                    <span className="truncate max-w-[120px]">
+                      {s.sessionName || s.sessionId}
+                    </span>
+                    {!isLive && s.status && (
+                      <span
+                        className={`text-[9px] uppercase tracking-wide ${
+                          active ? 'text-white/80' : 'text-amber-600'
+                        }`}
+                      >
+                        {s.status === 'scan_qr' ? 'qr' : s.status}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
 
