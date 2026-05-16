@@ -296,7 +296,14 @@ export class CampaignService {
       if (channelHandleQuery.length === 0) {
         throw new Error('no_routable_channel');
       }
-      contacts = await Contact.find({ $or: channelHandleQuery }).limit(10_000);
+      // Hard 10k cap on the broadcast audience. If a campaign genuinely
+      // needs to reach more contacts in one launch, the operator should
+      // build a Segment (paginated, async-friendly) instead. Without this
+      // cap a misconfigured query could load the entire contact table
+      // into memory in one go.
+      contacts = await Contact.find({ $or: channelHandleQuery })
+        .limit(10_000)
+        .lean();
     }
 
     const docs: any[] = [];
@@ -473,31 +480,49 @@ export const campaignService = new CampaignService();
 // silence unused import (kept for downstream Phase 3 wiring)
 void CHANNEL_VALUES;
 
-let senderInterval: NodeJS.Timeout | null = null;
+// Multi-tenant safe: one interval per tenantId so several tenants can run
+// their own pipelines concurrently. Previously a single module-level
+// timer meant the second startCampaignSender() call was silently ignored
+// — leaving every other tenant's campaigns un-ticked.
+const senderIntervals: Map<string, NodeJS.Timeout> = new Map();
 
 /**
- * Boots the periodic campaign sender for a single tenant. Safe to call
- * multiple times — only one timer per process. Stop via stopCampaignSender().
+ * Boots the periodic campaign sender for a single tenant. Idempotent per
+ * tenantId. Stop via stopCampaignSender(tenantId) — or stopCampaignSender()
+ * with no arg to halt every tenant timer.
  */
 export function startCampaignSender(
   tenantId: string,
   intervalMs = 30_000,
 ): void {
-  if (senderInterval) return;
-  senderInterval = setInterval(async () => {
+  if (senderIntervals.has(tenantId)) return;
+  const t = setInterval(async () => {
     try {
       await campaignService.tickSender(tenantId);
     } catch (err) {
-      console.error('campaignService.tickSender failed:', err);
+      console.error(
+        `campaignService.tickSender failed for tenant ${tenantId}:`,
+        err,
+      );
     }
   }, intervalMs);
   // Don't keep the event loop alive solely for this timer.
-  senderInterval.unref?.();
+  t.unref?.();
+  senderIntervals.set(tenantId, t);
 }
 
-export function stopCampaignSender(): void {
-  if (senderInterval) {
-    clearInterval(senderInterval);
-    senderInterval = null;
+export function stopCampaignSender(tenantId?: string): void {
+  if (tenantId) {
+    const existing = senderIntervals.get(tenantId);
+    if (existing) {
+      clearInterval(existing);
+      senderIntervals.delete(tenantId);
+    }
+    return;
+  }
+  for (const [id, t] of senderIntervals) {
+    clearInterval(t);
+    senderIntervals.delete(id);
   }
 }
+

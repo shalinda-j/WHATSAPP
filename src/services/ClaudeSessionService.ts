@@ -20,7 +20,11 @@ const COMMON_HEADERS: Record<string, string> = {
 const MIN_REQUEST_GAP_MS = 3000;
 const JITTER_MIN_MS = 500;
 const JITTER_MAX_MS = 1500;
-const REQUEST_TIMEOUT_MS = 120000;
+// Cap user-facing chat requests at 45s. Previously 120s, which meant a
+// stalled provider could block a chat handler for two full minutes —
+// long enough that downstream rate-limits and the user's own retry
+// timeout would have fired several times.
+const REQUEST_TIMEOUT_MS = 45000;
 
 export class ClaudeSessionExpiredError extends Error {
   code = 'SESSION_EXPIRED' as const;
