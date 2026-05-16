@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../config';
+import SystemHealthPanel from '../components/config/SystemHealthPanel';
 import {
   Plus,
   Trash,
@@ -767,6 +768,8 @@ export default function Config() {
           <Plus className="h-5 w-5 mr-2" /> Add New
         </button>
       </div>
+
+      <SystemHealthPanel />
 
       {/* Tabs */}
       <div className="flex border-b border-gray-200 mb-6">

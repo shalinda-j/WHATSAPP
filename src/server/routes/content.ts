@@ -7,6 +7,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { authenticateToken } from '../middleware/auth';
 import { resolveTenant } from '../middleware/tenantContext';
+import { asyncHandler } from '../middleware/asyncHandler';
 import GeneratedAsset from '../../models/GeneratedAsset';
 import { imageGenService } from '../../services/contentGen/ImageGenService';
 
@@ -32,19 +33,22 @@ router.get('/providers', (_req: Request, res: Response) => {
   res.json({ providers: imageGenService.list() });
 });
 
-router.get('/assets', async (req: Request, res: Response) => {
-  const tenantId = req.tenant?._id;
-  const { type, limit = 50 } = req.query;
-  const filter: Record<string, unknown> = { tenantId };
-  if (typeof type === 'string') filter.type = type;
-  const assets = await GeneratedAsset.find(filter)
-    .sort({ createdAt: -1 })
-    .limit(Math.min(Number(limit) || 50, 200))
-    .lean();
-  res.json({ assets });
-});
+router.get(
+  '/assets',
+  asyncHandler(async (req: Request, res: Response) => {
+    const tenantId = req.tenant?._id;
+    const { type, limit = 50 } = req.query;
+    const filter: Record<string, unknown> = { tenantId };
+    if (typeof type === 'string') filter.type = type;
+    const assets = await GeneratedAsset.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(Math.min(Number(limit) || 50, 200))
+      .lean();
+    res.json({ assets });
+  }),
+);
 
-router.post('/image/generate', async (req: Request, res: Response) => {
+router.post('/image/generate', asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenant?._id;
   if (!tenantId) return res.status(401).json({ error: 'no_tenant' });
 
@@ -89,12 +93,15 @@ router.post('/image/generate', async (req: Request, res: Response) => {
       providers: imageGenService.list(),
     });
   }
-});
+}));
 
-router.delete('/assets/:id', async (req: Request, res: Response) => {
-  const tenantId = req.tenant?._id;
-  await GeneratedAsset.deleteOne({ _id: req.params.id, tenantId });
-  res.status(204).end();
-});
+router.delete(
+  '/assets/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const tenantId = req.tenant?._id;
+    await GeneratedAsset.deleteOne({ _id: req.params.id, tenantId });
+    res.status(204).end();
+  }),
+);
 
 export default router;

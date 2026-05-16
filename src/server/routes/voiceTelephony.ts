@@ -9,6 +9,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { authenticateToken } from '../middleware/auth';
 import { resolveTenant } from '../middleware/tenantContext';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { voiceTelephonyRegistry } from '../../services/voiceTelephony/providers';
 import CallLog from '../../models/CallLog';
 
@@ -30,7 +31,7 @@ const InitiateCallSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
-router.post('/calls/initiate', async (req: Request, res: Response) => {
+router.post('/calls/initiate', asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenant?._id;
   if (!tenantId) return res.status(401).json({ error: 'no_tenant' });
 
@@ -81,6 +82,6 @@ router.post('/calls/initiate', async (req: Request, res: Response) => {
       provider: provider.name,
     });
   }
-});
+}));
 
 export default router;

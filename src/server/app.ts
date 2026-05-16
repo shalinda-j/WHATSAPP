@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import * as path from 'path';
 
@@ -327,6 +327,29 @@ app.use((req, res, next) => {
   // inside change every deploy.
   res.setHeader('Cache-Control', 'no-store, must-revalidate');
   res.sendFile(path.join(CLIENT_BUILD_PATH, 'index.html'));
+});
+
+// Global error handler — MUST be registered AFTER all routes. Without this,
+// any thrown error inside an async route handler causes Express 5 to send
+// its default HTML error page, which the browser sees as a corrupted
+// response (often surfacing as ERR_CONNECTION_CLOSED depending on timing).
+// This handler ensures every API failure becomes a clean JSON 500 the
+// frontend can render instead of silently dying.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
+  // Don't double-respond if a handler already partially wrote a response.
+  if (res.headersSent) return;
+  const message =
+    err instanceof Error ? err.message : 'Internal server error';
+  console.error(
+    `❌ Unhandled error on ${req.method} ${req.originalUrl}:`,
+    err,
+  );
+  res.status(500).json({
+    error: 'internal_error',
+    message,
+    path: req.originalUrl,
+  });
 });
 
 export default app;
