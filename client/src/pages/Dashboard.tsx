@@ -13,6 +13,11 @@ import {
   Plus,
   Smartphone,
   Trash2,
+  Sparkles,
+  X,
+  Radio,
+  Users,
+  Building2,
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 
@@ -48,12 +53,23 @@ interface RecentEvent {
   role?: string;
 }
 
+const WHATS_NEW_VERSION = '0.8.0';
+const WHATS_NEW_STORAGE_KEY = `whats-new-dismissed-v${WHATS_NEW_VERSION}`;
+
 export default function Dashboard() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [aiProviders, setAiProviders] = useState<AIProvider[]>([]);
   const [aiLoading, setAiLoading] = useState(true);
   const [recentEvents, setRecentEvents] = useState<RecentEvent[]>([]);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(
+    () => localStorage.getItem(WHATS_NEW_STORAGE_KEY) !== '1',
+  );
+
+  const dismissWhatsNew = () => {
+    localStorage.setItem(WHATS_NEW_STORAGE_KEY, '1');
+    setWhatsNewOpen(false);
+  };
 
   const fetchSessions = async () => {
     try {
@@ -220,6 +236,92 @@ export default function Dashboard() {
   return (
     <div>
       <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
+
+      {whatsNewOpen && (
+        <div className="relative bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white p-6 rounded-xl shadow-lg mb-6 overflow-hidden">
+          <button
+            onClick={dismissWhatsNew}
+            aria-label="Dismiss"
+            className="absolute top-3 right-3 text-white/70 hover:text-white transition"
+          >
+            <X size={18} />
+          </button>
+
+          <div className="flex items-center mb-3">
+            <Sparkles className="h-5 w-5 mr-2" />
+            <span className="text-xs font-semibold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded">
+              What's new · v{WHATS_NEW_VERSION}
+            </span>
+          </div>
+
+          <h2 className="text-2xl font-bold mb-2">
+            Now a full marketing automation platform
+          </h2>
+          <p className="text-sm text-white/90 mb-4 max-w-3xl">
+            We've grown beyond WhatsApp. v{WHATS_NEW_VERSION} ships multi-channel
+            delivery, a multi-agent orchestrator, and per-tenant isolation —
+            all on the same prompt-version, budget, and feedback machinery.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="bg-white/10 backdrop-blur-sm p-3 rounded-lg border border-white/10">
+              <div className="flex items-center mb-1.5">
+                <Radio className="h-4 w-4 mr-1.5" />
+                <h3 className="font-semibold text-sm">Multi-channel</h3>
+              </div>
+              <p className="text-xs text-white/85">
+                Telegram and Email adapters live alongside WhatsApp via a
+                channel-agnostic router. Instagram and Messenger stubbed
+                pending Meta verification.
+              </p>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-sm p-3 rounded-lg border border-white/10">
+              <div className="flex items-center mb-1.5">
+                <Bot className="h-4 w-4 mr-1.5" />
+                <h3 className="font-semibold text-sm">Multi-agent</h3>
+              </div>
+              <p className="text-xs text-white/85">
+                Lead qualifier, personalization, deal closer, content
+                recommender + operator-invoked campaign, segmentation and
+                follow-up agents — gated by budget and approval mode.
+              </p>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-sm p-3 rounded-lg border border-white/10">
+              <div className="flex items-center mb-1.5">
+                <Building2 className="h-4 w-4 mr-1.5" />
+                <h3 className="font-semibold text-sm">Multi-tenant</h3>
+              </div>
+              <p className="text-xs text-white/85">
+                Per-tenant credentials, plans, brand voice and budget caps,
+                with a backfill script to migrate single-tenant deployments.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 mt-4">
+            <a
+              href="/agents"
+              className="text-xs bg-white text-purple-700 font-semibold px-3 py-1.5 rounded-md hover:bg-white/90 transition flex items-center"
+            >
+              <Bot className="h-3.5 w-3.5 mr-1" /> Open Agents Hub
+            </a>
+            <a
+              href="/campaigns"
+              className="text-xs bg-white/10 hover:bg-white/20 text-white font-semibold px-3 py-1.5 rounded-md transition flex items-center border border-white/20"
+            >
+              <Users className="h-3.5 w-3.5 mr-1" /> Try Campaigns
+            </a>
+            <a
+              href="/channels"
+              className="text-xs bg-white/10 hover:bg-white/20 text-white font-semibold px-3 py-1.5 rounded-md transition flex items-center border border-white/20"
+            >
+              <Radio className="h-3.5 w-3.5 mr-1" /> Connect a channel
+            </a>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Connection Status Card */}

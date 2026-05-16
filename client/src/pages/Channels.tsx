@@ -63,16 +63,36 @@ const STATUS_BADGE = {
 const CREDENTIAL_FIELDS: Partial<
   Record<
     Channel,
-    Array<{ key: string; label: string; type: 'text' | 'password' }>
+    Array<{
+      key: string;
+      label: string;
+      type: 'text' | 'password';
+      placeholder?: string;
+    }>
   >
 > = {
   telegram: [
-    { key: 'botToken', label: 'Bot Token (BotFather)', type: 'password' },
+    {
+      key: 'botToken',
+      label: 'Bot Token',
+      type: 'password',
+      placeholder: '123456:ABC-DEF...',
+    },
   ],
   email: [
-    { key: 'provider', label: 'Provider (sendgrid|ses|smtp)', type: 'text' },
+    {
+      key: 'provider',
+      label: 'Provider',
+      type: 'text',
+      placeholder: 'sendgrid | ses | smtp',
+    },
     { key: 'apiKey', label: 'API Key', type: 'password' },
-    { key: 'fromAddress', label: 'From address', type: 'text' },
+    {
+      key: 'fromAddress',
+      label: 'From address',
+      type: 'text',
+      placeholder: 'hello@yourbrand.com',
+    },
   ],
   instagram: [
     { key: 'businessAccountId', label: 'Business Account ID', type: 'text' },
@@ -82,13 +102,153 @@ const CREDENTIAL_FIELDS: Partial<
     { key: 'pageId', label: 'Page ID', type: 'text' },
     { key: 'accessToken', label: 'Page Access Token', type: 'password' },
   ],
+  linkedin: [
+    {
+      key: 'accessToken',
+      label: 'Access Token',
+      type: 'password',
+      placeholder: 'OAuth token from linkedin.com/developers',
+    },
+    {
+      key: 'organizationUrn',
+      label: 'Organization URN (optional)',
+      type: 'text',
+      placeholder: 'urn:li:organization:12345',
+    },
+  ],
+  tiktok: [
+    {
+      key: 'accessToken',
+      label: 'Access Token',
+      type: 'password',
+      placeholder: 'TikTok for Business API token',
+    },
+    {
+      key: 'advertiserId',
+      label: 'Advertiser ID (optional)',
+      type: 'text',
+    },
+  ],
 };
 
-const CONNECTABLE_CHANNELS: Channel[] = [
-  'telegram',
-  'instagram',
-  'facebook',
-  'email',
+// Per-channel setup guide — shown above the credential fields so the user
+// knows exactly where to grab each value from, instead of having to dig
+// through provider docs.
+const SETUP_GUIDES: Partial<Record<Channel, { steps: string[]; href?: string; hrefLabel?: string }>> = {
+  telegram: {
+    steps: [
+      'Open @BotFather in Telegram.',
+      "Send /newbot, pick a name and username for the bot.",
+      'BotFather replies with a token like 123456:ABC… — paste it below.',
+    ],
+    href: 'https://t.me/BotFather',
+    hrefLabel: 'Open BotFather',
+  },
+  facebook: {
+    steps: [
+      'Go to developers.facebook.com → My Apps → Create App (Business type).',
+      'Add the Messenger product, then generate a Page Access Token for your Page.',
+      'Complete Meta Business verification before going live (testing works without it).',
+    ],
+    href: 'https://developers.facebook.com/apps/',
+    hrefLabel: 'Meta for Developers',
+  },
+  instagram: {
+    steps: [
+      'Connect your Instagram account to a Facebook Page.',
+      'In your Meta app, add the Instagram Graph API product.',
+      'Copy the Business Account ID and a Page Access Token with instagram_basic + instagram_manage_messages scopes.',
+    ],
+    href: 'https://developers.facebook.com/docs/instagram-api',
+    hrefLabel: 'Instagram Graph API docs',
+  },
+  linkedin: {
+    steps: [
+      'Go to linkedin.com/developers and create a new app on your Company Page.',
+      'Request the Share on LinkedIn + Marketing Developer Platform products (approval needed).',
+      'Generate an OAuth token with w_member_social + w_organization_social scopes.',
+    ],
+    href: 'https://www.linkedin.com/developers/apps',
+    hrefLabel: 'LinkedIn Developers',
+  },
+  tiktok: {
+    steps: [
+      'Sign up at business.tiktokglobalshop.com / TikTok for Business.',
+      'Create an app under TikTok for Developers → Marketing API.',
+      'Generate a long-lived access token for your advertiser account.',
+    ],
+    href: 'https://developers.tiktok.com/',
+    hrefLabel: 'TikTok for Developers',
+  },
+  email: {
+    steps: [
+      'Pick a provider (SendGrid is the simplest to start with).',
+      'Create an API key with mail-send permissions.',
+      'Verify your from-address / sending domain on the provider dashboard.',
+    ],
+    href: 'https://app.sendgrid.com/settings/api_keys',
+    hrefLabel: 'SendGrid API Keys',
+  },
+};
+
+interface ChannelTile {
+  channel: Channel;
+  title: string;
+  description: string;
+  flow: 'qr' | 'token' | 'oauth-pending';
+  flowLabel: string;
+}
+
+const CHANNEL_TILES: ChannelTile[] = [
+  {
+    channel: 'whatsapp',
+    title: 'WhatsApp',
+    description: 'QR-code pairing via WhatsApp Web. Manage devices on the Linked Devices page.',
+    flow: 'qr',
+    flowLabel: 'QR code',
+  },
+  {
+    channel: 'telegram',
+    title: 'Telegram',
+    description: 'Bot token from @BotFather. 30-second setup, no business verification needed.',
+    flow: 'token',
+    flowLabel: 'Bot token',
+  },
+  {
+    channel: 'facebook',
+    title: 'Facebook Messenger',
+    description: 'Meta Graph API. Requires a Meta app and Page Access Token.',
+    flow: 'oauth-pending',
+    flowLabel: 'Page token (OAuth coming)',
+  },
+  {
+    channel: 'instagram',
+    title: 'Instagram',
+    description: 'Instagram Graph API. Same Meta app as Facebook Messenger.',
+    flow: 'oauth-pending',
+    flowLabel: 'Page token (OAuth coming)',
+  },
+  {
+    channel: 'linkedin',
+    title: 'LinkedIn',
+    description: 'Marketing Developer Platform. Requires app review for posting at scale.',
+    flow: 'oauth-pending',
+    flowLabel: 'Access token (OAuth coming)',
+  },
+  {
+    channel: 'tiktok',
+    title: 'TikTok',
+    description: 'TikTok for Business / Marketing API. Long-lived access token.',
+    flow: 'oauth-pending',
+    flowLabel: 'Access token (OAuth coming)',
+  },
+  {
+    channel: 'email',
+    title: 'Email',
+    description: 'SendGrid, AWS SES, or any SMTP provider.',
+    flow: 'token',
+    flowLabel: 'API key',
+  },
 ];
 
 export default function Channels() {
@@ -140,9 +300,9 @@ export default function Channels() {
     }
   };
 
-  const openConnect = () => {
+  const openConnect = (channel: Channel = 'telegram') => {
     setShowConnect(true);
-    setPickChannel('telegram');
+    setPickChannel(channel);
     setLabel('');
     setCreds({});
     setSaveError(null);
@@ -193,7 +353,7 @@ export default function Channels() {
             <RefreshCw className="h-4 w-4" /> Refresh
           </button>
           <button
-            onClick={openConnect}
+            onClick={() => openConnect()}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm bg-green-600 text-white hover:bg-green-700"
           >
             <Plus className="h-4 w-4" /> Connect channel
@@ -207,15 +367,68 @@ export default function Channels() {
         </div>
       )}
 
+      {/* Per-channel pick tiles — one click → wizard preloaded with the right
+          credential fields + setup guide. Mirrors the buffer.com / hootsuite
+          flow but with manual-token paste, since OAuth requires the operator
+          to register apps with each platform first. */}
+      <section className="mb-6">
+        <h2 className="text-sm font-semibold text-gray-700 mb-2 uppercase tracking-wide">
+          Add a channel
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {CHANNEL_TILES.map((tile) => {
+            const Meta = CHANNEL_META[tile.channel] ?? CHANNEL_META.web;
+            const Icon = Meta.icon;
+            const isWhatsApp = tile.channel === 'whatsapp';
+            return (
+              <button
+                key={tile.channel}
+                onClick={
+                  isWhatsApp
+                    ? () => {
+                        window.location.href = '/sessions';
+                      }
+                    : () => openConnect(tile.channel)
+                }
+                className="text-left rounded-lg border border-gray-200 bg-white p-4 hover:border-green-400 hover:shadow-md transition group"
+              >
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Icon className={`h-5 w-5 ${Meta.color}`} />
+                  <span className="font-semibold text-gray-900">
+                    {tile.title}
+                  </span>
+                  <span
+                    className={`ml-auto text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                      tile.flow === 'qr'
+                        ? 'bg-green-50 text-green-700'
+                        : tile.flow === 'token'
+                          ? 'bg-blue-50 text-blue-700'
+                          : 'bg-amber-50 text-amber-700'
+                    }`}
+                  >
+                    {tile.flowLabel}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 leading-snug">
+                  {tile.description}
+                </p>
+                <span className="mt-2 inline-block text-xs font-medium text-green-700 group-hover:underline">
+                  {isWhatsApp ? 'Open Linked Devices →' : 'Connect →'}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
       {loading ? (
         <div className="text-gray-500">Loading...</div>
       ) : rows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center">
           <p className="text-gray-700 font-medium">No channels connected yet</p>
           <p className="text-sm text-gray-500 mt-1">
-            WhatsApp is wired by default via the QR-code session manager. Click{' '}
-            <strong>Connect channel</strong> to add Telegram, Instagram,
-            Facebook Messenger or Email.
+            Pick a channel above to get started — Telegram is the fastest path
+            and needs no business verification.
           </p>
         </div>
       ) : (
@@ -283,28 +496,36 @@ export default function Channels() {
               </button>
             </div>
             <div className="space-y-3">
-              <div>
-                <label className="text-xs text-gray-600 mb-1 block">
-                  Channel
-                </label>
-                <select
-                  value={pickChannel}
-                  onChange={(e) => {
-                    setPickChannel(e.target.value as Channel);
-                    setCreds({});
-                  }}
-                  className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm bg-white"
-                >
-                  {CONNECTABLE_CHANNELS.map((ch) => (
-                    <option key={ch} value={ch}>
-                      {ch}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  WhatsApp connects automatically via the QR-code session
-                  manager on the Linked Devices page.
-                </p>
+              <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  {(() => {
+                    const Meta = CHANNEL_META[pickChannel] ?? CHANNEL_META.web;
+                    const Icon = Meta.icon;
+                    return <Icon className={`h-4 w-4 ${Meta.color}`} />;
+                  })()}
+                  <span className="text-sm font-semibold text-gray-800 capitalize">
+                    {pickChannel}
+                  </span>
+                </div>
+                {SETUP_GUIDES[pickChannel] && (
+                  <>
+                    <ol className="list-decimal list-inside text-xs text-gray-600 space-y-0.5">
+                      {SETUP_GUIDES[pickChannel]!.steps.map((s, i) => (
+                        <li key={i}>{s}</li>
+                      ))}
+                    </ol>
+                    {SETUP_GUIDES[pickChannel]!.href && (
+                      <a
+                        href={SETUP_GUIDES[pickChannel]!.href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-block mt-2 text-xs font-medium text-green-700 hover:underline"
+                      >
+                        {SETUP_GUIDES[pickChannel]!.hrefLabel} ↗
+                      </a>
+                    )}
+                  </>
+                )}
               </div>
               <div>
                 <label className="text-xs text-gray-600 mb-1 block">
@@ -335,6 +556,7 @@ export default function Channels() {
                       onChange={(e) =>
                         setCreds({ ...creds, [f.key]: e.target.value })
                       }
+                      placeholder={f.placeholder}
                       autoComplete="off"
                     />
                   </div>

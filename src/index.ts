@@ -605,12 +605,20 @@ onMessage(async (message, sock, sessionId) => {
           console.log(
             `   🧠 Handled by agent: ${agentOutcome.agentName} (trace=${agentOutcome.traceId})`,
           );
-        } else {
-          console.log(
-            `   🧠 Agent ${agentOutcome.agentName} handled silently/queued (reason=${agentOutcome.reason}, trace=${agentOutcome.traceId})`,
-          );
+          return;
         }
-        return;
+        // Only suppress the AI fallback when an operator-approval queue
+        // genuinely owns the response. Budget caps, agent errors and silent
+        // agents must still let the user hear *something* back.
+        if (agentOutcome.queuedForApproval) {
+          console.log(
+            `   🧠 Agent ${agentOutcome.agentName} queued for approval (trace=${agentOutcome.traceId})`,
+          );
+          return;
+        }
+        console.log(
+          `   🧠 Agent ${agentOutcome.agentName} returned no outbound (reason=${agentOutcome.reason}, trace=${agentOutcome.traceId}) — falling back to AI`,
+        );
       }
     } catch (err) {
       console.error(
