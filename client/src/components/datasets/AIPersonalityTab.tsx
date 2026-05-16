@@ -83,31 +83,37 @@ export default function AIPersonalityTab({
     fetchData();
   }, []);
 
+  const extractError = (error: unknown, fallback: string): string => {
+    const ax = error as { response?: { data?: { error?: string } } };
+    return (
+      ax?.response?.data?.error ||
+      (error instanceof Error ? error.message : fallback)
+    );
+  };
+
   const handleSavePersonality = async () => {
     if (!personality) return;
 
     setSaving(true);
     try {
+      const { _id: _unused, ...rest } = personality;
       const payload = {
-        ...personality,
+        ...rest,
         type: 'personality',
         key: 'AI_PERSONALITY',
       };
 
-      if (personality._id && personality._id.trim() !== '') {
-        await api.put(`/api/datasets/${personality._id}`, payload);
-      } else {
-        // Don't send _id when creating new - let backend/MongoDB generate it
-        const { _id: _unused, ...createPayload } = payload;
-        const res = await api.post('/api/datasets', createPayload);
-        setPersonality({ ...personality, _id: res.data._id });
-      }
+      // Backend handles key-based upsert, so a single POST is enough — no
+      // need to branch on whether `_id` is set. This makes the flow robust
+      // against stale local state (deleted doc, page reload, etc.).
+      const res = await api.post('/api/datasets', payload);
+      setPersonality({ ...personality, _id: res.data._id });
 
       onDataChange();
       alert('AI Personality saved successfully!');
     } catch (error) {
       console.error('Failed to save personality:', error);
-      alert('Failed to save AI Personality');
+      alert(extractError(error, 'Failed to save AI Personality'));
     } finally {
       setSaving(false);
     }
@@ -124,20 +130,13 @@ export default function AIPersonalityTab({
         isActive: true,
       };
 
-      const existingRes = await api.get(
-        '/api/datasets?key=CONVERSATION_EXAMPLES',
-      );
-      if (existingRes.data && existingRes.data.length > 0) {
-        await api.put(`/api/datasets/${existingRes.data[0]._id}`, payload);
-      } else {
-        await api.post('/api/datasets', payload);
-      }
+      await api.post('/api/datasets', payload);
 
       onDataChange();
       alert('Conversation examples saved successfully!');
     } catch (error) {
       console.error('Failed to save examples:', error);
-      alert('Failed to save conversation examples');
+      alert(extractError(error, 'Failed to save conversation examples'));
     } finally {
       setSaving(false);
     }

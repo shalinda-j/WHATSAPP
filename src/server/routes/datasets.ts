@@ -222,6 +222,26 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Name is required' });
     }
 
+    // Key-based upsert: when the caller supplies a `key` (e.g. AI_PERSONALITY,
+    // CONVERSATION_EXAMPLES) and a doc with that key already exists, update it
+    // in-place instead of letting the unique index throw E11000. Without this,
+    // the frontend can't recover from a stale `_id` in local state.
+    if (key && typeof key === 'string' && key.trim() !== '') {
+      const existing = await Dataset.findOne({ key });
+      if (existing) {
+        if (name !== undefined) existing.name = name;
+        if (description !== undefined) existing.description = description;
+        if (type !== undefined) existing.type = type;
+        if (content !== undefined) existing.content = content;
+        if (scope !== undefined) existing.scope = scope;
+        if (category !== undefined) existing.category = category;
+        if (isActive !== undefined) existing.isActive = isActive;
+        if (metadata !== undefined) existing.metadata = metadata;
+        await existing.save();
+        return res.json(existing);
+      }
+    }
+
     const newDataset = new Dataset({
       name,
       description: description || '',
@@ -240,7 +260,16 @@ router.post('/', async (req, res) => {
     console.error('Error creating dataset:', {
       message: err.message,
       name: err.name,
+      code: err.code,
     });
+    // E11000 means a unique-index collision the upsert path above couldn't
+    // recover from (e.g. concurrent insert). Surface a readable message so
+    // the frontend can act on it.
+    if (err.code === 11000) {
+      return res.status(409).json({
+        error: 'A dataset with the same key already exists. Refresh and retry.',
+      });
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -277,11 +306,25 @@ router.put('/:id', validateObjectId(), async (req, res) => {
     if (isActive !== undefined) updateData.isActive = isActive;
     if (metadata !== undefined) updateData.metadata = metadata;
 
-    const updatedDataset = await Dataset.findByIdAndUpdate(
+    let updatedDataset = await Dataset.findByIdAndUpdate(
       req.params.id,
       updateData,
       { new: true },
     );
+
+    // Stale `_id` recovery: if the doc the frontend thought it had has been
+    // deleted, fall back to the unique `key` to locate the live record and
+    // update that one instead of returning a confusing 404.
+    if (!updatedDataset && key && typeof key === 'string' && key.trim() !== '') {
+      const byKey = await Dataset.findOne({ key });
+      if (byKey) {
+        updatedDataset = await Dataset.findByIdAndUpdate(
+          byKey._id,
+          updateData,
+          { new: true },
+        );
+      }
+    }
 
     if (!updatedDataset) {
       return res.status(404).json({ error: 'Dataset not found' });
@@ -292,8 +335,14 @@ router.put('/:id', validateObjectId(), async (req, res) => {
     console.error('Error updating dataset:', {
       message: err.message,
       name: err.name,
+      code: err.code,
       id: req.params.id,
     });
+    if (err.code === 11000) {
+      return res.status(409).json({
+        error: 'A dataset with the same key already exists.',
+      });
+    }
     res.status(500).json({ error: err.message });
   }
 });
