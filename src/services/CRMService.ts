@@ -112,8 +112,15 @@ export class CRMService {
   /**
    * Get a single contact by ID
    */
-  static async getContactById(id: string) {
-    return Contact.findById(id).populate('owner', 'username email');
+  static async getContactById(id: string, tenantId?: string) {
+    // SECURITY: when a tenantId is supplied, refuse to surface contacts
+    // owned by another tenant. Legacy contacts with no tenantId remain
+    // accessible (single-tenant deployments) via the $exists fallback.
+    const query: Record<string, unknown> = { _id: id };
+    if (tenantId) {
+      query.$or = [{ tenantId }, { tenantId: { $exists: false } }];
+    }
+    return Contact.findOne(query).populate('owner', 'username email');
   }
 
   /**
@@ -173,12 +180,23 @@ export class CRMService {
   /**
    * Get contact statistics
    */
-  static async getContactStats() {
+  static async getContactStats(tenantId?: string) {
+    const scope = buildTenantFilter(tenantId);
+    const matchStage = Object.keys(scope).length > 0 ? [{ $match: scope }] : [];
     const [total, byType, byStatus, bySource] = await Promise.all([
-      Contact.countDocuments(),
-      Contact.aggregate([{ $group: { _id: '$type', count: { $sum: 1 } } }]),
-      Contact.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
-      Contact.aggregate([{ $group: { _id: '$source', count: { $sum: 1 } } }]),
+      Contact.countDocuments(scope),
+      Contact.aggregate([
+        ...matchStage,
+        { $group: { _id: '$type', count: { $sum: 1 } } },
+      ]),
+      Contact.aggregate([
+        ...matchStage,
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]),
+      Contact.aggregate([
+        ...matchStage,
+        { $group: { _id: '$source', count: { $sum: 1 } } },
+      ]),
     ]);
 
     return {
@@ -290,8 +308,12 @@ export class CRMService {
   /**
    * Get a single deal
    */
-  static async getDealById(id: string) {
-    return Deal.findById(id)
+  static async getDealById(id: string, tenantId?: string) {
+    const query: Record<string, unknown> = { _id: id };
+    if (tenantId) {
+      query.$or = [{ tenantId }, { tenantId: { $exists: false } }];
+    }
+    return Deal.findOne(query)
       .populate('contact', 'name firstName lastName email phone company')
       .populate('owner', 'username email');
   }
@@ -333,10 +355,13 @@ export class CRMService {
   /**
    * Get deal statistics
    */
-  static async getDealStats() {
+  static async getDealStats(tenantId?: string) {
+    const scope = buildTenantFilter(tenantId);
+    const matchStage = Object.keys(scope).length > 0 ? [{ $match: scope }] : [];
     const [total, byStage, totalValue, wonValue] = await Promise.all([
-      Deal.countDocuments(),
+      Deal.countDocuments(scope),
       Deal.aggregate([
+        ...matchStage,
         {
           $group: {
             _id: '$stage',
@@ -345,9 +370,12 @@ export class CRMService {
           },
         },
       ]),
-      Deal.aggregate([{ $group: { _id: null, total: { $sum: '$value' } } }]),
       Deal.aggregate([
-        { $match: { stage: 'won' } },
+        ...matchStage,
+        { $group: { _id: null, total: { $sum: '$value' } } },
+      ]),
+      Deal.aggregate([
+        { $match: { ...scope, stage: 'won' } },
         { $group: { _id: null, total: { $sum: '$value' } } },
       ]),
     ]);
@@ -470,11 +498,13 @@ export class CRMService {
   /**
    * Get upcoming activities (for dashboard)
    */
-  static async getUpcomingActivities(limit = 10) {
-    return Activity.find({
+  static async getUpcomingActivities(limit = 10, tenantId?: string) {
+    const base = {
       status: 'pending',
       dueDate: { $gte: new Date() },
-    })
+    };
+    const query = combineQuery(base, buildTenantFilter(tenantId));
+    return Activity.find(query)
       .sort({ dueDate: 1 })
       .limit(limit)
       .populate('contact', 'firstName lastName email phone')
@@ -517,7 +547,8 @@ export class CRMService {
   /**
    * Get CRM dashboard stats
    */
-  static async getDashboardStats() {
+  static async getDashboardStats(tenantId?: string) {
+    const scope = buildTenantFilter(tenantId);
     const [
       contactStats,
       dealStats,
@@ -525,11 +556,11 @@ export class CRMService {
       recentContacts,
       recentDeals,
     ] = await Promise.all([
-      this.getContactStats(),
-      this.getDealStats(),
-      this.getUpcomingActivities(5),
-      Contact.find().sort({ createdAt: -1 }).limit(5),
-      Deal.find()
+      this.getContactStats(tenantId),
+      this.getDealStats(tenantId),
+      this.getUpcomingActivities(5, tenantId),
+      Contact.find(scope).sort({ createdAt: -1 }).limit(5),
+      Deal.find(scope)
         .sort({ createdAt: -1 })
         .limit(5)
         .populate('contact', 'firstName lastName'),
@@ -557,7 +588,11 @@ export class CRMService {
    * Global search across contacts, deals, and activities
    */
   static async globalSearch(query: string) {
-    const searchRegex = new RegExp(query, 'i');
+    // SECURITY: escape user input before constructing the regex. Raw
+    // user-controlled strings in `new RegExp(...)` would allow regex
+    // injection (e.g. catastrophic backtracking, denial-of-service via
+    // `(a+)+$`-style patterns).
+    const searchRegex = new RegExp(escapeRegex(query), 'i');
 
     const [contacts, deals, activities] = await Promise.all([
       Contact.find({

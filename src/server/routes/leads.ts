@@ -86,6 +86,12 @@ router.post('/register', strictRateLimit, async (req, res) => {
       status: 'new',
       source: 'whatsapp',
       registeredAt: new Date(),
+      // Tenant scope — stamp at creation so the lead is visible to the
+      // tenant-scoped Registrations list. Falls back to undefined for
+      // single-tenant deployments without the resolveTenant middleware,
+      // which the list endpoints already handle via the legacy `$exists`
+      // backwards-compat clause.
+      tenantId: (req as { tenant?: { _id?: unknown } }).tenant?._id,
     });
 
     await lead.save();
@@ -388,7 +394,10 @@ router.post('/', async (req, res) => {
       sanitizedData.notes = notes.trim().substring(0, 1000); // Limit notes length
     }
 
-    const lead = new Lead(sanitizedData);
+    const lead = new Lead({
+      ...sanitizedData,
+      tenantId: (req as { tenant?: { _id?: unknown } }).tenant?._id,
+    });
     await lead.save();
     res.status(201).json(lead);
   } catch (err: any) {

@@ -55,7 +55,9 @@ router.use(resolveTenant);
 
 router.get('/dashboard', async (req, res) => {
   try {
-    const stats = await CRMService.getDashboardStats();
+    const stats = await CRMService.getDashboardStats(
+      req.tenant?._id ? String(req.tenant._id) : undefined,
+    );
     res.json(stats);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -100,7 +102,9 @@ router.get('/contacts', async (req, res) => {
 
 router.get('/contacts/stats', async (req, res) => {
   try {
-    const stats = await CRMService.getContactStats();
+    const stats = await CRMService.getContactStats(
+      req.tenant?._id ? String(req.tenant._id) : undefined,
+    );
     res.json(stats);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -109,7 +113,10 @@ router.get('/contacts/stats', async (req, res) => {
 
 router.get('/contacts/:id', validateObjectId(), async (req, res) => {
   try {
-    const contact = await CRMService.getContactById(req.params.id as string);
+    const contact = await CRMService.getContactById(
+      req.params.id as string,
+      req.tenant?._id ? String(req.tenant._id) : undefined,
+    );
     if (!contact) {
       return res.status(404).json({ error: 'Contact not found' });
     }
@@ -239,7 +246,9 @@ router.get('/deals/kanban', async (req, res) => {
 
 router.get('/deals/stats', async (req, res) => {
   try {
-    const stats = await CRMService.getDealStats();
+    const stats = await CRMService.getDealStats(
+      req.tenant?._id ? String(req.tenant._id) : undefined,
+    );
     res.json(stats);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -248,7 +257,10 @@ router.get('/deals/stats', async (req, res) => {
 
 router.get('/deals/:id', validateObjectId(), async (req, res) => {
   try {
-    const deal = await CRMService.getDealById(req.params.id as string);
+    const deal = await CRMService.getDealById(
+      req.params.id as string,
+      req.tenant?._id ? String(req.tenant._id) : undefined,
+    );
     if (!deal) {
       return res.status(404).json({ error: 'Deal not found' });
     }
@@ -322,6 +334,7 @@ router.get('/activities/upcoming', async (req, res) => {
     const { limit } = req.query;
     const activities = await CRMService.getUpcomingActivities(
       Number(limit) || 10,
+      req.tenant?._id ? String(req.tenant._id) : undefined,
     );
     res.json(activities);
   } catch (err: any) {
@@ -493,17 +506,31 @@ router.get('/registrations', async (req, res) => {
 // Get registration stats
 router.get('/registrations/stats', async (req, res) => {
   try {
+    // Tenant scope on the count + every aggregation. Legacy leads without
+    // a tenantId stay visible to single-tenant deployments via the
+    // `$exists: false` branch — matches the list endpoint's behaviour.
+    const tenantId = req.tenant?._id ? String(req.tenant._id) : null;
+    const tenantScope: Record<string, unknown> = tenantId
+      ? { $or: [{ tenantId }, { tenantId: { $exists: false } }] }
+      : {};
+
     const [total, byStatus, byCountry, byJobType, recentCount] =
       await Promise.all([
-        Lead.countDocuments(),
-        Lead.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+        Lead.countDocuments(tenantScope),
         Lead.aggregate([
+          { $match: tenantScope },
+          { $group: { _id: '$status', count: { $sum: 1 } } },
+        ]),
+        Lead.aggregate([
+          { $match: tenantScope },
           { $group: { _id: '$interestedCountry', count: { $sum: 1 } } },
         ]),
         Lead.aggregate([
+          { $match: tenantScope },
           { $group: { _id: '$jobVacancyType', count: { $sum: 1 } } },
         ]),
         Lead.countDocuments({
+          ...tenantScope,
           registeredAt: {
             $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
           },
@@ -601,10 +628,18 @@ router.delete('/registrations/:id/cv', async (req, res) => {
       return res.status(404).json({ error: 'Registration not found' });
     }
 
-    // Delete file from disk
+    // Delete file from disk — strictly inside the CV upload dir.
+    // SECURITY: `cvUrl` is stored from earlier uploads but could in theory
+    // hold `../`-style traversal if a malicious upsert ever wrote it. We
+    // normalise via path.basename + path.resolve, then verify the result
+    // still sits inside uploadDir before unlinking.
     if (registration.cvUrl) {
-      const filePath = path.join(__dirname, '../../..', registration.cvUrl);
-      if (fs.existsSync(filePath)) {
+      const safeBasename = path.basename(registration.cvUrl);
+      const filePath = path.resolve(uploadDir, safeBasename);
+      const inside =
+        filePath === path.resolve(uploadDir) ||
+        filePath.startsWith(path.resolve(uploadDir) + path.sep);
+      if (inside && fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
     }
@@ -623,7 +658,13 @@ router.delete('/registrations/:id/cv', async (req, res) => {
 // Export registrations to CSV
 router.get('/registrations/export', async (req, res) => {
   try {
-    const registrations = await Lead.find().sort({ registeredAt: -1 }).lean();
+    const tenantId = req.tenant?._id ? String(req.tenant._id) : null;
+    const tenantScope: Record<string, unknown> = tenantId
+      ? { $or: [{ tenantId }, { tenantId: { $exists: false } }] }
+      : {};
+    const registrations = await Lead.find(tenantScope)
+      .sort({ registeredAt: -1 })
+      .lean();
 
     if (registrations.length === 0) {
       return res.status(400).json({ error: 'No registrations to export' });
