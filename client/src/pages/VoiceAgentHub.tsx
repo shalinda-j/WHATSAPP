@@ -565,24 +565,25 @@ export default function VoiceAgentHub() {
     PROVIDER_INFO[activeVoiceProvider as keyof typeof PROVIDER_INFO];
 
   return (
-    <div className="max-w-7xl mx-auto pb-8">
+    <div className="-m-4 sm:-m-6 lg:-m-8 min-h-[calc(100vh-4rem)] bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 p-4 sm:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto pb-8">
       {/* Header */}
-      <div className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center">
-            <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg mr-3">
-              <AudioLines className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
+            <div className="p-2.5 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-xl mr-3 shadow-md shadow-indigo-500/20">
+              <AudioLines className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
             </div>
             Voice Agent Hub
           </h1>
-          <p className="text-gray-500 mt-2 ml-1">
+          <p className="text-gray-500 mt-2 ml-1 text-sm sm:text-base">
             Central command for your WhatsApp Voice AI infrastructure
           </p>
         </div>
         <button
           onClick={() => fetchAllData(true)}
           disabled={refreshing}
-          className="flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+          className="flex items-center px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all disabled:opacity-50"
         >
           <RefreshCw
             className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`}
@@ -655,16 +656,25 @@ export default function VoiceAgentHub() {
       )}
 
       {/* Master Toggle & Stats Banner */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {/* Master Toggle Card */}
         <div
-          className={`sm:col-span-2 p-6 rounded-xl shadow-lg text-white transition-all duration-300 ${
+          className={`sm:col-span-2 p-6 rounded-xl shadow-lg text-white transition-all duration-300 relative overflow-hidden ${
             isVoiceActive
-              ? 'bg-gradient-to-br from-indigo-600 to-purple-700'
+              ? 'bg-gradient-to-br from-indigo-600 via-purple-600 to-purple-700 shadow-indigo-500/20'
               : 'bg-gradient-to-br from-gray-600 to-gray-700'
           }`}
         >
-          <div className="flex items-center justify-between">
+          {/* Subtle decorative orb so the card has more visual weight */}
+          <div
+            aria-hidden
+            className={`pointer-events-none absolute -top-12 -right-12 h-40 w-40 rounded-full blur-3xl transition-opacity ${
+              isVoiceActive
+                ? 'bg-pink-400/30 opacity-100'
+                : 'bg-white/10 opacity-50'
+            }`}
+          />
+          <div className="relative flex items-center justify-between">
             <div className="flex items-center">
               <div
                 className={`p-3 rounded-lg mr-4 transition-colors ${
@@ -707,7 +717,7 @@ export default function VoiceAgentHub() {
               />
             </button>
           </div>
-          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          <div className="relative mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
             <div className="flex items-center gap-1.5">
               <Zap className="h-4 w-4" />
               <span>Provider:</span>
@@ -752,8 +762,8 @@ export default function VoiceAgentHub() {
       </div>
 
       {/* Secondary Stats Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center hover:shadow-md hover:border-gray-200 transition-all">
           <div className="p-2 rounded-full bg-green-100 mr-3">
             <Users className="h-5 w-5 text-green-600" />
           </div>
@@ -764,7 +774,7 @@ export default function VoiceAgentHub() {
             </p>
           </div>
         </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center hover:shadow-md hover:border-gray-200 transition-all">
           <div className="p-2 rounded-full bg-purple-100 mr-3">
             <Bot className="h-5 w-5 text-purple-600" />
           </div>
@@ -775,7 +785,7 @@ export default function VoiceAgentHub() {
             </p>
           </div>
         </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center hover:shadow-md hover:border-gray-200 transition-all">
           <div className="p-2 rounded-full bg-indigo-100 mr-3">
             <Database className="h-5 w-5 text-indigo-600" />
           </div>
@@ -784,7 +794,7 @@ export default function VoiceAgentHub() {
             <p className="text-lg font-bold text-gray-900">{datasets.length}</p>
           </div>
         </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center hover:shadow-md hover:border-gray-200 transition-all">
           <div
             className={`p-2 rounded-full mr-3 ${
               isVoiceActive ? 'bg-green-100' : 'bg-gray-100'
@@ -810,7 +820,7 @@ export default function VoiceAgentHub() {
       </div>
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Left Column - Voice Providers Configuration */}
         <div className="xl:col-span-2 space-y-6">
           <div className="flex items-center justify-between">
@@ -1613,7 +1623,7 @@ export default function VoiceAgentHub() {
         <div className="space-y-6">
           {/* Recent Leads Widget */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="bg-gray-50 px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-5 py-4 border-b border-gray-200 flex items-center justify-between">
               <div className="flex items-center">
                 <Users className="h-5 w-5 mr-2 text-green-600" />
                 <h3 className="font-semibold text-gray-800">Latest Leads</h3>
@@ -1746,6 +1756,7 @@ export default function VoiceAgentHub() {
             </div>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
