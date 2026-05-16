@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../config';
 import { Link } from 'react-router-dom';
+import TelephonyProvidersSection from '../components/voice/TelephonyProvidersSection';
 import {
   AudioLines,
   Bot,
@@ -1267,6 +1268,9 @@ export default function VoiceAgentHub() {
               </div>
             </div>
           </div>
+
+          {/* Telephony Providers Section — live readiness + outbound test */}
+          <TelephonyProvidersSection />
 
           {/* Call Agent Section */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
