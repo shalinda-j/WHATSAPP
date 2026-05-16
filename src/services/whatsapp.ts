@@ -75,6 +75,11 @@ export class WhatsAppSessionManager {
       reconnectTimers.delete(sessionId);
       this.startSession(sessionId);
     }, delay);
+    // Don't let pending reconnect timers keep the event loop alive — the
+    // process should be free to shut down even if a long backoff is
+    // mid-wait. The session is still reachable via reconnectTimers.get(...)
+    // for explicit cleanup in clearReconnectTimer().
+    timer.unref?.();
 
     reconnectTimers.set(sessionId, timer);
   }

@@ -142,10 +142,13 @@ router.get('/', async (req, res) => {
     }
 
     const total = await Lead.countDocuments(query);
+    // .lean() drops Mongoose's per-doc getters/virtuals/proto chain — fine
+    // for a read-only paginated list and noticeably cheaper at high volume.
     const leads = await Lead.find(query)
       .sort({ registeredAt: -1 })
       .skip((Number(page) - 1) * Number(limit))
-      .limit(Number(limit));
+      .limit(Number(limit))
+      .lean();
 
     res.json({
       leads,
@@ -160,17 +163,31 @@ router.get('/', async (req, res) => {
 
 router.get('/stats', async (req, res) => {
   try {
-    const totalLeads = await Lead.countDocuments();
+    // Tenant scope + legacy-doc fallback. Without this every tenant sees
+    // the global stats — same leak fixed for /api/crm/registrations/stats.
+    const tenantId = (req as { tenant?: { _id?: unknown } }).tenant?._id
+      ? String((req as { tenant: { _id: unknown } }).tenant._id)
+      : null;
+    const tenantScope: Record<string, unknown> = tenantId
+      ? { $or: [{ tenantId }, { tenantId: { $exists: false } }] }
+      : {};
+    const matchStage = tenantId ? [{ $match: tenantScope }] : [];
+
+    const totalLeads = await Lead.countDocuments(tenantScope);
     const byStatus = await Lead.aggregate([
+      ...matchStage,
       { $group: { _id: '$status', count: { $sum: 1 } } },
     ]);
     const byJobType = await Lead.aggregate([
+      ...matchStage,
       { $group: { _id: '$jobVacancyType', count: { $sum: 1 } } },
     ]);
     const byCountry = await Lead.aggregate([
+      ...matchStage,
       { $group: { _id: '$interestedCountry', count: { $sum: 1 } } },
     ]);
     const byExperience = await Lead.aggregate([
+      ...matchStage,
       { $group: { _id: '$experienceYears', count: { $sum: 1 } } },
     ]);
 
@@ -210,7 +227,13 @@ router.get('/job-types', async (req, res) => {
 
 router.get('/export', async (req, res) => {
   try {
-    const leads = await Lead.find().sort({ registeredAt: -1 });
+    const tenantId = (req as { tenant?: { _id?: unknown } }).tenant?._id
+      ? String((req as { tenant: { _id: unknown } }).tenant._id)
+      : null;
+    const tenantScope: Record<string, unknown> = tenantId
+      ? { $or: [{ tenantId }, { tenantId: { $exists: false } }] }
+      : {};
+    const leads = await Lead.find(tenantScope).sort({ registeredAt: -1 });
 
     const headers = [
       'ID',
