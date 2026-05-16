@@ -13,6 +13,14 @@ const QualificationSchema = new (mongoose as any).Schema(
 );
 
 const LeadSchema = new (mongoose as any).Schema({
+  // Multi-tenancy: scoped to the tenant that captured the lead. Legacy
+  // rows without this field are surfaced via $or in the listing query so
+  // a fresh tenantId migration doesn't hide existing data.
+  tenantId: {
+    type: (mongoose as any).Schema.Types.ObjectId,
+    ref: 'Tenant',
+    index: true,
+  },
   // Personal Information
   fullName: { type: String, required: true },
   phoneNumber: { type: String, required: true },

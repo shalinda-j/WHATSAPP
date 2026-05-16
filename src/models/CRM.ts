@@ -2,6 +2,14 @@ import mongoose from 'mongoose';
 
 // Contact Schema - CRM Contact Management
 const ContactSchema = new mongoose.Schema({
+  // Multi-tenancy: every CRM doc is scoped to the tenant that created it.
+  // Legacy docs (created before this field existed) have it undefined; the
+  // list endpoints match those via $or so existing data doesn't vanish.
+  tenantId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Tenant',
+    index: true,
+  },
   // Combined name field for simpler frontend access
   name: { type: String, required: true },
   // Separate name fields for detailed views
@@ -114,6 +122,11 @@ ContactSchema.pre('save', function () {
 
 // Deal Schema - Sales Pipeline Management
 const DealSchema = new mongoose.Schema({
+  tenantId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Tenant',
+    index: true,
+  },
   title: { type: String, required: true },
   description: String,
   value: { type: Number, default: 0 },
@@ -155,6 +168,11 @@ DealSchema.index({ stage: 1 });
 
 // Activity Schema - Tasks, Calls, Meetings, Emails
 const ActivitySchema = new mongoose.Schema({
+  tenantId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Tenant',
+    index: true,
+  },
   type: {
     type: String,
     enum: ['call', 'meeting', 'email', 'whatsapp', 'task', 'note'],
