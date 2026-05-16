@@ -27,6 +27,7 @@ import {
   Users,
   LineChart,
   Building2,
+  Wand2,
 } from 'lucide-react';
 
 interface NavItem {
@@ -86,6 +87,7 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/channels', icon: Radio, label: 'Channels' },
       { to: '/campaigns', icon: Megaphone, label: 'Campaigns' },
       { to: '/segments', icon: Users, label: 'Segments' },
+      { to: '/content-studio', icon: Wand2, label: 'Content Studio' },
       { to: '/marketing-insights', icon: LineChart, label: 'Insights' },
     ],
   },
