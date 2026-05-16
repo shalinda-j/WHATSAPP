@@ -1,10 +1,24 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, AuthRequest } from '../middleware/auth';
 import Tenant from '../../models/Tenant';
 
 const router = Router();
 router.use(authenticateToken);
+
+/**
+ * Tenant management is a super-admin / admin operation. Without this gate
+ * any authenticated user could enumerate every tenant in the deployment
+ * — a serious info-disclosure leak for multi-tenant installs.
+ */
+function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
+  const role = req.user?.role;
+  if (role !== 'admin' && role !== 'super-admin') {
+    return res.status(403).json({ error: 'admin_role_required' });
+  }
+  next();
+}
+router.use(requireAdmin);
 
 const TenantCreateSchema = z.object({
   slug: z

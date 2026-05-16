@@ -2,12 +2,21 @@ import { Router } from 'express';
 import { voiceCallAgent } from '../../services/VoiceCallAgentService';
 import CallLog from '../../models/CallLog';
 import { authenticateToken } from '../middleware/auth';
+import { resolveTenant } from '../middleware/tenantContext';
 import { generateSpeech } from '../../services/voice';
 
 const router = Router();
 
-// All routes protected
+// All routes protected + tenant-scoped
 router.use(authenticateToken);
+router.use(resolveTenant);
+
+function tenantScope(req: { tenant?: { _id?: unknown } }): Record<string, unknown> {
+  const tenantId = req.tenant?._id ? String(req.tenant._id) : null;
+  return tenantId
+    ? { $or: [{ tenantId }, { tenantId: { $exists: false } }] }
+    : {};
+}
 
 // GET /api/call-agent/logs
 router.get('/logs', async (req, res) => {
@@ -21,7 +30,20 @@ router.get('/logs', async (req, res) => {
     const limitNum = parseInt(limit, 10);
     const skip = (pageNum - 1) * limitNum;
 
-    const query = sessionId ? { sessionId } : {};
+    // Combine session filter (if any) with tenant scope. Two clauses each
+    // can carry an $or, so chain via $and to keep them independent.
+    const scope = tenantScope(req as { tenant?: { _id?: unknown } });
+    const sessionClause = sessionId ? { sessionId } : null;
+    const subClauses = [scope, sessionClause].filter(
+      (c): c is Record<string, unknown> =>
+        !!c && Object.keys(c).length > 0,
+    );
+    const query =
+      subClauses.length === 0
+        ? {}
+        : subClauses.length === 1
+          ? subClauses[0]
+          : { $and: subClauses };
     const [logs, total] = await Promise.all([
       CallLog.find(query)
         .sort({ createdAt: -1 })

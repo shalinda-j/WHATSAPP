@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface ICallLog extends Document {
+  tenantId?: mongoose.Types.ObjectId;
   sessionId: string;
   callerId: string;
   callerName?: string;
@@ -20,6 +21,11 @@ export interface ICallLog extends Document {
 
 const CallLogSchema = new Schema(
   {
+    tenantId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Tenant',
+      index: true,
+    },
     sessionId: { type: String, required: true, index: true },
     callerId: { type: String, required: true, index: true },
     callerName: { type: String },
