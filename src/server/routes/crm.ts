@@ -72,6 +72,11 @@ router.get('/search', async (req, res) => {
     if (!q || typeof q !== 'string') {
       return res.status(400).json({ error: 'Search query is required' });
     }
+    // Cap input length so a pathological query string can't be used to
+    // burn server CPU even after the regex-injection escape fixed in PR #23.
+    if (q.length > 500) {
+      return res.status(400).json({ error: 'Search query too long' });
+    }
     const results = await CRMService.globalSearch(q);
     res.json(results);
   } catch (err: any) {
@@ -650,6 +655,47 @@ router.delete('/registrations/:id/cv', async (req, res) => {
     await registration.save();
 
     res.json({ success: true, message: 'CV deleted successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Full registration delete — the frontend's row Delete button was calling
+ * DELETE /api/crm/registrations/:id which previously returned 404 because
+ * only the /cv variant existed. Tenant-scoped + same path-traversal-safe
+ * file cleanup as the /cv handler.
+ */
+router.delete('/registrations/:id', async (req, res) => {
+  try {
+    const tenantId = req.tenant?._id ? String(req.tenant._id) : null;
+    const query: Record<string, unknown> = { _id: req.params.id };
+    if (tenantId) {
+      query.$or = [{ tenantId }, { tenantId: { $exists: false } }];
+    }
+    const registration = await Lead.findOne(query);
+    if (!registration) {
+      return res.status(404).json({ error: 'Registration not found' });
+    }
+
+    // Clean up any attached CV inside the upload dir (path-traversal safe).
+    if (registration.cvUrl) {
+      const safeBasename = path.basename(registration.cvUrl);
+      const filePath = path.resolve(uploadDir, safeBasename);
+      const inside =
+        filePath === path.resolve(uploadDir) ||
+        filePath.startsWith(path.resolve(uploadDir) + path.sep);
+      if (inside && fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+        } catch (e) {
+          console.error('Failed to delete CV during registration delete:', e);
+        }
+      }
+    }
+
+    await registration.deleteOne();
+    res.json({ success: true, message: 'Registration deleted successfully' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
