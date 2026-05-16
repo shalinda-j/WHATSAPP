@@ -23,7 +23,42 @@ import {
   ShieldAlert,
   CheckCircle2,
   Loader2,
+  Wand2,
 } from 'lucide-react';
+
+const IMAGE_PROVIDER_TYPES = ['image-openai', 'image-stability'] as const;
+type ImageProviderType = (typeof IMAGE_PROVIDER_TYPES)[number];
+const isImageProviderType = (t?: string): t is ImageProviderType =>
+  !!t && (IMAGE_PROVIDER_TYPES as readonly string[]).includes(t);
+
+const IMAGE_PROVIDER_META: Record<
+  ImageProviderType,
+  {
+    label: string;
+    defaultModel: string;
+    modelPlaceholder: string;
+    apiKeyPlaceholder: string;
+    docsUrl: string;
+    docsLabel: string;
+  }
+> = {
+  'image-openai': {
+    label: 'OpenAI (DALL-E / gpt-image-1)',
+    defaultModel: 'gpt-image-1',
+    modelPlaceholder: 'gpt-image-1, dall-e-3',
+    apiKeyPlaceholder: 'sk-...',
+    docsUrl: 'https://platform.openai.com/api-keys',
+    docsLabel: 'OpenAI API keys',
+  },
+  'image-stability': {
+    label: 'Stability AI (SDXL)',
+    defaultModel: 'stable-diffusion-xl-1024-v1-0',
+    modelPlaceholder: 'stable-diffusion-xl-1024-v1-0',
+    apiKeyPlaceholder: 'sk-...',
+    docsUrl: 'https://platform.stability.ai/account/keys',
+    docsLabel: 'Stability AI keys',
+  },
+};
 
 interface Config {
   _id: string;
@@ -102,7 +137,9 @@ export default function Config() {
   const [configs, setConfigs] = useState<Config[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'general' | 'ai' | 'voice'>('ai');
+  const [activeTab, setActiveTab] = useState<
+    'general' | 'ai' | 'image' | 'voice'
+  >('ai');
 
   // Usage Cycle State
   const [usageCycle, setUsageCycle] = useState<UsageCycle | null>(null);
@@ -374,15 +411,20 @@ export default function Config() {
   };
 
   const handleCreate = () => {
+    const isImage = activeTab === 'image';
+    const isAi = activeTab === 'ai';
     setFormData({
       key: '',
       value: '',
       description: '',
-      isProvider: activeTab === 'ai', // Auto-set based on tab
-      providerType: 'openai',
+      isProvider: isAi || isImage,
+      providerType: isImage ? 'image-openai' : 'openai',
+      aiModel: isImage
+        ? IMAGE_PROVIDER_META['image-openai'].defaultModel
+        : '',
       isActive: false,
-      usageLimit: 1000000,
-      costPerToken: 0.000002,
+      usageLimit: isImage ? 0 : 1000000,
+      costPerToken: isImage ? 0 : 0.000002,
     });
     setEditingId(null);
     setIsEditing(true);
@@ -506,7 +548,12 @@ export default function Config() {
   };
 
   const generalConfigs = configs.filter((c) => !c.isProvider);
-  const aiConfigs = configs.filter((c) => c.isProvider);
+  const aiConfigs = configs.filter(
+    (c) => c.isProvider && !isImageProviderType(c.providerType),
+  );
+  const imageConfigs = configs.filter(
+    (c) => c.isProvider && isImageProviderType(c.providerType),
+  );
 
   if (isEditing) {
     return (
@@ -559,19 +606,67 @@ export default function Config() {
                 <select
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
                   value={formData.providerType}
-                  onChange={(e) =>
-                    setFormData({ ...formData, providerType: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const nextType = e.target.value;
+                    setFormData((prev) => {
+                      // When switching INTO an image provider, suggest its
+                      // default model so the operator doesn't have to look it up.
+                      // Only auto-fill if the field is empty so we never
+                      // clobber a deliberately set value.
+                      const auto =
+                        isImageProviderType(nextType) && !prev.aiModel
+                          ? IMAGE_PROVIDER_META[nextType as ImageProviderType]
+                              .defaultModel
+                          : prev.aiModel;
+                      return {
+                        ...prev,
+                        providerType: nextType,
+                        aiModel: auto,
+                      };
+                    });
+                  }}
                 >
-                  <option value="openai">OpenAI (GPT)</option>
-                  <option value="anthropic">Anthropic (Claude)</option>
-                  <option value="google">Google (Gemini)</option>
-                  <option value="groq">Groq</option>
-                  <option value="openrouter">
-                    OpenRouter (Multi-Provider)
-                  </option>
-                  <option value="local">Local (Ollama/LM Studio)</option>
+                  <optgroup label="Chat / LLM">
+                    <option value="openai">OpenAI (GPT)</option>
+                    <option value="anthropic">Anthropic (Claude)</option>
+                    <option value="google">Google (Gemini)</option>
+                    <option value="groq">Groq</option>
+                    <option value="openrouter">
+                      OpenRouter (Multi-Provider)
+                    </option>
+                    <option value="local">Local (Ollama/LM Studio)</option>
+                  </optgroup>
+                  <optgroup label="Image generation">
+                    {IMAGE_PROVIDER_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {IMAGE_PROVIDER_META[t].label}
+                      </option>
+                    ))}
+                  </optgroup>
                 </select>
+                {isImageProviderType(formData.providerType) && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Stored as an active image-gen credential. Content Studio
+                    will use it the moment <strong>Active</strong> is enabled.
+                    <a
+                      href={
+                        IMAGE_PROVIDER_META[
+                          formData.providerType as ImageProviderType
+                        ].docsUrl
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline ml-1"
+                    >
+                      {
+                        IMAGE_PROVIDER_META[
+                          formData.providerType as ImageProviderType
+                        ].docsLabel
+                      }{' '}
+                      →
+                    </a>
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">
@@ -584,7 +679,13 @@ export default function Config() {
                   onChange={(e) =>
                     setFormData({ ...formData, apiKey: e.target.value })
                   }
-                  placeholder="sk-..."
+                  placeholder={
+                    isImageProviderType(formData.providerType)
+                      ? IMAGE_PROVIDER_META[
+                          formData.providerType as ImageProviderType
+                        ].apiKeyPlaceholder
+                      : 'sk-...'
+                  }
                 />
               </div>
               <div>
@@ -598,9 +699,13 @@ export default function Config() {
                     setFormData({ ...formData, aiModel: e.target.value })
                   }
                   placeholder={
-                    formData.providerType === 'openrouter'
-                      ? 'e.g. openai/gpt-4o, anthropic/claude-3-opus'
-                      : 'e.g. gpt-4-turbo'
+                    isImageProviderType(formData.providerType)
+                      ? IMAGE_PROVIDER_META[
+                          formData.providerType as ImageProviderType
+                        ].modelPlaceholder
+                      : formData.providerType === 'openrouter'
+                        ? 'e.g. openai/gpt-4o, anthropic/claude-3-opus'
+                        : 'e.g. gpt-4-turbo'
                   }
                 />
                 {formData.providerType === 'openrouter' && (
@@ -783,6 +888,29 @@ export default function Config() {
         >
           <div className="flex items-center">
             <Bot className="w-4 h-4 mr-2" /> AI Providers
+          </div>
+        </button>
+        <button
+          className={`py-2 px-4 font-medium text-sm ${
+            activeTab === 'image'
+              ? 'border-b-2 border-purple-500 text-purple-600'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+          onClick={() => setActiveTab('image')}
+        >
+          <div className="flex items-center">
+            <Wand2 className="w-4 h-4 mr-2" /> Image Providers
+            {imageConfigs.length > 0 && (
+              <span
+                className={`ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                  activeTab === 'image'
+                    ? 'bg-purple-100 text-purple-700'
+                    : 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                {imageConfigs.length}
+              </span>
+            )}
           </div>
         </button>
         <button
@@ -1314,6 +1442,123 @@ export default function Config() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {activeTab === 'image' && (
+        <div className="space-y-5">
+          <div className="rounded-xl border border-purple-200 bg-gradient-to-r from-purple-50 to-pink-50 p-5">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-white rounded-lg shadow-sm">
+                <Wand2 className="h-5 w-5 text-purple-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-gray-900">
+                  Image generation providers
+                </h3>
+                <p className="text-sm text-gray-700 mt-1">
+                  Plug an API key in here and Content Studio + every agent's
+                  image-generation calls pick it up immediately — no
+                  environment variable, no restart. Stored encrypted via
+                  CryptoService.
+                </p>
+                <button
+                  onClick={() => {
+                    setFormData({
+                      key: '',
+                      value: '',
+                      description: '',
+                      isProvider: true,
+                      providerType: 'image-openai',
+                      apiKey: '',
+                      aiModel:
+                        IMAGE_PROVIDER_META['image-openai'].defaultModel,
+                      isActive: true,
+                    });
+                    setEditingId(null);
+                    setIsEditing(true);
+                  }}
+                  className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-sm font-semibold rounded-md hover:bg-purple-700"
+                >
+                  <Plus className="h-4 w-4" /> Connect image provider
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {imageConfigs.length === 0 ? (
+            <div className="text-center py-12 border border-dashed border-gray-300 rounded-xl bg-white">
+              <Wand2 className="h-10 w-10 mx-auto text-gray-300 mb-2" />
+              <p className="text-sm font-medium text-gray-700">
+                No image providers connected yet
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Click <em>Connect image provider</em> above to add an OpenAI
+                or Stability key.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {imageConfigs.map((c) => {
+                const meta = isImageProviderType(c.providerType)
+                  ? IMAGE_PROVIDER_META[c.providerType as ImageProviderType]
+                  : null;
+                return (
+                  <div
+                    key={c._id}
+                    className={`rounded-xl border p-4 shadow-sm bg-white ${
+                      c.isActive
+                        ? 'border-purple-300 ring-1 ring-purple-200'
+                        : 'border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <Wand2 className="h-4 w-4 text-purple-600" />
+                          <h4 className="font-semibold text-gray-900 truncate">
+                            {meta?.label ?? c.providerType ?? c.key}
+                          </h4>
+                        </div>
+                        <p className="text-xs text-gray-600 font-mono">
+                          model: {c.aiModel || meta?.defaultModel || '—'}
+                        </p>
+                      </div>
+                      <span
+                        className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
+                          c.isActive
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        {c.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+                      <span className="text-xs text-gray-500 inline-flex items-center gap-1">
+                        <ShieldAlert className="h-3 w-3" /> Key:{' '}
+                        {c.apiKey ? 'set (encrypted)' : 'missing'}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleEdit(c)}
+                          className="text-xs text-gray-600 hover:text-gray-900 inline-flex items-center gap-1"
+                        >
+                          <Edit className="h-3 w-3" /> Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(c._id)}
+                          className="text-xs text-red-600 hover:text-red-800 inline-flex items-center gap-1"
+                        >
+                          <Trash className="h-3 w-3" /> Remove
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
