@@ -14,6 +14,7 @@ import {
   AssignedPrompt,
 } from '../types/agent';
 import { IAgent } from '../interfaces/IAgent';
+import { agentRAGService } from './AgentRAGService';
 
 export interface OrchestratorOutcome {
   handled: boolean;
@@ -100,9 +101,40 @@ export class AgentOrchestrator {
       };
     }
 
+    // RAG augmentation — pull the closest training examples and prepend
+    // them onto the system prompt. tenantId comes through ctx.metadata
+    // because AgentContext doesn't carry it yet; when it's absent we skip
+    // retrieval cleanly so existing callers keep working unchanged.
+    const tenantId =
+      typeof ctx.metadata?.tenantId === 'string' ? ctx.metadata.tenantId : null;
+    let augmentedPrompt = assigned;
+    if (tenantId) {
+      try {
+        const retrieved = await agentRAGService.retrieveExamples({
+          tenantId,
+          agentName: agent.name,
+          query: ctx.inputMessage,
+          topK: 3,
+        });
+        if (retrieved.length > 0) {
+          const block = agentRAGService.formatForPrompt(retrieved);
+          augmentedPrompt = {
+            ...assigned,
+            systemPrompt: `${assigned.systemPrompt}\n\n${block}`,
+          };
+        }
+      } catch (err) {
+        console.error(
+          `AgentRAGService.retrieveExamples failed for ${agent.name}:`,
+          err,
+        );
+        // Fall through with the un-augmented prompt — RAG never blocks.
+      }
+    }
+
     const ctxWithPrompt: AgentContext = {
       ...ctx,
-      assignedPrompt: assigned,
+      assignedPrompt: augmentedPrompt,
     };
 
     const start = Date.now();

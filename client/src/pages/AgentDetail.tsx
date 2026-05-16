@@ -9,6 +9,7 @@ import {
   Sparkles,
   FlaskConical,
 } from 'lucide-react';
+import AgentTrainingPanel from '../components/agents/AgentTrainingPanel';
 
 interface PromptMetrics {
   uses: number;
@@ -540,6 +541,8 @@ export default function AgentDetail() {
           </table>
         </div>
       </section>
+
+      <AgentTrainingPanel agentName={name} />
     </div>
   );
 }
