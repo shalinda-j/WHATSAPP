@@ -157,6 +157,40 @@ export default function AgentDetail() {
     await load();
   };
 
+  const clearCandidate = async () => {
+    if (!confirm('Clear candidate? Traffic returns to 100% on current.')) return;
+    const last = data?.versions.find((v) => v.isCandidate);
+    if (!last) return;
+    await api.patch(`/api/agents/${name}/versions/${last.version}`, {
+      action: 'clear_candidate',
+    });
+    await load();
+  };
+
+  const updateTraffic = async (percent: number) => {
+    try {
+      await api.patch(`/api/agents/${name}/traffic`, {
+        trafficPercent: percent,
+      });
+      // Optimistic update so the slider doesn't snap back while reload runs.
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              config: { ...prev.config, candidateTrafficPercent: percent },
+            }
+          : prev,
+      );
+      await load();
+    } catch (err) {
+      const ax = err as { response?: { data?: { error?: string } } };
+      alert(
+        ax.response?.data?.error ||
+          (err instanceof Error ? err.message : 'Update failed'),
+      );
+    }
+  };
+
   const archive = async (version: number) => {
     if (!confirm(`Archive v${version}?`)) return;
     await api.patch(`/api/agents/${name}/versions/${version}`, {
@@ -438,6 +472,60 @@ export default function AgentDetail() {
                   <p className="text-xs text-gray-600 mt-1 italic">
                     "{v.changelog}"
                   </p>
+                )}
+                {/* A/B traffic split — only meaningful for the candidate.
+                    Capped at 50% server-side; ≥50% means "promote instead". */}
+                {v.isCandidate && (
+                  <div className="mt-2 rounded-md border border-purple-200 bg-purple-50/50 px-2.5 py-1.5">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] font-semibold text-purple-800 uppercase tracking-wide">
+                        Candidate traffic
+                      </span>
+                      <span className="text-[11px] font-mono text-purple-900">
+                        {cfg.candidateTrafficPercent}% → v{v.version} ·{' '}
+                        {100 - cfg.candidateTrafficPercent}% → v
+                        {cfg.currentPromptVersion}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="50"
+                      step="5"
+                      value={cfg.candidateTrafficPercent}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          candidateTrafficPercent: Number(e.target.value),
+                        }))
+                      }
+                      onMouseUp={(e) =>
+                        updateTraffic(
+                          Number((e.target as HTMLInputElement).value),
+                        )
+                      }
+                      onTouchEnd={(e) =>
+                        updateTraffic(
+                          Number((e.target as HTMLInputElement).value),
+                        )
+                      }
+                      className="w-full accent-purple-600"
+                    />
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-[10px] text-gray-500">
+                        0% (paused)
+                      </span>
+                      <button
+                        onClick={clearCandidate}
+                        className="text-[10px] text-purple-700 hover:text-purple-900 underline"
+                      >
+                        Clear candidate
+                      </button>
+                      <span className="text-[10px] text-gray-500">
+                        50% (cap — promote instead)
+                      </span>
+                    </div>
+                  </div>
                 )}
                 <details className="mt-2">
                   <summary className="text-xs text-gray-600 cursor-pointer hover:text-gray-900">

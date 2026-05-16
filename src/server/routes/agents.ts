@@ -28,7 +28,7 @@ const ConfigPatchSchema = z.object({
   promotionPolicy: z.enum(['auto', 'manual']).optional(),
   autoPromoteMinSamples: z.number().int().min(1).optional(),
   autoPromoteMinPValue: z.number().min(0).max(1).optional(),
-  candidateTrafficPercent: z.number().min(0).max(100).optional(),
+  candidateTrafficPercent: z.number().min(0).max(50).optional(),
 });
 
 const PromptCreateSchema = z.object({
@@ -38,9 +38,22 @@ const PromptCreateSchema = z.object({
   makeCandidate: z.boolean().default(true),
 });
 
+// Safety cap on candidate traffic — a runaway candidate at >50% defeats the
+// point of an A/B test. Operators who genuinely want a full canary should
+// promote() instead of cranking traffic.
+const MAX_CANDIDATE_TRAFFIC_PERCENT = 50;
+
 const PromptPatchSchema = z.object({
   action: z.enum(['promote', 'archive', 'set_candidate', 'clear_candidate']),
-  trafficPercent: z.number().min(0).max(100).optional(),
+  trafficPercent: z
+    .number()
+    .min(0)
+    .max(MAX_CANDIDATE_TRAFFIC_PERCENT)
+    .optional(),
+});
+
+const TrafficUpdateSchema = z.object({
+  trafficPercent: z.number().min(0).max(MAX_CANDIDATE_TRAFFIC_PERCENT),
 });
 
 const FeedbackCreateSchema = z.object({
@@ -229,6 +242,34 @@ router.patch(
       res.json({ success: true });
       return;
     }
+  }),
+);
+
+/**
+ * Adjust the traffic split for whichever version is currently the candidate.
+ * Cleaner UX than re-issuing `action: 'set_candidate'` just to nudge the
+ * percentage. 0 = effectively pause the candidate without clearing it; the
+ * upper bound is the MAX_CANDIDATE_TRAFFIC_PERCENT guard rail.
+ */
+router.patch(
+  '/:name/traffic',
+  asyncHandler(async (req, res) => {
+    const body = TrafficUpdateSchema.parse(req.body);
+    const name = String(req.params.name);
+    const config = await AgentConfig.findOne({ name });
+    if (!config) throw new Error('Agent not found');
+    if (config.candidatePromptVersion == null) {
+      throw new Error(
+        'No candidate version set — make a candidate before adjusting traffic.',
+      );
+    }
+    const updated = await AgentConfig.findOneAndUpdate(
+      { name },
+      { $set: { candidateTrafficPercent: body.trafficPercent } },
+      { new: true },
+    );
+    await agentRegistry.forceReload();
+    res.json({ success: true, config: updated });
   }),
 );
 
