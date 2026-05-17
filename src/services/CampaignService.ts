@@ -10,6 +10,8 @@ import AgentPromptVersion from '../models/AgentPromptVersion';
 import { Contact } from '../models/CRM';
 import { aiLoadBalancer } from './AILoadBalancer';
 import { channelRouter } from '../channels';
+import { isQuietHoursActive, tenantQuietHours } from './quietHours';
+import { isPhoneOptedOut } from './optOut';
 import { Channel } from '../types/agent';
 import { CAMPAIGN_GENERATOR_V1_PROMPT } from '../agents/prompts/campaign-generator-v1';
 
@@ -362,6 +364,15 @@ export class CampaignService {
       else byCampaign.set(k, [exec] as any);
     }
 
+    // Tenant-wide quiet hours: a single lookup short-circuits the whole
+    // tick so we don't claim+release queued rows while the channel is
+    // muted. Per-campaign quietHours below still takes precedence when
+    // the tenant window isn't active.
+    const tenant = await Tenant.findById(tenantId);
+    if (isQuietHoursActive(tenantQuietHours(tenant))) {
+      return { sent: 0 };
+    }
+
     let sent = 0;
     for (const [campaignKey, execs] of byCampaign.entries()) {
       const campaign = await MarketingCampaign.findById(campaignKey);
@@ -386,6 +397,23 @@ export class CampaignService {
           { new: true },
         );
         if (!claimed) continue;
+
+        // Compliance gate: a contact who replied STOP/UNSUBSCRIBE is
+        // marked optedOut. Skip them here rather than at send time so
+        // the execution row carries an auditable reason and ops have a
+        // clean count of suppressed deliveries.
+        if (await isPhoneOptedOut(exec.recipientExternalId)) {
+          await CampaignExecution.updateOne(
+            { _id: claimed._id },
+            {
+              $set: {
+                status: 'failed',
+                errorMessage: 'recipient_opted_out',
+              },
+            },
+          );
+          continue;
+        }
 
         const variant = variantById.get(exec.variantId);
         if (!variant) {

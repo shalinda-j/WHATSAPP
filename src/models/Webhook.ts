@@ -1,11 +1,22 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
+export type WebhookCategory = 'data' | 'ops';
+export type WebhookFormat = 'generic' | 'slack' | 'discord';
+
 export interface IWebhook {
   url: string;
   events: string[]; // e.g., ['message.received', 'booking.created']
   secret?: string; // For verifying payloads
   isActive: boolean;
   name: string;
+  /**
+   * 'data' webhooks receive business events (message.received, lead.created).
+   * 'ops' webhooks receive operational alerts (budget cap hit, approval
+   * queue backlog, channel disconnect). The format determines the payload
+   * shape so Slack / Discord incoming-webhook URLs work out of the box.
+   */
+  category?: WebhookCategory;
+  format?: WebhookFormat;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -19,6 +30,17 @@ const WebhookSchema = new Schema(
     events: { type: [String], default: [] },
     secret: { type: String },
     isActive: { type: Boolean, default: true },
+    category: {
+      type: String,
+      enum: ['data', 'ops'],
+      default: 'data',
+      index: true,
+    },
+    format: {
+      type: String,
+      enum: ['generic', 'slack', 'discord'],
+      default: 'generic',
+    },
   },
   { timestamps: true },
 );

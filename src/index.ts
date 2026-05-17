@@ -54,6 +54,7 @@ import { registerCoreAgents } from './agents/bootstrap';
 import { registerCoreChannels, channelRouter } from './channels';
 import { classifyIntent } from './services/IntentClassifierService';
 import { HumanizerService } from './services/HumanizerService';
+import { isStopKeyword, markContactOptedOut } from './services/optOut';
 
 const PORT = process.env.PORT || 8080;
 let server: any;
@@ -436,6 +437,27 @@ onMessage(async (message, sock, sessionId) => {
     // Ignore status broadcasts - only skip @broadcast addresses
     if (jid.includes('@broadcast')) {
       console.log('   (Ignoring broadcast message)');
+      return;
+    }
+
+    // Opt-out / STOP keyword: a contact replying with STOP/UNSUBSCRIBE/etc.
+    // is marked opted-out across every channel; outbound campaigns +
+    // follow-ups skip them from then on. We send a single confirmation,
+    // then short-circuit the rest of the flow — no AI, no upsell, no
+    // form prompts to someone who just asked to be left alone.
+    if (text && isStopKeyword(text)) {
+      console.log(`   🚫 STOP keyword detected from ${jid}, marking opted-out`);
+      try {
+        const modified = await markContactOptedOut(jid, 'whatsapp', 'inbound_stop_keyword');
+        console.log(`   ✅ Opted out ${modified} matching contact(s)`);
+      } catch (err) {
+        console.error('   ⚠️ markContactOptedOut failed:', err);
+      }
+      await sendMessage(
+        jid,
+        'ඔබව unsubscribe කර ඇත. තවදුරටත් අපෙන් marketing පණිවිඩ ලැබෙන්නේ නැත.\n\nYou have been unsubscribed. You will no longer receive marketing messages from us.',
+        sessionId,
+      );
       return;
     }
 

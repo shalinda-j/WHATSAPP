@@ -5,6 +5,8 @@ import { Contact } from '../models/CRM';
 import Lead from '../models/Lead';
 import Tenant from '../models/Tenant';
 import AgentConfig from '../models/AgentConfig';
+import { isQuietHoursActive, tenantQuietHours } from './quietHours';
+import { isPhoneOptedOut } from './optOut';
 
 const DEFAULT_DORMANT_THRESHOLD_DAYS = 5;
 const DEFAULT_BATCH_SIZE = 10;
@@ -30,11 +32,19 @@ let tickInterval: NodeJS.Timeout | null = null;
  */
 async function tick(
   tenantId: string,
-): Promise<{ scanned: number; fired: number }> {
+): Promise<{ scanned: number; fired: number; skippedQuietHours?: boolean }> {
   // Gate on the agent being enabled.
   const cfg = await AgentConfig.findOne({ name: 'follow_up' });
   if (!cfg || !cfg.isActive || cfg.mode === 'disabled') {
     return { scanned: 0, fired: 0 };
+  }
+
+  // Tenant-wide quiet hours short-circuit the entire tick. Skipping at the
+  // top avoids burning Mongo queries + LLM tokens just to discover at send
+  // time that we can't deliver.
+  const tenant = await Tenant.findById(tenantId);
+  if (isQuietHoursActive(tenantQuietHours(tenant))) {
+    return { scanned: 0, fired: 0, skippedQuietHours: true };
   }
 
   const threshold = new Date(
@@ -84,6 +94,13 @@ async function tick(
   for (const lead of dormantLeads) {
     const phone = lead.phoneNumber;
     const contact = phone ? contactsByPhone.get(phone) ?? null : null;
+
+    // Skip opted-out contacts: a STOP from the user must silence every
+    // future outbound — including agent-driven follow-ups, not just
+    // campaign broadcasts.
+    if (phone && (await isPhoneOptedOut(phone))) {
+      continue;
+    }
 
     const daysSinceLastInteraction = Math.floor(
       (Date.now() - new Date(lead.updatedAt).getTime()) / (24 * 60 * 60 * 1000),

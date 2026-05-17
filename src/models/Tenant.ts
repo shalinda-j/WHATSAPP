@@ -23,6 +23,18 @@ export interface ITenant extends Document {
     monthlyCostUsdCap: number;
     perConversationTokenCap: number;
   };
+  /**
+   * Tenant-wide quiet hours. When set, the campaign sender + follow-up
+   * scheduler skip outbound sends whose local time falls inside the
+   * window. Per-campaign quietHours still take precedence when present.
+   * Falls back to brand.timezone when zone is unset.
+   */
+  quietHours?: {
+    enabled: boolean;
+    startHour: number;
+    endHour: number;
+    timezone?: string;
+  };
   /** Owner admin user id (references Admin collection). */
   ownerAdminId?: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -56,6 +68,12 @@ const TenantSchema = new Schema(
       dailyTokenCap: { type: Number, default: 1_000_000 },
       monthlyCostUsdCap: { type: Number, default: 100 },
       perConversationTokenCap: { type: Number, default: 8000 },
+    },
+    quietHours: {
+      enabled: { type: Boolean, default: false },
+      startHour: { type: Number, min: 0, max: 23, default: 21 },
+      endHour: { type: Number, min: 0, max: 23, default: 8 },
+      timezone: { type: String },
     },
     ownerAdminId: { type: Schema.Types.ObjectId, ref: 'Admin' },
   } as any,

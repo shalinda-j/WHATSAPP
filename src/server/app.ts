@@ -35,9 +35,11 @@ import campaignsRouter from './routes/campaigns';
 import segmentsRouter from './routes/segments';
 import tenantsRouter from './routes/tenants';
 import marketingInsightsRouter from './routes/marketingInsights';
+import auditRouter from './routes/audit';
 
 import mongoose from 'mongoose';
 import { authenticateToken } from './middleware/auth';
+import { auditLog } from './middleware/auditLog';
 
 const app = express();
 
@@ -159,6 +161,13 @@ app.use('/api/campaigns', campaignsRouter);
 app.use('/api/segments', segmentsRouter);
 app.use('/api/tenants', tenantsRouter);
 app.use('/api/marketing-insights', marketingInsightsRouter);
+app.use('/api/audit', authenticateToken, auditRouter);
+
+// Audit middleware: records every mutating API call (POST/PUT/PATCH/DELETE)
+// to the AuditEvent collection. Hooked via res.on('finish') so it adds zero
+// blocking latency and never rejects a legitimate call even if Mongo writes
+// fail. Sensitive request-body fields are redacted before persistence.
+app.use(auditLog);
 
 // Public forms endpoint (for bot)
 app.use('/api/forms/default', async (req, res, next) => {

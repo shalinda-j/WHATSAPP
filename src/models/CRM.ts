@@ -70,6 +70,20 @@ const ContactSchema = new mongoose.Schema({
   nextFollowUp: { type: Date },
   lastContact: { type: Date },
   whatsappOptIn: { type: Boolean, default: true },
+  /**
+   * Channel-agnostic opt-out flag set when the contact sends a STOP /
+   * UNSUBSCRIBE keyword (or the operator marks them as opted-out
+   * manually). When true, outbound campaigns + follow-ups skip this
+   * contact across every channel. `whatsappOptIn` is kept as the
+   * legacy WhatsApp-specific flag for backwards compatibility.
+   */
+  optedOut: { type: Boolean, default: false, index: true },
+  optedOutAt: { type: Date },
+  optedOutReason: { type: String },
+  optedOutChannel: {
+    type: String,
+    enum: ['whatsapp', 'telegram', 'instagram', 'facebook', 'email', 'manual'],
+  },
   whatsappNumber: { type: String },
   // Alias for whatsappNumber (frontend uses whatsappId)
   whatsappId: { type: String },
