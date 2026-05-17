@@ -28,15 +28,66 @@
     -->
     <script>
       (function () {
-        // Guard against an infinite reload loop if the comparison ever
-        // misfires (e.g. proxy strips Cache-Control). One self-heal per
-        // page-load is enough; if we reloaded already in this session we
-        // do nothing.
-        try {
-          if (sessionStorage.getItem('__bundleSelfHealed') === '1') return;
-        } catch (_) {
-          /* sessionStorage might be disabled — fall through */
+        // Helper used by both the HTML-drift comparison and the
+        // load-error listener so we never trigger more than one recovery
+        // reload per tab.
+        function alreadyHealed() {
+          try {
+            return sessionStorage.getItem('__bundleSelfHealed') === '1';
+          } catch (_) {
+            return false;
+          }
         }
+        function markHealed() {
+          try {
+            sessionStorage.setItem('__bundleSelfHealed', '1');
+          } catch (_) {
+            /* ignore */
+          }
+        }
+        // Cache-bust reload: changing the URL forces the browser to
+        // refetch every asset without honouring its (possibly corrupt)
+        // disk cache. Used instead of plain reload() so we recover from
+        // ERR_CACHE_READ_FAILURE, not just stale HTML.
+        function recoverReload(reason, detail) {
+          if (alreadyHealed()) return;
+          markHealed();
+          console.warn(
+            '[bundle-check] ' + reason + ' — recovering' +
+              (detail ? ' (' + detail + ')' : ''),
+          );
+          var bust = '_v=' + Date.now();
+          var url = window.location.pathname + '?' + bust + window.location.hash;
+          window.location.replace(url);
+        }
+
+        // ── Asset load-error listener ─────────────────────────────────
+        // Catches errors that fire while the document is loading <script
+        // src> and <link href> tags — including ERR_CACHE_READ_FAILURE
+        // (corrupt disk cache), 404 (stale hash that the HTML-drift
+        // check below didn't catch in time), and network failures. We
+        // run in the capture phase so we see the event before app code
+        // attaches its own handlers. Registered immediately because the
+        // bundle <script> tag below us may fail before our async fetch()
+        // completes.
+        window.addEventListener(
+          'error',
+          function (ev) {
+            var t = ev && ev.target;
+            if (!t || t === window) return;
+            var tagName = (t.tagName || '').toUpperCase();
+            if (tagName !== 'SCRIPT' && tagName !== 'LINK') return;
+            var url = t.src || t.href || '';
+            if (url.indexOf('/assets/') === -1) return;
+            recoverReload(
+              'asset load failed',
+              url.split('/').pop() + ' on ' + tagName,
+            );
+          },
+          true,
+        );
+
+        if (alreadyHealed()) return;
         var ASSET_RE = /\/assets\/[\w.-]+\.(?:js|css)/g;
         function currentDocAssets() {
           var hits = new Set();
@@ -75,17 +126,12 @@
             var have = currentDocAssets();
             var want = freshHtmlAssets(html);
             // Only act when we have a concrete divergence — never reload
-            // if either side parsed to an empty list.
+            // if either side parsed to an empty list. The cache-busting
+            // recoverReload() also handles ERR_CACHE_READ_FAILURE in the
+            // common path: refetching with a fresh URL bypasses the
+            // browser's disk cache for every asset.
             if (have && want && have !== want) {
-              try {
-                sessionStorage.setItem('__bundleSelfHealed', '1');
-              } catch (_) {
-                /* ignore */
-              }
-              console.warn(
-                '[bundle-check] stale HTML detected, reloading to current bundle',
-              );
-              window.location.reload();
+              recoverReload('stale HTML detected');
             }
           })
           .catch(function () {
