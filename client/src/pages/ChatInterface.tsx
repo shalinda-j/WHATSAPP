@@ -142,7 +142,16 @@ export default function ChatInterface() {
     const API_URL = import.meta.env.VITE_API_URL || window.location.origin;
     const token = localStorage.getItem('token');
     const newSocket = io(API_URL, {
-      transports: ['websocket', 'polling'],
+      // Start with HTTP polling, then upgrade to WebSocket. The
+      // reverse default ('websocket' first) is faster on a clean LAN
+      // but on DigitalOcean App Platform / Cloudflare-style proxies
+      // the initial WebSocket handshake gets killed before the upgrade
+      // completes — producing the noisy
+      //   "WebSocket is closed before the connection is established"
+      // followed by a successful reconnect via polling+upgrade. Polling
+      // first avoids that whole dance — the upgrade still happens once
+      // the connection is established, so we still get a real WS link.
+      transports: ['polling', 'websocket'],
       auth: { token },
     });
 
