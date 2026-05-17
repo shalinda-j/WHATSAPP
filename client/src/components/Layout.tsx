@@ -28,6 +28,7 @@ import {
   LineChart,
   Building2,
   Wand2,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface NavItem {
@@ -95,6 +96,7 @@ const NAV_SECTIONS: NavSection[] = [
     title: 'System',
     items: [
       { to: '/tenants', icon: Building2, label: 'Tenants' },
+      { to: '/audit', icon: ShieldAlert, label: 'Audit Log' },
       { to: '/config', icon: Settings, label: 'Configuration' },
       { to: '/system', icon: Cpu, label: 'System Health' },
     ],

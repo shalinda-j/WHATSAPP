@@ -36,8 +36,19 @@ interface Message {
     buyingSignal?: string;
     isBooking?: boolean;
     detectedLanguage?: string;
+    sentimentScore?: number;
+    sentimentLabel?: 'positive' | 'neutral' | 'negative';
   };
 }
+
+const SENTIMENT_BADGE: Record<
+  'positive' | 'neutral' | 'negative',
+  { label: string; className: string }
+> = {
+  positive: { label: '😊 positive', className: 'bg-green-50 text-green-700' },
+  neutral: { label: '· neutral', className: 'bg-gray-50 text-gray-500' },
+  negative: { label: '⚠ negative', className: 'bg-red-50 text-red-700' },
+};
 
 interface Conversation {
   userId: string;
@@ -814,17 +825,38 @@ export default function ChatInterface() {
                           </div>
                         </div>
 
-                        {/* Intent badge */}
-                        {msg.metadata?.intent && (
+                        {/* Intent + sentiment badges (user messages only —
+                            assistant replies inherit no inbound signal). */}
+                        {(msg.metadata?.intent ||
+                          (isUser && msg.metadata?.sentimentLabel &&
+                            msg.metadata.sentimentLabel !== 'neutral')) && (
                           <div
-                            className={`flex ${
+                            className={`flex flex-wrap gap-1 ${
                               isUser ? 'justify-start' : 'justify-end'
                             } mt-1`}
                           >
-                            <span className="text-[9px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full flex items-center gap-1">
-                              <Tag className="h-2 w-2" />
-                              {msg.metadata.intent}
-                            </span>
+                            {msg.metadata?.intent && (
+                              <span className="text-[9px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full flex items-center gap-1">
+                                <Tag className="h-2 w-2" />
+                                {msg.metadata.intent}
+                              </span>
+                            )}
+                            {isUser && msg.metadata?.sentimentLabel &&
+                              msg.metadata.sentimentLabel !== 'neutral' && (
+                                <span
+                                  className={`text-[9px] px-1.5 py-0.5 rounded-full ${
+                                    SENTIMENT_BADGE[msg.metadata.sentimentLabel]
+                                      .className
+                                  }`}
+                                  title={
+                                    msg.metadata.sentimentScore !== undefined
+                                      ? `Sentiment score: ${msg.metadata.sentimentScore.toFixed(2)}`
+                                      : undefined
+                                  }
+                                >
+                                  {SENTIMENT_BADGE[msg.metadata.sentimentLabel].label}
+                                </span>
+                              )}
                           </div>
                         )}
                       </div>

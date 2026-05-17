@@ -33,6 +33,7 @@ const Segments = lazy(() => import('./pages/Segments'));
 const Tenants = lazy(() => import('./pages/Tenants'));
 const MarketingInsights = lazy(() => import('./pages/MarketingInsights'));
 const ContentStudio = lazy(() => import('./pages/ContentStudio'));
+const AuditLog = lazy(() => import('./pages/AuditLog'));
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   const { token, loading } = useAuth();
@@ -252,6 +253,14 @@ function AppRoutes() {
           element={
             <Suspense fallback={<RouteSpinner />}>
               <Tenants />
+            </Suspense>
+          }
+        />
+        <Route
+          path="audit"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <AuditLog />
             </Suspense>
           }
         />
