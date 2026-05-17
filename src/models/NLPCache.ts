@@ -12,6 +12,14 @@ export interface INLPCache extends Document {
    */
   canonicalUtterances: string[];
   aiResponse: string;
+  /**
+   * OpenAI text-embedding-3-small vector of `aiResponse` (1536 dims).
+   * Used to merge semantically-similar AI responses into one intent even
+   * when the surface text differs — e.g. "Our hours are 9 to 5" and
+   * "We're open from 9 AM to 5 PM" should collapse instead of producing
+   * two separate intent rows. Null when no embedding provider is set.
+   */
+  responseEmbedding?: number[];
   /** Languages detected across the utterances (en / si / ta). */
   languages: string[];
   /** Number of times this cached answer has been served. */
@@ -28,6 +36,7 @@ const NLPCacheSchema = new Schema(
     userUtterances: [{ type: String, required: true }],
     canonicalUtterances: { type: [String], default: [] },
     aiResponse: { type: String, required: true },
+    responseEmbedding: { type: [Number] },
     languages: { type: [String], default: [] },
     hits: { type: Number, default: 0, index: true },
     lastUsedAt: { type: Date },

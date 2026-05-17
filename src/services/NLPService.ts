@@ -4,6 +4,35 @@ import { NlpManager } from 'node-nlp';
 import NLPCache from '../models/NLPCache';
 import crypto from 'crypto';
 import { normaliseUtterance, detectLanguage } from './nlpNormalise';
+import { agentRAGService } from './AgentRAGService';
+
+/**
+ * Cosine similarity over two equal-length vectors. Returns 0 when either
+ * vector is empty/missing or when their magnitudes are zero (rather than
+ * NaN, which would break the > threshold comparison downstream).
+ */
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (!a || !b || a.length === 0 || a.length !== b.length) return 0;
+  let dot = 0;
+  let na = 0;
+  let nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  const denom = Math.sqrt(na) * Math.sqrt(nb);
+  return denom === 0 ? 0 : dot / denom;
+}
+
+/**
+ * If two AI responses have cosine similarity ≥ this threshold their embeddings
+ * are close enough that we treat them as "the same answer worded differently"
+ * and merge them under one intent rather than creating a fresh intent.
+ * Tuned conservatively — at 0.9 only paraphrases of the same fact collapse;
+ * unrelated answers comfortably score below 0.7.
+ */
+const SEMANTIC_MERGE_THRESHOLD = 0.9;
 
 class NLPService {
   private manager: any;
@@ -261,12 +290,67 @@ class NLPService {
       const canonical = normaliseUtterance(rawMessage);
       const lang = detectLanguage(rawMessage);
 
-      // Group similar AI responses under the same intent via MD5(response).
-      const responseHash = crypto
-        .createHash('md5')
-        .update(normalizedResponse)
-        .digest('hex');
-      const intentName = `learned_intent_${responseHash.substring(0, 10)}`;
+      // ── Semantic grouping ──────────────────────────────────────────────
+      // Before falling back to the exact MD5(response) bucket, embed the
+      // response and check whether any existing intent's cached response
+      // is semantically the same (cosine ≥ SEMANTIC_MERGE_THRESHOLD).
+      // This collapses "Our hours are 9 to 5" and "We're open from 9 AM
+      // to 5 PM" into one intent instead of two — a major cache-hit-rate
+      // win because the next user phrasing only needs to match one of the
+      // collapsed intents.
+      //
+      // The embedding step degrades gracefully:
+      //  - No OPENAI_API_KEY → embedText returns null → we skip semantic
+      //    grouping and fall through to MD5 grouping (the old behaviour).
+      //  - Mongo down → catch silences and falls through.
+      let intentName: string | null = null;
+      let responseEmbedding: number[] | null = null;
+      if (agentRAGService.isEmbeddingReady()) {
+        responseEmbedding = await agentRAGService.embedText(normalizedResponse);
+        if (responseEmbedding) {
+          try {
+            // Pull every intent that *has* an embedding. Bounded by the
+            // cache size which is operator-controlled.
+            const candidates = await NLPCache.find({
+              responseEmbedding: { $exists: true, $not: { $size: 0 } },
+            })
+              .select('intentName responseEmbedding')
+              .lean();
+            let best: { intentName: string; score: number } | null = null;
+            for (const c of candidates as Array<{
+              intentName: string;
+              responseEmbedding?: number[];
+            }>) {
+              if (!c.responseEmbedding) continue;
+              const score = cosineSimilarity(
+                responseEmbedding,
+                c.responseEmbedding,
+              );
+              if (!best || score > best.score) {
+                best = { intentName: c.intentName, score };
+              }
+            }
+            if (best && best.score >= SEMANTIC_MERGE_THRESHOLD) {
+              intentName = best.intentName;
+              console.log(
+                `🧬 [NLP LEARN] Semantic merge into ${best.intentName} (cos=${best.score.toFixed(3)})`,
+              );
+            }
+          } catch (err) {
+            console.error('Semantic grouping lookup failed:', err);
+          }
+        }
+      }
+
+      // Fall back to MD5(response) bucket when semantic grouping didn't
+      // find a sibling intent (or the embedding step was skipped).
+      if (!intentName) {
+        const responseHash = crypto
+          .createHash('md5')
+          .update(normalizedResponse)
+          .digest('hex');
+        intentName = `learned_intent_${responseHash.substring(0, 10)}`;
+      }
 
       // ── Cross-intent canonical guard ───────────────────────────────────
       // If we've already learned this exact canonical question under a
@@ -305,6 +389,19 @@ class NLPService {
             lang,
           ]);
           (cache as { languages: string[] }).languages = Array.from(langs);
+          // Backfill the embedding when we have one and the existing row
+          // doesn't — lets a row created pre-embedding participate in
+          // future semantic-merge lookups.
+          const existingEmbedding = (
+            cache as { responseEmbedding?: number[] }
+          ).responseEmbedding;
+          if (
+            responseEmbedding &&
+            (!existingEmbedding || existingEmbedding.length === 0)
+          ) {
+            (cache as { responseEmbedding?: number[] }).responseEmbedding =
+              responseEmbedding;
+          }
           await cache.save();
 
           // Feed both raw and canonical to the classifier so suffix
@@ -333,6 +430,10 @@ class NLPService {
         canonicalUtterances: [canonical],
         languages: [lang],
         aiResponse: normalizedResponse,
+        // Persist the embedding so future learn calls can semantic-merge
+        // against this intent. May be undefined when no embedding provider
+        // is configured — that's fine, the field is optional.
+        responseEmbedding: responseEmbedding ?? undefined,
         hits: 0,
       });
       await cache.save();
