@@ -6,6 +6,7 @@ import {
   FileText,
   Bot,
   MessageSquare,
+  GraduationCap,
 } from 'lucide-react';
 import { api } from '../config';
 import LanguageSwitcher, {
@@ -18,6 +19,7 @@ import LinksTab from '../components/datasets/LinksTab';
 import MegaTextTab from '../components/datasets/MegaTextTab';
 import AIPersonalityTab from '../components/datasets/AIPersonalityTab';
 import AcknowledgementsTab from '../components/datasets/AcknowledgementsTab';
+import SkillsTab from '../components/datasets/SkillsTab';
 
 type TabType =
   | 'knowledge'
@@ -25,7 +27,8 @@ type TabType =
   | 'links'
   | 'megatext'
   | 'personality'
-  | 'acknowledgements';
+  | 'acknowledgements'
+  | 'skills';
 
 interface Tab {
   id: TabType;
@@ -41,6 +44,7 @@ const tabs: Tab[] = [
   { id: 'megatext', label: 'Mega Text', icon: FileText },
   { id: 'personality', label: 'AI Personality', icon: Bot },
   { id: 'acknowledgements', label: 'Acknowledgements', icon: MessageSquare },
+  { id: 'skills', label: 'Skills', icon: GraduationCap },
 ];
 
 export default function Datasets() {
@@ -53,6 +57,7 @@ export default function Datasets() {
     megatext: 0,
     personality: 0,
     acknowledgements: 0,
+    skills: 0,
   });
 
   // Fetch counts for each tab
@@ -70,6 +75,7 @@ export default function Datasets() {
         megatext: 0,
         personality: 0,
         acknowledgements: 0,
+        skills: 0,
       };
 
       // Filter out 'config' type (internal configuration items, not displayed in tabs)
@@ -98,6 +104,19 @@ export default function Datasets() {
             newCounts[tabType]++;
           }
         });
+
+      // Skills live in a separate collection (agent_skills), not under
+      // /api/datasets — fetch them in parallel so the tab badge stays
+      // accurate.
+      try {
+        const skillsRes = await api.get('/api/agent-skills');
+        const skillsArr =
+          (skillsRes.data?.skills as unknown[]) ??
+          (Array.isArray(skillsRes.data) ? skillsRes.data : []);
+        newCounts.skills = Array.isArray(skillsArr) ? skillsArr.length : 0;
+      } catch {
+        /* skills count is informational — non-fatal */
+      }
 
       setCounts(newCounts);
     } catch (error) {
@@ -157,6 +176,13 @@ export default function Datasets() {
       case 'acknowledgements':
         return (
           <AcknowledgementsTab
+            language={currentLanguage}
+            onDataChange={handleDataChange}
+          />
+        );
+      case 'skills':
+        return (
+          <SkillsTab
             language={currentLanguage}
             onDataChange={handleDataChange}
           />

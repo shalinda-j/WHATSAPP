@@ -15,6 +15,7 @@ import {
 } from '../types/agent';
 import { IAgent } from '../interfaces/IAgent';
 import { agentRAGService } from './AgentRAGService';
+import AgentSkill from '../models/AgentSkill';
 
 export interface OrchestratorOutcome {
   handled: boolean;
@@ -108,6 +109,49 @@ export class AgentOrchestrator {
     const tenantId =
       typeof ctx.metadata?.tenantId === 'string' ? ctx.metadata.tenantId : null;
     let augmentedPrompt = assigned;
+
+    // ── Skill injection ───────────────────────────────────────────────
+    // Every active skill assigned to this agent contributes a
+    // promptSection (e.g. BANT qualification rules, brand-voice guide)
+    // which we concatenate onto the system prompt BEFORE the RAG block.
+    // Skills are tenant-scoped; an absent tenantId just means no skills
+    // injected, never a failure. Errors are swallowed because a skill
+    // lookup blip must not block the agent's response.
+    if (tenantId) {
+      try {
+        const skills = await AgentSkill.find({
+          tenantId,
+          isActive: true,
+          assignedAgents: agent.name,
+        })
+          .select('name promptSection category')
+          .lean();
+        if (skills.length > 0) {
+          const blocks = (
+            skills as Array<{
+              name: string;
+              promptSection: string;
+              category: string;
+            }>
+          )
+            .map(
+              (s) =>
+                `## Skill: ${s.name}${s.category ? ` (${s.category})` : ''}\n${s.promptSection.trim()}`,
+            )
+            .join('\n\n');
+          augmentedPrompt = {
+            ...augmentedPrompt,
+            systemPrompt: `${augmentedPrompt.systemPrompt}\n\n${blocks}`,
+          };
+        }
+      } catch (err) {
+        console.error(
+          `AgentSkill injection failed for ${agent.name}:`,
+          err,
+        );
+      }
+    }
+
     if (tenantId) {
       try {
         const retrieved = await agentRAGService.retrieveExamples({
