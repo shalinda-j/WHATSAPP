@@ -3,6 +3,7 @@
 import { NlpManager } from 'node-nlp';
 import NLPCache from '../models/NLPCache';
 import crypto from 'crypto';
+import { normaliseUtterance, detectLanguage } from './nlpNormalise';
 
 class NLPService {
   private manager: any;
@@ -10,6 +11,13 @@ class NLPService {
   private isTraining = false;
   private needsRetraining = false;
   private initialized = false;
+  /**
+   * In-memory canonical-form → intentName map. Built at boot, kept in sync
+   * by learnFromAI. Lets processMessage short-circuit a full node-nlp
+   * classification when the user just repeated a previously-seen question
+   * (the dominant cache-hit case). O(1) lookup vs O(intents) classifier.
+   */
+  private canonicalIndex: Map<string, string> = new Map();
 
   constructor() {
     // Initialize standard NlpManager using default settings.
@@ -45,11 +53,28 @@ class NLPService {
 
       console.log(`📚 Found ${caches.length} cached intents. Loading...`);
 
-      // Add all cached utterances and answers
+      // Add all cached utterances and answers. We feed node-nlp the
+      // canonical form (so Sinhala/Tamil suffix variants collapse) and
+      // simultaneously build the in-memory canonicalIndex used for the
+      // fast-path exact match in processMessage.
       let utteranceCount = 0;
+      this.canonicalIndex.clear();
       for (const cache of caches) {
-        for (const utterance of cache.userUtterances) {
-          this.manager.addDocument('en', utterance, cache.intentName);
+        const canonicals = (cache as { canonicalUtterances?: string[] })
+          .canonicalUtterances?.length
+          ? (cache as { canonicalUtterances: string[] }).canonicalUtterances
+          : cache.userUtterances.map(normaliseUtterance);
+        for (let i = 0; i < cache.userUtterances.length; i++) {
+          const raw = cache.userUtterances[i];
+          const canon = canonicals[i] ?? normaliseUtterance(raw);
+          // Feed both the raw + canonical forms so node-nlp's classifier
+          // sees the widest training surface for variants we miss in
+          // the suffix list.
+          this.manager.addDocument('en', raw, cache.intentName);
+          if (canon && canon !== raw.toLowerCase()) {
+            this.manager.addDocument('en', canon, cache.intentName);
+          }
+          if (canon) this.canonicalIndex.set(canon, cache.intentName);
           utteranceCount++;
         }
         this.manager.addAnswer('en', cache.intentName, cache.aiResponse);
@@ -135,6 +160,30 @@ class NLPService {
     }
 
     try {
+      // ── Fast path: exact canonical match ─────────────────────────────
+      // The dominant cache-hit pattern is the same question repeated with
+      // trivial surface differences (extra '?', different casing, a stray
+      // suffix). We canonicalise the inbound text and look it up directly
+      // in the in-memory index — skips a full classification when it
+      // would have returned a near-1.0 score anyway.
+      const canon = normaliseUtterance(userMessage);
+      if (canon && this.canonicalIndex.has(canon)) {
+        const intentName = this.canonicalIndex.get(canon)!;
+        // Pull the persisted answer + increment hit count atomically.
+        const row = await NLPCache.findOneAndUpdate(
+          { intentName },
+          { $inc: { hits: 1 }, $set: { lastUsedAt: new Date() } },
+          { new: true },
+        );
+        if (row?.aiResponse) {
+          console.log(
+            `🧠 [NLP CACHE HIT — canonical] intent=${intentName}, hits=${row.hits}`,
+          );
+          return row.aiResponse;
+        }
+      }
+
+      // ── Slow path: node-nlp classifier ───────────────────────────────
       const result = await this.manager.process('en', userMessage);
 
       // Debug logging for development
@@ -148,18 +197,30 @@ class NLPService {
         );
       }
 
-      // If confidence is high enough (e.g., above 0.8), we trust the NLP layer
-      // Note: node-nlp sets score=1 and intent='None' when no match found below threshold
+      // If confidence is high enough (e.g., above 0.8), we trust the NLP layer.
+      // node-nlp sets score=1 and intent='None' when no match found below
+      // its internal threshold — we additionally require score>0.8 to keep
+      // false-positives from the LLM-quality bar low.
       if (
         result.intent &&
         result.intent !== 'None' &&
         result.score > 0.8 &&
         result.answer
       ) {
+        // Track the hit on the persisted row + update lastUsedAt so the
+        // analytics endpoints can rank intents by usage.
+        await NLPCache.updateOne(
+          { intentName: result.intent },
+          { $inc: { hits: 1 }, $set: { lastUsedAt: new Date() } },
+        ).catch((err: unknown) => {
+          // Hit-counter update failure is non-fatal — the cached answer
+          // still goes back to the user.
+          console.error('Failed to increment NLP hit count:', err);
+        });
         console.log(
-          `🧠 [NLP CACHE HIT] Confidence: ${result.score.toFixed(2)}, Intent: ${
-            result.intent
-          }`,
+          `🧠 [NLP CACHE HIT — classifier] confidence=${result.score.toFixed(
+            2,
+          )}, intent=${result.intent}`,
         );
         return result.answer;
       }
@@ -193,63 +254,101 @@ class NLPService {
     }
 
     try {
-      // Normalize inputs to avoid duplicates with slight variations
-      const normalizedMessage = userMessage.trim().toLowerCase();
+      const rawMessage = userMessage.trim();
       const normalizedResponse = aiResponse.trim();
+      // Canonical form is the key both for de-duping utterances and for
+      // the fast-path index. Detect the language for analytics.
+      const canonical = normaliseUtterance(rawMessage);
+      const lang = detectLanguage(rawMessage);
 
-      // Create a unique hash for the AI response to group similar responses to the same intent
+      // Group similar AI responses under the same intent via MD5(response).
       const responseHash = crypto
         .createHash('md5')
         .update(normalizedResponse)
         .digest('hex');
       const intentName = `learned_intent_${responseHash.substring(0, 10)}`;
 
+      // ── Cross-intent canonical guard ───────────────────────────────────
+      // If we've already learned this exact canonical question under a
+      // *different* intent (different LLM response), don't shadow that
+      // intent — skip the learn step rather than poisoning the cache with
+      // conflicting answers for the same question.
+      const indexedIntent = this.canonicalIndex.get(canonical);
+      if (indexedIntent && indexedIntent !== intentName) {
+        console.log(
+          `⚠️ [NLP LEARN] Canonical "${canonical.slice(0, 50)}" already maps to ${indexedIntent}; skipping conflicting learn.`,
+        );
+        return false;
+      }
+
       // Check if this AI Response already exists as an intent
       let cache = await NLPCache.findOne({ intentName });
 
       if (cache) {
-        // Check if this exact utterance already exists (case-insensitive check)
-        const utteranceExists = cache.userUtterances.some(
-          (u: string) => u.toLowerCase() === normalizedMessage,
-        );
+        // Dedupe on the canonical form, not the raw text — that's what
+        // makes the cache learn variants instead of accumulating duplicates.
+        const cacheCanonicals = (cache as { canonicalUtterances?: string[] })
+          .canonicalUtterances ?? [];
+        const utteranceExists =
+          cacheCanonicals.includes(canonical) ||
+          cache.userUtterances.some(
+            (u: string) => normaliseUtterance(u) === canonical,
+          );
 
         if (!utteranceExists) {
-          // Add new utterance to existing intent
-          cache.userUtterances.push(userMessage.trim());
+          cache.userUtterances.push(rawMessage);
+          cacheCanonicals.push(canonical);
+          (cache as { canonicalUtterances: string[] }).canonicalUtterances =
+            cacheCanonicals;
+          const langs = new Set([
+            ...((cache as { languages?: string[] }).languages ?? []),
+            lang,
+          ]);
+          (cache as { languages: string[] }).languages = Array.from(langs);
           await cache.save();
 
-          // Add to NLP manager and retrain
-          this.manager.addDocument('en', userMessage.trim(), intentName);
+          // Feed both raw and canonical to the classifier so suffix
+          // variants and partial-match phrasings both classify.
+          this.manager.addDocument('en', rawMessage, intentName);
+          if (canonical && canonical !== rawMessage.toLowerCase()) {
+            this.manager.addDocument('en', canonical, intentName);
+          }
+          this.canonicalIndex.set(canonical, intentName);
           console.log(
-            `📝 [NLP LEARN] Added new utterance to existing intent: ${intentName}`,
+            `📝 [NLP LEARN] Added new utterance to existing intent: ${intentName} (lang=${lang})`,
           );
 
           await this._trainModel();
           return true;
-        } else {
-          // Utterance already exists, no need to retrain
-          console.log(
-            `📝 [NLP LEARN] Utterance already exists in intent: ${intentName}`,
-          );
-          return false;
         }
-      } else {
-        // Create new intent
-        cache = new NLPCache({
-          intentName,
-          userUtterances: [userMessage.trim()],
-          aiResponse: normalizedResponse,
-        });
-        await cache.save();
-
-        // Add to NLP manager
-        this.manager.addDocument('en', userMessage.trim(), intentName);
-        this.manager.addAnswer('en', intentName, normalizedResponse);
-        console.log(`✨ [NLP LEARN] Created new intent: ${intentName}`);
-
-        await this._trainModel();
-        return true;
+        console.log(
+          `📝 [NLP LEARN] Utterance already exists in intent: ${intentName}`,
+        );
+        return false;
       }
+
+      cache = new NLPCache({
+        intentName,
+        userUtterances: [rawMessage],
+        canonicalUtterances: [canonical],
+        languages: [lang],
+        aiResponse: normalizedResponse,
+        hits: 0,
+      });
+      await cache.save();
+
+      this.manager.addDocument('en', rawMessage, intentName);
+      if (canonical && canonical !== rawMessage.toLowerCase()) {
+        this.manager.addDocument('en', canonical, intentName);
+      }
+      this.manager.addAnswer('en', intentName, normalizedResponse);
+      this.canonicalIndex.set(canonical, intentName);
+      console.log(
+        `✨ [NLP LEARN] Created new intent: ${intentName} (lang=${lang})`,
+      );
+
+      await this._trainModel();
+      return true;
     } catch (error) {
       console.error('❌ Error learning from AI in Local NLP:', error);
       return false;
@@ -268,6 +367,7 @@ class NLPService {
         forceNER: true,
         nlu: { log: false },
       });
+      this.canonicalIndex.clear();
       this.isTrained = true;
       this.needsRetraining = false;
       console.log('🧹 [NLP] All cached data cleared.');
@@ -277,22 +377,79 @@ class NLPService {
   }
 
   /**
-   * Get statistics about the NLP cache
+   * Aggregate statistics about the NLP cache — includes hit-driven metrics
+   * so an operator can see exactly which cached intents are paying for
+   * themselves (vs. being indexed but never matched).
    */
-  async getStats(): Promise<{ intentCount: number; totalUtterances: number }> {
+  async getStats(): Promise<{
+    intentCount: number;
+    totalUtterances: number;
+    totalHits: number;
+    languageBreakdown: Record<string, number>;
+    topIntents: Array<{
+      intentName: string;
+      hits: number;
+      lastUsedAt: Date | null;
+      sampleUtterance: string;
+      response: string;
+    }>;
+  }> {
     try {
-      const caches = await NLPCache.find();
+      const caches = await NLPCache.find().lean();
       const totalUtterances = caches.reduce(
-        (sum: number, c: any) => sum + c.userUtterances.length,
+        (sum: number, c: any) => sum + (c.userUtterances?.length ?? 0),
         0,
       );
+      const totalHits = caches.reduce(
+        (sum: number, c: any) => sum + (c.hits ?? 0),
+        0,
+      );
+
+      const languageBreakdown: Record<string, number> = {};
+      for (const c of caches as Array<{ languages?: string[] }>) {
+        for (const lang of c.languages ?? []) {
+          languageBreakdown[lang] = (languageBreakdown[lang] ?? 0) + 1;
+        }
+      }
+
+      const topIntents = [...caches]
+        .sort(
+          (a: { hits?: number }, b: { hits?: number }) =>
+            (b.hits ?? 0) - (a.hits ?? 0),
+        )
+        .slice(0, 20)
+        .map(
+          (c: {
+            intentName: string;
+            hits?: number;
+            lastUsedAt?: Date;
+            userUtterances: string[];
+            aiResponse: string;
+          }) => ({
+            intentName: c.intentName,
+            hits: c.hits ?? 0,
+            lastUsedAt: c.lastUsedAt ?? null,
+            sampleUtterance: c.userUtterances[0] ?? '',
+            response: c.aiResponse.slice(0, 200),
+          }),
+        );
+
       return {
         intentCount: caches.length,
         totalUtterances,
+        totalHits,
+        languageBreakdown,
+        topIntents,
       };
     } catch (error) {
       console.error('❌ Error getting NLP stats:', error);
-      return { intentCount: 0, totalUtterances: 0 };
+      return {
+        intentCount: 0,
+        totalUtterances: 0,
+        totalHits: 0,
+        languageBreakdown: {},
+        topIntents: [],
+      };
     }
   }
 }
