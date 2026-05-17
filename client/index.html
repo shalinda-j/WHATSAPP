@@ -5,6 +5,95 @@
     <link rel="icon" type="image/x-icon" href="/360ai-i.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Work 360 AI</title>
+    <!--
+      Stale-bundle self-heal.
+
+      Vite hashes every emitted JS/CSS asset URL. After a deploy, browsers
+      sometimes still hold a cached `index.html` from the previous build
+      that references the OLD hashes — those assets no longer exist on
+      the server, so loading the page yields a string of 404s and a
+      "Refused to apply style ... MIME type text/html" error.
+
+      The PR #16 server fix prevents the silent-corruption case (assets
+      now return a real 404 instead of the SPA shell) and tags index.html
+      with Cache-Control: no-store going forward — but it can't
+      retroactively invalidate an HTML the browser already cached.
+
+      This boot script runs on every page load. It refetches '/' bypassing
+      the HTTP cache, compares the asset URLs declared inside the served
+      HTML to the ones the current document is actually trying to load,
+      and forces a single reload when they diverge. After that one reload
+      the browser sees the no-store header and stays current on every
+      future deploy.
+    -->
+    <script>
+      (function () {
+        // Guard against an infinite reload loop if the comparison ever
+        // misfires (e.g. proxy strips Cache-Control). One self-heal per
+        // page-load is enough; if we reloaded already in this session we
+        // do nothing.
+        try {
+          if (sessionStorage.getItem('__bundleSelfHealed') === '1') return;
+        } catch (_) {
+          /* sessionStorage might be disabled — fall through */
+        }
+        var ASSET_RE = /\/assets\/[\w.-]+\.(?:js|css)/g;
+        function currentDocAssets() {
+          var hits = new Set();
+          // Read what THIS html is asking the browser to load.
+          var nodes = document.querySelectorAll(
+            'script[src], link[rel="stylesheet"][href], link[rel="modulepreload"][href]',
+          );
+          for (var i = 0; i < nodes.length; i++) {
+            var url =
+              nodes[i].getAttribute('src') ||
+              nodes[i].getAttribute('href') ||
+              '';
+            if (url.indexOf('/assets/') !== -1) hits.add(url);
+          }
+          return Array.from(hits).sort().join('|');
+        }
+        function freshHtmlAssets(html) {
+          var hits = new Set();
+          var m;
+          while ((m = ASSET_RE.exec(html))) hits.add(m[0]);
+          return Array.from(hits).sort().join('|');
+        }
+        // Bypass the HTTP cache entirely so we see what the SERVER thinks
+        // the current bundle is, not whatever's stuck in disk cache.
+        fetch(window.location.pathname || '/', {
+          cache: 'no-store',
+          credentials: 'same-origin',
+          headers: { 'X-Bundle-Check': '1' },
+        })
+          .then(function (res) {
+            if (!res.ok) return null;
+            return res.text();
+          })
+          .then(function (html) {
+            if (!html) return;
+            var have = currentDocAssets();
+            var want = freshHtmlAssets(html);
+            // Only act when we have a concrete divergence — never reload
+            // if either side parsed to an empty list.
+            if (have && want && have !== want) {
+              try {
+                sessionStorage.setItem('__bundleSelfHealed', '1');
+              } catch (_) {
+                /* ignore */
+              }
+              console.warn(
+                '[bundle-check] stale HTML detected, reloading to current bundle',
+              );
+              window.location.reload();
+            }
+          })
+          .catch(function () {
+            // Network blip → let the page proceed; if assets really are
+            // missing the user can hard-refresh manually.
+          });
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
