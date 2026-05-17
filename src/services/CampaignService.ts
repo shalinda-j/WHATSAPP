@@ -11,6 +11,7 @@ import { Contact } from '../models/CRM';
 import { aiLoadBalancer } from './AILoadBalancer';
 import { channelRouter } from '../channels';
 import { isQuietHoursActive, tenantQuietHours } from './quietHours';
+import { isPhoneOptedOut } from './optOut';
 import { Channel } from '../types/agent';
 import { CAMPAIGN_GENERATOR_V1_PROMPT } from '../agents/prompts/campaign-generator-v1';
 
@@ -396,6 +397,23 @@ export class CampaignService {
           { new: true },
         );
         if (!claimed) continue;
+
+        // Compliance gate: a contact who replied STOP/UNSUBSCRIBE is
+        // marked optedOut. Skip them here rather than at send time so
+        // the execution row carries an auditable reason and ops have a
+        // clean count of suppressed deliveries.
+        if (await isPhoneOptedOut(exec.recipientExternalId)) {
+          await CampaignExecution.updateOne(
+            { _id: claimed._id },
+            {
+              $set: {
+                status: 'failed',
+                errorMessage: 'recipient_opted_out',
+              },
+            },
+          );
+          continue;
+        }
 
         const variant = variantById.get(exec.variantId);
         if (!variant) {
