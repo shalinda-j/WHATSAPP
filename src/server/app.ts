@@ -37,6 +37,8 @@ import tenantsRouter from './routes/tenants';
 import marketingInsightsRouter from './routes/marketingInsights';
 import auditRouter from './routes/audit';
 import slaRouter from './routes/sla';
+import exportsRouter from './routes/exports';
+import { resolveTenant } from './middleware/tenantContext';
 
 import mongoose from 'mongoose';
 import { authenticateToken } from './middleware/auth';
@@ -164,6 +166,7 @@ app.use('/api/tenants', tenantsRouter);
 app.use('/api/marketing-insights', marketingInsightsRouter);
 app.use('/api/audit', authenticateToken, auditRouter);
 app.use('/api/sla', authenticateToken, slaRouter);
+app.use('/api/export', authenticateToken, resolveTenant, exportsRouter);
 
 // Audit middleware: records every mutating API call (POST/PUT/PATCH/DELETE)
 // to the AuditEvent collection. Hooked via res.on('finish') so it adds zero
