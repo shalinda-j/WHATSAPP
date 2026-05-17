@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import AuditEvent from '../../models/AuditEvent';
 
@@ -16,7 +16,7 @@ const router = express.Router();
  *   method  — POST|PUT|PATCH|DELETE
  *   path    — substring match on path
  */
-router.get('/', async (req, res) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100));
     const before = req.query.before

@@ -102,8 +102,10 @@ export function auditLog(req: Request, res: Response, next: NextFunction): void 
       durationMs,
       requestSummary,
       errorMessage: res.statusCode >= 400 ? `http_${res.statusCode}` : undefined,
-    }).catch((err) => {
-      console.error('auditLog: failed to persist event:', err?.message ?? err);
+    }).catch((err: unknown) => {
+      const message =
+        err instanceof Error ? err.message : String(err);
+      console.error('auditLog: failed to persist event:', message);
     });
   });
 
