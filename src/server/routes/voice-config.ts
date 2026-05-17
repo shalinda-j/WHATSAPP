@@ -10,7 +10,8 @@ router.use(authenticateToken);
 // GET all voice configs
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const configs = await VoiceConfig.find().sort({ updatedAt: -1 });
+    // BOLT OPTIMIZATION: Added .lean() to bypass document hydration for read-only query
+    const configs = await VoiceConfig.find().sort({ updatedAt: -1 }).lean();
     if (!configs || configs.length === 0) {
       const defaultConfig = await VoiceConfig.create({
         provider: 'google-free',
