@@ -15,9 +15,10 @@ router.use(resolveTenant);
 router.get('/', async (req, res) => {
   try {
     // Only return non-deleted sessions
-    const sessions = await Session.find({ deleted: { $ne: true } }).sort({
-      createdAt: -1,
-    });
+    // BOLT OPTIMIZATION: Added .lean() to bypass document hydration for read-only query
+    const sessions = await Session.find({ deleted: { $ne: true } })
+      .sort({ createdAt: -1 })
+      .lean();
     const activeCount = manager.getActiveSessionsCount();
     res.json({
       sessions,
