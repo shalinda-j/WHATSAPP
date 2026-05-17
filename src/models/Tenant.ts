@@ -35,6 +35,18 @@ export interface ITenant extends Document {
     endHour: number;
     timezone?: string;
   };
+  /**
+   * Optional IP allowlist. When non-empty, every authenticated admin API
+   * request must originate from one of the listed CIDR ranges (or exact
+   * IPs). Empty array = open access from any source (default).
+   */
+  ipAllowlist?: string[];
+  /**
+   * Per-tenant inactive-session timeout in minutes. When set, the admin
+   * UI's idle watchdog refreshes against the JWT token's `iat` claim
+   * and forces a re-login when (now - iat) exceeds this value.
+   */
+  sessionTimeoutMinutes?: number;
   /** Owner admin user id (references Admin collection). */
   ownerAdminId?: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -75,6 +87,8 @@ const TenantSchema = new Schema(
       endHour: { type: Number, min: 0, max: 23, default: 8 },
       timezone: { type: String },
     },
+    ipAllowlist: { type: [String], default: [] },
+    sessionTimeoutMinutes: { type: Number },
     ownerAdminId: { type: Schema.Types.ObjectId, ref: 'Admin' },
   } as any,
   { timestamps: true },

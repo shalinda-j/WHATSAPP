@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import Tenant, { ITenant } from '../../models/Tenant';
+import { clientIpFromRequest, isIpAllowed } from '../../services/ipAllowlist';
+import { AuthRequest } from './auth';
 
 declare module 'express-serve-static-core' {
   interface Request {
@@ -53,6 +55,42 @@ export async function resolveTenant(
         .status(403)
         .json({ error: 'Tenant suspended', tenantSlug: tenant.slug });
       return;
+    }
+
+    // Per-tenant IP allowlist. Skipped when the tenant has no entries
+    // configured — single-tenant deployments keep working untouched.
+    const allowlist = (tenant as any).ipAllowlist as string[] | undefined;
+    if (allowlist && allowlist.length > 0) {
+      const ip = clientIpFromRequest(req);
+      if (!isIpAllowed(ip, allowlist)) {
+        console.warn(
+          `🚫 resolveTenant: blocked ${req.method} ${req.path} from ${ip} (tenant=${tenant.slug})`,
+        );
+        _res.status(403).json({
+          error: 'ip_not_allowed',
+          message: "Your IP is not on this tenant's allowlist.",
+        });
+        return;
+      }
+    }
+
+    // Per-tenant idle session timeout enforced against the JWT issuance
+    // timestamp. Skipped when authenticateToken hasn't populated req.user
+    // (resolveTenant is occasionally used on public endpoints).
+    const timeoutMinutes = (tenant as any).sessionTimeoutMinutes as
+      | number
+      | undefined;
+    const authReq = req as AuthRequest & { user?: { iat?: number } };
+    if (timeoutMinutes && timeoutMinutes > 0 && authReq.user?.iat) {
+      const issuedAt = Number(authReq.user.iat) * 1000;
+      const ageMs = Date.now() - issuedAt;
+      if (ageMs > timeoutMinutes * 60 * 1000) {
+        _res.status(401).json({
+          error: 'session_timeout',
+          message: `Session exceeded the tenant idle timeout of ${timeoutMinutes} minute(s). Please log in again.`,
+        });
+        return;
+      }
     }
 
     req.tenant = tenant;

@@ -68,6 +68,10 @@ const LeadSchema = new (mongoose as any).Schema({
     enum: ['whatsapp', 'website', 'referral', 'manual'],
     default: 'whatsapp',
   },
+  // Auto-applied tags from the IntentClassifierService (e.g. 'intent:booking_request',
+  // 'intent:pricing_question') so the CRM and segment rule engine can
+  // filter by inbound conversation signals without a separate scan.
+  tags: { type: [String], default: [], index: true },
   registeredAt: { type: Date, default: Date.now, index: true },
   updatedAt: { type: Date, default: Date.now },
 });

@@ -18,6 +18,9 @@ export interface IChatMessage {
     audioDuration?: number;
     isFirstMessage?: boolean;
     messageCount?: number;
+    /** Heuristic sentiment computed inline at message ingest. */
+    sentimentScore?: number;
+    sentimentLabel?: 'positive' | 'neutral' | 'negative';
   };
 }
 
@@ -49,12 +52,24 @@ const ChatMessageSchema = new Schema({
     audioDuration: { type: Number },
     isFirstMessage: { type: Boolean, default: false },
     messageCount: { type: Number, default: 1 },
+    sentimentScore: { type: Number },
+    sentimentLabel: {
+      type: String,
+      enum: ['positive', 'neutral', 'negative'],
+    },
   },
 });
 
 // Indexes for common queries
 ChatMessageSchema.index({ userId: 1, timestamp: -1 });
 ChatMessageSchema.index({ 'metadata.sessionId': 1, timestamp: -1 });
+// Sentiment analytics need to scan negative messages by recency. Sparse
+// because most inbound messages stay neutral and we don't want to bloat
+// the index with the neutral majority.
+ChatMessageSchema.index(
+  { 'metadata.sentimentLabel': 1, timestamp: -1 },
+  { sparse: true },
+);
 
 const ChatMessage = mongoose.model(
   'ChatMessage',

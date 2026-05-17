@@ -55,6 +55,8 @@ import { registerCoreChannels, channelRouter } from './channels';
 import { classifyIntent } from './services/IntentClassifierService';
 import { HumanizerService } from './services/HumanizerService';
 import { isStopKeyword, markContactOptedOut } from './services/optOut';
+import { scoreSentiment } from './services/sentiment';
+import { autoTagLeadFromMessage } from './services/leadAutoTag';
 
 const PORT = process.env.PORT || 8080;
 let server: any;
@@ -515,6 +517,18 @@ onMessage(async (message, sock, sessionId) => {
 
     // [NEW] 1. Save USER Message to DB
     try {
+      // Heuristic sentiment runs inline (sub-millisecond, zero cost). The
+      // matched-term count is treated as a confidence proxy upstream — agents
+      // can route low-confidence neutral messages to an LLM-backed scorer.
+      const sentiment = scoreSentiment(text);
+
+      // Fire-and-forget lead auto-tagging. Adds 'intent:*' tag to any Lead
+      // matching this phone so the CRM/segment rule engine can filter by
+      // inbound conversation signals without an extra scan. Failures are
+      // swallowed — the message handler must never block on this.
+      autoTagLeadFromMessage(jid.replace(/@.*/, ''), text).catch((err) => {
+        console.error('   ⚠️ autoTagLeadFromMessage failed:', err);
+      });
       const savedMsg = await ChatMessage.create({
         userId: jid,
         role: 'user',
@@ -524,6 +538,8 @@ onMessage(async (message, sock, sessionId) => {
         metadata: {
           sessionId,
           isBooking: false,
+          sentimentScore: sentiment.score,
+          sentimentLabel: sentiment.label,
         },
       });
 
