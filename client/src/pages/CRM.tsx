@@ -284,9 +284,20 @@ interface RegistrationMessage {
   sender: string;
 }
 
+interface SessionSummary {
+  sessionId: string;
+  sessionName?: string;
+  status?: string;
+}
+
 export default function CRM() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(true);
+  // Per-device scope. 'all' shows every record across sessions; selecting
+  // a sessionId narrows every CRM tab + dashboard tile to that device's
+  // slice (mirrors the device picker on the Chat page).
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [sessionFilter, setSessionFilter] = useState<string>('all');
 
   // Dashboard state
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(
@@ -397,10 +408,30 @@ export default function CRM() {
   // Fetch functions
   const fetchDashboard = async () => {
     try {
-      const res = await api.get('/api/crm/dashboard');
+      const params = new URLSearchParams();
+      if (sessionFilter && sessionFilter !== 'all') {
+        params.append('sessionId', sessionFilter);
+      }
+      const qs = params.toString();
+      const res = await api.get(`/api/crm/dashboard${qs ? `?${qs}` : ''}`);
       setDashboardStats(res.data);
     } catch (err) {
       console.error('Failed to fetch dashboard', err);
+    }
+  };
+
+  const fetchSessions = async () => {
+    try {
+      const res = await api.get('/api/sessions');
+      setSessions(res.data.sessions || []);
+    } catch (err) {
+      console.error('Failed to fetch sessions', err);
+    }
+  };
+
+  const appendSessionScope = (params: URLSearchParams) => {
+    if (sessionFilter && sessionFilter !== 'all') {
+      params.append('sessionId', sessionFilter);
     }
   };
 
@@ -412,6 +443,7 @@ export default function CRM() {
       params.append('limit', '20');
       if (contactSearch) params.append('search', contactSearch);
       if (contactTypeFilter) params.append('type', contactTypeFilter);
+      appendSessionScope(params);
 
       const res = await api.get(`/api/crm/contacts?${params}`);
       setContacts(res.data.contacts);
@@ -431,6 +463,7 @@ export default function CRM() {
       params.append('limit', '20');
       if (dealSearch) params.append('search', dealSearch);
       if (dealStageFilter) params.append('stage', dealStageFilter);
+      appendSessionScope(params);
 
       const res = await api.get(`/api/crm/deals?${params}`);
       setDeals(res.data.deals);
@@ -444,7 +477,12 @@ export default function CRM() {
 
   const fetchDealsKanban = async () => {
     try {
-      const res = await api.get('/api/crm/deals/kanban');
+      const params = new URLSearchParams();
+      appendSessionScope(params);
+      const qs = params.toString();
+      const res = await api.get(
+        `/api/crm/deals/kanban${qs ? `?${qs}` : ''}`,
+      );
       setDealsByStage(res.data);
     } catch (err) {
       console.error('Failed to fetch deals kanban', err);
@@ -458,6 +496,7 @@ export default function CRM() {
       params.append('page', activitiesPage.toString());
       params.append('limit', '20');
       if (activityTypeFilter) params.append('type', activityTypeFilter);
+      appendSessionScope(params);
 
       const res = await api.get(`/api/crm/activities?${params}`);
       setActivities(res.data.activities);
@@ -510,6 +549,7 @@ export default function CRM() {
         params.append('status', registrationStatusFilter);
       if (registrationJobFilter)
         params.append('jobType', registrationJobFilter);
+      appendSessionScope(params);
 
       const res = await api.get(`/api/crm/registrations?${params}`);
       setRegistrations(res.data.registrations);
@@ -575,10 +615,18 @@ export default function CRM() {
   };
 
   useEffect(() => {
+    fetchSessions();
     fetchDashboard();
     fetchAnalytics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Re-fetch dashboard whenever the device scope changes; the per-tab
+  // effect below picks up sessionFilter through its own dep too.
+  useEffect(() => {
+    fetchDashboard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionFilter]);
 
   useEffect(() => {
     if (activeTab === 'contacts') fetchContacts();
@@ -596,6 +644,7 @@ export default function CRM() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeTab,
+    sessionFilter,
     contactsPage,
     contactSearch,
     contactTypeFilter,
@@ -625,7 +674,14 @@ export default function CRM() {
       if (editingContact) {
         await api.put(`/api/crm/contacts/${editingContact._id}`, data);
       } else {
-        await api.post('/api/crm/contacts', data);
+        // Stamp the active device scope so the new row appears in the
+        // currently-selected tab — invisible-after-save bug from PR #21
+        // would otherwise recur for device-scoped views.
+        const payload =
+          sessionFilter && sessionFilter !== 'all'
+            ? { ...data, sessionId: sessionFilter }
+            : data;
+        await api.post('/api/crm/contacts', payload);
       }
       setShowContactModal(false);
       setEditingContact(null);
@@ -676,7 +732,11 @@ export default function CRM() {
       if (editingDeal) {
         await api.put(`/api/crm/deals/${editingDeal._id}`, data);
       } else {
-        await api.post('/api/crm/deals', data);
+        const payload =
+          sessionFilter && sessionFilter !== 'all'
+            ? { ...data, sessionId: sessionFilter }
+            : data;
+        await api.post('/api/crm/deals', payload);
       }
       setShowDealModal(false);
       setEditingDeal(null);
@@ -723,7 +783,11 @@ export default function CRM() {
           activityForm,
         );
       } else {
-        await api.post('/api/crm/activities', activityForm);
+        const payload =
+          sessionFilter && sessionFilter !== 'all'
+            ? { ...activityForm, sessionId: sessionFilter }
+            : activityForm;
+        await api.post('/api/crm/activities', payload);
       }
       setShowActivityModal(false);
       setEditingActivity(null);
@@ -2341,11 +2405,42 @@ export default function CRM() {
   return (
     <div className="animate-in fade-in duration-500">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800">CRM</h1>
-        <p className="text-gray-500 mt-1">
-          Manage contacts, deals, and activities
-        </p>
+      <div className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-800">CRM</h1>
+          <p className="text-gray-500 mt-1">
+            Manage contacts, deals, and activities
+            {sessionFilter !== 'all' && (
+              <span className="ml-2 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                Filtered to one device
+              </span>
+            )}
+          </p>
+        </div>
+        {/* Per-device picker — only renders when more than one session is
+            connected. Matches the device-tab pattern on the Chat page. */}
+        {sessions.length > 1 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              Device
+            </span>
+            <select
+              value={sessionFilter}
+              onChange={(e) => setSessionFilter(e.target.value)}
+              className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg bg-white"
+            >
+              <option value="all">All devices ({sessions.length})</option>
+              {sessions.map((s) => (
+                <option key={s.sessionId} value={s.sessionId}>
+                  {s.sessionName || s.sessionId}
+                  {s.status && s.status !== 'connected'
+                    ? ` (${s.status})`
+                    : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}

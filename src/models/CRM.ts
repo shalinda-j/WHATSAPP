@@ -10,6 +10,12 @@ const ContactSchema = new mongoose.Schema({
     ref: 'Tenant',
     index: true,
   },
+  // Per-device scoping: WhatsApp sessions (multi-device deployments) tag
+  // their inbound records with the session that owns the conversation,
+  // so operators can switch the CRM view per phone. Legacy docs without
+  // this field surface under "All devices" via the same $exists fallback
+  // the tenant scope uses.
+  sessionId: { type: String, index: true },
   // Combined name field for simpler frontend access
   name: { type: String, required: true },
   // Separate name fields for detailed views
@@ -137,6 +143,7 @@ const DealSchema = new mongoose.Schema({
     ref: 'Tenant',
     index: true,
   },
+  sessionId: { type: String, index: true },
   title: { type: String, required: true },
   description: String,
   value: { type: Number, default: 0 },
@@ -183,6 +190,7 @@ const ActivitySchema = new mongoose.Schema({
     ref: 'Tenant',
     index: true,
   },
+  sessionId: { type: String, index: true },
   type: {
     type: String,
     enum: ['call', 'meeting', 'email', 'whatsapp', 'task', 'note'],

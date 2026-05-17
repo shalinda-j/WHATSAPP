@@ -18,6 +18,16 @@ function buildTenantFilter(tenantId?: string): Record<string, unknown> {
 }
 
 /**
+ * Per-device scope: narrow to one WhatsApp session while still surfacing
+ * legacy rows that pre-date the sessionId field. Operator picks "All
+ * devices" by passing `undefined` (no filter applied).
+ */
+function buildSessionFilter(sessionId?: string): Record<string, unknown> {
+  if (!sessionId || sessionId === 'all') return {};
+  return { $or: [{ sessionId }, { sessionId: { $exists: false } }] };
+}
+
+/**
  * Combine a base filter, an optional tenant filter and an optional search
  * filter (each of which may itself use $or) into a single Mongo query
  * without one $or overwriting another. The $and form is used whenever two
@@ -57,6 +67,9 @@ export class CRMService {
        * visibility).
        */
       tenantId?: string;
+      /** Per-device scope. Pass a WhatsApp sessionId to narrow the
+       *  list to records owned by that specific device. */
+      sessionId?: string;
     } = {},
   ) {
     const {
@@ -68,6 +81,7 @@ export class CRMService {
       source,
       tags,
       tenantId,
+      sessionId,
     } = options;
 
     const base: Record<string, unknown> = {};
@@ -77,6 +91,7 @@ export class CRMService {
     if (tags && tags.length > 0) base.tags = { $in: tags };
 
     const tenantFilter = buildTenantFilter(tenantId);
+    const sessionFilter = buildSessionFilter(sessionId);
 
     // Search - SECURITY FIX: Escape regex to prevent injection
     const searchFilter: Record<string, unknown> = search
@@ -92,7 +107,7 @@ export class CRMService {
         }
       : {};
 
-    const query = combineQuery(base, tenantFilter, searchFilter);
+    const query = combineQuery(base, tenantFilter, sessionFilter, searchFilter);
 
     const total = await Contact.countDocuments(query);
     const contacts = await Contact.find(query)
@@ -180,8 +195,12 @@ export class CRMService {
   /**
    * Get contact statistics
    */
-  static async getContactStats(tenantId?: string) {
-    const scope = buildTenantFilter(tenantId);
+  static async getContactStats(tenantId?: string, sessionId?: string) {
+    const scope = combineQuery(
+      {},
+      buildTenantFilter(tenantId),
+      buildSessionFilter(sessionId),
+    );
     const matchStage = Object.keys(scope).length > 0 ? [{ $match: scope }] : [];
     const [total, byType, byStatus, bySource] = await Promise.all([
       Contact.countDocuments(scope),
@@ -230,6 +249,7 @@ export class CRMService {
       contact?: string;
       owner?: string;
       tenantId?: string;
+      sessionId?: string;
     } = {},
   ) {
     const {
@@ -240,6 +260,7 @@ export class CRMService {
       contact,
       owner,
       tenantId,
+      sessionId,
     } = options;
 
     const base: Record<string, unknown> = {};
@@ -248,6 +269,7 @@ export class CRMService {
     if (owner) base.owner = owner;
 
     const tenantFilter = buildTenantFilter(tenantId);
+    const sessionFilter = buildSessionFilter(sessionId);
     const searchFilter: Record<string, unknown> = search
       ? {
           $or: [
@@ -257,7 +279,12 @@ export class CRMService {
         }
       : {};
 
-    const query = combineQuery(base, tenantFilter, searchFilter);
+    const query = combineQuery(
+      base,
+      tenantFilter,
+      sessionFilter,
+      searchFilter,
+    );
 
     const total = await Deal.countDocuments(query);
     const deals = await Deal.find(query)
@@ -279,8 +306,12 @@ export class CRMService {
    * Get deals grouped by stage (for Kanban). Pass `tenantId` to scope to a
    * single tenant's pipeline; omit it for cross-tenant admin views.
    */
-  static async getDealsByStage(tenantId?: string) {
-    const query = buildTenantFilter(tenantId);
+  static async getDealsByStage(tenantId?: string, sessionId?: string) {
+    const query = combineQuery(
+      {},
+      buildTenantFilter(tenantId),
+      buildSessionFilter(sessionId),
+    );
     const deals = await Deal.find(query)
       .sort({ createdAt: -1 })
       .populate('contact', 'name firstName lastName email phone company')
@@ -355,8 +386,12 @@ export class CRMService {
   /**
    * Get deal statistics
    */
-  static async getDealStats(tenantId?: string) {
-    const scope = buildTenantFilter(tenantId);
+  static async getDealStats(tenantId?: string, sessionId?: string) {
+    const scope = combineQuery(
+      {},
+      buildTenantFilter(tenantId),
+      buildSessionFilter(sessionId),
+    );
     const matchStage = Object.keys(scope).length > 0 ? [{ $match: scope }] : [];
     const [total, byStage, totalValue, wonValue] = await Promise.all([
       Deal.countDocuments(scope),
@@ -407,6 +442,7 @@ export class CRMService {
       owner?: string;
       upcoming?: boolean;
       tenantId?: string;
+      sessionId?: string;
     } = {},
   ) {
     const {
@@ -419,6 +455,7 @@ export class CRMService {
       owner,
       upcoming,
       tenantId,
+      sessionId,
     } = options;
 
     const base: Record<string, unknown> = {};
@@ -433,7 +470,8 @@ export class CRMService {
     }
 
     const tenantFilter = buildTenantFilter(tenantId);
-    const query = combineQuery(base, tenantFilter);
+    const sessionFilter = buildSessionFilter(sessionId);
+    const query = combineQuery(base, tenantFilter, sessionFilter);
 
     const total = await Activity.countDocuments(query);
     const activities = await Activity.find(query)
@@ -498,12 +536,20 @@ export class CRMService {
   /**
    * Get upcoming activities (for dashboard)
    */
-  static async getUpcomingActivities(limit = 10, tenantId?: string) {
+  static async getUpcomingActivities(
+    limit = 10,
+    tenantId?: string,
+    sessionId?: string,
+  ) {
     const base = {
       status: 'pending',
       dueDate: { $gte: new Date() },
     };
-    const query = combineQuery(base, buildTenantFilter(tenantId));
+    const query = combineQuery(
+      base,
+      buildTenantFilter(tenantId),
+      buildSessionFilter(sessionId),
+    );
     return Activity.find(query)
       .sort({ dueDate: 1 })
       .limit(limit)
@@ -547,8 +593,12 @@ export class CRMService {
   /**
    * Get CRM dashboard stats
    */
-  static async getDashboardStats(tenantId?: string) {
-    const scope = buildTenantFilter(tenantId);
+  static async getDashboardStats(tenantId?: string, sessionId?: string) {
+    const scope = combineQuery(
+      {},
+      buildTenantFilter(tenantId),
+      buildSessionFilter(sessionId),
+    );
     const [
       contactStats,
       dealStats,
@@ -556,9 +606,9 @@ export class CRMService {
       recentContacts,
       recentDeals,
     ] = await Promise.all([
-      this.getContactStats(tenantId),
-      this.getDealStats(tenantId),
-      this.getUpcomingActivities(5, tenantId),
+      this.getContactStats(tenantId, sessionId),
+      this.getDealStats(tenantId, sessionId),
+      this.getUpcomingActivities(5, tenantId, sessionId),
       Contact.find(scope).sort({ createdAt: -1 }).limit(5),
       Deal.find(scope)
         .sort({ createdAt: -1 })

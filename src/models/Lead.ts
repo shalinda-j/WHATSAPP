@@ -21,6 +21,10 @@ const LeadSchema = new (mongoose as any).Schema({
     ref: 'Tenant',
     index: true,
   },
+  // WhatsApp session that captured this lead. Lets the CRM filter by
+  // device (Primary Phone / Support Phone / etc) the same way the chat
+  // UI does. Legacy leads without this field show under "All devices".
+  sessionId: { type: String, index: true },
   // Personal Information
   fullName: { type: String, required: true },
   phoneNumber: { type: String, required: true },

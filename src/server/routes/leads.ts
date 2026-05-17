@@ -92,6 +92,15 @@ router.post('/register', strictRateLimit, async (req, res) => {
       // which the list endpoints already handle via the legacy `$exists`
       // backwards-compat clause.
       tenantId: (req as { tenant?: { _id?: unknown } }).tenant?._id,
+      // Per-device scope. Bot callers pass `sessionId` in the body
+      // (e.g. 'default', 'support-phone'); operators tagging leads
+      // from the admin UI may also supply it.
+      sessionId:
+        typeof (req.body as { sessionId?: unknown })?.sessionId === 'string'
+          ? ((req.body as { sessionId: string }).sessionId !== 'all'
+              ? (req.body as { sessionId: string }).sessionId
+              : undefined)
+          : undefined,
     });
 
     await lead.save();
