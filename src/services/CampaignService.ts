@@ -10,6 +10,7 @@ import AgentPromptVersion from '../models/AgentPromptVersion';
 import { Contact } from '../models/CRM';
 import { aiLoadBalancer } from './AILoadBalancer';
 import { channelRouter } from '../channels';
+import { isQuietHoursActive, tenantQuietHours } from './quietHours';
 import { Channel } from '../types/agent';
 import { CAMPAIGN_GENERATOR_V1_PROMPT } from '../agents/prompts/campaign-generator-v1';
 
@@ -360,6 +361,15 @@ export class CampaignService {
       const bucket = byCampaign.get(k);
       if (bucket) bucket.push(exec as any);
       else byCampaign.set(k, [exec] as any);
+    }
+
+    // Tenant-wide quiet hours: a single lookup short-circuits the whole
+    // tick so we don't claim+release queued rows while the channel is
+    // muted. Per-campaign quietHours below still takes precedence when
+    // the tenant window isn't active.
+    const tenant = await Tenant.findById(tenantId);
+    if (isQuietHoursActive(tenantQuietHours(tenant))) {
+      return { sent: 0 };
     }
 
     let sent = 0;
