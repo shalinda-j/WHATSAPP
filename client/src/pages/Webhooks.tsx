@@ -10,6 +10,9 @@ import {
   Send,
 } from 'lucide-react';
 
+type WebhookCategory = 'data' | 'ops';
+type WebhookFormat = 'generic' | 'slack' | 'discord';
+
 interface Webhook {
   _id: string;
   name: string;
@@ -17,6 +20,8 @@ interface Webhook {
   events: string[];
   secret?: string;
   isActive: boolean;
+  category?: WebhookCategory;
+  format?: WebhookFormat;
   createdAt: string;
 }
 
@@ -30,6 +35,8 @@ export default function Webhooks() {
   const [newName, setNewName] = useState('');
   const [newUrl, setNewUrl] = useState('');
   const [newSecret, setNewSecret] = useState('');
+  const [newCategory, setNewCategory] = useState<WebhookCategory>('data');
+  const [newFormat, setNewFormat] = useState<WebhookFormat>('generic');
 
   const fetchWebhooks = async () => {
     setLoading(true);
@@ -61,12 +68,16 @@ export default function Webhooks() {
         name: newName,
         url: newUrl,
         secret: newSecret,
-        events: ['*'], // Default to all events for now
+        events: newCategory === 'ops' ? [] : ['*'],
+        category: newCategory,
+        format: newFormat,
         isActive: true,
       });
       setNewName('');
       setNewUrl('');
       setNewSecret('');
+      setNewCategory('data');
+      setNewFormat('generic');
       fetchWebhooks();
     } catch {
       alert('Failed to create webhook');
@@ -157,23 +168,57 @@ export default function Webhooks() {
             onChange={(e) => setNewUrl(e.target.value)}
             required
           />
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="Secret (Optional)"
-              className="p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none w-full"
-              value={newSecret}
-              onChange={(e) => setNewSecret(e.target.value)}
-            />
+          <input
+            type="text"
+            placeholder="Secret (Optional)"
+            className="p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+            value={newSecret}
+            onChange={(e) => setNewSecret(e.target.value)}
+          />
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-500 font-semibold">
+              Category
+            </label>
+            <select
+              value={newCategory}
+              onChange={(e) =>
+                setNewCategory(e.target.value as WebhookCategory)
+              }
+              className="p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+            >
+              <option value="data">Data events (messages, leads…)</option>
+              <option value="ops">Ops alerts (budget caps, approvals)</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-500 font-semibold">
+              Payload format
+            </label>
+            <select
+              value={newFormat}
+              onChange={(e) => setNewFormat(e.target.value as WebhookFormat)}
+              className="p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+            >
+              <option value="generic">Generic JSON (HMAC-signed)</option>
+              <option value="slack">Slack incoming-webhook</option>
+              <option value="discord">Discord webhook</option>
+            </select>
+          </div>
+          <div className="md:col-span-2 flex items-end">
             <button
               type="submit"
               disabled={creating}
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 w-full md:w-auto"
             >
-              {creating ? 'Adding...' : 'Add'}
+              {creating ? 'Adding...' : 'Add webhook'}
             </button>
           </div>
         </form>
+        <p className="mt-3 text-xs text-gray-500">
+          <strong>Ops alerts</strong> fire on budget-cap hits and approval-queue
+          backlog — drop in a Slack or Discord incoming-webhook URL and pick the
+          matching format to get pre-built alert blocks.
+        </p>
       </div>
 
       {/* List */}
@@ -194,7 +239,7 @@ export default function Webhooks() {
               className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
             >
               <div className="flex-1">
-                <div className="flex items-center gap-3 mb-1">
+                <div className="flex items-center gap-3 mb-1 flex-wrap">
                   <h3 className="font-bold text-gray-800">{hook.name}</h3>
                   <span
                     className={`px-2 py-0.5 text-xs rounded-full ${
@@ -205,6 +250,16 @@ export default function Webhooks() {
                   >
                     {hook.isActive ? 'Active' : 'Inactive'}
                   </span>
+                  {hook.category === 'ops' && (
+                    <span className="px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700">
+                      ops
+                    </span>
+                  )}
+                  {hook.format && hook.format !== 'generic' && (
+                    <span className="px-2 py-0.5 text-xs rounded-full bg-indigo-100 text-indigo-700">
+                      {hook.format}
+                    </span>
+                  )}
                 </div>
                 <code className="text-sm text-gray-500 bg-gray-50 px-2 py-1 rounded">
                   {hook.url}

@@ -938,6 +938,43 @@ export default function CRM() {
     }
   };
 
+  /**
+   * Tenant-scoped CSV export hitting the /api/export/* endpoints (PR #42).
+   * Used for the Contacts tab — wraps the blob → click → revoke dance so
+   * the per-tab button handler stays a single line.
+   */
+  const downloadCsv = async (path: string, filename: string) => {
+    try {
+      const res = await api.get(path, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(
+        new Blob([res.data], { type: 'text/csv;charset=utf-8;' }),
+      );
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      showRegistrationNotify('Export downloaded successfully', 'success');
+    } catch {
+      showRegistrationNotify('Failed to export CSV', 'error');
+    }
+  };
+
+  const handleExportContactsCSV = () => {
+    const date = new Date().toISOString().split('T')[0];
+    return downloadCsv(
+      '/api/export/contacts.csv',
+      `crm-contacts-${date}.csv`,
+    );
+  };
+
+  const handleExportAllLeadsCSV = () => {
+    const date = new Date().toISOString().split('T')[0];
+    return downloadCsv('/api/export/leads.csv', `leads-${date}.csv`);
+  };
+
   const getCategoryLabel = (cat: string) => {
     const labels: Record<string, string> = {
       jobs: 'Jobs & Work',
@@ -1173,16 +1210,25 @@ export default function CRM() {
             />
           </div>
         </div>
-        <button
-          onClick={() => {
-            resetContactForm();
-            setEditingContact(null);
-            setShowContactModal(true);
-          }}
-          className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition"
-        >
-          <Plus className="h-5 w-5" /> Add Contact
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportContactsCSV}
+            className="flex items-center gap-2 px-4 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition"
+            title="Download all contacts as CSV"
+          >
+            <Download className="h-5 w-5" /> Export CSV
+          </button>
+          <button
+            onClick={() => {
+              resetContactForm();
+              setEditingContact(null);
+              setShowContactModal(true);
+            }}
+            className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition"
+          >
+            <Plus className="h-5 w-5" /> Add Contact
+          </button>
+        </div>
       </div>
 
       {/* Contacts Table */}
