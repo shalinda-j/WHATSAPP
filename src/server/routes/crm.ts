@@ -57,6 +57,9 @@ router.get('/dashboard', async (req, res) => {
   try {
     const stats = await CRMService.getDashboardStats(
       req.tenant?._id ? String(req.tenant._id) : undefined,
+      typeof req.query.sessionId === 'string' && req.query.sessionId !== 'all'
+        ? req.query.sessionId
+        : undefined,
     );
     res.json(stats);
   } catch (err: any) {
@@ -88,7 +91,8 @@ router.get('/search', async (req, res) => {
 
 router.get('/contacts', async (req, res) => {
   try {
-    const { page, limit, search, type, status, source, tags } = req.query;
+    const { page, limit, search, type, status, source, tags, sessionId } =
+      req.query;
     const result = await CRMService.getContacts({
       page: Number(page) || 1,
       limit: Number(limit) || 20,
@@ -98,6 +102,10 @@ router.get('/contacts', async (req, res) => {
       source: source as string,
       tags: tags ? (tags as string).split(',') : undefined,
       tenantId: req.tenant?._id ? String(req.tenant._id) : undefined,
+      sessionId:
+        typeof sessionId === 'string' && sessionId !== 'all'
+          ? sessionId
+          : undefined,
     });
     res.json(result);
   } catch (err: any) {
@@ -109,6 +117,9 @@ router.get('/contacts/stats', async (req, res) => {
   try {
     const stats = await CRMService.getContactStats(
       req.tenant?._id ? String(req.tenant._id) : undefined,
+      typeof req.query.sessionId === 'string' && req.query.sessionId !== 'all'
+        ? req.query.sessionId
+        : undefined,
     );
     res.json(stats);
   } catch (err: any) {
@@ -133,12 +144,17 @@ router.get('/contacts/:id', validateObjectId(), async (req, res) => {
 
 router.post('/contacts', async (req, res) => {
   try {
-    // Stamp the active tenant on insert so subsequent tenant-scoped list
-    // queries surface the row. Without this the contact saves but is
-    // invisible from the Contacts tab.
+    // Stamp the active tenant + (optionally) the device scope so the row
+    // is visible to the matching tenant/device list view. sessionId may
+    // come either from the request body (CRM admin UI selected a device
+    // before adding) or be left absent (created globally).
     const payload = {
       ...req.body,
       tenantId: req.tenant?._id,
+      sessionId:
+        typeof req.body?.sessionId === 'string' && req.body.sessionId !== 'all'
+          ? req.body.sessionId
+          : undefined,
     };
     const contact = await CRMService.createContact(payload);
     res.status(201).json(contact);
@@ -222,7 +238,7 @@ router.delete('/contacts/:id', validateObjectId(), async (req, res) => {
 
 router.get('/deals', async (req, res) => {
   try {
-    const { stage, contact, owner, search, page, limit } = req.query;
+    const { stage, contact, owner, search, page, limit, sessionId } = req.query;
     const result = await CRMService.getDeals({
       page: Number(page) || 1,
       limit: Number(limit) || 20,
@@ -231,6 +247,10 @@ router.get('/deals', async (req, res) => {
       owner: owner as string,
       search: search as string,
       tenantId: req.tenant?._id ? String(req.tenant._id) : undefined,
+      sessionId:
+        typeof sessionId === 'string' && sessionId !== 'all'
+          ? sessionId
+          : undefined,
     });
     return res.json(result);
   } catch (err: any) {
@@ -242,6 +262,9 @@ router.get('/deals/kanban', async (req, res) => {
   try {
     const deals = await CRMService.getDealsByStage(
       req.tenant?._id ? String(req.tenant._id) : undefined,
+      typeof req.query.sessionId === 'string' && req.query.sessionId !== 'all'
+        ? req.query.sessionId
+        : undefined,
     );
     res.json(deals);
   } catch (err: any) {
@@ -253,6 +276,9 @@ router.get('/deals/stats', async (req, res) => {
   try {
     const stats = await CRMService.getDealStats(
       req.tenant?._id ? String(req.tenant._id) : undefined,
+      typeof req.query.sessionId === 'string' && req.query.sessionId !== 'all'
+        ? req.query.sessionId
+        : undefined,
     );
     res.json(stats);
   } catch (err: any) {
@@ -280,6 +306,10 @@ router.post('/deals', async (req, res) => {
     const deal = await CRMService.createDeal({
       ...req.body,
       tenantId: req.tenant?._id,
+      sessionId:
+        typeof req.body?.sessionId === 'string' && req.body.sessionId !== 'all'
+          ? req.body.sessionId
+          : undefined,
     });
     res.status(201).json(deal);
   } catch (err: any) {
@@ -315,8 +345,17 @@ router.delete('/deals/:id', validateObjectId(), async (req, res) => {
 
 router.get('/activities', async (req, res) => {
   try {
-    const { page, limit, type, contact, deal, status, owner, upcoming } =
-      req.query;
+    const {
+      page,
+      limit,
+      type,
+      contact,
+      deal,
+      status,
+      owner,
+      upcoming,
+      sessionId,
+    } = req.query;
     const result = await CRMService.getActivities({
       page: Number(page) || 1,
       limit: Number(limit) || 20,
@@ -327,6 +366,10 @@ router.get('/activities', async (req, res) => {
       owner: owner as string,
       upcoming: upcoming === 'true',
       tenantId: req.tenant?._id ? String(req.tenant._id) : undefined,
+      sessionId:
+        typeof sessionId === 'string' && sessionId !== 'all'
+          ? sessionId
+          : undefined,
     });
     res.json(result);
   } catch (err: any) {
@@ -340,6 +383,9 @@ router.get('/activities/upcoming', async (req, res) => {
     const activities = await CRMService.getUpcomingActivities(
       Number(limit) || 10,
       req.tenant?._id ? String(req.tenant._id) : undefined,
+      typeof req.query.sessionId === 'string' && req.query.sessionId !== 'all'
+        ? req.query.sessionId
+        : undefined,
     );
     res.json(activities);
   } catch (err: any) {
@@ -364,6 +410,10 @@ router.post('/activities', async (req, res) => {
     const activity = await CRMService.createActivity({
       ...req.body,
       tenantId: req.tenant?._id,
+      sessionId:
+        typeof req.body?.sessionId === 'string' && req.body.sessionId !== 'all'
+          ? req.body.sessionId
+          : undefined,
     });
     res.status(201).json(activity);
   } catch (err: any) {
@@ -464,6 +514,20 @@ router.get('/registrations', async (req, res) => {
         }
       : null;
 
+    // Per-device scope: same legacy-doc fallback as the tenant clause.
+    const sessionIdQ =
+      typeof req.query.sessionId === 'string' && req.query.sessionId !== 'all'
+        ? req.query.sessionId
+        : null;
+    const sessionClause = sessionIdQ
+      ? {
+          $or: [
+            { sessionId: sessionIdQ },
+            { sessionId: { $exists: false } },
+          ],
+        }
+      : null;
+
     let searchClause: Record<string, unknown> | null = null;
     if (search) {
       const escapedSearch = (search as string).replace(
@@ -478,9 +542,9 @@ router.get('/registrations', async (req, res) => {
       };
     }
 
-    // Combine clauses safely — both tenant filter and search use $or, so
-    // a flat merge would clobber one. Wrap in $and when both are present.
-    const subClauses = [tenantClause, searchClause].filter(
+    // Combine clauses safely — each may carry an $or, so a flat merge
+    // would clobber. Wrap in $and when 2+ are present.
+    const subClauses = [tenantClause, sessionClause, searchClause].filter(
       (c): c is Record<string, unknown> => c !== null,
     );
     const query: Record<string, unknown> =
