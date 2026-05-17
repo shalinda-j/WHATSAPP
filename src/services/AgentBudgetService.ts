@@ -1,5 +1,9 @@
 import AgentBudgetLedger from '../models/AgentBudgetLedger';
 import { IAgentConfig } from '../models/AgentConfig';
+import { WebhookService } from './WebhookService';
+
+const BUDGET_ALERT_COOLDOWN_MS = 60 * 60 * 1000;
+const lastAlertByAgentReason = new Map<string, number>();
 
 export interface BudgetCheck {
   allowed: boolean;
@@ -57,6 +61,11 @@ export class AgentBudgetService {
     const dailyCostUsd = dailyAgg[0]?.cost ?? 0;
 
     if (conversationTokensUsed >= config.budgetTokensPerConversation) {
+      this.emitBudgetAlert(config, 'per_conversation_cap', {
+        conversationTokensUsed,
+        dailyTokensUsed,
+        dailyCostUsd,
+      });
       return {
         allowed: false,
         reason: 'per_conversation_cap',
@@ -66,6 +75,11 @@ export class AgentBudgetService {
       };
     }
     if (dailyTokensUsed >= config.budgetTokensPerDay) {
+      this.emitBudgetAlert(config, 'daily_token_cap', {
+        conversationTokensUsed,
+        dailyTokensUsed,
+        dailyCostUsd,
+      });
       return {
         allowed: false,
         reason: 'daily_token_cap',
@@ -75,6 +89,11 @@ export class AgentBudgetService {
       };
     }
     if (dailyCostUsd >= config.costCapUsdPerDay) {
+      this.emitBudgetAlert(config, 'daily_cost_cap', {
+        conversationTokensUsed,
+        dailyTokensUsed,
+        dailyCostUsd,
+      });
       return {
         allowed: false,
         reason: 'daily_cost_cap',
@@ -90,6 +109,49 @@ export class AgentBudgetService {
       dailyTokensUsed,
       dailyCostUsd,
     };
+  }
+
+  /**
+   * Fires an ops webhook alert when an agent trips a budget cap. Cooldown
+   * keyed by (agent, reason) so a runaway conversation can't flood ops
+   * with one alert per blocked execution. Fire-and-forget — never blocks
+   * the budget check.
+   */
+  private emitBudgetAlert(
+    config: IAgentConfig,
+    reason: 'per_conversation_cap' | 'daily_token_cap' | 'daily_cost_cap',
+    counters: {
+      conversationTokensUsed: number;
+      dailyTokensUsed: number;
+      dailyCostUsd: number;
+    },
+  ): void {
+    const key = `${config.name}::${reason}`;
+    const last = lastAlertByAgentReason.get(key) ?? 0;
+    if (Date.now() - last < BUDGET_ALERT_COOLDOWN_MS) return;
+    lastAlertByAgentReason.set(key, Date.now());
+
+    const REASON_BODY: Record<typeof reason, string> = {
+      per_conversation_cap:
+        'A single conversation has consumed its allowed token budget.',
+      daily_token_cap:
+        'The agent has hit the daily token cap and is blocked until the next reset.',
+      daily_cost_cap:
+        'The agent has hit the daily USD cost cap and is blocked until the next reset.',
+    };
+
+    void WebhookService.triggerOpsAlert({
+      level: reason === 'daily_cost_cap' ? 'error' : 'warn',
+      title: `Agent budget cap hit: ${config.name}`,
+      body: REASON_BODY[reason],
+      fields: {
+        agent: config.name,
+        reason,
+        conversationTokens: counters.conversationTokensUsed,
+        dailyTokens: counters.dailyTokensUsed,
+        dailyCostUsd: counters.dailyCostUsd.toFixed(4),
+      },
+    });
   }
 
   async record(

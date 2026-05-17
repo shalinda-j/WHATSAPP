@@ -5,6 +5,11 @@ import AgentApprovalQueue, {
 import AgentExecution from '../models/AgentExecution';
 import AgentFeedback from '../models/AgentFeedback';
 import AgentPromptVersion from '../models/AgentPromptVersion';
+import { WebhookService } from './WebhookService';
+
+const APPROVAL_BACKLOG_ALERT_THRESHOLD = 25;
+let lastApprovalAlertAt = 0;
+const APPROVAL_ALERT_COOLDOWN_MS = 15 * 60 * 1000;
 
 function tryEmit(event: string, payload: unknown): void {
   // Socket.io is optional at this layer — in test/cron contexts the server
@@ -61,6 +66,28 @@ export class AgentApprovalQueueService {
       createdAt: entry.createdAt,
       expiresAt: entry.expiresAt,
     });
+
+    // Ops alert when the pending backlog crosses the threshold, so the
+    // on-call operator gets paged before approvals start expiring. The
+    // cooldown prevents one slow-reviewing operator from flooding Slack
+    // with one alert per enqueue.
+    const pending = await this.pendingCount().catch(() => 0);
+    if (
+      pending >= APPROVAL_BACKLOG_ALERT_THRESHOLD &&
+      Date.now() - lastApprovalAlertAt > APPROVAL_ALERT_COOLDOWN_MS
+    ) {
+      lastApprovalAlertAt = Date.now();
+      void WebhookService.triggerOpsAlert({
+        level: pending >= APPROVAL_BACKLOG_ALERT_THRESHOLD * 2 ? 'error' : 'warn',
+        title: 'Agent approval queue backlog',
+        body: `Pending approvals: ${pending}. Reviews are falling behind — outbound for agents in approval mode is blocked until cleared.`,
+        fields: {
+          pending,
+          threshold: APPROVAL_BACKLOG_ALERT_THRESHOLD,
+          agent: params.agentName,
+        },
+      });
+    }
 
     return entry;
   }
