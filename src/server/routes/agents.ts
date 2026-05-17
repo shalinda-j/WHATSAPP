@@ -581,4 +581,106 @@ router.post(
   }),
 );
 
+/**
+ * Per-agent latency + cost dashboard. Aggregates AgentExecution over the
+ * requested window (default 7 days, max 90) and returns one row per agent:
+ *   { executions, successRate, p50LatencyMs, p95LatencyMs, totalTokens,
+ *     totalCostUsd, topFailures: [{reason, count}] }
+ *
+ * Uses a single Mongo aggregation per agent — bounded at top-N agents to
+ * keep the cost predictable as the agent roster grows.
+ */
+router.get(
+  '/metrics/dashboard',
+  asyncHandler(async (req, res) => {
+    const days = Math.min(90, Math.max(1, Number(req.query.days) || 7));
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const aggregation = await AgentExecution.aggregate([
+      { $match: { createdAt: { $gte: since } } },
+      {
+        $group: {
+          _id: '$agentName',
+          executions: { $sum: 1 },
+          successes: {
+            $sum: { $cond: [{ $eq: ['$outcome', 'success'] }, 1, 0] },
+          },
+          failures: {
+            $sum: { $cond: [{ $eq: ['$outcome', 'failed'] }, 1, 0] },
+          },
+          totalTokens: { $sum: '$tokensUsed' },
+          totalCostUsd: { $sum: '$costUsd' },
+          latencies: { $push: '$latencyMs' },
+        },
+      },
+      { $sort: { executions: -1 } },
+      { $limit: 50 },
+    ]);
+
+    type AggregationRow = {
+      _id: string;
+      executions: number;
+      successes: number;
+      failures: number;
+      totalTokens: number;
+      totalCostUsd: number;
+      latencies: number[];
+    };
+
+    const percentile = (sorted: number[], p: number): number => {
+      if (sorted.length === 0) return 0;
+      const idx = Math.min(
+        sorted.length - 1,
+        Math.max(0, Math.ceil((p / 100) * sorted.length) - 1),
+      );
+      return sorted[idx];
+    };
+
+    const rows = (aggregation as AggregationRow[]).map((r) => {
+      const sortedLat = [...r.latencies].sort((a, b) => a - b);
+      return {
+        agentName: r._id,
+        executions: r.executions,
+        successRate:
+          r.executions > 0 ? r.successes / r.executions : 0,
+        failures: r.failures,
+        p50LatencyMs: percentile(sortedLat, 50),
+        p95LatencyMs: percentile(sortedLat, 95),
+        totalTokens: r.totalTokens,
+        totalCostUsd: Number(r.totalCostUsd.toFixed(4)),
+        avgCostPerExecutionUsd:
+          r.executions > 0
+            ? Number((r.totalCostUsd / r.executions).toFixed(6))
+            : 0,
+      };
+    });
+
+    // Top failure reasons in the same window — capped at 20 distinct
+    // messages so a noisy errorMessage column can't blow up the response.
+    const failureReasons = await AgentExecution.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: since },
+          outcome: 'failed',
+          errorMessage: { $ne: null },
+        },
+      },
+      { $group: { _id: '$errorMessage', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 20 },
+    ]);
+
+    res.json({
+      success: true,
+      windowDays: days,
+      since,
+      rows,
+      topFailures: failureReasons.map((f: { _id: string; count: number }) => ({
+        reason: f._id,
+        count: f.count,
+      })),
+    });
+  }),
+);
+
 export default router;
