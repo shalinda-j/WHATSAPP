@@ -3,6 +3,8 @@ import Workflow from '../../models/Workflow';
 import { aiLoadBalancer } from '../../services/AILoadBalancer';
 import { authenticateToken } from '../middleware/auth';
 import { resolveTenant } from '../middleware/tenantContext';
+import { getIntegrationExecutor } from '../services/workflowExecutors';
+import { interpolate } from '../services/workflowInterpolate';
 
 const router = Router();
 
@@ -162,9 +164,13 @@ async function executeGraph(
   nodes: any[],
   edges: any[],
   triggerData: any,
+  tenantId?: string,
 ): Promise<{ logs: any[]; output: any; duration: number }> {
   const startTime = Date.now();
   const logs: any[] = [];
+  // Per-node outputs, keyed by node.id. Used by the interpolation helper
+  // so any node can reference {{node_X.output.field}} downstream.
+  const upstreamOutputs: Record<string, unknown> = {};
 
   const nodeMap: Record<string, any> = {};
   for (const n of nodes) nodeMap[n.id] = n;
@@ -351,18 +357,65 @@ async function executeGraph(
         }
 
         case 'integration': {
-          const iType = node.data?.integrationType;
-          log(
-            node.id,
-            `Integration [${iType}] — config: ${JSON.stringify(
-              node.data || {},
-            ).substring(0, 80)}`,
-          );
+          const iType = node.data?.integrationType as string | undefined;
+          // Resolve every {{placeholder}} in the node config against the
+          // trigger payload + outputs of every previously-executed node.
+          // Interpolation never throws — missing references become empty
+          // strings — so a placeholder typo can't crash the workflow.
+          const interpolatedConfig = interpolate(node.data ?? {}, {
+            trigger: context.triggerData,
+            upstream: upstreamOutputs,
+          });
+          const executor = getIntegrationExecutor(iType);
+          if (!executor) {
+            // Unsupported integration types log + return ok:false so the
+            // operator sees a clear failure rather than a fake success.
+            log(
+              node.id,
+              `Integration [${iType ?? 'unknown'}] has no executor — skipped`,
+              'error',
+            );
+            result.output = {
+              integration: iType,
+              executed: false,
+              error: 'no_executor',
+              config: interpolatedConfig,
+            };
+            return { success: false };
+          }
+          log(node.id, `→ executing integration [${iType}]`);
+          const execResult = await executor(interpolatedConfig, {
+            tenantId,
+            triggerData: context.triggerData,
+            upstream: upstreamOutputs,
+          });
+          if (execResult.ok) {
+            log(
+              node.id,
+              `✓ ${iType} ok${
+                execResult.providerCallId
+                  ? ` (id=${execResult.providerCallId})`
+                  : ''
+              }`,
+            );
+          } else {
+            log(
+              node.id,
+              `✗ ${iType} failed: ${execResult.error ?? 'unknown error'}`,
+              'error',
+            );
+          }
           result.output = {
             integration: iType,
-            executed: true,
-            config: node.data,
+            executed: execResult.ok,
+            providerCallId: execResult.providerCallId,
+            status: execResult.status,
+            data: execResult.data,
+            error: execResult.error,
           };
+          if (!execResult.ok) {
+            return { success: false };
+          }
           break;
         }
 
@@ -372,6 +425,8 @@ async function executeGraph(
       }
 
       context.lastOutput = result.output;
+      // Expose this node's output to downstream {{node_id.field}} lookups.
+      upstreamOutputs[node.id] = result.output;
       return { success: true, decisionResult };
     } catch (error) {
       log(node.id, `Error: ${error}`, 'error');
@@ -472,6 +527,7 @@ router.post('/execute', async (req: Request, res: Response) => {
         sender: 'test',
         timestamp: new Date().toISOString(),
       },
+      req.tenant?._id ? String(req.tenant._id) : undefined,
     );
 
     res.json({
@@ -593,6 +649,7 @@ router.post('/:id/execute', async (req: Request, res: Response) => {
         message: 'Manual trigger',
         timestamp: new Date().toISOString(),
       },
+      req.tenant?._id ? String(req.tenant._id) : undefined,
     );
 
     workflow.lastRunAt = new Date();
