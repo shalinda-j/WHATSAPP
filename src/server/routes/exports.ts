@@ -151,7 +151,7 @@ router.get(
     try {
       const tenant = (req as any).tenant;
       const filter: Record<string, unknown> = {
-        campaignId: new mongoose.Types.ObjectId(req.params.campaignId),
+        campaignId: new mongoose.Types.ObjectId(String(req.params.campaignId)),
       };
       if (tenant?._id) {
         filter.tenantId = new mongoose.Types.ObjectId(String(tenant._id));
