@@ -300,10 +300,46 @@ app.use(
     setHeaders: (res, filePath) => {
       if (filePath.endsWith('index.html')) {
         res.setHeader('Cache-Control', 'no-store, must-revalidate');
+        // Note: the Clear-Site-Data one-shot purge is applied in the
+        // SPA fallback below (which has access to req for the cookie
+        // check). express.static's setHeaders callback only sees (res,
+        // path) so we can't do cookie-conditional headers here.
       }
     },
   }),
 );
+
+/**
+ * One-shot site-data purge: when a browser arrives without the `_bv`
+ * cookie we attach `Clear-Site-Data: "cache"` to the HTML response and
+ * set the cookie to prevent it firing again on subsequent visits.
+ *
+ * This is the recovery path for users who are *currently* holding a
+ * stale `index.html` from before PR #16/#35/#36 shipped — once they
+ * hit the server again and get a fresh response with this header,
+ * their browser drops every cached asset for the origin and re-fetches
+ * everything cleanly. The cookie is `_bv=v2` (bumped when we need to
+ * force another purge in the future) with a 1-year max-age.
+ *
+ * After the first visit the cookie is set, so the long-lived immutable
+ * caching of hashed assets (from PR #17) keeps working — no
+ * performance penalty on steady-state.
+ */
+const SITE_DATA_PURGE_VERSION = 'v2';
+function applyBundleRecoveryHeaders(req: Request, res: Response): void {
+  res.setHeader('Cache-Control', 'no-store, must-revalidate');
+  const cookieHeader = req.headers.cookie || '';
+  const purgeCookieRe = new RegExp(
+    '(?:^|;\\s*)_bv=' + SITE_DATA_PURGE_VERSION + '(?:;|$)',
+  );
+  if (!purgeCookieRe.test(cookieHeader)) {
+    res.setHeader('Clear-Site-Data', '"cache"');
+    res.setHeader(
+      'Set-Cookie',
+      `_bv=${SITE_DATA_PURGE_VERSION}; Max-Age=31536000; Path=/; SameSite=Lax`,
+    );
+  }
+}
 
 // SPA Fallback - Use middleware instead of route pattern for Express 5.x compatibility
 app.use((req, res, next) => {
@@ -329,7 +365,10 @@ app.use((req, res, next) => {
   // For all other paths (real SPA routes like /dashboard, /channels), serve
   // index.html so React Router takes over. Don't cache — the asset hashes
   // inside change every deploy.
-  res.setHeader('Cache-Control', 'no-store, must-revalidate');
+  // One-shot Clear-Site-Data purge (cookie-gated) + no-store on the HTML.
+  // After the first visit the `_bv` cookie suppresses the purge so
+  // long-lived immutable caching of hashed assets keeps working.
+  applyBundleRecoveryHeaders(req, res);
   res.sendFile(path.join(CLIENT_BUILD_PATH, 'index.html'));
 });
 
