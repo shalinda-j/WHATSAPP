@@ -59,7 +59,10 @@ interface Conversation {
   detectedLanguage?: string;
   userInfo?: {
     name?: string;
+    /** Real E.164-style phone, only set when the JID has a resolvable phone. */
     phone?: string;
+    /** True when the JID is a Linked-ID / group / unknown shape. */
+    isUnresolved?: boolean;
   };
 }
 
@@ -443,10 +446,35 @@ export default function ChatInterface() {
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
+  /**
+   * Display label for a user. The backend now hands us a resolved
+   * userInfo with name + real phone, so prefer that. Falls back to the
+   * pushName captured on the last message, then a LID-aware label so
+   * Linked-IDs render as 'LID …xxxx' instead of a garbage '+15889…'
+   * number that doesn't dial.
+   */
   const getUserDisplayName = (userId: string) => {
-    const phone = userId.split('@')[0];
     const conv = conversations.find((c) => c.userId === userId);
-    return conv?.userInfo?.name || conv?.userInfo?.phone || `+${phone}`;
+    if (conv?.userInfo?.name) return conv.userInfo.name;
+    if (conv?.userInfo?.phone) return `+${conv.userInfo.phone}`;
+
+    const pushName = (conv?.lastMessage?.metadata as { pushName?: string } | undefined)
+      ?.pushName;
+    if (pushName) return pushName;
+
+    // No userInfo and no pushName — derive a safe label from the raw JID.
+    if (userId.endsWith('@lid')) {
+      const tail = userId.replace('@lid', '').slice(-4);
+      return `LID …${tail}`;
+    }
+    if (userId.endsWith('@g.us')) {
+      const tail = userId.replace('@g.us', '').slice(-4);
+      return `Group …${tail}`;
+    }
+    const local = userId.split('@')[0]?.split(':')[0] ?? userId;
+    const digits = local.replace(/\D/g, '');
+    if (digits.length >= 8 && digits.length <= 15) return `+${digits}`;
+    return 'Unknown';
   };
 
   const filteredConversations = conversations.filter((c) => {
