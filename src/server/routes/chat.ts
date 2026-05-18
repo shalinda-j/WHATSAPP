@@ -76,14 +76,57 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
     );
 
     // Bulk-resolve userInfo (name + real phone) for every userId in one
-    // bounded Contact query — much cheaper than a per-row findOne. LIDs
-    // (@lid suffix) can't be looked up by phone; for those we fall back
-    // to the pushName captured on the last message.
+    // bounded Contact query — much cheaper than a per-row findOne. Phone
+    // resolution priority:
+    //   1. metadata.realPhone on the last message (carries the actual
+    //      number for @lid users that Baileys exposed via senderPn)
+    //   2. extractRealPhone() on the userId (works for @s.whatsapp.net)
+    //   3. Lookup the LID against any earlier message that did carry a
+    //      realPhone for the same userId — handles older messages that
+    //      arrived before the realPhone resolver landed.
+    // LIDs with no realPhone anywhere fall through to the pushName label
+    // on the frontend.
     const phoneByUserId = new Map<string, string>();
-    for (const conv of conversations as Array<{ _id: string }>) {
-      const phone = extractRealPhone(conv._id);
-      if (phone) phoneByUserId.set(conv._id, phone);
+    const unresolvedLidUserIds: string[] = [];
+    for (const conv of conversations as Array<{
+      _id: string;
+      lastMessage: { metadata?: { realPhone?: string } };
+    }>) {
+      const fromLastMsg = conv.lastMessage?.metadata?.realPhone;
+      if (fromLastMsg) {
+        phoneByUserId.set(conv._id, fromLastMsg);
+        continue;
+      }
+      const fromJid = extractRealPhone(conv._id);
+      if (fromJid) {
+        phoneByUserId.set(conv._id, fromJid);
+        continue;
+      }
+      unresolvedLidUserIds.push(conv._id);
     }
+
+    // Back-fill for LIDs by checking any earlier ChatMessage that carries
+    // a realPhone for the same userId. One $group over the index hits.
+    if (unresolvedLidUserIds.length > 0) {
+      const backfill = (await ChatMessage.aggregate([
+        {
+          $match: {
+            userId: { $in: unresolvedLidUserIds },
+            'metadata.realPhone': { $exists: true, $ne: '' },
+          },
+        },
+        {
+          $group: {
+            _id: '$userId',
+            realPhone: { $first: '$metadata.realPhone' },
+          },
+        },
+      ])) as Array<{ _id: string; realPhone: string }>;
+      for (const row of backfill) {
+        if (row.realPhone) phoneByUserId.set(row._id, row.realPhone);
+      }
+    }
+
     const distinctPhones = Array.from(new Set(phoneByUserId.values()));
 
     type ContactLite = {

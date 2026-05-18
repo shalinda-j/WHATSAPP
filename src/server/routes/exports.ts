@@ -274,6 +274,7 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
       firstSeen: Date;
       lastSeen: Date;
       sessionIds: (string | null | undefined)[];
+      realPhones: (string | null | undefined)[];
     };
 
     const agg = (await ChatMessage.aggregate([
@@ -285,6 +286,7 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
           firstSeen: { $min: '$timestamp' },
           lastSeen: { $max: '$timestamp' },
           sessionIds: { $addToSet: '$metadata.sessionId' },
+          realPhones: { $addToSet: '$metadata.realPhone' },
         },
       },
       { $sort: { lastSeen: -1 } },
@@ -310,11 +312,21 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
       return;
     }
 
-    // Map each userId to a *real* E.164-style phone or null when the JID
-    // is a Linked-ID (@lid) / group / malformed. We never coerce LIDs
-    // into the phone column — operators would dial them and get nothing.
+    // Map each userId to a *real* E.164-style phone or null. Priority:
+    //   1. metadata.realPhone collected across the message window (lifted
+    //      from Baileys senderPn / participantPn at ingest)
+    //   2. extractRealPhone(userId) for @s.whatsapp.net JIDs
+    // LIDs with no realPhone anywhere stay null — we never coerce them
+    // into the phone column because operators would dial them and get
+    // nothing.
     const phoneByUserId = new Map<string, string | null>(
-      agg.map((row) => [row._id, extractRealPhone(row._id)]),
+      agg.map((row) => {
+        const fromMetadata = (row.realPhones || []).find(
+          (p): p is string => typeof p === 'string' && p.length > 0,
+        );
+        if (fromMetadata) return [row._id, fromMetadata];
+        return [row._id, extractRealPhone(row._id)];
+      }),
     );
     const distinctDigits = Array.from(
       new Set(

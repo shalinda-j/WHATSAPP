@@ -31,6 +31,40 @@ export function isGroupJid(jid: string | undefined | null): boolean {
 }
 
 /**
+ * Best-effort extraction of the real phone-number JID from a raw Baileys
+ * message. Modern Baileys (6.6+) attaches `senderPn` / `participantPn`
+ * fields to the message key for `@lid` messages — these carry the
+ * actual phone number behind the LID. Fields are untyped in 6.6.x so
+ * we read them defensively.
+ *
+ * Returns null when no phone-shaped identifier is available.
+ */
+export function extractPhoneJidFromMessage(rawMessage: unknown): string | null {
+  if (!rawMessage || typeof rawMessage !== 'object') return null;
+  const msg = rawMessage as { key?: Record<string, unknown> };
+  const key = msg.key ?? {};
+
+  // Try, in order, the fields Baileys may surface a real-PN through.
+  const candidates: unknown[] = [
+    key.senderPn,
+    key.participantPn,
+    key.participantAlt,
+    key.senderAlt,
+    // Some builds nest it under `previousId` / `userJid`.
+    (msg as any).userJid,
+  ];
+  for (const c of candidates) {
+    if (typeof c !== 'string' || c.length === 0) continue;
+    if (isLidJid(c) || isGroupJid(c)) continue;
+    const phone = extractRealPhone(c);
+    if (phone) {
+      return c.includes('@') ? c : `${phone}@s.whatsapp.net`;
+    }
+  }
+  return null;
+}
+
+/**
  * Extracts the **real** E.164-style phone digits from a JID, or null when the
  * JID can't safely be mapped to a phone (LIDs, groups, malformed inputs).
  *

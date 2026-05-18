@@ -57,6 +57,7 @@ import { HumanizerService } from './services/HumanizerService';
 import { isStopKeyword, markContactOptedOut } from './services/optOut';
 import { scoreSentiment } from './services/sentiment';
 import { autoTagLeadFromMessage } from './services/leadAutoTag';
+import { extractPhoneJidFromMessage, extractRealPhone } from './utils/jid';
 
 const PORT = process.env.PORT || 8080;
 let server: any;
@@ -534,6 +535,17 @@ onMessage(async (message, sock, sessionId) => {
       // (@lid) with no Contact match.
       const inboundPushName =
         (message as any).pushName || (message.key as any)?.pushName || undefined;
+
+      // Resolve the real phone for this message. For `@lid` JIDs Baileys
+      // 6.6+ exposes the underlying phone via `key.senderPn` /
+      // `key.participantPn`; for classic `@s.whatsapp.net` JIDs we can
+      // pull it from the JID itself. Stored on metadata so the chat list,
+      // export and CRM lookups all converge on the same real number even
+      // though `userId` stays as the raw JID (preserving the existing
+      // aggregation contract).
+      const phoneJidFromMsg = extractPhoneJidFromMessage(message);
+      const inboundRealPhone =
+        extractRealPhone(phoneJidFromMsg) ?? extractRealPhone(jid) ?? undefined;
       const savedMsg = await ChatMessage.create({
         userId: jid,
         role: 'user',
@@ -544,6 +556,7 @@ onMessage(async (message, sock, sessionId) => {
           sessionId,
           isBooking: false,
           pushName: inboundPushName,
+          realPhone: inboundRealPhone,
           sentimentScore: sentiment.score,
           sentimentLabel: sentiment.label,
         },
