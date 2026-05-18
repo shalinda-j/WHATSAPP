@@ -346,7 +346,8 @@ router.use(authenticateToken);
 // Get all webhooks
 router.get('/', async (req, res) => {
   try {
-    const webhooks = await (Webhook as any).find().sort({ createdAt: -1 });
+    // ⚡ Bolt Performance Optimization: Added .lean() to bypass Mongoose hydration for faster read-only queries
+    const webhooks = await (Webhook as any).find().sort({ createdAt: -1 }).lean();
     res.json(webhooks);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -395,7 +396,8 @@ router.delete('/:id', async (req, res) => {
 // Test webhook
 router.post('/:id/test', async (req, res) => {
   try {
-    const webhook = await (Webhook as any).findById(req.params.id);
+    // ⚡ Bolt Performance Optimization: Added .lean() to bypass Mongoose hydration for faster read-only queries
+    const webhook = await (Webhook as any).findById(req.params.id).lean();
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
 
     // This is a bit of a hack to use the private sendPayload method by exposing a test mechanism
