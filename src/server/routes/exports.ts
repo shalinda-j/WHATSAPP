@@ -239,13 +239,14 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
     const fromRaw = req.query.from ? String(req.query.from).trim() : '';
     const toRaw = req.query.to ? String(req.query.to).trim() : '';
 
-    // Default behaviour: emit ONLY rows whose JID resolves to a real
-    // dialable phone number. LIDs and other unresolved identifiers are
-    // dropped so operators don't end up with un-dialable garbage in the
-    // CSV. Set ?includeUnresolved=true to get the full unfiltered set
-    // (for debugging / auditing).
-    const includeUnresolved =
-      String(req.query.includeUnresolved ?? '').toLowerCase() === 'true';
+    // Filter mode (default OFF so the export is never empty). When
+    // ?phoneOnly=true is passed, drop rows whose JID didn't resolve to
+    // a dialable phone — leaves the CSV containing only conversations
+    // an operator can actually call back. Backwards-compatible alias
+    // ?includeUnresolved=false also turns it on for old links.
+    const phoneOnly =
+      String(req.query.phoneOnly ?? '').toLowerCase() === 'true' ||
+      String(req.query.includeUnresolved ?? '').toLowerCase() === 'false';
 
     // Resolve the time window — explicit from/to wins; otherwise parse
     // YYYY-MM into a UTC calendar-month range; otherwise no window (all-time).
@@ -295,6 +296,7 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
           lastSeen: { $max: '$timestamp' },
           sessionIds: { $addToSet: '$metadata.sessionId' },
           realPhones: { $addToSet: '$metadata.realPhone' },
+          pushNames: { $addToSet: '$metadata.pushName' },
         },
       },
       { $sort: { lastSeen: -1 } },
@@ -304,9 +306,11 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
     if (agg.length === 0) {
       const empty = toCsv([], [
         'phone',
-        'name',
-        'email',
+        'identifier',
         'identifierType',
+        'name',
+        'pushName',
+        'email',
         'rawJid',
         'lastSeen',
         'firstSeen',
@@ -391,15 +395,26 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
       }
     }
 
-    const rows = agg
+    // Pull the freshest pushName per userId from the aggregation so
+    // unresolved-LID rows still carry the WhatsApp display name and
+    // aren't shown as anonymous in the CSV.
+    type AggExt = Agg & { pushNames?: (string | null | undefined)[] };
+    const aggWithNames = agg as AggExt[];
+
+    const rows = aggWithNames
       .map((r) => {
         const phone = phoneByUserId.get(r._id) || '';
         const contact = phone ? contactsByPhone.get(phone) : undefined;
+        const pushName = (r.pushNames || []).find(
+          (n): n is string => typeof n === 'string' && n.length > 0,
+        );
         return {
-          phone,
-          name: contact?.name ?? '',
-          email: contact?.email ?? '',
+          phone, // the dialable number when known
+          identifier: phone || r._id, // always populated — phone if real, raw JID otherwise
           identifierType: phone ? 'phone' : isLidJid(r._id) ? 'lid' : 'unknown',
+          name: contact?.name ?? pushName ?? '',
+          pushName: pushName ?? '',
+          email: contact?.email ?? '',
           rawJid: r._id,
           lastSeen: r.lastSeen,
           firstSeen: r.firstSeen,
@@ -410,17 +425,18 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
           optedOut: contact?.optedOut ? 'true' : '',
         };
       })
-      // Default: drop rows whose phone field is empty (LIDs without a
-      // resolved senderPn, malformed JIDs, etc.). Operators asked for
-      // a dialable list, not an audit dump. ?includeUnresolved=true
-      // restores the full set.
-      .filter((row) => includeUnresolved || Boolean(row.phone));
+      // Opt-in dialable-only filter via ?phoneOnly=true. Default keeps
+      // every row so the operator always gets data back, even when the
+      // tenant's conversations are all LID-based.
+      .filter((row) => !phoneOnly || Boolean(row.phone));
 
     const csv = toCsv(rows, [
       'phone',
-      'name',
-      'email',
+      'identifier',
       'identifierType',
+      'name',
+      'pushName',
+      'email',
       'rawJid',
       'lastSeen',
       'firstSeen',
