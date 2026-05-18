@@ -239,6 +239,14 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
     const fromRaw = req.query.from ? String(req.query.from).trim() : '';
     const toRaw = req.query.to ? String(req.query.to).trim() : '';
 
+    // Default behaviour: emit ONLY rows whose JID resolves to a real
+    // dialable phone number. LIDs and other unresolved identifiers are
+    // dropped so operators don't end up with un-dialable garbage in the
+    // CSV. Set ?includeUnresolved=true to get the full unfiltered set
+    // (for debugging / auditing).
+    const includeUnresolved =
+      String(req.query.includeUnresolved ?? '').toLowerCase() === 'true';
+
     // Resolve the time window — explicit from/to wins; otherwise parse
     // YYYY-MM into a UTC calendar-month range; otherwise no window (all-time).
     let from: Date | undefined;
@@ -383,24 +391,30 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
       }
     }
 
-    const rows = agg.map((r) => {
-      const phone = phoneByUserId.get(r._id) || '';
-      const contact = phone ? contactsByPhone.get(phone) : undefined;
-      return {
-        phone,
-        name: contact?.name ?? '',
-        email: contact?.email ?? '',
-        identifierType: phone ? 'phone' : isLidJid(r._id) ? 'lid' : 'unknown',
-        rawJid: r._id,
-        lastSeen: r.lastSeen,
-        firstSeen: r.firstSeen,
-        messageCount: r.messageCount,
-        deviceSessions: (r.sessionIds || [])
-          .filter((s): s is string => Boolean(s))
-          .join(';'),
-        optedOut: contact?.optedOut ? 'true' : '',
-      };
-    });
+    const rows = agg
+      .map((r) => {
+        const phone = phoneByUserId.get(r._id) || '';
+        const contact = phone ? contactsByPhone.get(phone) : undefined;
+        return {
+          phone,
+          name: contact?.name ?? '',
+          email: contact?.email ?? '',
+          identifierType: phone ? 'phone' : isLidJid(r._id) ? 'lid' : 'unknown',
+          rawJid: r._id,
+          lastSeen: r.lastSeen,
+          firstSeen: r.firstSeen,
+          messageCount: r.messageCount,
+          deviceSessions: (r.sessionIds || [])
+            .filter((s): s is string => Boolean(s))
+            .join(';'),
+          optedOut: contact?.optedOut ? 'true' : '',
+        };
+      })
+      // Default: drop rows whose phone field is empty (LIDs without a
+      // resolved senderPn, malformed JIDs, etc.). Operators asked for
+      // a dialable list, not an audit dump. ?includeUnresolved=true
+      // restores the full set.
+      .filter((row) => includeUnresolved || Boolean(row.phone));
 
     const csv = toCsv(rows, [
       'phone',
