@@ -529,6 +529,11 @@ onMessage(async (message, sock, sessionId) => {
       autoTagLeadFromMessage(jid.replace(/@.*/, ''), text).catch((err) => {
         console.error('   ⚠️ autoTagLeadFromMessage failed:', err);
       });
+      // WhatsApp push name — store on the message so the chat list can
+      // render a human-readable label even when the userId is a Linked-ID
+      // (@lid) with no Contact match.
+      const inboundPushName =
+        (message as any).pushName || (message.key as any)?.pushName || undefined;
       const savedMsg = await ChatMessage.create({
         userId: jid,
         role: 'user',
@@ -538,6 +543,7 @@ onMessage(async (message, sock, sessionId) => {
         metadata: {
           sessionId,
           isBooking: false,
+          pushName: inboundPushName,
           sentimentScore: sentiment.score,
           sentimentLabel: sentiment.label,
         },

@@ -21,6 +21,12 @@ export interface IChatMessage {
     /** Heuristic sentiment computed inline at message ingest. */
     sentimentScore?: number;
     sentimentLabel?: 'positive' | 'neutral' | 'negative';
+    /**
+     * WhatsApp display name captured at ingest. Stored on the message so
+     * the chat list + exports can resolve a human-readable label even
+     * when the userId is a Linked-ID with no Contact match.
+     */
+    pushName?: string;
   };
 }
 
@@ -57,6 +63,7 @@ const ChatMessageSchema = new Schema({
       type: String,
       enum: ['positive', 'neutral', 'negative'],
     },
+    pushName: { type: String },
   },
 });
 

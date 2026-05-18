@@ -5,6 +5,7 @@ import { Contact } from '../../models/CRM';
 import CampaignExecution from '../../models/CampaignExecution';
 import ChatMessage from '../../models/ChatMessage';
 import { toCsv, csvDownloadHeaders } from '../utils/csv';
+import { extractRealPhone, isLidJid } from '../../utils/jid';
 
 const router = express.Router();
 
@@ -295,6 +296,8 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
         'phone',
         'name',
         'email',
+        'identifierType',
+        'rawJid',
         'lastSeen',
         'firstSeen',
         'messageCount',
@@ -307,19 +310,16 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
       return;
     }
 
-    // userId is the WhatsApp JID — strip the suffix to get raw digits.
-    // Some legacy rows used the raw phone, others used JIDs; handle both.
-    const toDigits = (jid: string): string => {
-      if (!jid) return '';
-      const at = jid.indexOf('@');
-      return (at >= 0 ? jid.slice(0, at) : jid).replace(/\D/g, '');
-    };
-
-    const phoneByUserId = new Map<string, string>(
-      agg.map((row) => [row._id, toDigits(row._id)]),
+    // Map each userId to a *real* E.164-style phone or null when the JID
+    // is a Linked-ID (@lid) / group / malformed. We never coerce LIDs
+    // into the phone column — operators would dial them and get nothing.
+    const phoneByUserId = new Map<string, string | null>(
+      agg.map((row) => [row._id, extractRealPhone(row._id)]),
     );
     const distinctDigits = Array.from(
-      new Set(Array.from(phoneByUserId.values()).filter(Boolean)),
+      new Set(
+        Array.from(phoneByUserId.values()).filter((p): p is string => Boolean(p)),
+      ),
     );
 
     // One bounded contact lookup for every phone in the export — much cheaper
@@ -378,6 +378,8 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
         phone,
         name: contact?.name ?? '',
         email: contact?.email ?? '',
+        identifierType: phone ? 'phone' : isLidJid(r._id) ? 'lid' : 'unknown',
+        rawJid: r._id,
         lastSeen: r.lastSeen,
         firstSeen: r.firstSeen,
         messageCount: r.messageCount,
@@ -392,6 +394,8 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
       'phone',
       'name',
       'email',
+      'identifierType',
+      'rawJid',
       'lastSeen',
       'firstSeen',
       'messageCount',

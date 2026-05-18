@@ -1,10 +1,12 @@
 import { Router, Request, Response } from 'express';
 import ChatMessage from '../../models/ChatMessage';
 import Session from '../../models/Session';
+import { Contact } from '../../models/CRM';
 import { sendMessage, getSocket } from '../../services/whatsapp';
 import { getIO } from '../socket';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { resolveTenant } from '../middleware/tenantContext';
+import { extractRealPhone, fallbackJidLabel } from '../../utils/jid';
 
 const router = Router();
 
@@ -73,22 +75,73 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
       unreadCounts.map((item: any) => [item._id, item.unreadCount]),
     );
 
+    // Bulk-resolve userInfo (name + real phone) for every userId in one
+    // bounded Contact query — much cheaper than a per-row findOne. LIDs
+    // (@lid suffix) can't be looked up by phone; for those we fall back
+    // to the pushName captured on the last message.
+    const phoneByUserId = new Map<string, string>();
+    for (const conv of conversations as Array<{ _id: string }>) {
+      const phone = extractRealPhone(conv._id);
+      if (phone) phoneByUserId.set(conv._id, phone);
+    }
+    const distinctPhones = Array.from(new Set(phoneByUserId.values()));
+
+    type ContactLite = {
+      name?: string;
+      phone?: string;
+      whatsappNumber?: string;
+      whatsappId?: string;
+    };
+    const contactByPhone = new Map<string, ContactLite>();
+    if (distinctPhones.length > 0) {
+      const contacts = (await (Contact as any)
+        .find(
+          {
+            $or: [
+              { phone: { $in: distinctPhones } },
+              { whatsappNumber: { $in: distinctPhones } },
+              { whatsappId: { $in: distinctPhones } },
+            ],
+          },
+          { name: 1, phone: 1, whatsappNumber: 1, whatsappId: 1 },
+        )
+        .lean()) as ContactLite[];
+      for (const c of contacts) {
+        for (const key of ['phone', 'whatsappNumber', 'whatsappId'] as const) {
+          const v = (c[key] || '').replace(/\D/g, '');
+          if (v && !contactByPhone.has(v)) contactByPhone.set(v, c);
+        }
+      }
+    }
+
     // Format response
-    const formattedConversations = conversations.map((conv: any) => ({
-      userId: conv._id,
-      sessionId: conv.lastMessage.metadata?.sessionId ?? null,
-      lastMessage: {
-        _id: conv.lastMessage._id,
-        userId: conv.lastMessage.userId,
-        role: conv.lastMessage.role,
-        type: conv.lastMessage.type,
-        content: conv.lastMessage.content,
-        timestamp: conv.lastMessage.timestamp,
-        metadata: conv.lastMessage.metadata,
-      },
-      unreadCount: unreadMap.get(conv._id) || 0,
-      messageCount: conv.messageCount,
-    }));
+    const formattedConversations = conversations.map((conv: any) => {
+      const phone = phoneByUserId.get(conv._id) ?? null;
+      const contact = phone ? contactByPhone.get(phone) : undefined;
+      const pushName: string | undefined = conv.lastMessage.metadata?.pushName;
+      const displayName =
+        contact?.name || pushName || fallbackJidLabel(conv._id);
+      return {
+        userId: conv._id,
+        sessionId: conv.lastMessage.metadata?.sessionId ?? null,
+        userInfo: {
+          name: displayName,
+          phone: phone ?? undefined,
+          isUnresolved: !phone, // signals @lid / group / unknown to the UI
+        },
+        lastMessage: {
+          _id: conv.lastMessage._id,
+          userId: conv.lastMessage.userId,
+          role: conv.lastMessage.role,
+          type: conv.lastMessage.type,
+          content: conv.lastMessage.content,
+          timestamp: conv.lastMessage.timestamp,
+          metadata: conv.lastMessage.metadata,
+        },
+        unreadCount: unreadMap.get(conv._id) || 0,
+        messageCount: conv.messageCount,
+      };
+    });
 
     res.json({ conversations: formattedConversations });
   } catch (error) {
