@@ -141,6 +141,7 @@ export default function ChatInterface() {
   const [exportMonth, setExportMonth] = useState<string>(() =>
     new Date().toISOString().slice(0, 7),
   );
+  const [exportIncludeUnresolved, setExportIncludeUnresolved] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   const openExportModal = () => {
@@ -158,6 +159,7 @@ export default function ChatInterface() {
         params.set('sessionId', exportSession);
       }
       if (exportMonth) params.set('month', exportMonth);
+      if (exportIncludeUnresolved) params.set('includeUnresolved', 'true');
       const res = await api.get(
         `/api/export/chat-numbers.csv?${params.toString()}`,
         { responseType: 'blob' },
@@ -1120,6 +1122,25 @@ export default function ChatInterface() {
                   Leave blank to export all-time numbers.
                 </p>
               </div>
+
+              <label className="flex items-start gap-2 text-xs text-gray-600 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={exportIncludeUnresolved}
+                  onChange={(e) =>
+                    setExportIncludeUnresolved(e.target.checked)
+                  }
+                  disabled={exporting}
+                  className="mt-0.5"
+                />
+                <span>
+                  Include unresolved (LID) rows.{' '}
+                  <span className="text-gray-400">
+                    By default, only conversations with a dialable phone
+                    number are exported.
+                  </span>
+                </span>
+              </label>
             </div>
 
             <div className="mt-6 flex justify-end gap-2">
