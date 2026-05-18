@@ -27,6 +27,14 @@ export interface IChatMessage {
      * when the userId is a Linked-ID with no Contact match.
      */
     pushName?: string;
+    /**
+     * Real E.164-style phone digits resolved from the message at ingest.
+     * For phone-backed JIDs this is the same digits the userId carries;
+     * for `@lid` JIDs this is the real number lifted from
+     * `message.key.senderPn` / `participantPn` (Baileys 6.6+). Empty when
+     * the message arrived from a privacy-shielded LID with no fallback.
+     */
+    realPhone?: string;
   };
 }
 
@@ -64,6 +72,7 @@ const ChatMessageSchema = new Schema({
       enum: ['positive', 'neutral', 'negative'],
     },
     pushName: { type: String },
+    realPhone: { type: String, index: true },
   },
 });
 
