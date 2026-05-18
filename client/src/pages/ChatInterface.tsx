@@ -21,6 +21,7 @@ import {
   RefreshCw,
   MessageSquare,
   Smartphone,
+  Download,
 } from 'lucide-react';
 
 interface Message {
@@ -128,6 +129,58 @@ export default function ChatInterface() {
   const [showToneMenu, setShowToneMenu] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Real-number export modal state. Defaults: the currently-selected
+  // device filter + the current calendar month so a single click usually
+  // matches what the operator is staring at.
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportSession, setExportSession] = useState<SessionFilter>('all');
+  const [exportMonth, setExportMonth] = useState<string>(() =>
+    new Date().toISOString().slice(0, 7),
+  );
+  const [exporting, setExporting] = useState(false);
+
+  const openExportModal = () => {
+    setExportSession(sessionFilter);
+    setExportMonth(new Date().toISOString().slice(0, 7));
+    setShowExportModal(true);
+  };
+
+  const handleExportNumbers = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (exportSession && exportSession !== 'all') {
+        params.set('sessionId', exportSession);
+      }
+      if (exportMonth) params.set('month', exportMonth);
+      const res = await api.get(
+        `/api/export/chat-numbers.csv?${params.toString()}`,
+        { responseType: 'blob' },
+      );
+      const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const fnameParts = ['chat-numbers'];
+      if (exportSession && exportSession !== 'all') {
+        fnameParts.push(sessionLabel(exportSession).replace(/\s+/g, '_'));
+      }
+      if (exportMonth) fnameParts.push(exportMonth);
+      link.setAttribute('download', `${fnameParts.join('-')}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setShowExportModal(false);
+    } catch (err) {
+      console.error('Number export failed:', err);
+      alert('Export failed — see console for details.');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // Derive a friendly label for a session id — falls back to the id when we
   // haven't loaded session metadata yet.
@@ -426,6 +479,13 @@ export default function ChatInterface() {
               Live Chat
             </h1>
             <div className="flex items-center gap-2">
+              <button
+                onClick={openExportModal}
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"
+                title="Export real phone numbers (device + month)"
+              >
+                <Download className="h-3.5 w-3.5" />
+              </button>
               <button
                 onClick={fetchConversations}
                 className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"
@@ -966,6 +1026,102 @@ export default function ChatInterface() {
           className="fixed inset-0 z-40"
           onClick={() => setShowToneMenu(false)}
         />
+      )}
+
+      {/* Real-numbers export modal — device + month filter */}
+      {showExportModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          onClick={() => !exporting && setShowExportModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                <Download className="h-5 w-5 text-green-600" />
+                Export real numbers
+              </h2>
+              <button
+                onClick={() => setShowExportModal(false)}
+                disabled={exporting}
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-50"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-500 mb-5">
+              Distinct phone numbers from inbound chats, scoped to a device
+              and a calendar month. The CSV includes message count, first /
+              last seen, and matched contact name when available.
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Device
+                </label>
+                <select
+                  value={exportSession}
+                  onChange={(e) => setExportSession(e.target.value)}
+                  disabled={exporting}
+                  className="w-full p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none disabled:opacity-50"
+                >
+                  <option value="all">All devices</option>
+                  {sessions.map((s) => (
+                    <option key={s.sessionId} value={s.sessionId}>
+                      {s.sessionName || s.sessionId}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Month
+                </label>
+                <input
+                  type="month"
+                  value={exportMonth}
+                  onChange={(e) => setExportMonth(e.target.value)}
+                  disabled={exporting}
+                  className="w-full p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none disabled:opacity-50"
+                />
+                <p className="mt-1 text-[11px] text-gray-400">
+                  Leave blank to export all-time numbers.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => setShowExportModal(false)}
+                disabled={exporting}
+                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleExportNumbers}
+                disabled={exporting}
+                className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50 flex items-center gap-2"
+              >
+                {exporting ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    Download CSV
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
