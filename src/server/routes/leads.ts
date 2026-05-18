@@ -443,9 +443,37 @@ router.put('/:id', validateObjectId(), async (req, res) => {
     if (!previous) {
       return res.status(404).json({ error: 'Lead not found' });
     }
+
+    // SECURITY FIX: Prevent mass assignment and path traversal vulnerabilities
+    // by explicitly extracting only allowed fields.
+    const {
+      fullName,
+      phoneNumber,
+      email,
+      address,
+      age,
+      interestedCountry,
+      experienceYears,
+      jobVacancyType,
+      status,
+      notes,
+    } = req.body;
+
+    const updateData: any = { updatedAt: new Date() };
+    if (fullName !== undefined) updateData.fullName = fullName;
+    if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
+    if (email !== undefined) updateData.email = email;
+    if (address !== undefined) updateData.address = address;
+    if (age !== undefined) updateData.age = age;
+    if (interestedCountry !== undefined) updateData.interestedCountry = interestedCountry;
+    if (experienceYears !== undefined) updateData.experienceYears = experienceYears;
+    if (jobVacancyType !== undefined) updateData.jobVacancyType = jobVacancyType;
+    if (status !== undefined) updateData.status = status;
+    if (notes !== undefined) updateData.notes = notes;
+
     const lead = await Lead.findByIdAndUpdate(
       req.params.id,
-      { ...req.body, updatedAt: new Date() },
+      updateData,
       { new: true },
     );
 

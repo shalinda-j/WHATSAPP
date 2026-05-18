@@ -367,9 +367,20 @@ router.post('/', async (req, res) => {
 // Update webhook
 router.put('/:id', async (req, res) => {
   try {
+    // SECURITY FIX: Prevent mass assignment by extracting only allowed fields
+    const { name, url, events, isActive, category, format, secret } = req.body;
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (url !== undefined) updateData.url = url;
+    if (events !== undefined) updateData.events = events;
+    if (isActive !== undefined) updateData.isActive = isActive;
+    if (category !== undefined) updateData.category = category;
+    if (format !== undefined) updateData.format = format;
+    if (secret !== undefined) updateData.secret = secret;
+
     const webhook = await (Webhook as any).findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updateData,
       {
         new: true,
       },
