@@ -141,7 +141,9 @@ export default function ChatInterface() {
   const [exportMonth, setExportMonth] = useState<string>(() =>
     new Date().toISOString().slice(0, 7),
   );
-  const [exportIncludeUnresolved, setExportIncludeUnresolved] = useState(false);
+  // Default false → export includes every conversation (LIDs + phones).
+  // Tick to filter out rows without a dialable phone.
+  const [exportPhoneOnly, setExportPhoneOnly] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   const openExportModal = () => {
@@ -159,7 +161,7 @@ export default function ChatInterface() {
         params.set('sessionId', exportSession);
       }
       if (exportMonth) params.set('month', exportMonth);
-      if (exportIncludeUnresolved) params.set('includeUnresolved', 'true');
+      if (exportPhoneOnly) params.set('phoneOnly', 'true');
       const res = await api.get(
         `/api/export/chat-numbers.csv?${params.toString()}`,
         { responseType: 'blob' },
@@ -1126,18 +1128,17 @@ export default function ChatInterface() {
               <label className="flex items-start gap-2 text-xs text-gray-600 cursor-pointer select-none">
                 <input
                   type="checkbox"
-                  checked={exportIncludeUnresolved}
-                  onChange={(e) =>
-                    setExportIncludeUnresolved(e.target.checked)
-                  }
+                  checked={exportPhoneOnly}
+                  onChange={(e) => setExportPhoneOnly(e.target.checked)}
                   disabled={exporting}
                   className="mt-0.5"
                 />
                 <span>
-                  Include unresolved (LID) rows.{' '}
+                  Dialable phones only.{' '}
                   <span className="text-gray-400">
-                    By default, only conversations with a dialable phone
-                    number are exported.
+                    By default every conversation is exported. Tick this
+                    to skip LID-only rows that don't have a callable
+                    phone number.
                   </span>
                 </span>
               </label>
