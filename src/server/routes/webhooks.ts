@@ -288,6 +288,9 @@ router.post('/sendgrid', metaEventRateLimit, async (req, res) => {
     const CampaignExecution = (await import('../../models/CampaignExecution'))
       .default;
 
+    // ⚡ Bolt Optimization: Use bulkWrite to avoid N+1 queries when processing webhook batches
+    const bulkOperations = [];
+
     for (const ev of events) {
       const sgId = ev?.sg_message_id as string | undefined;
       if (!sgId) continue;
@@ -323,15 +326,22 @@ router.post('/sendgrid', metaEventRateLimit, async (req, res) => {
           continue;
       }
 
+      bulkOperations.push({
+        updateOne: {
+          filter: { externalMessageId: { $regex: `^${base}` } },
+          update: { $set: update },
+        }
+      });
+    }
+
+    if (bulkOperations.length > 0) {
       try {
-        await CampaignExecution.updateOne(
-          { externalMessageId: { $regex: `^${base}` } },
-          { $set: update },
-        );
+        await CampaignExecution.bulkWrite(bulkOperations, { ordered: false });
       } catch (err) {
-        console.error('sendgrid webhook updateOne failed:', err);
+        console.error('sendgrid webhook bulkWrite failed:', err);
       }
     }
+
     res.status(200).json({ ok: true, received: events.length });
   } catch (err: any) {
     console.error('sendgrid webhook error:', err);
