@@ -7,3 +7,7 @@
 
 **Learning:** When using Mongoose to fetch read-only queries, not using `.lean()` adds unnecessary overhead since documents are hydrated as Mongoose objects. In performance-sensitive routes where we only need plain objects for serialization or simple reading, this overhead is noticeable, especially for analytics endpoints which fetch large volumes of chat messages or datasets.
 **Action:** Always append `.lean()` to Mongoose read-only queries (e.g., `ChatMessage.find().lean()`) to bypass document hydration and improve performance.
+
+## 2026-05-21 - Replace nested string inclusions with precompiled regexes
+**Learning:** In routes that perform keyword categorization (like `/questions` in analytics), recreating nested dictionary mapping arrays and using `content.includes()` inside O(M*N) nested loops per request introduces measurable CPU bottlenecks, especially as array sizes or message volume grows.
+**Action:** Always precompile constant keyword categories into `RegExp` objects outside of request execution loops, reducing substring scanning overhead to O(1) matching per category.
