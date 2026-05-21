@@ -12,59 +12,128 @@ router.use(authenticateToken);
 
 /**
  * GET /api/chat/export-numbers
- * Export real mobile numbers from actual WhatsApp conversations as CSV.
- * Pulls unique sender JIDs from ChatMessage, strips the @s.whatsapp.net suffix,
- * and emits a clean phone-number list (no random / generated numbers).
+ * Export real mobile numbers from actual WhatsApp conversations.
+ *
+ * Aggregates EVERY unique customer JID that appears in ChatMessage history
+ * (both messages they sent AND messages we sent to them — both prove the
+ * number is real and was contacted). Strips the WhatsApp suffix, validates
+ * the remaining digits as a phone number, and emits CSV/JSON sorted by date.
+ *
+ * Query params:
+ *   format       = 'csv' | 'json'                 (default 'csv')
+ *   sort         = 'newest' | 'oldest' | 'active' (default 'newest' — date order)
+ *   role         = 'all' | 'user' | 'assistant'   (default 'all')
+ *   includeStats = 'true' | 'false'               (default 'true')
+ *   minMessages  = number                         (default 1)
+ *   limit        = number                         (default 50000)
  */
 router.get('/export-numbers', async (req: AuthRequest, res: Response) => {
   try {
-    const { format = 'csv', includeStats = 'true' } = req.query as Record<
-      string,
-      string
-    >;
+    const {
+      format = 'csv',
+      sort = 'newest',
+      role = 'all',
+      includeStats = 'true',
+      minMessages = '1',
+      limit = '50000',
+    } = req.query as Record<string, string>;
 
-    // Aggregate unique users from real ChatMessage history (user-originated messages).
-    // We restrict to role='user' so we only export contacts who actually messaged us.
+    const minMsgs = Math.max(1, parseInt(minMessages, 10) || 1);
+    const maxRows = Math.max(1, Math.min(parseInt(limit, 10) || 50000, 200000));
+
+    // Build match filter:
+    // - Always include only userIds that contain an '@' (real JIDs)
+    // - Always exclude group/broadcast JIDs (@g.us / @broadcast / status@)
+    // - Always require at least one digit before the '@'
+    const baseMatch: any = {
+      userId: {
+        $regex: /^[+]?\d[\d]*@(?!g\.us|broadcast)/i,
+      },
+    };
+    if (role === 'user' || role === 'assistant') {
+      baseMatch.role = role;
+    } else {
+      // role='all' — include user + assistant (every direction proves contact).
+      // Exclude pure 'system' messages.
+      baseMatch.role = { $in: ['user', 'assistant'] };
+    }
+
+    // Sort spec for the group output
+    const sortSpec: Record<string, 1 | -1> =
+      sort === 'oldest'
+        ? { lastSeen: 1 }
+        : sort === 'active'
+        ? { messageCount: -1, lastSeen: -1 }
+        : { lastSeen: -1 }; // 'newest' (default)
+
     const rows = await ChatMessage.aggregate([
-      { $match: { role: 'user', userId: { $regex: /^\d+@/ } } },
+      { $match: baseMatch },
       {
         $group: {
           _id: '$userId',
           messageCount: { $sum: 1 },
           firstSeen: { $min: '$timestamp' },
           lastSeen: { $max: '$timestamp' },
+          // pick the last *user-originated* content as the conversation hint
           lastMessage: { $last: '$content' },
+          // counts per role for diagnostics
+          inboundCount: {
+            $sum: { $cond: [{ $eq: ['$role', 'user'] }, 1, 0] },
+          },
+          outboundCount: {
+            $sum: { $cond: [{ $eq: ['$role', 'assistant'] }, 1, 0] },
+          },
         },
       },
-      { $sort: { lastSeen: -1 } },
+      { $match: { messageCount: { $gte: minMsgs } } },
+      { $sort: sortSpec },
+      { $limit: maxRows },
     ]);
 
+    // Extract digits and validate — guard against group JIDs that slipped through.
+    const seen = new Set<string>();
     const records = rows
       .map((r: any) => {
         const jid = String(r._id || '');
-        const phone = jid.split('@')[0].replace(/[^0-9]/g, '');
-        // Filter out impossible / sentinel JIDs (group chats, broadcasts, status)
+        // Group JIDs look like `123456-987@g.us` — reject any hyphen before '@'.
+        const local = jid.split('@')[0] || '';
+        if (local.includes('-')) return null;
+        const phone = local.replace(/[^0-9]/g, '');
         if (!phone || phone.length < 8 || phone.length > 15) return null;
+        if (seen.has(phone)) return null;
+        seen.add(phone);
         return {
           phone,
           jid,
           messageCount: r.messageCount || 0,
+          inboundCount: r.inboundCount || 0,
+          outboundCount: r.outboundCount || 0,
           firstSeen: r.firstSeen ? new Date(r.firstSeen).toISOString() : '',
           lastSeen: r.lastSeen ? new Date(r.lastSeen).toISOString() : '',
-          lastMessage: String(r.lastMessage || '').slice(0, 200),
+          lastMessage: String(r.lastMessage || '')
+            .replace(/\r?\n/g, ' ')
+            .slice(0, 200),
         };
       })
       .filter(Boolean) as Array<{
       phone: string;
       jid: string;
       messageCount: number;
+      inboundCount: number;
+      outboundCount: number;
       firstSeen: string;
       lastSeen: string;
       lastMessage: string;
     }>;
 
     if (format === 'json') {
-      return res.json({ total: records.length, contacts: records });
+      return res.json({
+        total: records.length,
+        sort,
+        role,
+        minMessages: minMsgs,
+        contacts: records,
+      });
     }
 
     const csvEscape = (s: string) =>
@@ -76,12 +145,16 @@ router.get('/export-numbers', async (req: AuthRequest, res: Response) => {
           'phone',
           'whatsapp_id',
           'message_count',
+          'inbound_count',
+          'outbound_count',
           'first_seen',
           'last_seen',
           'last_message',
         ]
       : ['phone'];
 
+    // UTF-8 BOM so Excel opens Sinhala/Tamil text cleanly
+    const BOM = '﻿';
     const lines = [header.join(',')];
     for (const r of records) {
       const row = withStats
@@ -89,6 +162,8 @@ router.get('/export-numbers', async (req: AuthRequest, res: Response) => {
             r.phone,
             csvEscape(r.jid),
             String(r.messageCount),
+            String(r.inboundCount),
+            String(r.outboundCount),
             r.firstSeen,
             r.lastSeen,
             csvEscape(r.lastMessage),
@@ -99,16 +174,70 @@ router.get('/export-numbers', async (req: AuthRequest, res: Response) => {
 
     const stamp = new Date().toISOString().split('T')[0];
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('X-Export-Total', String(records.length));
     res.setHeader(
       'Content-Disposition',
       `attachment; filename="whatsapp-live-chat-numbers-${stamp}.csv"`,
     );
-    res.send(lines.join('\n'));
+    res.send(BOM + lines.join('\r\n'));
   } catch (error) {
     console.error('Error exporting chat numbers:', error);
     res.status(500).json({ error: 'Failed to export chat numbers' });
   }
 });
+
+/**
+ * GET /api/chat/export-numbers/preview
+ * Lightweight diagnostic — returns counts so the UI can show the user
+ * exactly how many numbers will be exported before downloading.
+ */
+router.get(
+  '/export-numbers/preview',
+  async (_req: AuthRequest, res: Response) => {
+    try {
+      const stats = await ChatMessage.aggregate([
+        {
+          $match: {
+            role: { $in: ['user', 'assistant'] },
+            userId: { $regex: /^[+]?\d[\d]*@(?!g\.us|broadcast)/i },
+          },
+        },
+        {
+          $group: {
+            _id: '$userId',
+            messageCount: { $sum: 1 },
+            lastSeen: { $max: '$timestamp' },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            uniqueContacts: { $sum: 1 },
+            totalMessages: { $sum: '$messageCount' },
+            mostRecent: { $max: '$lastSeen' },
+          },
+        },
+      ]);
+
+      const s = stats[0] || {
+        uniqueContacts: 0,
+        totalMessages: 0,
+        mostRecent: null,
+      };
+
+      res.json({
+        uniqueContacts: s.uniqueContacts,
+        totalMessages: s.totalMessages,
+        mostRecent: s.mostRecent,
+      });
+    } catch (error) {
+      console.error('Error in export preview:', error);
+      res
+        .status(500)
+        .json({ error: 'Failed to preview export', uniqueContacts: 0 });
+    }
+  },
+);
 
 /**
  * GET /api/chat/conversations

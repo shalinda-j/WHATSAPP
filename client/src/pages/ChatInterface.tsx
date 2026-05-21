@@ -1,11 +1,23 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../config';
 import { io, Socket } from 'socket.io-client';
 import {
   Search, Send, MoreVertical, Phone, ChevronLeft,
   CheckCheck, Circle, Bot, User, Mic, Smile, Languages,
-  Tag, Globe, Info, X, RefreshCw, MessageSquare, Download
+  Tag, Globe, Info, X, RefreshCw, MessageSquare, Download,
+  Calendar as CalendarIcon, ArrowDown, ArrowUp, Activity,
+  CheckCircle2, AlertCircle
 } from 'lucide-react';
+
+type ExportSort = 'newest' | 'oldest' | 'active';
+type ExportRole = 'all' | 'user' | 'assistant';
+type ExportFormat = 'csv' | 'json';
+
+interface ExportPreview {
+  uniqueContacts: number;
+  totalMessages: number;
+  mostRecent: string | null;
+}
 
 interface Message {
   _id: string;
@@ -75,7 +87,16 @@ export default function ChatInterface() {
   const [showInfo, setShowInfo] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [exportToast, setExportToast] = useState<string | null>(null);
+  const [exportToast, setExportToast] = useState<{
+    msg: string;
+    type: 'success' | 'error' | 'info';
+  } | null>(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exportSort, setExportSort] = useState<ExportSort>('newest');
+  const [exportRole, setExportRole] = useState<ExportRole>('all');
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('csv');
+  const [exportPreview, setExportPreview] = useState<ExportPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   // Detect language of the message being typed
   const typingLang = detectLanguage(newMessage);
@@ -185,35 +206,102 @@ export default function ChatInterface() {
     }
   };
 
+  const fetchExportPreview = useCallback(async () => {
+    setPreviewLoading(true);
+    try {
+      const res = await api.get('/api/chat/export-numbers/preview');
+      setExportPreview(res.data);
+    } catch (e) {
+      console.error('Preview failed', e);
+      setExportPreview(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, []);
+
+  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setExportToast({ msg, type });
+    setTimeout(() => setExportToast(null), 4000);
+  };
+
   const handleExportNumbers = async () => {
     if (exporting) return;
     setExporting(true);
-    setExportToast(null);
     try {
+      const params = {
+        format: exportFormat,
+        sort: exportSort,
+        role: exportRole,
+        includeStats: 'true',
+      };
+
       const res = await api.get('/api/chat/export-numbers', {
-        responseType: 'blob',
-        params: { format: 'csv', includeStats: 'true' },
+        responseType: exportFormat === 'csv' ? 'blob' : 'json',
+        params,
       });
-      const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
+
+      const total = Number(res.headers?.['x-export-total']) || undefined;
       const stamp = new Date().toISOString().split('T')[0];
-      link.setAttribute('download', `live-chat-numbers-${stamp}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      setExportToast('Real customer mobile numbers exported successfully');
-      setTimeout(() => setExportToast(null), 3500);
+
+      if (exportFormat === 'json') {
+        // res.data is the parsed object — convert to a blob ourselves
+        const json = JSON.stringify(res.data, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `live-chat-numbers-${stamp}.json`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+        const count = (res.data?.contacts || []).length;
+        if (count === 0) {
+          showToast(
+            'No real customer numbers found yet — chat with a customer first, then re-export.',
+            'info',
+          );
+        } else {
+          showToast(`Exported ${count} real customer number${count !== 1 ? 's' : ''} (JSON).`, 'success');
+        }
+      } else {
+        const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `live-chat-numbers-${exportSort}-${stamp}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+        if (total === 0) {
+          showToast(
+            'CSV downloaded, but no real customer numbers were found yet. Chat with a customer first, then re-export.',
+            'info',
+          );
+        } else if (typeof total === 'number') {
+          showToast(
+            `Exported ${total} real customer number${total !== 1 ? 's' : ''} (${exportSort}).`,
+            'success',
+          );
+        } else {
+          showToast('Real customer mobile numbers exported successfully.', 'success');
+        }
+      }
+
+      setShowExportMenu(false);
     } catch (error) {
       console.error('Failed to export numbers:', error);
-      setExportToast('Failed to export numbers. Please try again.');
-      setTimeout(() => setExportToast(null), 3500);
+      showToast('Failed to export numbers. Please try again.', 'error');
     } finally {
       setExporting(false);
     }
   };
+
+  // Refresh preview whenever the export menu opens
+  useEffect(() => {
+    if (showExportMenu) fetchExportPreview();
+  }, [showExportMenu, fetchExportPreview]);
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -264,18 +352,17 @@ export default function ChatInterface() {
               <MessageSquare className="h-5 w-5 text-green-600" />
               Live Chat
             </h1>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 relative">
               <button
-                onClick={handleExportNumbers}
-                disabled={exporting || conversations.length === 0}
-                title="Export real customer mobile numbers as CSV"
-                className="p-1.5 rounded-lg hover:bg-green-50 text-green-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                onClick={() => setShowExportMenu(v => !v)}
+                title="Export real customer mobile numbers"
+                className={`p-1.5 rounded-lg transition-colors ${
+                  showExportMenu
+                    ? 'bg-green-100 text-green-700'
+                    : 'hover:bg-green-50 text-green-600'
+                }`}
               >
-                {exporting ? (
-                  <div className="h-3.5 w-3.5 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <Download className="h-3.5 w-3.5" />
-                )}
+                <Download className="h-3.5 w-3.5" />
               </button>
               <button onClick={fetchConversations} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
                 <RefreshCw className="h-3.5 w-3.5" />
@@ -283,6 +370,168 @@ export default function ChatInterface() {
               <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
                 {conversations.length}
               </span>
+
+              {/* Export Options Popover */}
+              {showExportMenu && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowExportMenu(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-2 z-50 w-[340px] bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+                    <div className="px-4 py-3 bg-gradient-to-br from-green-600 to-emerald-600 text-white">
+                      <div className="flex items-center gap-2">
+                        <Download className="h-4 w-4" />
+                        <h3 className="text-sm font-semibold">Export Real Mobile Numbers</h3>
+                      </div>
+                      <p className="text-[11px] text-green-100 mt-1">
+                        From actual WhatsApp conversations — never random data.
+                      </p>
+                    </div>
+
+                    <div className="p-4 space-y-4">
+                      {/* Preview stats */}
+                      <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                        {previewLoading ? (
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <div className="h-3 w-3 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+                            Counting numbers...
+                          </div>
+                        ) : exportPreview ? (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">
+                                Real numbers found
+                              </span>
+                              <span className="text-base font-bold text-green-700">
+                                {exportPreview.uniqueContacts.toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-[11px] text-gray-500">
+                              <span>Total messages</span>
+                              <span className="font-medium text-gray-700">
+                                {exportPreview.totalMessages.toLocaleString()}
+                              </span>
+                            </div>
+                            {exportPreview.mostRecent && (
+                              <div className="flex items-center justify-between text-[11px] text-gray-500">
+                                <span>Most recent</span>
+                                <span className="font-medium text-gray-700">
+                                  {new Date(exportPreview.mostRecent).toLocaleDateString(undefined, {
+                                    month: 'short', day: 'numeric', year: 'numeric',
+                                  })}
+                                </span>
+                              </div>
+                            )}
+                            {exportPreview.uniqueContacts === 0 && (
+                              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 mt-1.5 flex items-start gap-1.5">
+                                <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                                No customer conversations yet — start chatting to populate.
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-400">Could not load preview.</p>
+                        )}
+                      </div>
+
+                      {/* Sort options */}
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">
+                          Sort by date
+                        </label>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {([
+                            { v: 'newest', label: 'Newest', icon: ArrowDown },
+                            { v: 'oldest', label: 'Oldest', icon: ArrowUp },
+                            { v: 'active', label: 'Most active', icon: Activity },
+                          ] as { v: ExportSort; label: string; icon: typeof CalendarIcon }[]).map(({ v, label, icon: Icon }) => (
+                            <button
+                              key={v}
+                              onClick={() => setExportSort(v)}
+                              className={`flex flex-col items-center gap-1 py-2 rounded-lg border text-[11px] font-medium transition ${
+                                exportSort === v
+                                  ? 'bg-green-50 border-green-300 text-green-700'
+                                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                              }`}
+                            >
+                              <Icon className="h-3.5 w-3.5" />
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Role filter */}
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">
+                          Include contacts who
+                        </label>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {([
+                            { v: 'all', label: 'Any chat' },
+                            { v: 'user', label: 'Messaged us' },
+                            { v: 'assistant', label: 'We messaged' },
+                          ] as { v: ExportRole; label: string }[]).map(({ v, label }) => (
+                            <button
+                              key={v}
+                              onClick={() => setExportRole(v)}
+                              className={`py-1.5 rounded-lg border text-[11px] font-medium transition ${
+                                exportRole === v
+                                  ? 'bg-green-50 border-green-300 text-green-700'
+                                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Format toggle */}
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">
+                          Format
+                        </label>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {(['csv', 'json'] as ExportFormat[]).map(f => (
+                            <button
+                              key={f}
+                              onClick={() => setExportFormat(f)}
+                              className={`py-1.5 rounded-lg border text-[11px] font-bold uppercase transition ${
+                                exportFormat === f
+                                  ? 'bg-green-50 border-green-300 text-green-700'
+                                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                              }`}
+                            >
+                              {f}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Download button */}
+                      <button
+                        onClick={handleExportNumbers}
+                        disabled={exporting || (exportPreview?.uniqueContacts === 0)}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      >
+                        {exporting ? (
+                          <>
+                            <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            Exporting...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="h-4 w-4" />
+                            Download {exportFormat.toUpperCase()}
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -635,10 +884,24 @@ export default function ChatInterface() {
 
       {/* Export Toast Notification */}
       {exportToast && (
-        <div className="fixed bottom-6 right-6 z-[60] flex items-center gap-3 px-5 py-3 rounded-xl shadow-2xl bg-green-600 text-white text-sm font-medium animate-in slide-in-from-right duration-300">
-          <Download className="h-4 w-4" />
-          <span>{exportToast}</span>
-          <button onClick={() => setExportToast(null)} className="ml-2 opacity-80 hover:opacity-100">
+        <div
+          className={`fixed bottom-6 right-6 z-[60] flex items-start gap-3 px-5 py-3 rounded-xl shadow-2xl max-w-md text-sm font-medium animate-in slide-in-from-right duration-300 ${
+            exportToast.type === 'success'
+              ? 'bg-green-600 text-white'
+              : exportToast.type === 'error'
+              ? 'bg-red-600 text-white'
+              : 'bg-amber-500 text-white'
+          }`}
+        >
+          {exportToast.type === 'success' ? (
+            <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          ) : exportToast.type === 'error' ? (
+            <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          ) : (
+            <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          )}
+          <span className="flex-1 leading-relaxed">{exportToast.msg}</span>
+          <button onClick={() => setExportToast(null)} className="opacity-80 hover:opacity-100 flex-shrink-0">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
