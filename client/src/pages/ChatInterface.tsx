@@ -16,7 +16,16 @@ type ExportFormat = 'csv' | 'json';
 interface ExportPreview {
   uniqueContacts: number;
   totalMessages: number;
+  totalChatMessages?: number;
   mostRecent: string | null;
+  diagnostics?: {
+    uniqueUserIdsInChat: number;
+    fromChatHistory: number;
+    fromLeads: number;
+    fromContacts: number;
+    rejectedGroupSamples: string[];
+    rejectedOtherSamples: string[];
+  };
 }
 
 interface Message {
@@ -95,6 +104,8 @@ export default function ChatInterface() {
   const [exportSort, setExportSort] = useState<ExportSort>('newest');
   const [exportRole, setExportRole] = useState<ExportRole>('all');
   const [exportFormat, setExportFormat] = useState<ExportFormat>('csv');
+  const [includeLeads, setIncludeLeads] = useState(true);
+  const [includeContacts, setIncludeContacts] = useState(true);
   const [exportPreview, setExportPreview] = useState<ExportPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
@@ -233,6 +244,8 @@ export default function ChatInterface() {
         sort: exportSort,
         role: exportRole,
         includeStats: 'true',
+        includeLeads: includeLeads ? 'true' : 'false',
+        includeContacts: includeContacts ? 'true' : 'false',
       };
 
       const res = await api.get('/api/chat/export-numbers', {
@@ -407,6 +420,31 @@ export default function ChatInterface() {
                                 {exportPreview.uniqueContacts.toLocaleString()}
                               </span>
                             </div>
+
+                            {/* Breakdown by source */}
+                            {exportPreview.diagnostics && (
+                              <div className="grid grid-cols-3 gap-1 mt-1.5 mb-1">
+                                <div className="bg-white border border-gray-200 rounded-md px-1.5 py-1 text-center">
+                                  <div className="text-[9px] font-semibold text-gray-400 uppercase">Chat</div>
+                                  <div className="text-xs font-bold text-gray-800">
+                                    {exportPreview.diagnostics.fromChatHistory.toLocaleString()}
+                                  </div>
+                                </div>
+                                <div className="bg-white border border-gray-200 rounded-md px-1.5 py-1 text-center">
+                                  <div className="text-[9px] font-semibold text-gray-400 uppercase">Leads</div>
+                                  <div className="text-xs font-bold text-gray-800">
+                                    {exportPreview.diagnostics.fromLeads.toLocaleString()}
+                                  </div>
+                                </div>
+                                <div className="bg-white border border-gray-200 rounded-md px-1.5 py-1 text-center">
+                                  <div className="text-[9px] font-semibold text-gray-400 uppercase">CRM</div>
+                                  <div className="text-xs font-bold text-gray-800">
+                                    {exportPreview.diagnostics.fromContacts.toLocaleString()}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
                             <div className="flex items-center justify-between text-[11px] text-gray-500">
                               <span>Total messages</span>
                               <span className="font-medium text-gray-700">
@@ -426,7 +464,9 @@ export default function ChatInterface() {
                             {exportPreview.uniqueContacts === 0 && (
                               <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 mt-1.5 flex items-start gap-1.5">
                                 <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                                No customer conversations yet — start chatting to populate.
+                                {exportPreview.diagnostics?.uniqueUserIdsInChat === 0
+                                  ? 'No customer messages saved yet. Send or receive a WhatsApp message, then re-export.'
+                                  : 'Chat history exists but no valid mobile numbers found in it. Check the diagnostics.'}
                               </p>
                             )}
                           </div>
@@ -507,6 +547,35 @@ export default function ChatInterface() {
                               {f}
                             </button>
                           ))}
+                        </div>
+                      </div>
+
+                      {/* Extra sources */}
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">
+                          Also include
+                        </label>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button
+                            onClick={() => setIncludeLeads(v => !v)}
+                            className={`py-1.5 rounded-lg border text-[11px] font-medium transition ${
+                              includeLeads
+                                ? 'bg-green-50 border-green-300 text-green-700'
+                                : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+                            }`}
+                          >
+                            {includeLeads ? '✓ ' : ''}Registered Leads
+                          </button>
+                          <button
+                            onClick={() => setIncludeContacts(v => !v)}
+                            className={`py-1.5 rounded-lg border text-[11px] font-medium transition ${
+                              includeContacts
+                                ? 'bg-green-50 border-green-300 text-green-700'
+                                : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+                            }`}
+                          >
+                            {includeContacts ? '✓ ' : ''}CRM Contacts
+                          </button>
                         </div>
                       </div>
 

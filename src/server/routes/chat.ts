@@ -1,9 +1,50 @@
 import { Router, Request, Response } from 'express';
 import ChatMessage from '../../models/ChatMessage';
 import Session from '../../models/Session';
+import Lead from '../../models/Lead';
+import { Contact } from '../../models/CRM';
 import { sendMessage, getSocket } from '../../services/whatsapp';
 import { getIO } from '../socket';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+
+/**
+ * Extract a clean phone number (8-15 digits) from any string. Handles:
+ *   - "94712345678@s.whatsapp.net"  → "94712345678"
+ *   - "94712345678:5@s.whatsapp.net" (device-qualified) → "94712345678"
+ *   - "94712345678@c.us"            → "94712345678"
+ *   - "+94 71 234 5678"             → "94712345678"
+ *   - "94712345678-1234567@g.us"    → null (group JID)
+ *   - "status@broadcast"            → null
+ * Returns null when the input cannot be reduced to a valid mobile number.
+ */
+function extractPhoneFromUserId(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+
+  // Reject groups / broadcasts / status outright (case-insensitive suffix check)
+  const lower = s.toLowerCase();
+  if (lower.endsWith('@g.us')) return null;
+  if (lower.endsWith('@broadcast')) return null;
+  if (lower.startsWith('status@')) return null;
+
+  // Take the part before '@' if there is one — that's the localpart of a JID.
+  const localpart = s.includes('@') ? s.split('@')[0] : s;
+
+  // Localpart containing '-' is a group leftover even without the @g.us suffix.
+  if (localpart.includes('-')) return null;
+
+  // Strip device qualifier (":5" trailing the user number on multi-device JIDs).
+  const beforeColon = localpart.includes(':')
+    ? localpart.split(':')[0]
+    : localpart;
+
+  // Keep only digits — handles "+", spaces, dashes that might have leaked in.
+  const digits = beforeColon.replace(/[^0-9]/g, '');
+  if (!digits) return null;
+  if (digits.length < 8 || digits.length > 15) return null;
+  return digits;
+}
 
 const router = Router();
 
@@ -36,35 +77,23 @@ router.get('/export-numbers', async (req: AuthRequest, res: Response) => {
       includeStats = 'true',
       minMessages = '1',
       limit = '50000',
+      includeLeads = 'true',
+      includeContacts = 'true',
     } = req.query as Record<string, string>;
 
     const minMsgs = Math.max(1, parseInt(minMessages, 10) || 1);
     const maxRows = Math.max(1, Math.min(parseInt(limit, 10) || 50000, 200000));
 
-    // Build match filter:
-    // - Always include only userIds that contain an '@' (real JIDs)
-    // - Always exclude group/broadcast JIDs (@g.us / @broadcast / status@)
-    // - Always require at least one digit before the '@'
-    const baseMatch: any = {
-      userId: {
-        $regex: /^[+]?\d[\d]*@(?!g\.us|broadcast)/i,
-      },
-    };
+    // Build match WITHOUT any MongoDB-side userId regex (the previous regex
+    // silently dropped device-qualified JIDs and other valid formats, which is
+    // why the CSV came back empty). All filtering now happens in JS where it
+    // is easy to debug and impossible to miss valid contacts.
+    const baseMatch: any = {};
     if (role === 'user' || role === 'assistant') {
       baseMatch.role = role;
     } else {
-      // role='all' — include user + assistant (every direction proves contact).
-      // Exclude pure 'system' messages.
       baseMatch.role = { $in: ['user', 'assistant'] };
     }
-
-    // Sort spec for the group output
-    const sortSpec: Record<string, 1 | -1> =
-      sort === 'oldest'
-        ? { lastSeen: 1 }
-        : sort === 'active'
-        ? { messageCount: -1, lastSeen: -1 }
-        : { lastSeen: -1 }; // 'newest' (default)
 
     const rows = await ChatMessage.aggregate([
       { $match: baseMatch },
@@ -74,9 +103,7 @@ router.get('/export-numbers', async (req: AuthRequest, res: Response) => {
           messageCount: { $sum: 1 },
           firstSeen: { $min: '$timestamp' },
           lastSeen: { $max: '$timestamp' },
-          // pick the last *user-originated* content as the conversation hint
           lastMessage: { $last: '$content' },
-          // counts per role for diagnostics
           inboundCount: {
             $sum: { $cond: [{ $eq: ['$role', 'user'] }, 1, 0] },
           },
@@ -86,45 +113,172 @@ router.get('/export-numbers', async (req: AuthRequest, res: Response) => {
         },
       },
       { $match: { messageCount: { $gte: minMsgs } } },
-      { $sort: sortSpec },
-      { $limit: maxRows },
     ]);
 
-    // Extract digits and validate — guard against group JIDs that slipped through.
-    const seen = new Set<string>();
-    const records = rows
-      .map((r: any) => {
-        const jid = String(r._id || '');
-        // Group JIDs look like `123456-987@g.us` — reject any hyphen before '@'.
-        const local = jid.split('@')[0] || '';
-        if (local.includes('-')) return null;
-        const phone = local.replace(/[^0-9]/g, '');
-        if (!phone || phone.length < 8 || phone.length > 15) return null;
-        if (seen.has(phone)) return null;
-        seen.add(phone);
-        return {
+    // JS-level validation: every userId is run through the JID parser. This
+    // catches device-qualified JIDs (94...@s.whatsapp.net with :N device tag),
+    // @c.us (older WhatsApp), and dedupes by phone number across formats.
+    const byPhone = new Map<
+      string,
+      {
+        phone: string;
+        jid: string;
+        messageCount: number;
+        inboundCount: number;
+        outboundCount: number;
+        firstSeen: string;
+        lastSeen: string;
+        lastMessage: string;
+        sources: string[];
+      }
+    >();
+
+    for (const r of rows) {
+      const phone = extractPhoneFromUserId(r._id);
+      if (!phone) continue;
+      const existing = byPhone.get(phone);
+      const firstSeen = r.firstSeen
+        ? new Date(r.firstSeen).toISOString()
+        : '';
+      const lastSeen = r.lastSeen ? new Date(r.lastSeen).toISOString() : '';
+      if (existing) {
+        // Same number reported under two JID variants — merge counts.
+        existing.messageCount += r.messageCount || 0;
+        existing.inboundCount += r.inboundCount || 0;
+        existing.outboundCount += r.outboundCount || 0;
+        if (firstSeen && (!existing.firstSeen || firstSeen < existing.firstSeen)) {
+          existing.firstSeen = firstSeen;
+        }
+        if (lastSeen && (!existing.lastSeen || lastSeen > existing.lastSeen)) {
+          existing.lastSeen = lastSeen;
+          existing.lastMessage = String(r.lastMessage || '')
+            .replace(/\r?\n/g, ' ')
+            .slice(0, 200);
+        }
+      } else {
+        byPhone.set(phone, {
           phone,
-          jid,
+          jid: String(r._id || ''),
           messageCount: r.messageCount || 0,
           inboundCount: r.inboundCount || 0,
           outboundCount: r.outboundCount || 0,
-          firstSeen: r.firstSeen ? new Date(r.firstSeen).toISOString() : '',
-          lastSeen: r.lastSeen ? new Date(r.lastSeen).toISOString() : '',
+          firstSeen,
+          lastSeen,
           lastMessage: String(r.lastMessage || '')
             .replace(/\r?\n/g, ' ')
             .slice(0, 200),
-        };
-      })
-      .filter(Boolean) as Array<{
-      phone: string;
-      jid: string;
-      messageCount: number;
-      inboundCount: number;
-      outboundCount: number;
-      firstSeen: string;
-      lastSeen: string;
-      lastMessage: string;
-    }>;
+          sources: ['chat'],
+        });
+      }
+    }
+
+    // Multi-source fallback: pull in registered leads (real phone numbers
+    // from the registration flow) so the export always returns real data
+    // even if chat history hasn't accumulated yet.
+    if (includeLeads !== 'false') {
+      try {
+        const leads = await Lead.find(
+          {},
+          { phoneNumber: 1, registeredAt: 1, fullName: 1, updatedAt: 1 },
+        )
+          .sort({ registeredAt: -1 })
+          .lean();
+        for (const l of leads as any[]) {
+          const phone = extractPhoneFromUserId(l.phoneNumber);
+          if (!phone) continue;
+          const ts = l.updatedAt || l.registeredAt || new Date();
+          const iso = new Date(ts).toISOString();
+          const existing = byPhone.get(phone);
+          if (existing) {
+            if (!existing.sources.includes('lead')) existing.sources.push('lead');
+            if (!existing.lastSeen || iso > existing.lastSeen) {
+              existing.lastSeen = iso;
+            }
+            if (!existing.firstSeen || iso < existing.firstSeen) {
+              existing.firstSeen = iso;
+            }
+          } else {
+            byPhone.set(phone, {
+              phone,
+              jid: '',
+              messageCount: 0,
+              inboundCount: 0,
+              outboundCount: 0,
+              firstSeen: iso,
+              lastSeen: iso,
+              lastMessage: l.fullName ? `[Registered lead: ${l.fullName}]` : '',
+              sources: ['lead'],
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Lead source pull failed (non-fatal):', e);
+      }
+    }
+
+    // CRM contacts (manual entries + auto-registered from chat)
+    if (includeContacts !== 'false') {
+      try {
+        const contacts = await Contact.find(
+          {},
+          { phone: 1, name: 1, updatedAt: 1, createdAt: 1 },
+        )
+          .sort({ updatedAt: -1 })
+          .lean();
+        for (const c of contacts as any[]) {
+          const phone = extractPhoneFromUserId(c.phone);
+          if (!phone) continue;
+          const ts = c.updatedAt || c.createdAt || new Date();
+          const iso = new Date(ts).toISOString();
+          const existing = byPhone.get(phone);
+          if (existing) {
+            if (!existing.sources.includes('contact'))
+              existing.sources.push('contact');
+            if (!existing.lastSeen || iso > existing.lastSeen) {
+              existing.lastSeen = iso;
+            }
+            if (!existing.firstSeen || iso < existing.firstSeen) {
+              existing.firstSeen = iso;
+            }
+          } else {
+            byPhone.set(phone, {
+              phone,
+              jid: '',
+              messageCount: 0,
+              inboundCount: 0,
+              outboundCount: 0,
+              firstSeen: iso,
+              lastSeen: iso,
+              lastMessage: c.name ? `[CRM contact: ${c.name}]` : '',
+              sources: ['contact'],
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Contact source pull failed (non-fatal):', e);
+      }
+    }
+
+    // Final sort across the merged set
+    const allRecords = Array.from(byPhone.values());
+    if (sort === 'oldest') {
+      allRecords.sort((a, b) =>
+        (a.lastSeen || '').localeCompare(b.lastSeen || ''),
+      );
+    } else if (sort === 'active') {
+      allRecords.sort(
+        (a, b) =>
+          (b.messageCount || 0) - (a.messageCount || 0) ||
+          (b.lastSeen || '').localeCompare(a.lastSeen || ''),
+      );
+    } else {
+      // newest (default)
+      allRecords.sort((a, b) =>
+        (b.lastSeen || '').localeCompare(a.lastSeen || ''),
+      );
+    }
+
+    const records = allRecords.slice(0, maxRows);
 
     if (format === 'json') {
       return res.json({
@@ -144,6 +298,7 @@ router.get('/export-numbers', async (req: AuthRequest, res: Response) => {
       ? [
           'phone',
           'whatsapp_id',
+          'sources',
           'message_count',
           'inbound_count',
           'outbound_count',
@@ -161,6 +316,7 @@ router.get('/export-numbers', async (req: AuthRequest, res: Response) => {
         ? [
             r.phone,
             csvEscape(r.jid),
+            csvEscape(r.sources.join('|')),
             String(r.messageCount),
             String(r.inboundCount),
             String(r.outboundCount),
@@ -190,18 +346,19 @@ router.get('/export-numbers', async (req: AuthRequest, res: Response) => {
  * GET /api/chat/export-numbers/preview
  * Lightweight diagnostic — returns counts so the UI can show the user
  * exactly how many numbers will be exported before downloading.
+ *
+ * IMPORTANT: This endpoint uses the SAME JS validation as the export so
+ * the preview count always matches the CSV row count. No silent regex
+ * exclusions.
  */
 router.get(
   '/export-numbers/preview',
   async (_req: AuthRequest, res: Response) => {
     try {
-      const stats = await ChatMessage.aggregate([
-        {
-          $match: {
-            role: { $in: ['user', 'assistant'] },
-            userId: { $regex: /^[+]?\d[\d]*@(?!g\.us|broadcast)/i },
-          },
-        },
+      // Pull every chat userId — no MongoDB-side regex filter. We validate
+      // in JS to mirror the export behaviour exactly.
+      const rows = await ChatMessage.aggregate([
+        { $match: { role: { $in: ['user', 'assistant'] } } },
         {
           $group: {
             _id: '$userId',
@@ -209,26 +366,81 @@ router.get(
             lastSeen: { $max: '$timestamp' },
           },
         },
-        {
-          $group: {
-            _id: null,
-            uniqueContacts: { $sum: 1 },
-            totalMessages: { $sum: '$messageCount' },
-            mostRecent: { $max: '$lastSeen' },
-          },
-        },
       ]);
 
-      const s = stats[0] || {
-        uniqueContacts: 0,
-        totalMessages: 0,
-        mostRecent: null,
-      };
+      const totalChatMessages = await ChatMessage.estimatedDocumentCount();
+
+      const valid = new Set<string>();
+      const rejectedGroups: string[] = [];
+      const rejectedOther: string[] = [];
+      let totalMessages = 0;
+      let mostRecent: Date | null = null;
+
+      for (const r of rows) {
+        totalMessages += r.messageCount || 0;
+        const raw = String(r._id || '');
+        const phone = extractPhoneFromUserId(raw);
+        if (phone) {
+          valid.add(phone);
+          if (r.lastSeen && (!mostRecent || r.lastSeen > mostRecent)) {
+            mostRecent = r.lastSeen;
+          }
+        } else {
+          const lower = raw.toLowerCase();
+          if (
+            lower.endsWith('@g.us') ||
+            lower.endsWith('@broadcast') ||
+            lower.startsWith('status@')
+          ) {
+            if (rejectedGroups.length < 3) rejectedGroups.push(raw);
+          } else if (rejectedOther.length < 3) {
+            rejectedOther.push(raw);
+          }
+        }
+      }
+
+      // Also count leads & contacts that the export would merge in
+      let leadCount = 0;
+      let contactCount = 0;
+      try {
+        const leads = await Lead.find({}, { phoneNumber: 1 }).lean();
+        for (const l of leads as any[]) {
+          const phone = extractPhoneFromUserId(l.phoneNumber);
+          if (phone && !valid.has(phone)) {
+            leadCount++;
+            valid.add(phone);
+          } else if (phone) {
+            // already counted via chat — don't double-count
+          }
+        }
+        const contacts = await Contact.find({}, { phone: 1 }).lean();
+        for (const c of contacts as any[]) {
+          const phone = extractPhoneFromUserId(c.phone);
+          if (phone && !valid.has(phone)) {
+            contactCount++;
+            valid.add(phone);
+          }
+        }
+      } catch (e) {
+        console.warn('Lead/Contact preview pull failed (non-fatal):', e);
+      }
 
       res.json({
-        uniqueContacts: s.uniqueContacts,
-        totalMessages: s.totalMessages,
-        mostRecent: s.mostRecent,
+        uniqueContacts: valid.size,
+        totalMessages,
+        totalChatMessages,
+        mostRecent,
+        diagnostics: {
+          uniqueUserIdsInChat: rows.length,
+          fromChatHistory: Math.max(
+            0,
+            valid.size - leadCount - contactCount,
+          ),
+          fromLeads: leadCount,
+          fromContacts: contactCount,
+          rejectedGroupSamples: rejectedGroups,
+          rejectedOtherSamples: rejectedOther,
+        },
       });
     } catch (error) {
       console.error('Error in export preview:', error);
