@@ -11,6 +11,106 @@ const router = Router();
 router.use(authenticateToken);
 
 /**
+ * GET /api/chat/export-numbers
+ * Export real mobile numbers from actual WhatsApp conversations as CSV.
+ * Pulls unique sender JIDs from ChatMessage, strips the @s.whatsapp.net suffix,
+ * and emits a clean phone-number list (no random / generated numbers).
+ */
+router.get('/export-numbers', async (req: AuthRequest, res: Response) => {
+  try {
+    const { format = 'csv', includeStats = 'true' } = req.query as Record<
+      string,
+      string
+    >;
+
+    // Aggregate unique users from real ChatMessage history (user-originated messages).
+    // We restrict to role='user' so we only export contacts who actually messaged us.
+    const rows = await ChatMessage.aggregate([
+      { $match: { role: 'user', userId: { $regex: /^\d+@/ } } },
+      {
+        $group: {
+          _id: '$userId',
+          messageCount: { $sum: 1 },
+          firstSeen: { $min: '$timestamp' },
+          lastSeen: { $max: '$timestamp' },
+          lastMessage: { $last: '$content' },
+        },
+      },
+      { $sort: { lastSeen: -1 } },
+    ]);
+
+    const records = rows
+      .map((r: any) => {
+        const jid = String(r._id || '');
+        const phone = jid.split('@')[0].replace(/[^0-9]/g, '');
+        // Filter out impossible / sentinel JIDs (group chats, broadcasts, status)
+        if (!phone || phone.length < 8 || phone.length > 15) return null;
+        return {
+          phone,
+          jid,
+          messageCount: r.messageCount || 0,
+          firstSeen: r.firstSeen ? new Date(r.firstSeen).toISOString() : '',
+          lastSeen: r.lastSeen ? new Date(r.lastSeen).toISOString() : '',
+          lastMessage: String(r.lastMessage || '').slice(0, 200),
+        };
+      })
+      .filter(Boolean) as Array<{
+      phone: string;
+      jid: string;
+      messageCount: number;
+      firstSeen: string;
+      lastSeen: string;
+      lastMessage: string;
+    }>;
+
+    if (format === 'json') {
+      return res.json({ total: records.length, contacts: records });
+    }
+
+    const csvEscape = (s: string) =>
+      `"${(s || '').toString().replace(/"/g, '""')}"`;
+
+    const withStats = includeStats !== 'false';
+    const header = withStats
+      ? [
+          'phone',
+          'whatsapp_id',
+          'message_count',
+          'first_seen',
+          'last_seen',
+          'last_message',
+        ]
+      : ['phone'];
+
+    const lines = [header.join(',')];
+    for (const r of records) {
+      const row = withStats
+        ? [
+            r.phone,
+            csvEscape(r.jid),
+            String(r.messageCount),
+            r.firstSeen,
+            r.lastSeen,
+            csvEscape(r.lastMessage),
+          ]
+        : [r.phone];
+      lines.push(row.join(','));
+    }
+
+    const stamp = new Date().toISOString().split('T')[0];
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="whatsapp-live-chat-numbers-${stamp}.csv"`,
+    );
+    res.send(lines.join('\n'));
+  } catch (error) {
+    console.error('Error exporting chat numbers:', error);
+    res.status(500).json({ error: 'Failed to export chat numbers' });
+  }
+});
+
+/**
  * GET /api/chat/conversations
  * Get list of unique conversations with last message and unread count
  */

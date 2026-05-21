@@ -496,9 +496,11 @@ export const seedDatasets = async () => {
         name: 'AI Personality',
         type: 'config', // Configuration item, not displayed in Datasets tabs
         category: 'ai',
-        content: '', // Empty - must be configured
+        // Ship a production-grade professional marketing/sales personality by default
+        // so the bot never falls back to a basic FAQ-style responder.
+        content: AI_PERSONALITY(defaultConfig),
         description:
-          'System prompt and personality settings - MUST CONFIGURE IN ADMIN PANEL',
+          'Professional sales & marketing personality (deal-closing). Edit in Admin Panel > Datasets to fine-tune.',
       },
       {
         key: 'AI_KNOWLEDGE_BASE',
@@ -615,6 +617,27 @@ export const seedDatasets = async () => {
       if (!existing) {
         await Dataset.create(seed);
         console.log(`   ✅ Seeded Dataset: ${seed.name}`);
+      } else if (seed.key === 'AI_PERSONALITY') {
+        // Auto-upgrade empty/legacy AI personality to the production marketing prompt
+        // so existing installs immediately get the deal-closing behavior. We treat
+        // an empty string, an empty {en:''} object, or a missing content as upgradeable.
+        const raw = (existing as any).content;
+        const text =
+          typeof raw === 'string'
+            ? raw
+            : raw && typeof raw === 'object'
+            ? typeof raw.en === 'string'
+              ? raw.en
+              : ''
+            : '';
+        if (!text || text.trim().length < 80) {
+          (existing as any).content = seed.content;
+          (existing as any).updatedAt = new Date();
+          await (existing as any).save();
+          console.log(
+            `   🔁 Upgraded AI_PERSONALITY to production marketing prompt`,
+          );
+        }
       }
     }
 

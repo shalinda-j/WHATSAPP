@@ -540,7 +540,7 @@ onMessage(async (message, sock, sessionId) => {
       let intentAnalysis: any = null;
       let answeredViaNLP = false;
       let autoresearchIntent: string | null = null;
-      let responseLanguage = 'si'; // Default to Sinhala - accessible outside try block
+      const responseLanguage = 'si'; // Default to Sinhala - accessible outside try block
 
       try {
         // Autoresearch NLP Intent Classification (fast, under 200ms)
@@ -590,8 +590,11 @@ onMessage(async (message, sock, sessionId) => {
         // Default language is SINHALA. If user writes in English only, reply in English.
         let finalPrompt = text;
         if (isVoiceMessage) {
-          const looksLikeEnglish = /^([a-zA-Z]+\s*){3,}$/.test(text.trim()) &&
-            /\b(the|is|are|I|you|he|she|we|they|my|your|it|and|or|but|what|how|can|could|please|hello|hi|thank|yes|no|okay|ok)\b/i.test(text);
+          const looksLikeEnglish =
+            /^([a-zA-Z]+\s*){3,}$/.test(text.trim()) &&
+            /\b(the|is|are|I|you|he|she|we|they|my|your|it|and|or|but|what|how|can|could|please|hello|hi|thank|yes|no|okay|ok)\b/i.test(
+              text,
+            );
           const hasSinhalaChars = /[\u0D80-\u0DFF]/.test(text);
           const hasTamilChars = /[\u0B80-\u0BFF]/.test(text);
 
@@ -608,7 +611,10 @@ onMessage(async (message, sock, sessionId) => {
           // Text message: detect language
           const hasSinhala = /[\u0D80-\u0DFF]/.test(text);
           const hasTamil = /[\u0B80-\u0BFF]/.test(text);
-          const isLikelyEnglish = /^[a-zA-Z0-9\s\p{P}!?.,;&'"()+\-*#@%$^\[\]{}|\\/<>=`~]+$/u.test(text.trim());
+          const isLikelyEnglish =
+            /^[a-zA-Z0-9\s\p{P}!?.,;&'"()+\-*#@%$^\[\]{}|\\/<>=`~]+$/u.test(
+              text.trim(),
+            );
 
           if (hasSinhala) {
             finalPrompt += `\n\n(SYSTEM: සිංහල භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න.)`;
@@ -645,8 +651,10 @@ onMessage(async (message, sock, sessionId) => {
         }
 
         // Simulate realistic typing delay
-        const typingDelay = chatPersonality.getTypingDelay(response ? response.length : 0);
-        await new Promise(resolve => setTimeout(resolve, typingDelay));
+        const typingDelay = chatPersonality.getTypingDelay(
+          response ? response.length : 0,
+        );
+        await new Promise((resolve) => setTimeout(resolve, typingDelay));
       } catch (aiError: any) {
         console.error('   ❌ Error in AI/NLP processing:', aiError);
         throw aiError;
@@ -654,14 +662,23 @@ onMessage(async (message, sock, sessionId) => {
 
       console.log('   📤 Sending AI response...');
 
-      // Check if response is empty and provide fallback
+      // Check if response is empty and provide an engaging re-prompt that keeps the deal alive
       if (!response || response.trim() === '') {
-        await sendMessage(
-          jid,
-          '🙏 කරුණාකර නැවත උත්සාහ කරන්න. ඔබේ ප්‍රශ්නය මට තේරුම් ගන්න බැරි විය.',
-          sessionId,
-        );
-        console.log('   ⚠️ Empty response from AI, sent fallback message');
+        const hasSinhala = /[඀-෿]/.test(text);
+        const hasTamil = /[஀-௿]/.test(text);
+        let fallback: string;
+        if (hasTamil) {
+          fallback =
+            '🙏 மன்னிக்கவும் — உங்களின் கேள்வியை இன்னும் தெளிவாக சொல்ல முடியுமா?\n\n📞 அதிக விரிவாக பேச *!book* என்று அனுப்புங்கள், அல்லது *!register* மூலம் CV பதிவு செய்யுங்கள்.';
+        } else if (hasSinhala) {
+          fallback =
+            '🙏 කරුණාකර තව ටිකක් විස්තර කරන්න — ඔබ සොයන රැකියාව හෝ රට කුමක්ද?\n\n📞 උපදේශකයෙකු සමඟ කතා කිරීමට *!book* යවන්න, නැතහොත් CV එක ඉදිරිපත් කිරීමට *!register* යවන්න.';
+        } else {
+          fallback =
+            "🙏 Sorry — could you share a bit more so I can help you better?\n\nA quick next step usually saves time:\n• *!book* — talk to a consultant (free 15-min call)\n• *!register* — share your CV & I'll match you to current vacancies\n• *!jobs* — see what's open right now";
+        }
+        await sendMessage(jid, fallback, sessionId);
+        console.log('   ⚠️ Empty response from AI, sent re-engagement nudge');
         return;
       }
 
@@ -757,18 +774,18 @@ onMessage(async (message, sock, sessionId) => {
     } catch (aiError: any) {
       console.error('   ❌ AI response error:', aiError.message || aiError);
 
-      // Check for quota/rate limit errors
+      // Check for quota/rate limit errors — but always keep the deal alive with a CTA
       const errorMsg = aiError.message || '';
       if (errorMsg.includes('429') || errorMsg.includes('quota')) {
         await sendMessage(
           jid,
-          '⚠️ *API Quota Exceeded*\n\nPlease try again in a minute.',
+          "⏳ We're getting a lot of inquiries right now — give me ~1 minute and I'll be right back with you.\n\nMeanwhile, would you prefer:\n📞 a quick 15-min call (*!book*), or\n📄 to send your CV now (*!register*)?",
           sessionId,
         );
       } else {
         await sendMessage(
           jid,
-          '⚠️ Sorry, I could not process your message.\nPlease try again or use `!help`',
+          "🙏 Something glitched on my side — let me make it up to you. Tell me in one line what you're looking for and I'll personally make sure you get the right answer.\n\nOr type *!book* for a free consultation, *!jobs* to see current vacancies, or *!register* to submit your CV.",
           sessionId,
         );
       }

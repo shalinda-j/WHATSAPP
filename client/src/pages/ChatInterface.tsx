@@ -4,7 +4,7 @@ import { io, Socket } from 'socket.io-client';
 import {
   Search, Send, MoreVertical, Phone, ChevronLeft,
   CheckCheck, Circle, Bot, User, Mic, Smile, Languages,
-  Tag, Globe, Info, X, RefreshCw, MessageSquare
+  Tag, Globe, Info, X, RefreshCw, MessageSquare, Download
 } from 'lucide-react';
 
 interface Message {
@@ -74,6 +74,8 @@ export default function ChatInterface() {
   const [showToneMenu, setShowToneMenu] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportToast, setExportToast] = useState<string | null>(null);
 
   // Detect language of the message being typed
   const typingLang = detectLanguage(newMessage);
@@ -183,6 +185,36 @@ export default function ChatInterface() {
     }
   };
 
+  const handleExportNumbers = async () => {
+    if (exporting) return;
+    setExporting(true);
+    setExportToast(null);
+    try {
+      const res = await api.get('/api/chat/export-numbers', {
+        responseType: 'blob',
+        params: { format: 'csv', includeStats: 'true' },
+      });
+      const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const stamp = new Date().toISOString().split('T')[0];
+      link.setAttribute('download', `live-chat-numbers-${stamp}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setExportToast('Real customer mobile numbers exported successfully');
+      setTimeout(() => setExportToast(null), 3500);
+    } catch (error) {
+      console.error('Failed to export numbers:', error);
+      setExportToast('Failed to export numbers. Please try again.');
+      setTimeout(() => setExportToast(null), 3500);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -233,6 +265,18 @@ export default function ChatInterface() {
               Live Chat
             </h1>
             <div className="flex items-center gap-2">
+              <button
+                onClick={handleExportNumbers}
+                disabled={exporting || conversations.length === 0}
+                title="Export real customer mobile numbers as CSV"
+                className="p-1.5 rounded-lg hover:bg-green-50 text-green-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {exporting ? (
+                  <div className="h-3.5 w-3.5 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Download className="h-3.5 w-3.5" />
+                )}
+              </button>
               <button onClick={fetchConversations} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
@@ -587,6 +631,17 @@ export default function ChatInterface() {
       {/* Click outside to close tone menu */}
       {showToneMenu && (
         <div className="fixed inset-0 z-40" onClick={() => setShowToneMenu(false)} />
+      )}
+
+      {/* Export Toast Notification */}
+      {exportToast && (
+        <div className="fixed bottom-6 right-6 z-[60] flex items-center gap-3 px-5 py-3 rounded-xl shadow-2xl bg-green-600 text-white text-sm font-medium animate-in slide-in-from-right duration-300">
+          <Download className="h-4 w-4" />
+          <span>{exportToast}</span>
+          <button onClick={() => setExportToast(null)} className="ml-2 opacity-80 hover:opacity-100">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
       )}
     </div>
   );
