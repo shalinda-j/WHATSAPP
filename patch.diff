@@ -1,0 +1,26 @@
+<<<<<<< SEARCH
+    const questionCounts: Record<string, number> = {};
+
+    for (const msg of userMessages) {
+      const content = msg.content;
+      for (const [category, regex] of Object.entries(precompiledRegexMap)) {
+        if (regex.test(content)) {
+          questionCounts[category] = (questionCounts[category] || 0) + 1;
+          break;
+        }
+      }
+    }
+=======
+    const questionCounts: Record<string, number> = {};
+    const precompiledRegexEntries = Object.entries(precompiledRegexMap);
+
+    for (const msg of userMessages) {
+      const content = msg.content;
+      for (const [category, regex] of precompiledRegexEntries) {
+        if (regex.test(content)) {
+          questionCounts[category] = (questionCounts[category] || 0) + 1;
+          break;
+        }
+      }
+    }
+>>>>>>> REPLACE

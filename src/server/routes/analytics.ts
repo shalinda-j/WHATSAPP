@@ -7,6 +7,25 @@ import { resolveTenant } from '../middleware/tenantContext';
 
 const router = Router();
 
+// ⚡ Bolt: Precompile keywords into RegExp objects at the module scope.
+// Recreating arrays and using nested Array.some() with String.includes() inside
+// the request loop introduces an O(M*N) CPU bottleneck and unnecessary GC overhead.
+const keywordsMap: Record<string, string[]> = {
+  jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
+  register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
+  payment: ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
+  booking: ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
+  location: ['address', 'location', 'where', 'branch', 'office', 'map'],
+  services: ['service', 'what do you do', 'help', 'information', 'details'],
+  hello: ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
+  language: ['sinhala', 'english', 'tamil', 'translate'],
+};
+
+const precompiledRegexMap: Record<string, RegExp> = {};
+for (const [category, keywords] of Object.entries(keywordsMap)) {
+  precompiledRegexMap[category] = new RegExp(keywords.join('|'), 'i');
+}
+
 router.use(authenticateToken);
 router.use(resolveTenant);
 
@@ -108,21 +127,12 @@ router.get('/questions', async (req, res) => {
       .lean();
 
     const questionCounts: Record<string, number> = {};
-    const keywordsMap: Record<string, string[]> = {
-      jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
-      register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
-      payment: ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
-      booking: ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
-      location: ['address', 'location', 'where', 'branch', 'office', 'map'],
-      services: ['service', 'what do you do', 'help', 'information', 'details'],
-      hello: ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
-      language: ['sinhala', 'english', 'tamil', 'translate'],
-    };
+    const precompiledRegexEntries = Object.entries(precompiledRegexMap);
 
     for (const msg of userMessages) {
-      const content = msg.content.toLowerCase();
-      for (const [category, keywords] of Object.entries(keywordsMap)) {
-        if (keywords.some((k) => content.includes(k))) {
+      const content = msg.content;
+      for (const [category, regex] of precompiledRegexEntries) {
+        if (regex.test(content)) {
           questionCounts[category] = (questionCounts[category] || 0) + 1;
           break;
         }
