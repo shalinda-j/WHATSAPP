@@ -1,5 +1,9 @@
 import { toCsv, csvDownloadHeaders } from '../server/utils/csv';
 import { resolveContactExportPhone } from '../server/routes/exports';
+import {
+  extractPhoneFromText,
+  normalisePhoneDigits,
+} from '../services/LidPhoneMappingService';
 
 describe('toCsv', () => {
   it('renders an empty string for zero rows without columns', () => {
@@ -80,5 +84,18 @@ describe('resolveContactExportPhone', () => {
     expect(
       resolveContactExportPhone({ whatsappNumber: '29141520924734@lid' }, map),
     ).toBe('+94771234567');
+  });
+});
+
+describe('LID phone repair helpers', () => {
+  it('normalises Sri Lankan local mobile numbers', () => {
+    expect(normalisePhoneDigits('0703179882')).toBe('94703179882');
+    expect(normalisePhoneDigits('+94 70 317 9882')).toBe('94703179882');
+  });
+
+  it('extracts a phone number from inbound message text', () => {
+    expect(extractPhoneFromText('hi my number is 0703179882')).toBe(
+      '94703179882',
+    );
   });
 });

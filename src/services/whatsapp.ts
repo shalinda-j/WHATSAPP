@@ -22,7 +22,10 @@ import { promises as fsPromises } from 'fs';
 import { randomBytes } from 'crypto';
 import { HumanizerService } from './HumanizerService';
 import { extractPhoneJidFromMessage, isLidJid } from '../utils/jid';
-import { rememberLidPhoneMapping } from './LidPhoneMappingService';
+import {
+  extractPhoneFromText,
+  rememberLidPhoneMapping,
+} from './LidPhoneMappingService';
 
 // Set FFmpeg path
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
@@ -338,10 +341,12 @@ export class WhatsAppSessionManager {
         await Promise.all(
           messages.map(async (msg) => {
             if (isLidJid(msg.key.remoteJid)) {
+              const text = getMessageText(msg);
               rememberLidPhoneMapping({
                 sessionId,
                 lidJid: msg.key.remoteJid,
-                phoneJid: extractPhoneJidFromMessage(msg),
+                phoneJid:
+                  extractPhoneJidFromMessage(msg) ?? extractPhoneFromText(text),
                 source: 'message',
               }).catch((err) => {
                 console.error('Failed to store LID phone mapping:', err);
