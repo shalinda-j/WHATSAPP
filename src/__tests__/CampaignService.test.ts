@@ -28,6 +28,9 @@ describe('pickRecipientHandle', () => {
     expect(
       pickRecipientHandle({ whatsappNumber: '++--' }, 'whatsapp'),
     ).toBeUndefined();
+    expect(
+      pickRecipientHandle({ whatsappNumber: '29141520924734@lid' }, 'whatsapp'),
+    ).toBeUndefined();
   });
 
   it('returns email verbatim for the email channel', () => {

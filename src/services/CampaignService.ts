@@ -14,6 +14,7 @@ import { isQuietHoursActive, tenantQuietHours } from './quietHours';
 import { isPhoneOptedOut } from './optOut';
 import { Channel } from '../types/agent';
 import { CAMPAIGN_GENERATOR_V1_PROMPT } from '../agents/prompts/campaign-generator-v1';
+import { extractRealPhone } from '../utils/jid';
 
 export interface CampaignLaunchOptions {
   tenantId: string;
@@ -69,7 +70,7 @@ export function pickRecipientHandle(
     case 'whatsapp': {
       const raw = contact.whatsappNumber || contact.whatsappId || contact.phone;
       if (!raw) return undefined;
-      const digits = String(raw).replace(/\D/g, '');
+      const digits = extractRealPhone(String(raw));
       if (!digits) return undefined;
       return `${digits}@s.whatsapp.net`;
     }

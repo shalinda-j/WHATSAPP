@@ -1,4 +1,5 @@
 import { toCsv, csvDownloadHeaders } from '../server/utils/csv';
+import { resolveContactExportPhone } from '../server/routes/exports';
 
 describe('toCsv', () => {
   it('renders an empty string for zero rows without columns', () => {
@@ -50,5 +51,27 @@ describe('csvDownloadHeaders', () => {
     expect(csvDownloadHeaders('x.csv')['Content-Type']).toBe(
       'text/csv; charset=utf-8',
     );
+  });
+});
+
+describe('resolveContactExportPhone', () => {
+  it('exports normal phone-backed identifiers as clean phone numbers', () => {
+    expect(
+      resolveContactExportPhone({ phone: '+94 77 123 4567' }),
+    ).toBe('+94771234567');
+    expect(
+      resolveContactExportPhone({ whatsappNumber: '94771234567@s.whatsapp.net' }),
+    ).toBe('+94771234567');
+  });
+
+  it('does not export a LID as a phone number', () => {
+    expect(resolveContactExportPhone({ phone: '+29141520924734@lid' })).toBe('');
+  });
+
+  it('repairs old LID contacts from stored chat realPhone metadata', () => {
+    const map = new Map([['29141520924734@lid', '94771234567']]);
+    expect(
+      resolveContactExportPhone({ phone: '+29141520924734@lid' }, map),
+    ).toBe('+94771234567');
   });
 });
