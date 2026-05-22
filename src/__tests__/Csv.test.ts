@@ -74,4 +74,11 @@ describe('resolveContactExportPhone', () => {
       resolveContactExportPhone({ phone: '+29141520924734@lid' }, map),
     ).toBe('+94771234567');
   });
+
+  it('repairs old LID contacts when the stored mapping key has no suffix', () => {
+    const map = new Map([['29141520924734', '94771234567']]);
+    expect(
+      resolveContactExportPhone({ whatsappNumber: '29141520924734@lid' }, map),
+    ).toBe('+94771234567');
+  });
 });

@@ -6,6 +6,10 @@ import CampaignExecution from '../../models/CampaignExecution';
 import ChatMessage from '../../models/ChatMessage';
 import { toCsv, csvDownloadHeaders } from '../utils/csv';
 import { extractRealPhone, isLidJid } from '../../utils/jid';
+import {
+  loadPhoneMapForLids,
+  normaliseLidJid,
+} from '../../services/LidPhoneMappingService';
 
 const router = express.Router();
 
@@ -53,7 +57,8 @@ export function resolveContactExportPhone(
   for (const candidate of contactIdentifierCandidates(contact)) {
     const phone =
       realPhoneByIdentifier.get(candidate) ??
-      realPhoneByIdentifier.get(candidate.replace(/^\+/, ''));
+      realPhoneByIdentifier.get(candidate.replace(/^\+/, '')) ??
+      realPhoneByIdentifier.get(normaliseLidJid(candidate) ?? '');
     if (phone) return formatExportPhone(phone);
   }
 
@@ -154,6 +159,10 @@ router.get('/contacts.csv', async (req: Request, res: Response) => {
     }
     const identifiers = Array.from(identifierSet);
     const realPhoneByIdentifier = new Map<string, string>();
+    const sessionId =
+      typeof req.query.sessionId === 'string' && req.query.sessionId !== 'all'
+        ? req.query.sessionId
+        : undefined;
     if (identifiers.length > 0) {
       const resolved = (await ChatMessage.aggregate([
         {
@@ -172,6 +181,11 @@ router.get('/contacts.csv', async (req: Request, res: Response) => {
       ])) as Array<{ _id: string; realPhone: string }>;
       for (const row of resolved) {
         if (row.realPhone) realPhoneByIdentifier.set(row._id, row.realPhone);
+      }
+
+      const mappedPhones = await loadPhoneMapForLids(identifiers, sessionId);
+      for (const [lid, phone] of mappedPhones) {
+        realPhoneByIdentifier.set(lid, phone);
       }
     }
 

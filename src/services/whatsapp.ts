@@ -21,6 +21,8 @@ import { join } from 'path';
 import { promises as fsPromises } from 'fs';
 import { randomBytes } from 'crypto';
 import { HumanizerService } from './HumanizerService';
+import { extractPhoneJidFromMessage, isLidJid } from '../utils/jid';
+import { rememberLidPhoneMapping } from './LidPhoneMappingService';
 
 // Set FFmpeg path
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
@@ -335,6 +337,17 @@ export class WhatsAppSessionManager {
         if (type !== 'notify') return;
         await Promise.all(
           messages.map(async (msg) => {
+            if (isLidJid(msg.key.remoteJid)) {
+              rememberLidPhoneMapping({
+                sessionId,
+                lidJid: msg.key.remoteJid,
+                phoneJid: extractPhoneJidFromMessage(msg),
+                source: 'message',
+              }).catch((err) => {
+                console.error('Failed to store LID phone mapping:', err);
+              });
+            }
+
             const text = getMessageText(msg);
             // Global Security Middleware
             // If the message is deemed unsafe, we silently drop it or log it.
@@ -357,6 +370,49 @@ export class WhatsAppSessionManager {
           }),
         );
       });
+
+      const rememberContactMapping = (contact: { id?: string; lid?: string }) => {
+        if (!contact.lid || !contact.id) return;
+        rememberLidPhoneMapping({
+          sessionId,
+          lidJid: contact.lid,
+          phoneJid: contact.id,
+          source: 'chat_metadata',
+        }).catch((err) => {
+          console.error('Failed to store contact LID mapping:', err);
+        });
+      };
+
+      sock.ev.on('contacts.upsert', (contacts) => {
+        contacts.forEach(rememberContactMapping);
+      });
+
+      sock.ev.on('contacts.update', (contacts) => {
+        contacts.forEach(rememberContactMapping);
+      });
+
+      sock.ev.on('messaging-history.set', ({ contacts }) => {
+        contacts.forEach(rememberContactMapping);
+      });
+
+      // Baileys emits this when WhatsApp shares the real phone number for a
+      // privacy LID. Persist it so old CRM contacts can be exported with a
+      // dialable number once the mapping has ever been observed.
+      (sock.ev as any).on(
+        'chats.phoneNumberShare',
+        async (event: { lid?: string; jid?: string }) => {
+          try {
+            await rememberLidPhoneMapping({
+              sessionId,
+              lidJid: event.lid,
+              phoneJid: event.jid,
+              source: 'phone_number_share',
+            });
+          } catch (err) {
+            console.error('Failed to store phoneNumberShare mapping:', err);
+          }
+        },
+      );
 
       // Handle Incoming Calls (AI Call Assistant)
       sock.ev.on('call', async (calls) => {
