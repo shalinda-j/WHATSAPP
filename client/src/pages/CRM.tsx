@@ -964,8 +964,11 @@ export default function CRM() {
 
   const handleExportContactsCSV = () => {
     const date = new Date().toISOString().split('T')[0];
+    const params = new URLSearchParams();
+    appendSessionScope(params);
+    const qs = params.toString();
     return downloadCsv(
-      '/api/export/contacts.csv',
+      `/api/export/contacts.csv${qs ? `?${qs}` : ''}`,
       `crm-contacts-${date}.csv`,
     );
   };

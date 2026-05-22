@@ -58,6 +58,7 @@ import { isStopKeyword, markContactOptedOut } from './services/optOut';
 import { scoreSentiment } from './services/sentiment';
 import { autoTagLeadFromMessage } from './services/leadAutoTag';
 import { extractPhoneJidFromMessage, extractRealPhone } from './utils/jid';
+import { rememberLidPhoneMapping } from './services/LidPhoneMappingService';
 
 const PORT = process.env.PORT || 8080;
 let server: any;
@@ -414,6 +415,14 @@ onMessage(async (message, sock, sessionId) => {
     const phoneJidFromMsg = extractPhoneJidFromMessage(message);
     const inboundRealPhone =
       extractRealPhone(phoneJidFromMsg) ?? extractRealPhone(jid) ?? undefined;
+    rememberLidPhoneMapping({
+      sessionId,
+      lidJid: jid,
+      phoneJid: phoneJidFromMsg,
+      source: 'message',
+    }).catch((err) => {
+      console.error('   ⚠️ LID phone mapping save error:', err);
+    });
     autoRegistrationService
       .checkAndRegister(jid, pushName, sessionId, inboundRealPhone)
       .catch((err) => {
