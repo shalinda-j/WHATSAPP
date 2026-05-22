@@ -66,6 +66,121 @@ import {
 const PORT = process.env.PORT || 8080;
 let server: any;
 
+type LeadFlowFact = {
+  phone: string | null;
+  country: string | null;
+  name: string | null;
+};
+
+const COUNTRY_INTERESTS: Array<{ label: string; pattern: RegExp }> = [
+  { label: 'Japan', pattern: /\b(japan|japanese|jp)\b/i },
+  { label: 'Israel', pattern: /\b(israel|isreal)\b/i },
+  { label: 'Singapore', pattern: /\b(singapore|sg)\b/i },
+  { label: 'Europe', pattern: /\b(europe|european)\b/i },
+  { label: 'Korea', pattern: /\b(korea|korean)\b/i },
+  { label: 'Romania', pattern: /\b(romania|romanian)\b/i },
+  {
+    label: 'Training course',
+    pattern: /\b(course|training|welding|machinery|skill)\b/i,
+  },
+];
+
+function extractPhoneFromLeadText(text: string): string | null {
+  const candidates = text.match(/(?:\+?\d[\d\s().-]{7,}\d)/g) ?? [];
+
+  for (const candidate of candidates) {
+    const digits = candidate.replace(/\D/g, '');
+    if (digits.length === 10 && digits.startsWith('0')) {
+      return `94${digits.slice(1)}`;
+    }
+    if (digits.length >= 8 && digits.length <= 15) {
+      return digits;
+    }
+  }
+
+  return null;
+}
+
+function extractCountryInterest(text: string): string | null {
+  const match = COUNTRY_INTERESTS.find((country) => country.pattern.test(text));
+  return match?.label ?? null;
+}
+
+function extractNameHint(text: string): string | null {
+  const patterns = [
+    /\bmy\s+name\s+(?:is\s+)?([a-z][a-z\s.'-]{1,40})/i,
+    /\bname\s+(?:is\s+)?([a-z][a-z\s.'-]{1,40})/i,
+    /\b(?:mage|mge|maage)\s+nama\s+([a-z][a-z\s.'-]{1,40})/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    const name = match?.[1]?.trim().replace(/\s+/g, ' ');
+    if (name) return name;
+  }
+
+  return null;
+}
+
+function getLeadFlowFacts(text: string): LeadFlowFact {
+  return {
+    phone: extractPhoneFromLeadText(text),
+    country: extractCountryInterest(text),
+    name: extractNameHint(text),
+  };
+}
+
+function isGreetingMessage(text: string): boolean {
+  return /^(hi|hello|hey|good\s+(morning|afternoon|evening)|ayubowan|vanakkam)\b/i.test(
+    text.trim(),
+  );
+}
+
+function buildLeadFlowFallback(text: string): string {
+  const facts = getLeadFlowFacts(text);
+
+  if (facts.phone && facts.country) {
+    return [
+      `Thanks, I got your contact number and ${facts.country} interest.`,
+      'Our team will follow up. Please send your full name too.',
+    ].join(' ');
+  }
+
+  if (facts.phone) {
+    return [
+      'Thanks, I got your contact number.',
+      'Which country are you interested in - Japan, Israel, Singapore, Europe, or another country?',
+    ].join(' ');
+  }
+
+  if (facts.country) {
+    return [
+      `Sure, I can help with ${facts.country}.`,
+      'Please send your contact number so our team can follow up.',
+    ].join(' ');
+  }
+
+  if (facts.name) {
+    return [
+      `Thanks ${facts.name}.`,
+      'Please send your contact number and preferred country, like Japan, Israel, or Singapore.',
+    ].join(' ');
+  }
+
+  if (isGreetingMessage(text)) {
+    return [
+      'Hello! Welcome to Jayalath Global.',
+      'Are you looking for Japan, Israel, Singapore, Europe jobs, or a training course?',
+      'Please also send your contact number.',
+    ].join(' ');
+  }
+
+  return [
+    'No problem. Please send your name, contact number, and the country or job you are interested in.',
+    'Example: "My name Pasindu, phone 0703179882, I want Japan."',
+  ].join(' ');
+}
+
 async function startServer() {
   // 1. Connect to Database
   if (process.env.MONGODB_URI) {
@@ -835,6 +950,9 @@ onMessage(async (message, sock, sessionId) => {
         // 5. Fallback to AI Load Balancer if NLP doesn't know the answer
         if (!response) {
           response = await aiLoadBalancer.sendMessage(jid, finalPrompt);
+          if (/no ai services are configured/i.test(response)) {
+            response = buildLeadFlowFallback(text);
+          }
 
           // Learn from AI response dynamically (Fire & Forget)
           if (isLocalNLPEnabled && response && response.trim() !== '') {
@@ -959,21 +1077,9 @@ onMessage(async (message, sock, sessionId) => {
     } catch (aiError: any) {
       console.error('   ❌ AI response error:', aiError.message || aiError);
 
-      // Check for quota/rate limit errors
-      const errorMsg = aiError.message || '';
-      if (errorMsg.includes('429') || errorMsg.includes('quota')) {
-        await sendMessage(
-          jid,
-          '⚠️ *API Quota Exceeded*\n\nPlease try again in a minute.',
-          sessionId,
-        );
-      } else {
-        await sendMessage(
-          jid,
-          '⚠️ Sorry, I could not process your message.\nPlease try again or use `!help`',
-          sessionId,
-        );
-      }
+      // Keep the customer-facing flow moving even when every AI provider fails.
+      const fallbackResponse = buildLeadFlowFallback(text);
+      await sendMessage(jid, fallbackResponse, sessionId);
     }
   } catch (error) {
     console.error('❌ Message handling error:', error);
