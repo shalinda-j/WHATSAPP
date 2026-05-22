@@ -9,3 +9,9 @@
 **Vulnerability:** A simple string comparison (`!==`) was used to validate the `WEBHOOK_SECRET` against the incoming payload secret in the webhook inbound endpoint.
 **Learning:** Simple string comparison can expose the application to timing attacks, where an attacker can theoretically guess the secret character by character by measuring the time it takes for the comparison to fail.
 **Prevention:** Use `crypto.timingSafeEqual` with a constant-time comparison algorithm (such as SHA-256 hashes of the strings) to ensure that comparisons always take the same amount of time, regardless of whether they succeed or fail.
+
+## 2026-05-22 - [Mass Assignment] Explicit Field Extraction in API Updates
+
+**Vulnerability:** Several API update routes (like `PUT /api/leads/:id` and `PUT /api/webhooks/:id`) were passing `req.body` directly or via spread operator (`{ ...req.body }`) into Mongoose's `findByIdAndUpdate`.
+**Learning:** Trusting client input directly allows attackers to modify sensitive properties that they should not have access to (such as `tenantId`, bypassing tenant isolation, or `crmContactId`). This constitutes a Mass Assignment vulnerability.
+**Prevention:** Never use `req.body` directly in database update operations. Always explicitly extract and validate allowed fields into a safe update object before passing it to Mongoose.
