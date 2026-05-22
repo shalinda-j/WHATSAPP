@@ -3,7 +3,12 @@ import { CRMService } from '../../services/CRMService';
 import { authenticateToken } from '../middleware/auth';
 import { validateObjectId } from '../middleware/validation';
 import { resolveTenant } from '../middleware/tenantContext';
+import { Contact } from '../../models/CRM';
 import Lead from '../../models/Lead';
+import {
+  normalisePhoneDigits,
+  rememberLidPhoneMapping,
+} from '../../services/LidPhoneMappingService';
 import * as path from 'path';
 import * as fs from 'fs';
 import multer from 'multer';
@@ -217,6 +222,45 @@ router.patch('/contacts/:id', validateObjectId(), async (req, res) => {
       return res.status(404).json({ error: 'Contact not found' });
     }
     res.json(contact);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/contacts/:id/resolve-phone', validateObjectId(), async (req, res) => {
+  try {
+    const phone = normalisePhoneDigits(String(req.body?.phone ?? ''));
+    if (!phone) {
+      return res.status(400).json({ error: 'Valid phone is required' });
+    }
+
+    const contact = await Contact.findById(req.params.id);
+    if (!contact) {
+      return res.status(404).json({ error: 'Contact not found' });
+    }
+
+    const lidCandidates = [
+      contact.phone,
+      contact.whatsappNumber,
+      contact.whatsappId,
+    ].filter((v): v is string => typeof v === 'string' && v.length > 0);
+    await Promise.all(
+      lidCandidates.map((lidJid) =>
+        rememberLidPhoneMapping({
+          sessionId: contact.sessionId,
+          lidJid,
+          phoneJid: phone,
+          source: 'manual',
+        }),
+      ),
+    );
+
+    contact.phone = `+${phone}`;
+    contact.whatsappNumber = phone;
+    contact.updatedAt = new Date();
+    await contact.save();
+
+    res.json({ success: true, phone: `+${phone}`, contact });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

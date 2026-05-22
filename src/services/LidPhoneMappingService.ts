@@ -19,9 +19,38 @@ export function normaliseLidJid(value: string | null | undefined): string | null
 export function normalisePhoneJid(
   value: string | null | undefined,
 ): { phone: string; phoneJid: string } | null {
-  const phone = extractRealPhone(value);
+  const phone = normalisePhoneDigits(value);
   if (!phone) return null;
   return { phone, phoneJid: `${phone}@s.whatsapp.net` };
+}
+
+export function normalisePhoneDigits(
+  value: string | null | undefined,
+): string | null {
+  if (!value) return null;
+  if (isLidJid(String(value).trim().replace(/^\+/, ''))) return null;
+  const fromJid = extractRealPhone(value);
+  if (fromJid) return fromJid;
+
+  const digits = String(value).replace(/\D/g, '');
+  if (digits.length < 8 || digits.length > 15) return null;
+
+  // Sri Lanka local mobile format: 0703179882 -> 94703179882.
+  // The app's default market is Sri Lanka, and this keeps manual/in-message
+  // repair ergonomic without treating opaque @lid ids as phones.
+  if (/^0\d{9}$/.test(digits)) return `94${digits.slice(1)}`;
+  if (/^7\d{8}$/.test(digits)) return `94${digits}`;
+  return digits;
+}
+
+export function extractPhoneFromText(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const candidates = String(text).match(/\+?\d[\d\s().-]{7,}\d/g) ?? [];
+  for (const candidate of candidates) {
+    const phone = normalisePhoneDigits(candidate);
+    if (phone) return phone;
+  }
+  return null;
 }
 
 export async function rememberLidPhoneMapping(params: {
