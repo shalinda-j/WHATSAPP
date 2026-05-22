@@ -443,9 +443,35 @@ router.put('/:id', validateObjectId(), async (req, res) => {
     if (!previous) {
       return res.status(404).json({ error: 'Lead not found' });
     }
+
+    // Explicitly extract allowed fields to prevent mass assignment vulnerabilities.
+    // E.g., prevent malicious updates to tenantId, sessionId, or crmContactId
+    const allowedUpdates: Record<string, any> = {};
+    const updatableFields = [
+      'fullName',
+      'phoneNumber',
+      'email',
+      'address',
+      'age',
+      'interestedCountry',
+      'experienceYears',
+      'cvUrl',
+      'cvFileName',
+      'jobVacancyType',
+      'status',
+      'notes',
+    ];
+
+    for (const field of updatableFields) {
+      if (req.body[field] !== undefined) {
+        allowedUpdates[field] = req.body[field];
+      }
+    }
+    allowedUpdates.updatedAt = new Date();
+
     const lead = await Lead.findByIdAndUpdate(
       req.params.id,
-      { ...req.body, updatedAt: new Date() },
+      { $set: allowedUpdates },
       { new: true },
     );
 

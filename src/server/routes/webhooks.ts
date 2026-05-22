@@ -367,9 +367,27 @@ router.post('/', async (req, res) => {
 // Update webhook
 router.put('/:id', async (req, res) => {
   try {
+    // Explicitly extract allowed fields to prevent mass assignment vulnerabilities
+    const allowedUpdates: Record<string, any> = {};
+    const updatableFields = [
+      'name',
+      'url',
+      'events',
+      'secret',
+      'isActive',
+      'category',
+      'format',
+    ];
+
+    for (const field of updatableFields) {
+      if (req.body[field] !== undefined) {
+        allowedUpdates[field] = req.body[field];
+      }
+    }
+
     const webhook = await (Webhook as any).findByIdAndUpdate(
       req.params.id,
-      req.body,
+      { $set: allowedUpdates },
       {
         new: true,
       },
