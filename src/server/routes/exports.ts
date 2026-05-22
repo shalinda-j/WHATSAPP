@@ -11,6 +11,55 @@ const router = express.Router();
 
 const MAX_EXPORT_ROWS = 50_000;
 
+type ContactPhoneFields = {
+  phone?: string | null;
+  whatsappNumber?: string | null;
+  whatsappId?: string | null;
+};
+
+function contactIdentifierCandidates(contact: ContactPhoneFields): string[] {
+  const out = new Set<string>();
+  for (const raw of [
+    contact.phone,
+    contact.whatsappNumber,
+    contact.whatsappId,
+  ]) {
+    if (typeof raw !== 'string' || raw.trim() === '') continue;
+    const value = raw.trim();
+    out.add(value);
+    if (value.startsWith('+')) out.add(value.slice(1));
+  }
+  return Array.from(out);
+}
+
+function formatExportPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  return digits ? `+${digits}` : '';
+}
+
+export function resolveContactExportPhone(
+  contact: ContactPhoneFields,
+  realPhoneByIdentifier: Map<string, string> = new Map(),
+): string {
+  for (const raw of [
+    contact.phone,
+    contact.whatsappNumber,
+    contact.whatsappId,
+  ]) {
+    const phone = extractRealPhone(raw);
+    if (phone) return `+${phone}`;
+  }
+
+  for (const candidate of contactIdentifierCandidates(contact)) {
+    const phone =
+      realPhoneByIdentifier.get(candidate) ??
+      realPhoneByIdentifier.get(candidate.replace(/^\+/, ''));
+    if (phone) return formatExportPhone(phone);
+  }
+
+  return '';
+}
+
 /**
  * Streamable export endpoints. The current implementation materialises the
  * full result into memory before serialising — fine for ≤50k rows on a
@@ -99,11 +148,38 @@ router.get('/contacts.csv', async (req: Request, res: Response) => {
       .limit(MAX_EXPORT_ROWS)
       .lean()) as any[];
 
+    const identifierSet = new Set<string>();
+    for (const row of rows) {
+      for (const id of contactIdentifierCandidates(row)) identifierSet.add(id);
+    }
+    const identifiers = Array.from(identifierSet);
+    const realPhoneByIdentifier = new Map<string, string>();
+    if (identifiers.length > 0) {
+      const resolved = (await ChatMessage.aggregate([
+        {
+          $match: {
+            userId: { $in: identifiers },
+            'metadata.realPhone': { $exists: true, $ne: '' },
+          },
+        },
+        { $sort: { timestamp: -1 } },
+        {
+          $group: {
+            _id: '$userId',
+            realPhone: { $first: '$metadata.realPhone' },
+          },
+        },
+      ])) as Array<{ _id: string; realPhone: string }>;
+      for (const row of resolved) {
+        if (row.realPhone) realPhoneByIdentifier.set(row._id, row.realPhone);
+      }
+    }
+
     const flat = rows.map((r: any) => ({
       id: String(r._id),
       name: r.name,
       email: r.email ?? '',
-      phone: r.phone ?? r.whatsappNumber ?? '',
+      phone: resolveContactExportPhone(r, realPhoneByIdentifier),
       company: r.company ?? '',
       type: r.type,
       status: r.status,

@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import ChatMessage from '../models/ChatMessage';
+import { extractRealPhone, isLidJid } from '../utils/jid';
 
 // Lazy import to avoid circular deps
 const getContact = () => {
@@ -26,6 +27,7 @@ export class AutoRegistrationService {
     userId: string,
     pushName?: string,
     sessionId?: string,
+    realPhone?: string,
   ): Promise<boolean> {
     // Already checked this session (in-memory cache)
     if (this.registeredNumbers.has(userId)) return false;
@@ -37,18 +39,26 @@ export class AutoRegistrationService {
         return false;
       }
 
-      // Extract phone number from userId (format: 94771234567@s.whatsapp.net)
-      const phone = userId.replace('@s.whatsapp.net', '').replace('@c.us', '');
+      // Prefer the real phone resolved at ingest. `@lid` identifiers are
+      // privacy IDs, not dialable phone numbers.
+      const phone = realPhone ?? extractRealPhone(userId);
+      const rawIdentifier = userId.replace(/^\+/, '');
 
       // Check if contact already exists in DB
-      const existing = await Contact.findOne({
-        $or: [
+      const existingClauses: Record<string, unknown>[] = [
+        { whatsappNumber: userId },
+        { whatsappId: userId },
+        { 'customFields.rawWhatsappJid': rawIdentifier },
+      ];
+      if (phone) {
+        existingClauses.push(
           { phone: `+${phone}` },
-          { phone: phone },
-          { whatsappNumber: userId },
+          { phone },
           { whatsappNumber: phone },
-        ],
-      });
+          { whatsappId: phone },
+        );
+      }
+      const existing = await Contact.findOne({ $or: existingClauses });
 
       if (existing) {
         this.registeredNumbers.add(userId);
@@ -60,29 +70,43 @@ export class AutoRegistrationService {
       const isFirstMessage = msgCount === 0;
 
       // Parse display name
-      const fullName = pushName || `User ${phone.slice(-4)}`;
+      const displayTail = (phone || rawIdentifier.replace(/@.*/, '')).slice(-4);
+      const fullName = pushName || `User ${displayTail}`;
       const nameParts = fullName.trim().split(/\s+/);
       const firstName = nameParts[0] || fullName;
       const lastName = nameParts.slice(1).join(' ') || '';
 
-      // Create CRM contact
-      await Contact.create({
+      // Create CRM contact. Keep raw LIDs out of phone/whatsappNumber unless
+      // a real phone is available; store the raw JID only as metadata.
+      const contactData: Record<string, unknown> = {
         firstName,
         lastName,
-        phone: `+${phone}`,
-        whatsappNumber: userId,
         whatsappOptIn: true,
         source: 'whatsapp',
         type: 'lead',
         status: 'active',
         tags: ['auto-registered', isFirstMessage ? 'first-time' : 'returning'],
         notes: `Auto-registered from WhatsApp on ${new Date().toLocaleDateString()}`,
+        sessionId,
+        customFields: {
+          rawWhatsappJid: rawIdentifier,
+          identifierType: isLidJid(userId) ? 'lid' : 'phone',
+        },
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      };
+      if (phone) {
+        contactData.phone = `+${phone}`;
+        contactData.whatsappNumber = phone;
+        contactData.whatsappId = userId;
+      }
+
+      await Contact.create(contactData);
 
       this.registeredNumbers.add(userId);
-      console.log(`✅ Auto-registered CRM contact: ${fullName} (${phone})`);
+      console.log(
+        `✅ Auto-registered CRM contact: ${fullName} (${phone || rawIdentifier})`,
+      );
       return isFirstMessage; // Return true only for truly new users (to send welcome msg)
     } catch (err: any) {
       if (!err?.message?.includes('duplicate') && err?.code !== 11000) {

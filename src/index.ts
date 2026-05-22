@@ -411,8 +411,11 @@ onMessage(async (message, sock, sessionId) => {
     // Auto-register new users in CRM (fire and forget - don't block message processing)
     const pushName =
       (message as any).pushName || (message.key as any)?.pushName;
+    const phoneJidFromMsg = extractPhoneJidFromMessage(message);
+    const inboundRealPhone =
+      extractRealPhone(phoneJidFromMsg) ?? extractRealPhone(jid) ?? undefined;
     autoRegistrationService
-      .checkAndRegister(jid, pushName, sessionId)
+      .checkAndRegister(jid, pushName, sessionId, inboundRealPhone)
       .catch((err) => {
         console.error('   ⚠️ Auto-registration check error:', err);
       });
@@ -533,8 +536,6 @@ onMessage(async (message, sock, sessionId) => {
       // WhatsApp push name — store on the message so the chat list can
       // render a human-readable label even when the userId is a Linked-ID
       // (@lid) with no Contact match.
-      const inboundPushName =
-        (message as any).pushName || (message.key as any)?.pushName || undefined;
 
       // Resolve the real phone for this message. For `@lid` JIDs Baileys
       // 6.6+ exposes the underlying phone via `key.senderPn` /
@@ -543,9 +544,6 @@ onMessage(async (message, sock, sessionId) => {
       // export and CRM lookups all converge on the same real number even
       // though `userId` stays as the raw JID (preserving the existing
       // aggregation contract).
-      const phoneJidFromMsg = extractPhoneJidFromMessage(message);
-      const inboundRealPhone =
-        extractRealPhone(phoneJidFromMsg) ?? extractRealPhone(jid) ?? undefined;
       const savedMsg = await ChatMessage.create({
         userId: jid,
         role: 'user',
@@ -555,7 +553,7 @@ onMessage(async (message, sock, sessionId) => {
         metadata: {
           sessionId,
           isBooking: false,
-          pushName: inboundPushName,
+          pushName,
           realPhone: inboundRealPhone,
           sentimentScore: sentiment.score,
           sentimentLabel: sentiment.label,
