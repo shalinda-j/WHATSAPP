@@ -10,6 +10,7 @@ import {
   loadPhoneMapForLids,
   normaliseLidJid,
 } from '../../services/LidPhoneMappingService';
+import Session from '../../models/Session';
 
 const router = express.Router();
 
@@ -329,13 +330,11 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
     const fromRaw = req.query.from ? String(req.query.from).trim() : '';
     const toRaw = req.query.to ? String(req.query.to).trim() : '';
 
-    // Default behaviour: emit ONLY rows whose JID resolves to a real
-    // dialable phone number. LIDs and other unresolved identifiers are
-    // dropped so operators don't end up with un-dialable garbage in the
-    // CSV. Set ?includeUnresolved=true to get the full unfiltered set
-    // (for debugging / auditing).
+    // Default behaviour: include unresolved rows too. Operators use this
+    // export to split conversations by country/device, so an empty sheet is
+    // worse than a row with a raw LID and message context.
     const includeUnresolved =
-      String(req.query.includeUnresolved ?? '').toLowerCase() === 'true';
+      String(req.query.includeUnresolved ?? 'true').toLowerCase() !== 'false';
 
     // Resolve the time window — explicit from/to wins; otherwise parse
     // YYYY-MM into a UTC calendar-month range; otherwise no window (all-time).
@@ -355,9 +354,24 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
       to = new Date(Date.UTC(y, m, 1));
     }
 
+    const sessionLabelById = new Map<string, string>();
+    if (sessionId && sessionId !== 'all') {
+      const selectedSession = await Session.findOne({
+        $or: [{ sessionId }, { sessionName: sessionId }],
+      }).lean();
+      if (selectedSession?.sessionId) {
+        sessionLabelById.set(
+          selectedSession.sessionId,
+          selectedSession.sessionName || selectedSession.sessionId,
+        );
+      }
+    }
+    const scopedSessionIds = Array.from(sessionLabelById.keys());
+
     const match: Record<string, unknown> = { role: 'user' };
     if (sessionId && sessionId !== 'all') {
-      match['metadata.sessionId'] = sessionId;
+      match['metadata.sessionId'] =
+        scopedSessionIds.length > 0 ? { $in: scopedSessionIds } : sessionId;
     }
     if (from || to) {
       const range: Record<string, Date> = {};
@@ -373,10 +387,13 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
       lastSeen: Date;
       sessionIds: (string | null | undefined)[];
       realPhones: (string | null | undefined)[];
+      pushNames: (string | null | undefined)[];
+      lastMessage: string;
     };
 
     const agg = (await ChatMessage.aggregate([
       { $match: match },
+      { $sort: { timestamp: -1 } },
       {
         $group: {
           _id: '$userId',
@@ -385,6 +402,8 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
           lastSeen: { $max: '$timestamp' },
           sessionIds: { $addToSet: '$metadata.sessionId' },
           realPhones: { $addToSet: '$metadata.realPhone' },
+          pushNames: { $addToSet: '$metadata.pushName' },
+          lastMessage: { $first: '$content' },
         },
       },
       { $sort: { lastSeen: -1 } },
@@ -426,6 +445,17 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
         return [row._id, extractRealPhone(row._id)];
       }),
     );
+    const mappedPhones = await loadPhoneMapForLids(
+      agg.map((row) => row._id),
+      scopedSessionIds[0] || (sessionId !== 'all' ? sessionId : undefined),
+    );
+    for (const [lid, phone] of mappedPhones) {
+      const lidJid = normaliseLidJid(lid);
+      if (lidJid && (!phoneByUserId.get(lidJid) || !phoneByUserId.has(lidJid))) {
+        phoneByUserId.set(lidJid, phone);
+      }
+      if (phoneByUserId.has(lid)) phoneByUserId.set(lid, phone);
+    }
     const distinctDigits = Array.from(
       new Set(
         Array.from(phoneByUserId.values()).filter((p): p is string => Boolean(p)),
@@ -485,25 +515,34 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
       .map((r) => {
         const phone = phoneByUserId.get(r._id) || '';
         const contact = phone ? contactsByPhone.get(phone) : undefined;
+        const deviceSessions = (r.sessionIds || [])
+          .filter((s): s is string => Boolean(s));
+        const deviceLabels = deviceSessions.map(
+          (s) => sessionLabelById.get(s) || s,
+        );
+        const fallbackName = (r.pushNames || []).find(
+          (n): n is string => typeof n === 'string' && n.length > 0,
+        );
+        const country = inferCountryForExport(
+          r.lastMessage,
+          deviceLabels.join(' '),
+        );
         return {
           phone,
-          name: contact?.name ?? '',
+          name: contact?.name ?? fallbackName ?? '',
           email: contact?.email ?? '',
           identifierType: phone ? 'phone' : isLidJid(r._id) ? 'lid' : 'unknown',
           rawJid: r._id,
+          country,
+          lastMessage: r.lastMessage ?? '',
           lastSeen: r.lastSeen,
           firstSeen: r.firstSeen,
           messageCount: r.messageCount,
-          deviceSessions: (r.sessionIds || [])
-            .filter((s): s is string => Boolean(s))
-            .join(';'),
+          deviceSessions: deviceSessions.join(';'),
+          devices: deviceLabels.join(';'),
           optedOut: contact?.optedOut ? 'true' : '',
         };
       })
-      // Default: drop rows whose phone field is empty (LIDs without a
-      // resolved senderPn, malformed JIDs, etc.). Operators asked for
-      // a dialable list, not an audit dump. ?includeUnresolved=true
-      // restores the full set.
       .filter((row) => includeUnresolved || Boolean(row.phone));
 
     const csv = toCsv(rows, [
@@ -512,10 +551,13 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
       'email',
       'identifierType',
       'rawJid',
+      'country',
+      'lastMessage',
       'lastSeen',
       'firstSeen',
       'messageCount',
       'deviceSessions',
+      'devices',
       'optedOut',
     ]);
     res
@@ -543,6 +585,19 @@ function buildFilename(
     parts.push('all-time');
   }
   return `${parts.join('-')}.csv`;
+}
+
+function inferCountryForExport(
+  message: string | undefined,
+  device: string,
+): string {
+  const haystack = `${message || ''} ${device || ''}`.toLowerCase();
+  if (haystack.includes('israel')) return 'Israel';
+  if (haystack.includes('singapore')) return 'Singapore';
+  if (haystack.includes('japan')) return 'Japan';
+  if (haystack.includes('korea')) return 'Korea';
+  if (haystack.includes('romania')) return 'Romania';
+  return '';
 }
 
 export default router;

@@ -141,12 +141,13 @@ export default function ChatInterface() {
   const [exportMonth, setExportMonth] = useState<string>(() =>
     new Date().toISOString().slice(0, 7),
   );
-  const [exportIncludeUnresolved, setExportIncludeUnresolved] = useState(false);
+  const [exportIncludeUnresolved, setExportIncludeUnresolved] = useState(true);
   const [exporting, setExporting] = useState(false);
 
   const openExportModal = () => {
     setExportSession(sessionFilter);
     setExportMonth(new Date().toISOString().slice(0, 7));
+    setExportIncludeUnresolved(true);
     setShowExportModal(true);
   };
 
@@ -159,7 +160,7 @@ export default function ChatInterface() {
         params.set('sessionId', exportSession);
       }
       if (exportMonth) params.set('month', exportMonth);
-      if (exportIncludeUnresolved) params.set('includeUnresolved', 'true');
+      if (!exportIncludeUnresolved) params.set('includeUnresolved', 'false');
       const res = await api.get(
         `/api/export/chat-numbers.csv?${params.toString()}`,
         { responseType: 'blob' },
@@ -1082,9 +1083,9 @@ export default function ChatInterface() {
               </button>
             </div>
             <p className="text-sm text-gray-500 mb-5">
-              Distinct phone numbers from inbound chats, scoped to a device
-              and a calendar month. The CSV includes message count, first /
-              last seen, and matched contact name when available.
+              Inbound chats scoped to a device and calendar month. The CSV
+              includes phone when available, raw LID when unresolved, country,
+              last message, message count, and matched contact name.
             </p>
 
             <div className="space-y-4">
@@ -1134,10 +1135,10 @@ export default function ChatInterface() {
                   className="mt-0.5"
                 />
                 <span>
-                  Include unresolved (LID) rows.{' '}
+                  Include unresolved LID rows.{' '}
                   <span className="text-gray-400">
-                    By default, only conversations with a dialable phone
-                    number are exported.
+                    Keep this on to avoid empty sheets when WhatsApp has not
+                    shared a real phone number yet.
                   </span>
                 </span>
               </label>
