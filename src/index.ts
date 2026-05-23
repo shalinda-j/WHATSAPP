@@ -335,7 +335,23 @@ async function startServer() {
   // Initialize Socket.io
   initSocket(server);
 
-  // 3. Connect to WhatsApp
+  // 3. Connect to WhatsApp — but FIRST, optionally wait for the previous
+  // pod to fully disconnect. During rolling deploys, DigitalOcean App
+  // Platform starts the new pod while the old one still holds the
+  // WhatsApp socket; if we connect immediately, WhatsApp sees two devices
+  // with the same credentials and kicks BOTH with status 440 ("replaced").
+  // Setting WHATSAPP_STARTUP_DELAY_MS to ~60000 in production lets the old
+  // pod's graceful shutdown finish first. Default 0 = no delay (dev).
+  const startupDelayMs = parseInt(
+    process.env.WHATSAPP_STARTUP_DELAY_MS || '0',
+    10,
+  );
+  if (Number.isFinite(startupDelayMs) && startupDelayMs > 0) {
+    console.log(
+      `⏳ Waiting ${startupDelayMs}ms before WhatsApp connect (avoids rolling-deploy 440 conflict)...`,
+    );
+    await new Promise((r) => setTimeout(r, startupDelayMs));
+  }
   await connectToWhatsApp();
 }
 

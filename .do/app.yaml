@@ -14,7 +14,12 @@ services:
     source_dir: /
     github:
       branch: main
-      deploy_on_push: true
+      # Auto-deploy disabled to stop the rolling-deploy 440 conflict storm:
+      # every push used to spin up a NEW pod while the OLD one still held a
+      # WhatsApp socket, and WhatsApp would kick BOTH with 440 ("replaced").
+      # During that 30-60s overlap window customers saw the typing indicator
+      # but no reply. Deploy manually from the DO dashboard now.
+      deploy_on_push: false
       repo: shalinda-j/WHATSAPP
     http_port: 8080
     instance_count: 1
@@ -53,6 +58,14 @@ services:
       - key: OPENROUTER_API_KEY
         scope: RUN_AND_BUILD_TIME
         type: SECRET
+      - key: WHATSAPP_STARTUP_DELAY_MS
+        scope: RUN_TIME
+        # Delay before connecting to WhatsApp on process start. Gives the
+        # previous pod's graceful shutdown time to release the WhatsApp
+        # socket so we don't both connect simultaneously and trigger a 440
+        # conflict storm. 60s is comfortable for DO App Platform rolling
+        # deploys; lower it only if you've also disabled rolling overlap.
+        value: "60000"
       - key: ALLOWED_ORIGINS
         scope: RUN_TIME
         # Comma-separated list of accepted CORS origins for the admin panel.
