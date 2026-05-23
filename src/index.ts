@@ -65,6 +65,7 @@ import {
 import {
   extractPhoneFromText,
   rememberLidPhoneMapping,
+  backfillRealPhoneOnExistingMessages,
 } from './services/LidPhoneMappingService';
 
 const PORT = process.env.PORT || 8080;
@@ -245,6 +246,11 @@ async function startServer() {
       await seedAIProviders();
       await seedDatasets();
       await seedDefaultFormTemplate();
+      // One-shot stamp of realPhone on every legacy ChatMessage that the
+      // LidPhoneMapping table can resolve. Idempotent — only touches
+      // rows where realPhone is missing/empty. Runs after seedDatasets
+      // so any same-boot migration is already done.
+      await backfillRealPhoneOnExistingMessages();
       // NLP cache disabled by operator policy (see ConfigService.getLocalNLPEnabled).
       // Skip the model load to save boot time and memory while the cache is dormant.
 
