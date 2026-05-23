@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import mongoose from 'mongoose';
 import multer from 'multer';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const pdf = require('pdf-parse');
@@ -25,6 +26,91 @@ const upload = multer({
 // Keeping this authenticated for admin panel + tenant-scoped.
 router.use(authenticateToken);
 router.use(resolveTenant);
+
+/**
+ * GET /api/datasets/__diag — admin-only diagnostic. Returns enough context
+ * to triage "Datasets page is empty / not connecting" without server-log
+ * access:
+ *   - Mongo connection readyState
+ *   - Active tenant resolved by resolveTenant
+ *   - Total Dataset count + per-type breakdown (UNSCOPED)
+ *   - Count visible under the current tenant scope
+ *   - The two MongoDB filters that produce those counts (verbatim)
+ *
+ * Defined BEFORE the catch-all GET '/:id' so the literal path wins over
+ * the param matcher. No data leaks — counts only, no documents.
+ */
+router.get('/__diag', async (req, res) => {
+  try {
+    const connState = mongoose.connection.readyState; // 0=disc 1=conn 2=connecting 3=disconnecting
+    const stateLabel =
+      ['disconnected', 'connected', 'connecting', 'disconnecting'][
+        connState
+      ] ?? `unknown(${connState})`;
+
+    const tenant = req.tenant
+      ? {
+          id: String(req.tenant._id),
+          slug: req.tenant.slug,
+          status: req.tenant.status,
+        }
+      : null;
+
+    const unscopedFilter = { type: { $ne: 'config' } };
+    const scopedFilter = withTenantScope(req, unscopedFilter);
+
+    const [totalAll, totalVisible, byType, withoutTenantId, withTenantId] =
+      await Promise.all([
+        Dataset.countDocuments({}),
+        Dataset.countDocuments(scopedFilter),
+        Dataset.aggregate([{ $group: { _id: '$type', n: { $sum: 1 } } }]),
+        Dataset.countDocuments({ tenantId: { $exists: false } }),
+        Dataset.countDocuments({ tenantId: { $exists: true } }),
+      ]);
+
+    res.json({
+      mongo: {
+        readyState: connState,
+        readyStateLabel: stateLabel,
+        host: mongoose.connection.host ?? null,
+        databaseName: mongoose.connection.name ?? null,
+      },
+      tenant,
+      filters: {
+        unscoped: unscopedFilter,
+        scoped: scopedFilter,
+      },
+      counts: {
+        totalAll,
+        totalVisibleToTenant: totalVisible,
+        legacyRowsWithoutTenantId: withoutTenantId,
+        rowsWithTenantId: withTenantId,
+        byType: (byType as Array<{ _id: string | null; n: number }>).reduce(
+          (acc, row) => {
+            acc[row._id ?? '(missing)'] = row.n;
+            return acc;
+          },
+          {} as Record<string, number>,
+        ),
+      },
+      checks: {
+        // If true and totalVisibleToTenant is 0 → FAILURE MODE #1: tenant
+        // scope is hiding everything. Run migrate-tenant-id.ts on the server.
+        legacyDataExistsButHidden:
+          withoutTenantId > 0 && totalVisible < totalAll,
+        // If true → fresh DB, no rows yet, nothing to debug.
+        emptyDatabase: totalAll === 0,
+        // If true → Mongo dropped while serving the request.
+        mongoNotConnected: connState !== 1,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      error: err?.message ?? String(err),
+      stack: err?.stack ? String(err.stack).split('\n').slice(0, 5) : null,
+    });
+  }
+});
 
 // Get all datasets (with optional type filter)
 router.get('/', async (req, res) => {
