@@ -638,12 +638,15 @@ router.post('/session/test', async (req, res) => {
 router.post('/session/save', async (req, res) => {
   const { providerType, sessionToken, model, isActive } = req.body || {};
   if (!providerType || !sessionToken) {
-    return res
-      .status(400)
-      .json({ error: 'providerType and sessionToken are required' });
+    return res.status(400).json({
+      error:
+        'providerType and sessionToken are required. Open the modal, choose ChatGPT or Claude, and paste the session cookie.',
+    });
   }
   if (providerType !== 'openai-session' && providerType !== 'claude-session') {
-    return res.status(400).json({ error: 'Invalid providerType' });
+    return res.status(400).json({
+      error: `Invalid providerType '${providerType}'. Expected 'openai-session' or 'claude-session'.`,
+    });
   }
 
   try {
@@ -696,9 +699,34 @@ router.post('/session/save', async (req, res) => {
       model: resolvedModel,
     });
   } catch (err: any) {
+    // Log the full error server-side so operators can see WHY validation
+    // failed (cookie expired vs upstream network vs Cloudflare challenge
+    // vs malformed input) without having to scrape the browser console.
+    const rawMsg = err?.message || 'Failed to save session provider';
+    console.error(
+      `❌ /api/config/session/save failed for ${providerType}: ${rawMsg}`,
+      err,
+    );
+
+    // Translate common upstream failure modes into actionable guidance.
+    let friendly = rawMsg;
+    if (/session.*invalid|session.*expired|No accessToken/i.test(rawMsg)) {
+      friendly =
+        providerType === 'openai-session'
+          ? 'ChatGPT session cookie is invalid or expired. Get a fresh one from chatgpt.com (F12 -> Application -> Cookies -> __Secure-next-auth.session-token).'
+          : 'Claude session cookie is invalid or expired. Get a fresh one from claude.ai (F12 -> Application -> Cookies -> sessionKey).';
+    } else if (/timed out|ECONNABORTED/i.test(rawMsg)) {
+      friendly =
+        'Validation request to the provider timed out. The server may be slow or blocked by Cloudflare. Try again, or use an official API key provider (Gemini / OpenAI / Groq) instead.';
+    } else if (/HTTP 4\d\d/.test(rawMsg)) {
+      friendly =
+        'Provider rejected the cookie. Most likely it expired. Get a fresh cookie and retry, or switch to an official API key provider.';
+    }
+
     res.status(400).json({
-      error: err?.message || 'Failed to save session provider',
+      error: friendly,
       code: err?.code,
+      rawMessage: rawMsg,
     });
   }
 });

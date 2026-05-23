@@ -183,12 +183,40 @@ export default function Config() {
     setSessionModalOpen(true);
   };
 
+  // Catch obvious mistakes BEFORE we hit the network. Each provider has a
+  // distinctive cookie shape, so a wrong-shape paste almost always means
+  // the user copied something else (the whole document.cookie blob, a
+  // bearer token, an API key, etc.). The backend would still reject these
+  // with 400 but the round-trip wastes seconds and the user only sees a
+  // generic "400 Bad Request" in the console.
+  const validateCookieShape = (
+    token: string,
+    provider: 'openai-session' | 'claude-session',
+  ): string | null => {
+    const t = token.trim();
+    if (!t) return 'Paste your session cookie first';
+    if (t.length < 20) {
+      return 'That looks too short to be a session cookie. Make sure you copied the whole value.';
+    }
+    if (t.includes(' ') || t.includes('\n')) {
+      return 'Cookie should be a single value with no spaces or line breaks. Paste just the cookie value, not the whole document.cookie string.';
+    }
+    if (t.startsWith('sk-') && provider === 'openai-session') {
+      return 'That looks like an OpenAI API key, not a session cookie. To use API keys, close this modal and add an "OpenAI" provider in the Providers list (NOT the "Session" option).';
+    }
+    if (provider === 'openai-session' && !t.startsWith('ey')) {
+      return 'ChatGPT session cookies start with "eyJ" (JWT format). Get it from chatgpt.com -> F12 -> Application -> Cookies -> __Secure-next-auth.session-token.';
+    }
+    if (provider === 'claude-session' && !t.startsWith('sk-ant-sid01-')) {
+      return 'Claude session cookies start with "sk-ant-sid01-". Get it from claude.ai -> F12 -> Application -> Cookies -> sessionKey.';
+    }
+    return null;
+  };
+
   const testSession = async () => {
-    if (!sessionToken.trim()) {
-      setSessionResult({
-        type: 'error',
-        text: 'Paste your session cookie first',
-      });
+    const shapeError = validateCookieShape(sessionToken, sessionProvider);
+    if (shapeError) {
+      setSessionResult({ type: 'error', text: `❌ ${shapeError}` });
       return;
     }
     setSessionTesting(true);
@@ -224,11 +252,9 @@ export default function Config() {
   };
 
   const saveSession = async () => {
-    if (!sessionToken.trim()) {
-      setSessionResult({
-        type: 'error',
-        text: 'Paste your session cookie first',
-      });
+    const shapeError = validateCookieShape(sessionToken, sessionProvider);
+    if (shapeError) {
+      setSessionResult({ type: 'error', text: `❌ ${shapeError}` });
       return;
     }
     setSessionSaving(true);
