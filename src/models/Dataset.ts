@@ -53,6 +53,14 @@ export interface IDataset {
 
 const DatasetSchema = new Schema(
   {
+    // Multi-tenancy: which tenant owns this dataset row. Optional so
+    // legacy rows (and the auto-seeded config placeholders) remain
+    // visible via the route-level $or filter.
+    tenantId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Tenant',
+      index: true,
+    },
     name: { type: String, required: true },
     description: { type: String },
     type: {

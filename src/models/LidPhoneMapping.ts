@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+﻿import mongoose from 'mongoose';
 
 export interface ILidPhoneMapping {
   sessionId?: string;
@@ -27,7 +27,5 @@ const LidPhoneMappingSchema = new mongoose.Schema<ILidPhoneMapping>({
 LidPhoneMappingSchema.index({ sessionId: 1, lidJid: 1 });
 LidPhoneMappingSchema.index({ lidJid: 1, lastSeenAt: -1 });
 
-export default mongoose.model(
-  'LidPhoneMapping',
-  LidPhoneMappingSchema as any,
-) as unknown as mongoose.Model<ILidPhoneMapping>;
+const __LidPhoneMappingModel = mongoose.models.LidPhoneMapping || mongoose.model('LidPhoneMapping', LidPhoneMappingSchema as any);
+export default __LidPhoneMappingModel as unknown as mongoose.Model<ILidPhoneMapping>;

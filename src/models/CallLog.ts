@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 
 export interface ICallLog extends Document {
   tenantId?: mongoose.Types.ObjectId;
@@ -52,4 +52,4 @@ const CallLogSchema = new Schema(
   { timestamps: true },
 );
 
-export default mongoose.model('CallLog', CallLogSchema as any);
+export default mongoose.models.CallLog || mongoose.model('CallLog', CallLogSchema as any);

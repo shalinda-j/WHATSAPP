@@ -25,6 +25,14 @@ export interface IWebhookDocument extends IWebhook, Document {}
 
 const WebhookSchema = new Schema(
   {
+    // Multi-tenancy: which tenant owns this webhook subscription.
+    // Optional so legacy webhooks stay functional under the route-level
+    // $or filter until the tenant-backfill migration runs.
+    tenantId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Tenant',
+      index: true,
+    },
     name: { type: String, required: true },
     url: { type: String, required: true },
     events: { type: [String], default: [] },

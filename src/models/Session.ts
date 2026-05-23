@@ -50,9 +50,10 @@ SessionSchema.pre('save', async function () {
 SessionSchema.index({ status: 1, updatedAt: -1 });
 SessionSchema.index({ deleted: 1 });
 
-const Session = mongoose.model(
-  'Session',
-  SessionSchema as any,
-) as unknown as mongoose.Model<ISession>;
+const Session = (mongoose.models.Session ||
+  mongoose.model(
+    'Session',
+    SessionSchema as any,
+  )) as unknown as mongoose.Model<ISession>;
 
 export default Session;

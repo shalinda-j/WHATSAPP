@@ -10,6 +10,49 @@ declare module 'express-serve-static-core' {
 }
 
 /**
+ * Returns a MongoDB query clause that scopes results to the current tenant
+ * while ALSO matching legacy rows that pre-date the tenantId migration
+ * (rows where tenantId is missing or null). The fall-through keeps existing
+ * deployments working without forcing the operator to run the backfill
+ * script the same day this code ships.
+ *
+ * Usage:
+ *   const filter = { isActive: true };
+ *   const final = withTenantScope(req, filter);
+ *   await Dataset.find(final).sort({...});
+ *
+ * When the tenant resolver hasn't run (or the route is public) the helper
+ * returns the input filter untouched — never silently drops scope without
+ * the caller noticing.
+ */
+export function withTenantScope(
+  req: Request,
+  baseFilter: Record<string, unknown>,
+): Record<string, unknown> {
+  const tenantId = (req as Request & { tenant?: ITenant }).tenant?._id;
+  if (!tenantId) return baseFilter;
+  const tenantClause = {
+    $or: [
+      { tenantId },
+      { tenantId: { $exists: false } },
+      { tenantId: null },
+    ],
+  };
+  // If baseFilter is empty just return the tenant clause.
+  if (Object.keys(baseFilter).length === 0) return tenantClause;
+  return { $and: [baseFilter, tenantClause] };
+}
+
+/**
+ * Resolve the active tenantId from req, or undefined when none.
+ * Convenience wrapper that route handlers use when STAMPING tenantId on
+ * a newly-created document.
+ */
+export function tenantIdOf(req: Request): unknown | undefined {
+  return (req as Request & { tenant?: ITenant }).tenant?._id;
+}
+
+/**
  * Resolves the active tenant for an authenticated request.
  *
  * Resolution order:

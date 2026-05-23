@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IBooking {
   clientName: string;
@@ -21,6 +21,14 @@ export type BookingDocument = IBooking & Document;
 
 const BookingSchema = new Schema(
   {
+    // Multi-tenancy: which tenant captured this booking. Optional so
+    // legacy bookings created before tenants existed stay visible via
+    // the route-level $or filter.
+    tenantId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Tenant',
+      index: true,
+    },
     clientName: { type: String, required: true },
     clientPhone: { type: String, required: true },
     clientEmail: { type: String },
@@ -41,6 +49,6 @@ const BookingSchema = new Schema(
   { timestamps: true },
 );
 
-const Booking = (mongoose as any).model('Booking', BookingSchema);
+const Booking = mongoose.models.Booking || (mongoose as any).model('Booking', BookingSchema);
 
 export default Booking;

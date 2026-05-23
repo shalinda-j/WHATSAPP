@@ -22,6 +22,14 @@ export interface IKnowledgeEntry {
 }
 
 const KnowledgeEntrySchema = new (mongoose as any).Schema({
+  // Multi-tenancy: which tenant the Q/A belongs to. Optional so
+  // legacy auto-learned rows captured before tenants existed remain
+  // visible via the route-level $or filter.
+  tenantId: {
+    type: (mongoose as any).Schema.Types.ObjectId,
+    ref: 'Tenant',
+    index: true,
+  },
   question: {
     type: String,
     required: true,

@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 
 export interface ISegmentRule {
   /** Field path to evaluate — supports dotted paths like 'lead.status'. */
@@ -67,7 +67,5 @@ const ContactSegmentSchema = new Schema(
 
 ContactSegmentSchema.index({ tenantId: 1, name: 1 }, { unique: true });
 
-export default mongoose.model(
-  'ContactSegment',
-  ContactSegmentSchema as any,
-) as unknown as mongoose.Model<IContactSegment>;
+const __ContactSegmentModel = mongoose.models.ContactSegment || mongoose.model('ContactSegment', ContactSegmentSchema as any);
+export default __ContactSegmentModel as unknown as mongoose.Model<IContactSegment>;

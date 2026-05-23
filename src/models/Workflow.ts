@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IWorkflow extends Document {
   name: string;
@@ -19,6 +19,14 @@ export interface IWorkflow extends Document {
 
 const WorkflowSchema = new Schema(
   {
+    // Multi-tenancy: workflows are tenant-private. Optional today so
+    // legacy global workflows still execute under the route-level $or
+    // filter; the tenant-backfill migration assigns them to 'default'.
+    tenantId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Tenant',
+      index: true,
+    },
     name: { type: String, required: true },
     description: { type: String },
     nodes: [{ type: Schema.Types.Mixed, required: true }],
@@ -37,7 +45,5 @@ const WorkflowSchema = new Schema(
   { timestamps: true },
 );
 
-export default mongoose.model(
-  'Workflow',
-  WorkflowSchema as any,
-) as unknown as mongoose.Model<IWorkflow>;
+const __WorkflowModel = mongoose.models.Workflow || mongoose.model('Workflow', WorkflowSchema as any);
+export default __WorkflowModel as unknown as mongoose.Model<IWorkflow>;

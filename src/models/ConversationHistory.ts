@@ -46,10 +46,16 @@ const ConversationMessageSchema = new mongoose.Schema(
 );
 
 const ConversationHistorySchema = new (mongoose as any).Schema({
+  // userId used to be declared `unique: true` which capped the system to a
+  // SINGLE conversation row per WhatsApp identity for the entire lifetime
+  // of the deployment. Once the TTL retention created (then dropped) the
+  // first row, subsequent inserts with the same userId raced against the
+  // unique index. Indexing without uniqueness keeps lookups fast and lets
+  // a user have multiple rolling history rows (e.g. across sessions /
+  // tenants) without E11000.
   userId: {
     type: String,
     required: true,
-    unique: true,
     index: true,
   },
   messages: {

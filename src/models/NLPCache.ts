@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 
 export interface INLPCache extends Document {
   intentName: string;
@@ -32,7 +32,13 @@ export interface INLPCache extends Document {
 
 const NLPCacheSchema = new Schema(
   {
-    intentName: { type: String, required: true, unique: true },
+    // `sparse: true` makes the unique index skip docs where `intentName`
+    // is null/missing. Without sparse, two legacy rows that wrote
+    // intentName='' (the same trap that bit Dataset.key) would collide
+    // on the unique index even though the field is technically `required`.
+    // Belt-and-braces: required guards new writes, sparse protects the
+    // unique index from older data shapes.
+    intentName: { type: String, required: true, unique: true, sparse: true },
     userUtterances: [{ type: String, required: true }],
     canonicalUtterances: { type: [String], default: [] },
     aiResponse: { type: String, required: true },
@@ -48,7 +54,5 @@ const NLPCacheSchema = new Schema(
 NLPCacheSchema.index({ intentName: 1 });
 NLPCacheSchema.index({ canonicalUtterances: 1 });
 
-export default mongoose.model(
-  'NLPCache',
-  NLPCacheSchema as any,
-) as unknown as mongoose.Model<INLPCache>;
+const __NLPCacheModel = mongoose.models.NLPCache || mongoose.model('NLPCache', NLPCacheSchema as any);
+export default __NLPCacheModel as unknown as mongoose.Model<INLPCache>;

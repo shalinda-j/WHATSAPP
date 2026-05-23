@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IConfig extends Document {
   key: string;
@@ -48,7 +48,5 @@ const ConfigSchema = new Schema(
   },
 );
 
-export default mongoose.model(
-  'Config',
-  ConfigSchema as any,
-) as unknown as mongoose.Model<IConfig>;
+const __ConfigModel = mongoose.models.Config || mongoose.model('Config', ConfigSchema as any);
+export default __ConfigModel as unknown as mongoose.Model<IConfig>;

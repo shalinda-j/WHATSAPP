@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IAuditEvent extends Document {
   tenantId?: mongoose.Types.ObjectId;
@@ -40,7 +40,20 @@ AuditEventSchema.index({ tenantId: 1, createdAt: -1 });
 AuditEventSchema.index({ adminId: 1, createdAt: -1 });
 AuditEventSchema.index({ createdAt: -1 });
 
-export default mongoose.model(
-  'AuditEvent',
-  AuditEventSchema as any,
-) as unknown as mongoose.Model<IAuditEvent>;
+// TTL: 365 days. Audit events accumulate forever otherwise — every
+// admin POST/PUT/PATCH/DELETE writes one row. A 1-year retention
+// matches typical compliance windows (SOC2 / ISO 27001) without
+// requiring operators to set up an external archiver. Override via
+// the AUDIT_RETENTION_DAYS env var when more or less retention is
+// needed.
+const AUDIT_RETENTION_DAYS = Math.max(
+  1,
+  parseInt(process.env.AUDIT_RETENTION_DAYS || '365', 10) || 365,
+);
+AuditEventSchema.index(
+  { createdAt: 1 },
+  { expireAfterSeconds: AUDIT_RETENTION_DAYS * 24 * 60 * 60 },
+);
+
+const __AuditEventModel = mongoose.models.AuditEvent || mongoose.model('AuditEvent', AuditEventSchema as any);
+export default __AuditEventModel as unknown as mongoose.Model<IAuditEvent>;

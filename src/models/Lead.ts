@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+﻿import mongoose from 'mongoose';
 
 const QualificationSchema = new (mongoose as any).Schema(
   {
@@ -27,7 +27,11 @@ const LeadSchema = new (mongoose as any).Schema({
   sessionId: { type: String, index: true },
   // Personal Information
   fullName: { type: String, required: true },
-  phoneNumber: { type: String, required: true },
+  // phoneNumber is the primary key for CRM reconciliation: LeadQualifier
+  // agent + FollowUpScheduler + auto-registration all do `Lead.findOne({
+  // phoneNumber })`. Without an index those queries hit COLLSCAN every
+  // inbound message → linear cost in lead count.
+  phoneNumber: { type: String, required: true, index: true },
   email: { type: String },
   address: { type: String },
 
@@ -86,6 +90,6 @@ LeadSchema.index({ registeredAt: -1 });
 // to a collection scan on bigger datasets.
 LeadSchema.index({ status: 1, updatedAt: 1 });
 
-const Lead = (mongoose as any).model('Lead', LeadSchema);
+const Lead = mongoose.models.Lead || (mongoose as any).model('Lead', LeadSchema);
 
 export default Lead;

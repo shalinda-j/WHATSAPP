@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 
 export interface ITenant extends Document {
   /** Stable slug used in API paths and channel routing. */
@@ -94,7 +94,5 @@ const TenantSchema = new Schema(
   { timestamps: true },
 );
 
-export default mongoose.model(
-  'Tenant',
-  TenantSchema as any,
-) as unknown as mongoose.Model<ITenant>;
+const __TenantModel = mongoose.models.Tenant || mongoose.model('Tenant', TenantSchema as any);
+export default __TenantModel as unknown as mongoose.Model<ITenant>;

@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IAgentBudgetLedger extends Document {
   agentName: string;
@@ -37,7 +37,5 @@ AgentBudgetLedgerSchema.index(
   { expireAfterSeconds: 60 * 60 * 24 * 180 },
 );
 
-export default mongoose.model(
-  'AgentBudgetLedger',
-  AgentBudgetLedgerSchema as any,
-) as unknown as mongoose.Model<IAgentBudgetLedger>;
+const __AgentBudgetLedgerModel = mongoose.models.AgentBudgetLedger || mongoose.model('AgentBudgetLedger', AgentBudgetLedgerSchema as any);
+export default __AgentBudgetLedgerModel as unknown as mongoose.Model<IAgentBudgetLedger>;

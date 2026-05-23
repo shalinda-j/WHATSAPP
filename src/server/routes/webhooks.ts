@@ -6,6 +6,11 @@ import { sendMessage, getSocket } from '../../services/whatsapp';
 import { WebhookService } from '../../services/WebhookService';
 import { configurationManager } from '../../services/ConfigurationManagerService';
 import { authenticateToken } from '../middleware/auth';
+import {
+  resolveTenant,
+  withTenantScope,
+  tenantIdOf,
+} from '../middleware/tenantContext';
 import { rateLimit, lenientRateLimit } from '../middleware/rateLimit';
 
 const router = express.Router();
@@ -340,23 +345,30 @@ router.post('/sendgrid', metaEventRateLimit, async (req, res) => {
 });
 
 // --- CRUD for Admin Panel ---
-// SECURITY FIX: All CRUD routes require authentication
+// SECURITY FIX: All CRUD routes require authentication + tenant scope.
 router.use(authenticateToken);
+router.use(resolveTenant);
 
-// Get all webhooks
+// Get all webhooks (tenant-scoped)
 router.get('/', async (req, res) => {
   try {
-    const webhooks = await (Webhook as any).find().sort({ createdAt: -1 });
+    const webhooks = await (Webhook as any)
+      .find(withTenantScope(req, {}))
+      .sort({ createdAt: -1 });
     res.json(webhooks);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Create new webhook
+// Create new webhook (stamped with the current tenant)
 router.post('/', async (req, res) => {
   try {
-    const webhook = new (Webhook as any)(req.body);
+    const tid = tenantIdOf(req);
+    const webhook = new (Webhook as any)({
+      ...req.body,
+      ...(tid ? { tenantId: tid } : {}),
+    });
     await webhook.save();
     res.status(201).json(webhook);
   } catch (error: any) {

@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IAgentSideEffect {
   kind:
@@ -106,7 +106,5 @@ AgentExecutionSchema.index(
   { expireAfterSeconds: 60 * 60 * 24 * 90 },
 );
 
-export default mongoose.model(
-  'AgentExecution',
-  AgentExecutionSchema as any,
-) as unknown as mongoose.Model<IAgentExecution>;
+const __AgentExecutionModel = mongoose.models.AgentExecution || mongoose.model('AgentExecution', AgentExecutionSchema as any);
+export default __AgentExecutionModel as unknown as mongoose.Model<IAgentExecution>;

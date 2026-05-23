@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 import { Channel } from '../types/agent';
 
 export interface IChannelConnection extends Document {
@@ -51,7 +51,5 @@ const ChannelConnectionSchema = new Schema(
 
 ChannelConnectionSchema.index({ tenantId: 1, channel: 1 });
 
-export default mongoose.model(
-  'ChannelConnection',
-  ChannelConnectionSchema as any,
-) as unknown as mongoose.Model<IChannelConnection>;
+const __ChannelConnectionModel = mongoose.models.ChannelConnection || mongoose.model('ChannelConnection', ChannelConnectionSchema as any);
+export default __ChannelConnectionModel as unknown as mongoose.Model<IChannelConnection>;

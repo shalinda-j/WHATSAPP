@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 
 export type TrainingExampleSource = 'manual' | 'harvested';
 
@@ -52,7 +52,5 @@ const AgentTrainingExampleSchema = new Schema(
 
 AgentTrainingExampleSchema.index({ tenantId: 1, agentName: 1, isActive: 1 });
 
-export default mongoose.model(
-  'AgentTrainingExample',
-  AgentTrainingExampleSchema as any,
-) as unknown as mongoose.Model<IAgentTrainingExample>;
+const __AgentTrainingExampleModel = mongoose.models.AgentTrainingExample || mongoose.model('AgentTrainingExample', AgentTrainingExampleSchema as any);
+export default __AgentTrainingExampleModel as unknown as mongoose.Model<IAgentTrainingExample>;

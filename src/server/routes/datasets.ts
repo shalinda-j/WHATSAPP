@@ -5,7 +5,11 @@ const pdf = require('pdf-parse');
 import * as xlsx from 'xlsx';
 import Dataset, { DatasetType, Language } from '../../models/Dataset';
 import { authenticateToken } from '../middleware/auth';
-import { resolveTenant } from '../middleware/tenantContext';
+import {
+  resolveTenant,
+  withTenantScope,
+  tenantIdOf,
+} from '../middleware/tenantContext';
 import { validateObjectId } from '../middleware/validation';
 import { extractTextFromImage } from '../../services/gemini';
 
@@ -66,7 +70,9 @@ router.get('/', async (req, res) => {
     if (scope) filter.scope = scope;
     if (category) filter.category = category;
 
-    const datasets = await Dataset.find(filter).sort({ createdAt: -1 });
+    const datasets = await Dataset.find(withTenantScope(req, filter)).sort({
+      createdAt: -1,
+    });
     res.json(datasets);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -91,7 +97,9 @@ router.get('/type/:type', async (req, res) => {
     }
 
     // 'config' type is for internal configuration items, not displayed in Datasets page
-    const datasets = await Dataset.find({ type, isActive: true }).sort({
+    const datasets = await Dataset.find(
+      withTenantScope(req, { type, isActive: true }),
+    ).sort({
       createdAt: -1,
     });
     res.json(datasets);
@@ -264,6 +272,10 @@ router.post('/', async (req, res) => {
     if (typeof key === 'string' && key.trim() !== '') {
       datasetPayload.key = key.trim();
     }
+    // Stamp the active tenant on creates so the row is owned by them.
+    // Reads use withTenantScope to filter, including legacy-row fallback.
+    const tid = tenantIdOf(req);
+    if (tid) datasetPayload.tenantId = tid;
     const newDataset = new Dataset(datasetPayload);
 
     await newDataset.save();

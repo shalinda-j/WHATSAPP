@@ -2,7 +2,11 @@ import { Router } from 'express';
 import FormTemplate, { FormField } from '../../models/FormTemplate';
 import FormSubmission from '../../models/FormSubmission';
 import { authenticateToken } from '../middleware/auth';
-import { resolveTenant } from '../middleware/tenantContext';
+import {
+  resolveTenant,
+  withTenantScope,
+  tenantIdOf,
+} from '../middleware/tenantContext';
 import { standardRateLimit } from '../middleware/rateLimit';
 import { validateObjectId } from '../middleware/validation';
 
@@ -15,7 +19,9 @@ const router = Router();
 // Get all form templates
 router.get('/templates', authenticateToken, resolveTenant, async (req, res) => {
   try {
-    const templates = await FormTemplate.find().sort({ createdAt: -1 });
+    const templates = await FormTemplate.find(withTenantScope(req, {})).sort({
+      createdAt: -1,
+    });
     res.json(templates);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -79,9 +85,14 @@ router.post(
         isDefault,
       } = req.body;
 
-      // If setting as default, unset other defaults
+      const tid = tenantIdOf(req);
+      // If setting as default, unset other defaults — scoped to THIS
+      // tenant only, otherwise one tenant's default could clobber another's.
       if (isDefault) {
-        await FormTemplate.updateMany({}, { isDefault: false });
+        await FormTemplate.updateMany(
+          tid ? { tenantId: tid } : {},
+          { isDefault: false },
+        );
       }
 
       const template = new FormTemplate({
@@ -94,6 +105,7 @@ router.post(
         completionMessage,
         isDefault: isDefault || false,
         isActive: true,
+        ...(tid ? { tenantId: tid } : {}),
       });
 
       await template.save();

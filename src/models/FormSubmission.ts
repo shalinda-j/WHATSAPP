@@ -14,6 +14,14 @@ export interface IFormSubmission {
 }
 
 const FormSubmissionSchema = new (mongoose as any).Schema({
+  // Multi-tenancy: scoped to the tenant of the form being submitted.
+  // Optional so legacy submissions captured before tenants existed
+  // remain visible via the route-level $or filter.
+  tenantId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Tenant',
+    index: true,
+  },
   formId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'FormTemplate',

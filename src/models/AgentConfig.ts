@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IAgentConfig extends Document {
   name: string;
@@ -57,7 +57,5 @@ const AgentConfigSchema = new Schema(
   { timestamps: true },
 );
 
-export default mongoose.model(
-  'AgentConfig',
-  AgentConfigSchema as any,
-) as unknown as mongoose.Model<IAgentConfig>;
+const __AgentConfigModel = mongoose.models.AgentConfig || mongoose.model('AgentConfig', AgentConfigSchema as any);
+export default __AgentConfigModel as unknown as mongoose.Model<IAgentConfig>;

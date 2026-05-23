@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 
 export type AssetType = 'image' | 'video' | 'audio';
 export type AssetStatus = 'pending' | 'ready' | 'failed';
@@ -63,7 +63,5 @@ const GeneratedAssetSchema = new Schema(
 
 GeneratedAssetSchema.index({ tenantId: 1, createdAt: -1 });
 
-export default mongoose.model(
-  'GeneratedAsset',
-  GeneratedAssetSchema as any,
-) as unknown as mongoose.Model<IGeneratedAsset>;
+const __GeneratedAssetModel = mongoose.models.GeneratedAsset || mongoose.model('GeneratedAsset', GeneratedAssetSchema as any);
+export default __GeneratedAssetModel as unknown as mongoose.Model<IGeneratedAsset>;

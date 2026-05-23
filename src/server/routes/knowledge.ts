@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { knowledgeTrainingService } from '../../services/KnowledgeTrainingService';
 import KnowledgeEntry from '../../models/KnowledgeEntry';
 import { authenticateToken } from '../middleware/auth';
-import { resolveTenant } from '../middleware/tenantContext';
+import { resolveTenant, withTenantScope } from '../middleware/tenantContext';
 
 const router = Router();
 
@@ -18,25 +18,28 @@ router.get('/', async (req, res) => {
   try {
     const { category, source, language, active, search } = req.query;
 
-    const query: any = {};
+    const query: Record<string, unknown> = {};
 
     if (category) query.category = category;
     if (source) query.source = source;
     if (language) query.language = language;
     if (active !== undefined) query.isActive = active === 'true';
 
+    // Tenant-scope reads (with legacy-row fallback).
+    const scoped = withTenantScope(req, query);
+
     let entries;
     if (search) {
-      // Text search
+      // Text search — keep textScore projection; merge tenant scope into the
+      // $text-anchored find so cross-tenant rows can't leak through.
       entries = await KnowledgeEntry.find(
-        { ...query },
+        { ...scoped, $text: { $search: search as string } },
         { score: { $meta: 'textScore' } },
       )
-        .find({ $text: { $search: search as string } })
         .sort({ score: { $meta: 'textScore' } })
         .limit(50);
     } else {
-      entries = await KnowledgeEntry.find(query)
+      entries = await KnowledgeEntry.find(scoped)
         .sort({ usageCount: -1, createdAt: -1 })
         .limit(100);
     }

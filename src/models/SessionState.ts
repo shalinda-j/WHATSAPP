@@ -64,9 +64,8 @@ SessionStateSchema.pre('save', function (this: any) {
   this.updatedAt = new Date();
 });
 
-const SessionState = (mongoose as any).model(
-  'SessionState',
-  SessionStateSchema,
-);
+const SessionState =
+  mongoose.models.SessionState ||
+  (mongoose as any).model('SessionState', SessionStateSchema);
 
 export default SessionState;

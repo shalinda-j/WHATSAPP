@@ -19,6 +19,46 @@ const router = Router();
 
 router.use(authenticateToken);
 
+// SECURITY: explicit allowlist for fields that callers can write to /api/config.
+//
+// The old route spread `req.body` straight into `new Config()` / `$set`,
+// which let any authenticated client overwrite arbitrary schema fields —
+// including `isProvider` (promotes any config row to an AI provider) and
+// other privileged flags that may get added to the schema later. We keep
+// the provider-management fields in the allowlist because the existing
+// Config admin page (Config.tsx) legitimately creates AI provider rows
+// through POST /. Unknown keys are dropped silently; Mongoose update
+// operators injected via the body (`$set`, etc.) don't match the
+// allowlist and are stripped too.
+const CONFIG_EDITABLE_FIELDS = [
+  'key',
+  'value',
+  'description',
+  'isProvider',
+  'providerType',
+  'apiKey',
+  'aiModel',
+  'usageLimit',
+  'usageUsed',
+  'costPerToken',
+  'monthlyBudget',
+  'isActive',
+  'usagePeriodStart',
+  'lastResetAt',
+] as const;
+
+function pickConfigFields(body: unknown): Record<string, unknown> {
+  if (!body || typeof body !== 'object') return {};
+  const src = body as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const k of CONFIG_EDITABLE_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(src, k)) {
+      out[k] = src[k];
+    }
+  }
+  return out;
+}
+
 router.get('/', async (req, res) => {
   try {
     const configs = await Config.find();
@@ -30,8 +70,11 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    // Allow all body props to be saved
-    const newConfig = new Config(req.body);
+    const payload = pickConfigFields(req.body);
+    if (!payload.key) {
+      return res.status(400).json({ error: 'key is required' });
+    }
+    const newConfig = new Config(payload);
     await newConfig.save();
     res.json(newConfig);
   } catch (err: any) {
@@ -41,9 +84,13 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
+    const updates = pickConfigFields(req.body);
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'no editable fields supplied' });
+    }
     const updatedConfig = await Config.findByIdAndUpdate(
       req.params.id,
-      { $set: req.body }, // Update whatever is in the body
+      { $set: updates },
       { new: true },
     );
     res.json(updatedConfig);

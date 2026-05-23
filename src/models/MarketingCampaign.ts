@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 import { Channel } from '../types/agent';
 
 export type CampaignStatus =
@@ -133,7 +133,5 @@ const MarketingCampaignSchema = new Schema(
 MarketingCampaignSchema.index({ tenantId: 1, status: 1 });
 MarketingCampaignSchema.index({ tenantId: 1, 'trigger.scheduledAt': 1 });
 
-export default mongoose.model(
-  'MarketingCampaign',
-  MarketingCampaignSchema as any,
-) as unknown as mongoose.Model<IMarketingCampaign>;
+const __MarketingCampaignModel = mongoose.models.MarketingCampaign || mongoose.model('MarketingCampaign', MarketingCampaignSchema as any);
+export default __MarketingCampaignModel as unknown as mongoose.Model<IMarketingCampaign>;

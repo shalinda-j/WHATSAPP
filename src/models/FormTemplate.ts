@@ -82,6 +82,14 @@ const FormFieldSchema = new mongoose.Schema(
 );
 
 const FormTemplateSchema = new (mongoose as any).Schema({
+  // Multi-tenancy: scoped to the tenant that authored the form. Optional
+  // so legacy rows without tenantId stay visible via the route-level
+  // "tenantId OR legacy" $or filter — matches the existing Lead pattern.
+  tenantId: {
+    type: (mongoose as any).Schema.Types.ObjectId,
+    ref: 'Tenant',
+    index: true,
+  },
   name: { type: String, required: true },
   description: { type: String },
   isActive: { type: Boolean, default: true },

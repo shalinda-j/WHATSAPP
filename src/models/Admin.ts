@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IAdmin extends Document {
   username: string;
@@ -12,7 +12,5 @@ const AdminSchema = new Schema({
   role: { type: String, default: 'admin' },
 } as any);
 
-export default mongoose.model(
-  'Admin',
-  AdminSchema as any,
-) as unknown as mongoose.Model<IAdmin>;
+const __AdminModel = mongoose.models.Admin || mongoose.model('Admin', AdminSchema as any);
+export default __AdminModel as unknown as mongoose.Model<IAdmin>;

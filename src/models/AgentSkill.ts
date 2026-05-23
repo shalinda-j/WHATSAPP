@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 
 /**
  * A reusable "skill" — a self-contained block of instructions (a marketing
@@ -85,7 +85,5 @@ const AgentSkillSchema = new Schema(
 
 AgentSkillSchema.index({ tenantId: 1, assignedAgents: 1, isActive: 1 });
 
-export default mongoose.model(
-  'AgentSkill',
-  AgentSkillSchema as any,
-) as unknown as mongoose.Model<IAgentSkill>;
+const __AgentSkillModel = mongoose.models.AgentSkill || mongoose.model('AgentSkill', AgentSkillSchema as any);
+export default __AgentSkillModel as unknown as mongoose.Model<IAgentSkill>;

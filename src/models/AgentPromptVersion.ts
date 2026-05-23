@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IPromptMetrics {
   uses: number;
@@ -67,7 +67,5 @@ AgentPromptVersionSchema.index({ agentName: 1, version: -1 }, { unique: true });
 AgentPromptVersionSchema.index({ agentName: 1, isCurrent: 1 });
 AgentPromptVersionSchema.index({ agentName: 1, isCandidate: 1 });
 
-export default mongoose.model(
-  'AgentPromptVersion',
-  AgentPromptVersionSchema as any,
-) as unknown as mongoose.Model<IAgentPromptVersion>;
+const __AgentPromptVersionModel = mongoose.models.AgentPromptVersion || mongoose.model('AgentPromptVersion', AgentPromptVersionSchema as any);
+export default __AgentPromptVersionModel as unknown as mongoose.Model<IAgentPromptVersion>;

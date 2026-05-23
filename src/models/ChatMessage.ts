@@ -87,9 +87,7 @@ ChatMessageSchema.index(
   { sparse: true },
 );
 
-const ChatMessage = mongoose.model(
-  'ChatMessage',
-  ChatMessageSchema as any,
-) as any;
+const ChatMessage = (mongoose.models.ChatMessage ||
+  mongoose.model('ChatMessage', ChatMessageSchema as any)) as any;
 
 export default ChatMessage;

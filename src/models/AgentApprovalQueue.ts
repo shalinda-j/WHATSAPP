@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IAgentApprovalQueue extends Document {
   executionId: mongoose.Types.ObjectId;
@@ -60,7 +60,5 @@ AgentApprovalQueueSchema.index({ status: 1, createdAt: -1 });
 AgentApprovalQueueSchema.index({ agentName: 1, status: 1 });
 AgentApprovalQueueSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-export default mongoose.model(
-  'AgentApprovalQueue',
-  AgentApprovalQueueSchema as any,
-) as unknown as mongoose.Model<IAgentApprovalQueue>;
+const __AgentApprovalQueueModel = mongoose.models.AgentApprovalQueue || mongoose.model('AgentApprovalQueue', AgentApprovalQueueSchema as any);
+export default __AgentApprovalQueueModel as unknown as mongoose.Model<IAgentApprovalQueue>;

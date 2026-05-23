@@ -2,7 +2,11 @@ import { Router, Request, Response } from 'express';
 import Workflow from '../../models/Workflow';
 import { aiLoadBalancer } from '../../services/AILoadBalancer';
 import { authenticateToken } from '../middleware/auth';
-import { resolveTenant } from '../middleware/tenantContext';
+import {
+  resolveTenant,
+  withTenantScope,
+  tenantIdOf,
+} from '../middleware/tenantContext';
 import { getIntegrationExecutor } from '../services/workflowExecutors';
 import { interpolate } from '../services/workflowInterpolate';
 
@@ -13,147 +17,311 @@ router.use(authenticateToken);
 router.use(resolveTenant);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Safe Expression Evaluator — replaces dangerous new Function() code injection
-// Only allows: comparisons, boolean ops, variable access, literals
+// Safe Expression Evaluator
+//
+// Workflow decision nodes carry a user-supplied condition string (e.g.
+// `triggerData.message == "yes" && variables.attempt < 3`). The previous
+// implementation pre-validated tokens against an allowlist and then handed
+// the string to `new Function()` — meaning ANY clever bypass of the
+// allowlist (`constructor['constructor']`, escaped identifiers, comment
+// tricks, future regex gaps) became remote code execution inside the
+// Express process.
+//
+// This rewrite drops `new Function()` entirely. A small hand-written
+// tokenizer + recursive-descent parser produces an AST, and a tree walker
+// computes the boolean result. There is no string-to-code path, so even a
+// pathologically crafted expression can only return a boolean (or throw
+// during parse). The grammar intentionally supports just what workflow
+// decision nodes need:
+//
+//   expr      ::= or
+//   or        ::= and ( "||" and )*
+//   and       ::= not ( "&&" not )*
+//   not       ::= "!" not | comparison
+//   comparison::= primary ( ("=="|"!="|"==="|"!=="|"<"|">"|"<="|">=") primary )?
+//   primary   ::= NUMBER | STRING | "true" | "false" | "null" | "undefined"
+//               | IDENT ( "." IDENT )*    -- variable path, max 4 segments
+//               | "(" expr ")"
+//
+// No function calls. No bracket access. No assignment. No `new`. No `this`.
+// Property access is whitelisted to plain identifier paths AND blocks
+// `constructor`, `prototype`, `__proto__` to prevent prototype-chain
+// escapes even if the variable values themselves point at objects.
 // ─────────────────────────────────────────────────────────────────────────────
+
+type Token =
+  | { kind: 'num'; value: number }
+  | { kind: 'str'; value: string }
+  | { kind: 'ident'; value: string }
+  | { kind: 'punct'; value: string };
+
+const BLOCKED_PROPS = new Set([
+  'constructor',
+  'prototype',
+  '__proto__',
+  '__defineGetter__',
+  '__defineSetter__',
+  '__lookupGetter__',
+  '__lookupSetter__',
+]);
+
+function tokenize(input: string): Token[] {
+  const tokens: Token[] = [];
+  let i = 0;
+  while (i < input.length) {
+    const ch = input[i];
+
+    // Whitespace
+    if (/\s/.test(ch)) {
+      i++;
+      continue;
+    }
+
+    // Number literal (integer or decimal)
+    if (/[0-9]/.test(ch) || (ch === '.' && /[0-9]/.test(input[i + 1] ?? ''))) {
+      let j = i;
+      while (j < input.length && /[0-9.]/.test(input[j])) j++;
+      const lex = input.slice(i, j);
+      const n = Number(lex);
+      if (!Number.isFinite(n)) {
+        throw new Error(`Invalid number literal: ${lex}`);
+      }
+      tokens.push({ kind: 'num', value: n });
+      i = j;
+      continue;
+    }
+
+    // String literal: single OR double quoted; no escapes for simplicity.
+    if (ch === '"' || ch === "'") {
+      const quote = ch;
+      let j = i + 1;
+      while (j < input.length && input[j] !== quote) {
+        if (input[j] === '\\') {
+          // Block escape sequences entirely — keeps the parser tiny and
+          // closes the "smuggle a backslash-u escape" class of bypasses.
+          throw new Error('Escape sequences are not allowed in strings');
+        }
+        j++;
+      }
+      if (j >= input.length) throw new Error('Unterminated string literal');
+      tokens.push({ kind: 'str', value: input.slice(i + 1, j) });
+      i = j + 1;
+      continue;
+    }
+
+    // Identifier or keyword
+    if (/[A-Za-z_$]/.test(ch)) {
+      let j = i;
+      while (j < input.length && /[A-Za-z0-9_$]/.test(input[j])) j++;
+      tokens.push({ kind: 'ident', value: input.slice(i, j) });
+      i = j;
+      continue;
+    }
+
+    // Multi-char punctuation
+    const two = input.slice(i, i + 2);
+    const three = input.slice(i, i + 3);
+    if (three === '===' || three === '!==') {
+      tokens.push({ kind: 'punct', value: three });
+      i += 3;
+      continue;
+    }
+    if (
+      two === '==' ||
+      two === '!=' ||
+      two === '<=' ||
+      two === '>=' ||
+      two === '&&' ||
+      two === '||'
+    ) {
+      tokens.push({ kind: 'punct', value: two });
+      i += 2;
+      continue;
+    }
+    if ('()<>!.'.includes(ch)) {
+      tokens.push({ kind: 'punct', value: ch });
+      i++;
+      continue;
+    }
+
+    throw new Error(`Unexpected character: ${ch}`);
+  }
+  return tokens;
+}
+
 function safeEvalExpression(
   expr: string,
   variables: Record<string, any>,
   triggerData: any,
   lastOutput: any,
 ): { result: boolean; error?: string } {
-  // SECURITY: Block dangerous patterns
-  const dangerousPatterns = [
-    /\bfunction\b/i,
-    /\bnew\b/i,
-    /\brequire\b/i,
-    /\bimport\b/i,
-    /\bexport\b/i,
-    /\beval\b/i,
-    /\bFunction\b/i,
-    /\bconstructor\b/i,
-    /\bprototype\b/i,
-    /\b__proto__\b/i,
-    /\bprocess\b/i,
-    /\bglobal\b/i,
-    /\bwindow\b/i,
-    /\bdocument\b/i,
-    /\bfetch\b/i,
-    /\baxios\b/i,
-    /\bhttp\b/i,
-    /\bfs\b/i,
-    /\bpath\b/i,
-    /\bchild_process\b/i,
-    /\.\s*\[/, // bracket notation property access
-    /\.\s*\{/, // object literal injection
-  ];
-
-  for (const pattern of dangerousPatterns) {
-    if (pattern.test(expr)) {
-      return {
-        result: false,
-        error: `Blocked dangerous pattern in expression`,
-      };
-    }
+  if (typeof expr !== 'string') {
+    return { result: false, error: 'expression must be a string' };
+  }
+  if (expr.length > 500) {
+    // Hard cap on expression size — prevents pathological inputs from
+    // hogging CPU during parse.
+    return { result: false, error: 'expression too long (>500 chars)' };
   }
 
-  // Build safe context with only allowed properties
-  const safeContext: Record<string, any> = {
-    ...variables,
-    triggerData,
-    lastOutput,
+  let tokens: Token[];
+  try {
+    tokens = tokenize(expr);
+  } catch (err: any) {
+    return { result: false, error: `Tokenize: ${err.message ?? err}` };
+  }
+
+  let pos = 0;
+  const peek = () => tokens[pos];
+  const consume = () => tokens[pos++];
+  const eat = (value: string): boolean => {
+    const t = peek();
+    if (t && t.kind === 'punct' && t.value === value) {
+      pos++;
+      return true;
+    }
+    return false;
   };
 
-  // Tokenize and parse expression safely
-  // Allowed: variable names, numbers, strings, booleans, comparisons, logical ops
-  const allowedOperators = [
-    '==',
-    '!=',
-    '===',
-    '!==',
-    '>',
-    '<',
-    '>=',
-    '<=',
-    '&&',
-    '||',
-    '!',
-  ];
-  const allowedLiterals =
-    /^(\d+\.?\d*|true|false|null|undefined|'[^']*'|"[^"]*")$/;
+  const scope: Record<string, any> = {
+    variables,
+    triggerData,
+    lastOutput,
+    // Also expose top-level variable names directly so authors can write
+    // `attempt < 3` instead of `variables.attempt < 3` if they prefer.
+    ...variables,
+  };
 
-  // Simple validation: expression must only contain allowed tokens
-  const tokens = expr.split(/\s+/).filter((t) => t.length > 0);
-  for (const token of tokens) {
-    // Check if it's an allowed operator
-    if (allowedOperators.some((op) => token.includes(op))) continue;
+  const resolvePath = (segments: string[]): any => {
+    if (segments.length === 0 || segments.length > 4) {
+      throw new Error('Variable path must have 1–4 segments');
+    }
+    for (const s of segments) {
+      if (BLOCKED_PROPS.has(s)) {
+        throw new Error(`Blocked property name: ${s}`);
+      }
+    }
+    let cur: any = scope[segments[0]];
+    for (let i = 1; i < segments.length; i++) {
+      if (cur === null || cur === undefined) return undefined;
+      cur = cur[segments[i]];
+    }
+    return cur;
+  };
 
-    // Check if it's a literal
-    if (allowedLiterals.test(token)) continue;
+  // Parser ─────────────────────────────────────────────────────────────
+  const parsePrimary = (): any => {
+    const t = peek();
+    if (!t) throw new Error('Unexpected end of expression');
 
-    // Check if it's a valid variable path (e.g., variables.x, triggerData.message)
-    if (/^[\w]+$/.test(token)) continue; // simple variable name
-    if (/^[\w]+\.[\w]+$/.test(token)) continue; // one level property
-    if (/^[\w]+\.[\w]+\.[\w]+$/.test(token)) continue; // two levels
-
-    // Parentheses are allowed for grouping
-    if (token === '(' || token === ')') continue;
-
-    // Unknown token - reject for safety
-    return { result: false, error: `Unknown token: ${token}` };
-  }
-
-  // Now safely evaluate with limited scope
-  try {
-    // Create a sandboxed evaluation using only the safe context
-    // This is still safer than new Function() because we've validated all tokens
-    const evalContext = { ...safeContext };
-
-    // Replace variable references with safe lookups
-    let safeExpr = expr;
-
-    // Handle property access: variables.x -> (variables && variables.x)
-    safeExpr = safeExpr.replace(
-      /([\w]+)\.([\w]+)(\.?[\w]*)/g,
-      (match, obj, prop, rest) => {
-        if (rest) {
-          // Two-level access: variables.x.y -> (variables?.x?.y)
-          return `(${obj}?.${prop}${rest})`;
-        }
-        return `(${obj}?.${prop})`;
-      },
-    );
-
-    // Simple variable names: wrap in optional chaining
-    safeExpr = safeExpr.replace(/\b([\w]+)\b(?!\s*[.])/g, (match, name) => {
-      if (['true', 'false', 'null', 'undefined'].includes(name)) return name;
-      if (
-        allowedOperators.some(
-          (op) =>
-            expr.includes(`${name}${op}`) || expr.includes(`${op}${name}`),
-        )
-      )
-        return name;
-      return `(${name})`;
-    });
-
-    // Use a restricted Function constructor with only our safe context
-    // Since we've validated all tokens, this is safe
-    const params = Object.keys(evalContext);
-    const values = Object.values(evalContext);
-
-    // SECURITY: Double-check no dangerous patterns survived
-    if (dangerousPatterns.some((p) => p.test(safeExpr))) {
-      return { result: false, error: 'Expression contains blocked patterns' };
+    if (t.kind === 'punct' && t.value === '(') {
+      consume();
+      const v = parseOr();
+      if (!eat(')')) throw new Error('Expected )');
+      return v;
     }
 
-    const result = Boolean(
-      new Function(...params, `return (${safeExpr})`)(...values),
-    );
+    if (t.kind === 'num') {
+      consume();
+      return t.value;
+    }
 
-    return { result };
-  } catch (err) {
-    return { result: false, error: `Evaluation error: ${err}` };
+    if (t.kind === 'str') {
+      consume();
+      return t.value;
+    }
+
+    if (t.kind === 'ident') {
+      consume();
+      // Keywords
+      if (t.value === 'true') return true;
+      if (t.value === 'false') return false;
+      if (t.value === 'null') return null;
+      if (t.value === 'undefined') return undefined;
+      // Variable path: a, a.b, a.b.c, a.b.c.d
+      const segments = [t.value];
+      while (segments.length < 4) {
+        if (!eat('.')) break;
+        const next = peek();
+        if (!next || next.kind !== 'ident') {
+          throw new Error('Expected identifier after "."');
+        }
+        consume();
+        segments.push(next.value);
+      }
+      return resolvePath(segments);
+    }
+
+    throw new Error(`Unexpected token: ${t.value}`);
+  };
+
+  const parseNot = (): any => {
+    if (eat('!')) {
+      return !parseNot();
+    }
+    return parsePrimary();
+  };
+
+  const parseComparison = (): any => {
+    const left = parseNot();
+    const t = peek();
+    if (t && t.kind === 'punct') {
+      const op = t.value;
+      if (['==', '!=', '===', '!==', '<', '>', '<=', '>='].includes(op)) {
+        consume();
+        const right = parseNot();
+        switch (op) {
+          case '==':
+            // eslint-disable-next-line eqeqeq
+            return left == right;
+          case '!=':
+            // eslint-disable-next-line eqeqeq
+            return left != right;
+          case '===':
+            return left === right;
+          case '!==':
+            return left !== right;
+          case '<':
+            return left < right;
+          case '>':
+            return left > right;
+          case '<=':
+            return left <= right;
+          case '>=':
+            return left >= right;
+        }
+      }
+    }
+    return left;
+  };
+
+  const parseAnd = (): any => {
+    let v = parseComparison();
+    while (eat('&&')) {
+      const r = parseComparison();
+      v = Boolean(v) && Boolean(r) ? r : false;
+    }
+    return v;
+  };
+
+  const parseOr = (): any => {
+    let v = parseAnd();
+    while (eat('||')) {
+      const r = parseAnd();
+      v = v ? v : r;
+    }
+    return v;
+  };
+
+  try {
+    const value = parseOr();
+    if (pos < tokens.length) {
+      const leftover = tokens[pos];
+      throw new Error(`Unexpected trailing token: ${leftover.value}`);
+    }
+    return { result: Boolean(value) };
+  } catch (err: any) {
+    return { result: false, error: `Evaluation error: ${err.message ?? err}` };
   }
 }
 
@@ -499,7 +667,9 @@ async function executeGraph(
  */
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const workflows = await Workflow.find().sort({ updatedAt: -1 });
+    const workflows = await Workflow.find(withTenantScope(req, {})).sort({
+      updatedAt: -1,
+    });
     res.json(workflows);
   } catch (error) {
     console.error('Error fetching workflows:', error);
@@ -573,6 +743,7 @@ router.post('/', async (req: Request, res: Response) => {
         .json({ error: 'Name, nodes, and edges are required' });
     }
 
+    const tid = tenantIdOf(req);
     const workflow = new Workflow({
       name,
       description,
@@ -580,6 +751,7 @@ router.post('/', async (req: Request, res: Response) => {
       edges,
       metadata,
       version: '1.0.0',
+      ...(tid ? { tenantId: tid } : {}),
     });
     await workflow.save();
     res.status(201).json(workflow);

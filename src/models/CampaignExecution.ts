@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 import { Channel } from '../types/agent';
 
 export interface ICampaignExecution extends Document {
@@ -82,7 +82,5 @@ const CampaignExecutionSchema = new Schema(
 CampaignExecutionSchema.index({ campaignId: 1, status: 1 });
 CampaignExecutionSchema.index({ tenantId: 1, createdAt: -1 });
 
-export default mongoose.model(
-  'CampaignExecution',
-  CampaignExecutionSchema as any,
-) as unknown as mongoose.Model<ICampaignExecution>;
+const __CampaignExecutionModel = mongoose.models.CampaignExecution || mongoose.model('CampaignExecution', CampaignExecutionSchema as any);
+export default __CampaignExecutionModel as unknown as mongoose.Model<ICampaignExecution>;

@@ -1,6 +1,7 @@
 import express from 'express';
 import * as SystemController from '../controllers/SystemController';
 import { authenticateToken } from '../middleware/auth';
+import { strictRateLimit } from '../middleware/rateLimit';
 
 const router = express.Router();
 
@@ -17,6 +18,8 @@ router.post('/cache/clear', SystemController.clearCache);
 router.get('/export', SystemController.exportData);
 
 // POST /api/system/reset
-router.post('/reset', SystemController.resetSystem);
+// Strict rate limit: brute-forcing the admin-password second factor must
+// be slow even if the JWT is already compromised.
+router.post('/reset', strictRateLimit, SystemController.resetSystem);
 
 export default router;

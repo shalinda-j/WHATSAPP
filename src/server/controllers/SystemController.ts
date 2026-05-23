@@ -1,12 +1,14 @@
 import { Request, Response } from 'express';
+import bcrypt from 'bcrypt';
 import { configService } from '../../services/ConfigService';
 import { aiLoadBalancer } from '../../services/AILoadBalancer';
 import ChatMessage from '../../models/ChatMessage';
 import Config from '../../models/Config';
 import Dataset from '../../models/Dataset';
 import Session from '../../models/Session';
-import Admin from '../../models/Admin'; // We won't delete this, but good to know
+import Admin from '../../models/Admin';
 import mongoose from 'mongoose';
+import type { AuthRequest } from '../middleware/auth';
 
 // Existing stats logic
 export const getStats = async (req: Request, res: Response) => {
@@ -54,14 +56,25 @@ export const clearCache = async (req: Request, res: Response) => {
 export const exportData = async (req: Request, res: Response) => {
   try {
     console.log('📦 Starting Data Export...');
+    // SECURITY: never include Config.apiKey (or Config.value, which holds
+    // session tokens for the unofficial ChatGPT/Claude providers) in the
+    // export.
+    //
+    // Config.apiKey is stored via a Mongoose getter that DECRYPTS on
+    // .toJSON() — so `await Config.find({})` followed by JSON.stringify
+    // would write plaintext provider keys into the download. Two layers
+    // of defence:
+    //   1. `.lean()` skips Mongoose getters (no decryption happens).
+    //   2. Projection `'-apiKey -value'` strips the encrypted fields
+    //      entirely so the file never contains them.
+    const safeConfigs = await Config.find({}, '-apiKey -value').lean();
     const exportData = {
       timestamp: new Date().toISOString(),
-      chatMessages: await ChatMessage.find({}),
-      configs: await Config.find({}),
-      datasets: await Dataset.find({}),
-      sessions: await Session.find({}),
-      // Exclude Admin/Auth credentials for security, or include them encrypted?
-      // Users usually want to export *their* data. Let's include what we can safely.
+      chatMessages: await ChatMessage.find({}).lean(),
+      configs: safeConfigs,
+      datasets: await Dataset.find({}).lean(),
+      sessions: await Session.find({}).lean(),
+      // Admin/Auth credentials intentionally excluded.
     };
 
     const filename = `data_export_${new Date()
@@ -80,15 +93,46 @@ export const exportData = async (req: Request, res: Response) => {
 };
 
 // [NEW] Factory Reset
-export const resetSystem = async (req: Request, res: Response) => {
+//
+// SECURITY: the previous version of this endpoint accepted ANY authenticated
+// caller and a literal string 'reset-my-system' as the only guard, which
+// meant a stolen / XSS-leaked JWT could wipe the entire database. We now
+// require the caller's own admin password as a second factor. The string
+// confirmation is still required so the operator can't trigger this by
+// accident via a curl-with-cookie misclick.
+export const resetSystem = async (req: AuthRequest, res: Response) => {
   try {
-    const { confirmation } = req.body;
+    const { confirmation, password } = req.body ?? {};
 
     if (confirmation !== 'reset-my-system') {
       return res.status(400).json({ error: 'Invalid confirmation code.' });
     }
+    if (typeof password !== 'string' || password.length === 0) {
+      return res.status(400).json({
+        error: 'Admin password is required to authorise a factory reset.',
+      });
+    }
 
-    console.log('⚠️ FACTORY RESET TRIGGERED');
+    // Look the admin up by the JWT's id rather than trusting any
+    // username/email in the body — the body is attacker-controlled.
+    const adminId = req.user?.id;
+    if (!adminId) {
+      return res.status(401).json({ error: 'Not authenticated.' });
+    }
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return res.status(401).json({ error: 'Admin account no longer exists.' });
+    }
+    const passwordOk = await bcrypt.compare(password, admin.passwordHash);
+    if (!passwordOk) {
+      // Identical error wording for "wrong password" and "missing password"
+      // so an attacker can't probe for valid admin IDs.
+      return res.status(403).json({ error: 'Password verification failed.' });
+    }
+
+    console.log(
+      `⚠️ FACTORY RESET TRIGGERED by admin=${admin.username ?? adminId}`,
+    );
 
     // 1. Clear RAM Cache first
     configService.clearCache();
