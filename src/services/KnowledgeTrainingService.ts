@@ -264,26 +264,31 @@ export class KnowledgeTrainingService {
   }
 
   /**
-   * Sync knowledge base with AI load balancer
+   * Invalidate caches so the AI services pick up freshly-added knowledge
+   * on the next inbound message.
+   *
+   * Previously this method WROTE the AI_PERSONALITY dataset by appending
+   * the learned-knowledge base to the personality prompt. That corrupted
+   * the multi-language content shape: the admin panel saves the
+   * personality as `{ en, si, ta }`, but this method wrote a flat string,
+   * so on next admin-panel load `content.en` was undefined and the UI
+   * fell back to its hardcoded default — which looked like the user's
+   * saved prompt had "reverted to the previous prompt".
+   *
+   * The personality is operator-owned. Knowledge lives in its own
+   * KnowledgeEntry collection and is fed to each AI provider dynamically
+   * at call time. No write to AI_PERSONALITY here.
    */
   async syncWithAI(): Promise<void> {
     try {
-      const knowledgeBase = await this.getKnowledgeBaseForAI();
-      const personality = await configurationManager.getAIPersonality();
-
-      // Update the AI_PERSONALITY dataset with new knowledge
-      await Dataset.findOneAndUpdate(
-        { key: 'AI_PERSONALITY' },
-        { content: `${personality}\n\n${knowledgeBase}` },
-        { upsert: true },
-      );
-
-      // Clear configuration cache so AI picks up new knowledge
       configurationManager.clearCache();
-
-      console.log('[KnowledgeTraining] Synced knowledge base with AI');
+      console.log(
+        '[KnowledgeTraining] Cache cleared. AI_PERSONALITY is operator-owned ' +
+          'and is no longer mutated by this sync. Knowledge is fed dynamically ' +
+          'to each AI provider at call time.',
+      );
     } catch (error) {
-      console.error('[KnowledgeTraining] Error syncing with AI:', error);
+      console.error('[KnowledgeTraining] Error clearing cache:', error);
     }
   }
 

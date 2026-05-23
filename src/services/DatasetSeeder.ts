@@ -544,7 +544,11 @@ export const seedDatasets = async () => {
         name: 'AI Personality',
         type: 'config', // Configuration item, not displayed in Datasets tabs
         category: 'ai',
-        content: '', // Empty - must be configured
+        // Multi-language object shape — matches what AIPersonalityTab in the
+        // admin panel writes. Using a flat string here caused the previous
+        // bug where syncWithAI() flattened the shape and the admin panel
+        // then couldn't read content.en, reverting to its frontend default.
+        content: { en: '', si: '', ta: '' },
         description:
           'System prompt and personality settings - MUST CONFIGURE IN ADMIN PANEL',
       },
@@ -553,7 +557,7 @@ export const seedDatasets = async () => {
         name: 'AI Knowledge Base',
         type: 'config', // Configuration item, not displayed in Datasets tabs
         category: 'ai',
-        content: '', // Empty - must be configured
+        content: { en: '', si: '', ta: '' },
         description:
           'Knowledge base content for AI - MUST CONFIGURE IN ADMIN PANEL',
       },
