@@ -141,7 +141,13 @@ export default function ChatInterface() {
   const [exportMonth, setExportMonth] = useState<string>(() =>
     new Date().toISOString().slice(0, 7),
   );
-  const [exportIncludeUnresolved, setExportIncludeUnresolved] = useState(true);
+  // Default OFF: most operators downloading this export want a clean list
+  // of dialable numbers. Rows with no resolved phone (LIDs we have not
+  // mapped yet) were previously included by default and confused everyone
+  // who opened the CSV — the phone column was empty and only `rawJid` had
+  // text in it, which looked like "the export has no numbers". Operators
+  // who actually need the LID rows can still tick the box on.
+  const [exportIncludeUnresolved, setExportIncludeUnresolved] = useState(false);
 
   // Manual LID → phone mapping. Operator opens this when the chat list
   // shows "Unknown contact" because the automatic resolvers (Baileys
@@ -1194,10 +1200,12 @@ export default function ChatInterface() {
                   className="mt-0.5"
                 />
                 <span>
-                  Include unresolved LID rows.{' '}
+                  Also include unresolved LID rows (no phone number).{' '}
                   <span className="text-gray-400">
-                    Keep this on to avoid empty sheets when WhatsApp has not
-                    shared a real phone number yet.
+                    Off by default — output contains only dialable mobile
+                    numbers. Tick this on if you also want a list of LIDs
+                    the bot has not resolved yet so you can map them
+                    manually in the chat.
                   </span>
                 </span>
               </label>

@@ -600,4 +600,186 @@ function inferCountryForExport(
   return '';
 }
 
+/**
+ * GET /api/export/phones.csv
+ *
+ * Single-column-first export of EVERY known mobile number across the
+ * tenant — chat history, CRM contacts, leads, AND the LID→phone mapping
+ * table. Deduplicated by E.164 digits.
+ *
+ * Why this exists separately from `/chat-numbers.csv`:
+ *   chat-numbers.csv is "one row per conversation". It carries metadata
+ *   (lastSeen, messageCount, deviceSession, lastMessage) the operator
+ *   needs when triaging the chat list. But if you just want a list of
+ *   numbers to import into a dialler / WhatsApp Business broadcast /
+ *   marketing tool, you want one number per row with no LID noise and
+ *   no rows with empty phone cells.
+ *
+ * Columns:  phone, name, source
+ *   - phone   E.164 with leading + (e.g. +94771234567)
+ *   - name    best name across all sources (Contact > Lead > pushName)
+ *   - source  one of 'chat' | 'contact' | 'lead' | 'lid-mapping'
+ *             ('chat' wins if a phone is in multiple sources — most
+ *              actionable signal)
+ *
+ * Query params:
+ *   ?source=chat|contact|lead|lid-mapping  (filter to one source)
+ *   ?optedOut=false                         (default true: include all;
+ *                                            false drops opted-out)
+ */
+router.get('/phones.csv', async (req: Request, res: Response) => {
+  try {
+    const onlySource = req.query.source ? String(req.query.source) : null;
+    const dropOptedOut = String(req.query.optedOut ?? 'true') === 'false';
+    const tenant = (req as any).tenant;
+    const tenantObjectId = tenant?._id
+      ? new mongoose.Types.ObjectId(String(tenant._id))
+      : null;
+    const tenantOrLegacy = tenantObjectId
+      ? {
+          $or: [
+            { tenantId: tenantObjectId },
+            { tenantId: { $exists: false } },
+          ],
+        }
+      : {};
+
+    // Per-phone aggregation: phone → { name, source }. First write wins
+    // on `source` because we visit them in priority order (chat is the
+    // most actionable signal — they actually messaged the bot).
+    const phoneMap = new Map<string, { name: string; source: string }>();
+    const optedOut = new Set<string>();
+
+    // 1) Chat: aggregate distinct realPhone from ChatMessage. Same
+    //    aggregation shape as /chat-numbers.csv but reduced to phone.
+    if (!onlySource || onlySource === 'chat') {
+      const chatAgg = (await ChatMessage.aggregate([
+        { $match: { role: 'user' } },
+        { $sort: { timestamp: -1 } },
+        {
+          $group: {
+            _id: '$userId',
+            realPhones: { $addToSet: '$metadata.realPhone' },
+            pushNames: { $addToSet: '$metadata.pushName' },
+          },
+        },
+        { $limit: MAX_EXPORT_ROWS },
+      ])) as Array<{
+        _id: string;
+        realPhones: (string | null | undefined)[];
+        pushNames: (string | null | undefined)[];
+      }>;
+
+      for (const row of chatAgg) {
+        const phone =
+          (row.realPhones || []).find(
+            (p): p is string => typeof p === 'string' && p.length > 0,
+          ) ?? extractRealPhone(row._id);
+        if (!phone) continue;
+        const name =
+          (row.pushNames || []).find(
+            (p): p is string => typeof p === 'string' && p.length > 0,
+          ) ?? '';
+        if (!phoneMap.has(phone)) {
+          phoneMap.set(phone, { name, source: 'chat' });
+        }
+      }
+    }
+
+    // 2) Contacts: every Contact row with a phone-shaped identifier.
+    if (!onlySource || onlySource === 'contact') {
+      const contacts = (await (Contact as any)
+        .find(tenantOrLegacy, {
+          name: 1,
+          phone: 1,
+          whatsappNumber: 1,
+          whatsappId: 1,
+          optedOut: 1,
+        })
+        .lean()) as Array<{
+        name?: string;
+        phone?: string;
+        whatsappNumber?: string;
+        whatsappId?: string;
+        optedOut?: boolean;
+      }>;
+      for (const c of contacts) {
+        const phone = extractRealPhone(
+          c.phone || c.whatsappNumber || c.whatsappId || '',
+        );
+        if (!phone) continue;
+        if (c.optedOut) optedOut.add(phone);
+        if (!phoneMap.has(phone)) {
+          phoneMap.set(phone, { name: c.name ?? '', source: 'contact' });
+        }
+      }
+    }
+
+    // 3) Leads: phoneNumber field; Lead.fullName for the name column.
+    if (!onlySource || onlySource === 'lead') {
+      const leads = (await Lead.find(tenantOrLegacy, {
+        fullName: 1,
+        phoneNumber: 1,
+      }).lean()) as Array<{ fullName?: string; phoneNumber?: string }>;
+      for (const l of leads) {
+        const phone = extractRealPhone(l.phoneNumber || '');
+        if (!phone) continue;
+        if (!phoneMap.has(phone)) {
+          phoneMap.set(phone, { name: l.fullName ?? '', source: 'lead' });
+        }
+      }
+    }
+
+    // 4) LID mapping: phones we learned about but who never sent a
+    //    ChatMessage that survived (e.g. contacts.upsert hit before any
+    //    inbound). No name column for these — the mapping only tracks
+    //    LID→phone, not display name.
+    if (!onlySource || onlySource === 'lid-mapping') {
+      const LidPhoneMapping = (
+        await import('../../models/LidPhoneMapping')
+      ).default;
+      const mappings = (await LidPhoneMapping.find(
+        {},
+        { phone: 1 },
+      ).lean()) as Array<{ phone?: string }>;
+      for (const m of mappings) {
+        const phone = extractRealPhone(m.phone || '');
+        if (!phone) continue;
+        if (!phoneMap.has(phone)) {
+          phoneMap.set(phone, { name: '', source: 'lid-mapping' });
+        }
+      }
+    }
+
+    // Materialise: one row per unique phone, dropping opted-out rows
+    // when the operator asked for it.
+    const rows = Array.from(phoneMap.entries())
+      .filter(([phone]) => !dropOptedOut || !optedOut.has(phone))
+      .map(([phone, meta]) => ({
+        phone: `+${phone}`,
+        name: meta.name,
+        source: meta.source,
+      }))
+      // Sort by source priority (chat first) then phone for stable output.
+      .sort((a, b) => {
+        const order: Record<string, number> = {
+          chat: 0,
+          contact: 1,
+          lead: 2,
+          'lid-mapping': 3,
+        };
+        const so = (order[a.source] ?? 9) - (order[b.source] ?? 9);
+        if (so !== 0) return so;
+        return a.phone.localeCompare(b.phone);
+      });
+
+    const csv = toCsv(rows, ['phone', 'name', 'source']);
+    const filename = `phones-${new Date().toISOString().slice(0, 10)}.csv`;
+    res.set(csvDownloadHeaders(filename)).send(csv);
+  } catch (err: any) {
+    console.error('export phones.csv failed:', err);
+    res.status(500).json({ error: err?.message ?? 'export_failed' });
+  }
+});
+
 export default router;
