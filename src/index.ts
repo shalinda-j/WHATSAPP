@@ -173,76 +173,63 @@ function mergeLeadFacts(jid: string, latest: LeadFlowFact): LeadFlowFact {
 }
 
 /**
- * Sales-driven fallback used only when the AI providers are down or not
- * configured. Replies in Sinhala (primary language for the customer base),
- * applies the PAS (Problem -> Agitate -> Solution) framework, and remembers
- * facts across turns per user so we never ask the customer to repeat
- * themselves.
- *
- * Hard rules (mirror the AI_PERSONALITY rules so behaviour is consistent
- * whether the AI answers or the fallback does):
- *   - NEVER echo a customer's phone number back to them.
- *   - NEVER invent phone numbers, prices, jobs, dates, or contact details.
- *   - Always end with one clear next-step (CTA).
+ * Substitute {name}, {country}, {phone} placeholders in a Dataset template.
+ * Empty/missing facts become empty strings — operators can wrap optional
+ * variables in punctuation that simply collapses when blank.
  */
-function buildLeadFlowFallback(text: string, jid: string): string {
+function fillLeadTemplate(template: string, facts: LeadFlowFact): string {
+  return template
+    .replace(/\{name\}/g, facts.name ?? '')
+    .replace(/\{country\}/g, facts.country ?? '')
+    .replace(/\{phone\}/g, facts.phone ?? '');
+}
+
+/**
+ * Lead-intake fallback used only when the AI providers are down or not
+ * configured. Reads ALL templates from the LEAD_FALLBACK_TEMPLATES Dataset
+ * (configured via Admin Panel) — no hardcoded customer-facing text in source.
+ *
+ * Per-user state (leadFlowState) remembers phone/country/name across turns
+ * so the bot never asks the customer to repeat themselves. The template
+ * for the matching state slot is fetched from Dataset and placeholders are
+ * substituted.
+ *
+ * Returns the empty string when the matching template slot is not yet
+ * configured — the caller MUST treat empty as "do not reply" rather than
+ * inventing a default message.
+ */
+async function buildLeadFlowFallback(
+  text: string,
+  jid: string,
+): Promise<string> {
   const latest = getLeadFlowFacts(text);
   const facts = mergeLeadFacts(jid, latest);
+  const templates = await configService.getLeadFallbackTemplates();
 
+  let template = '';
   if (facts.phone && facts.country && facts.name) {
-    return [
-      `ස්තූතියි ${facts.name}! ඔබගේ සියලු විස්තර අපට ලැබුණා.`,
-      `${facts.country} සඳහා ඔබට හරියටම ගැලපෙන මාර්ගය ගැන අපගේ විශේෂඥයා ඉතා ඉක්මනින් ඔබට අමතනවා.`,
-    ].join(' ');
+    template = templates.haveAll;
+  } else if (facts.phone && facts.country) {
+    template = templates.havePhoneCountry;
+  } else if (facts.phone) {
+    template = templates.havePhone;
+  } else if (facts.country) {
+    template = templates.haveCountry;
+  } else if (facts.name) {
+    template = templates.haveName;
+  } else if (isGreetingMessage(text)) {
+    template = templates.greeting;
+  } else {
+    template = templates.empty;
   }
 
-  if (facts.phone && facts.country) {
-    return [
-      `${facts.country} සඳහා හොඳ තේරීමක්!`,
-      `(බොහෝ දෙනා හරියටම ගැලපෙන වැඩසටහන නොදන්නා නිසා වසර ගණන් වැරදි පාරක යනවා.)`,
-      `අපගේ විශේෂඥයා ඔබට මේ සතියේම අමතනවා — ඔබගේ සම්පූර්ණ නම පමණක් එවන්න.`,
-    ].join(' ');
+  if (!template) {
+    console.warn(
+      '⚠️ LEAD_FALLBACK_TEMPLATES slot not configured — fallback skipped. Configure via Admin Panel > Datasets > LEAD_FALLBACK_TEMPLATES.',
+    );
+    return '';
   }
-
-  if (facts.phone) {
-    return [
-      `ස්තූතියි, විස්තර ලැබුණා.`,
-      `(වැරදි රටක් තේරීම නිසා බොහෝ දෙනා වසර ගණන් සහ ලක්ෂ ගණන් රුපියල් අහිමි කරගන්නවා — ඔබට එහෙම වෙන්න ඉඩ දෙන්න එපා.)`,
-      `Japan, Israel, Singapore, Europe, හෝ වෙනත් රටක්ද ඔබ කැමති? එක් වචනයකින් එවන්න.`,
-    ].join(' ');
-  }
-
-  if (facts.country) {
-    return [
-      `${facts.country} සඳහා — හරිම හොඳ තේරීමක්! අවස්ථා බොහෝ ඇත.`,
-      `(නමුත් වැරදි ආයතන සහ වැරදි පොරොන්දු මත වසර ගණන් අහිමි කරගන්නා අය බොහොමයි.)`,
-      `අපගේ වැඩසටහන වෙනස් — ඔබට හරියටම ගැලපෙන විකල්පය මේ සතියේම පෙන්වන්නම්. කරුණාකර ඔබගේ දුරකථන අංකය එවන්න.`,
-    ].join(' ');
-  }
-
-  if (facts.name) {
-    return [
-      `ස්තූතියි ${facts.name}!`,
-      `(හරියටම ගැලපෙන රට සහ වැඩසටහන තේරීම ඔබගේ වෘත්තීය ජීවිතයේ ලොකුම තීරණය — වැරදීමට ඉඩ දෙන්න එපා.)`,
-      `Japan, Israel, Singapore, හෝ Europe කොයි රටට කැමති? දුරකථන අංකය එක්ක එවන්න — මේ සතියේම ඔබට කතා කරන්නම්.`,
-    ].join(' ');
-  }
-
-  if (isGreetingMessage(text)) {
-    return [
-      `ආයුබෝවන්! Jayalath Global වෙත සාදරයෙන් පිළිගනිමු.`,
-      `(බොහෝ දෙනා වැරදි පොරොන්දු සහ වැරදි පාර්ශ්වයන් මත වසර ගණන් සහ ලක්ෂ ගණන් රුපියල් අහිමි කරගන්නවා.)`,
-      `අපගේ විශේෂඥයන් Japan, Israel, Singapore, Europe රැකියා සහ පුහුණු පාඨමාලා සඳහා ඔබට හරියටම ගැලපෙන මඟ පෙන්වනවා.`,
-      `ඔබ කැමති රට + දුරකථන අංකය එවන්න — මේ සතියේම ඔබට කතා කරන්නම්.`,
-    ].join(' ');
-  }
-
-  return [
-    `Jayalath Global වෙත සාදරයෙන් පිළිගනිමු.`,
-    `(හරියටම තේරුමක් ගන්න බැරිකම — එක්කෝ වැරදි පොරොන්දු, එක්කෝ වැඩි ෆීස් — බොහෝ දෙනාගේ ලොකුම ප්‍රශ්නය.)`,
-    `අපගේ සහාය ලබා ගැනීමට කරුණාකර: (1) ඔබගේ නම (2) දුරකථන අංකය (3) කැමති රට — එවන්න.`,
-    `උදා: "Pasindu, 0703179882, Japan"`,
-  ].join(' ');
+  return fillLeadTemplate(template, facts);
 }
 
 async function startServer() {
@@ -1010,7 +997,7 @@ onMessage(async (message, sock, sessionId) => {
         if (!response) {
           response = await aiLoadBalancer.sendMessage(jid, finalPrompt);
           if (/no ai services are configured/i.test(response)) {
-            response = buildLeadFlowFallback(text, jid);
+            response = await buildLeadFlowFallback(text, jid);
           }
 
           // Learn from AI response dynamically (Fire & Forget)
@@ -1137,8 +1124,12 @@ onMessage(async (message, sock, sessionId) => {
       console.error('   ❌ AI response error:', aiError.message || aiError);
 
       // Keep the customer-facing flow moving even when every AI provider fails.
-      const fallbackResponse = buildLeadFlowFallback(text, jid);
-      await sendMessage(jid, fallbackResponse, sessionId);
+      // If LEAD_FALLBACK_TEMPLATES is not configured the helper returns ''
+      // and we stay silent — better than echoing made-up text at the customer.
+      const fallbackResponse = await buildLeadFlowFallback(text, jid);
+      if (fallbackResponse) {
+        await sendMessage(jid, fallbackResponse, sessionId);
+      }
     }
   } catch (error) {
     console.error('❌ Message handling error:', error);

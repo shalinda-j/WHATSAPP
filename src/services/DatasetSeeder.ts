@@ -1,8 +1,42 @@
 import Dataset from '../models/Dataset';
-import { createCompanyConfig } from '../config/companies';
-import { AI_PERSONALITY } from '../config/ai-personality';
+import { EMPTY_LEAD_FALLBACK_TEMPLATES } from './ConfigService';
 
-const defaultConfig = createCompanyConfig('default');
+// NOTE: this seeder intentionally creates ONLY empty config placeholders
+// (keyed rows whose `content` is an empty string / object / array). It
+// does NOT ship company-specific knowledge, command, link or personality
+// content — that's tenant data and lives in MongoDB, edited via the
+// admin Datasets page. A previous version of this file hard-coded
+// "Jayalath Global" knowledge entries, demo commands and demo URLs,
+// which would resurrect themselves on every restart even if the
+// operator had deleted them. Removed in this fix.
+
+/**
+ * Migration: clear `key: ''` left behind by the old POST/PUT logic.
+ *
+ * The Dataset schema has `key: { unique: true, sparse: true }`. A sparse
+ * unique index skips docs where the field is null/missing, but `''` is a
+ * value — so every row written by the old route with `key: ''` shared
+ * the same unique-index slot, and the second such insert was rejected
+ * with E11000. That made user-created knowledge entries appear to save
+ * once and then fail silently from the second onward.
+ *
+ * This migration is idempotent and only touches rows with `key === ''`.
+ */
+export const cleanEmptyDatasetKeys = async () => {
+  try {
+    const result = await Dataset.updateMany(
+      { key: '' },
+      { $unset: { key: '' } },
+    );
+    if (result.modifiedCount > 0) {
+      console.log(
+        `🩹 Cleaned ${result.modifiedCount} Dataset row(s) with empty key:'' (so the sparse unique index ignores them).`,
+      );
+    }
+  } catch (error) {
+    console.error('❌ Error cleaning empty Dataset keys:', error);
+  }
+};
 
 /**
  * Migration: Update existing config items to have type='config'
@@ -36,6 +70,7 @@ export const migrateConfigDatasets = async () => {
       'CONVERSATION_EXAMPLES',
       'COUNTRIES',
       'EXPERIENCE_LEVELS',
+      'LEAD_FALLBACK_TEMPLATES',
     ];
 
     // Update all documents with these keys to have type='config'
@@ -423,6 +458,19 @@ export const seedDatasets = async () => {
           'Message shown when user opts back in to auto-registration - CONFIGURE IN ADMIN PANEL',
       },
       {
+        key: 'LEAD_FALLBACK_TEMPLATES',
+        name: 'Lead Intake Fallback Templates',
+        type: 'config', // Configuration item, not displayed in Datasets tabs
+        category: 'messages',
+        // Empty defaults — operator MUST configure each slot via admin panel.
+        // When AI providers are down, the bot picks the matching slot based
+        // on which lead facts have been collected so far. Supports
+        // {name}, {country}, {phone} placeholders.
+        content: EMPTY_LEAD_FALLBACK_TEMPLATES,
+        description:
+          'Lead-intake reply templates used when AI is unavailable. 7 slots: haveAll, havePhoneCountry, havePhone, haveCountry, haveName, greeting, empty. Each supports {name}, {country}, {phone} placeholders - CONFIGURE IN ADMIN PANEL',
+      },
+      {
         key: 'PING_MESSAGE',
         name: 'Ping Message',
         type: 'config', // Configuration item, not displayed in Datasets tabs
@@ -607,8 +655,11 @@ export const seedDatasets = async () => {
       },
     ];
 
-    // First, migrate existing config items to have correct type
+    // First, migrate existing config items to have correct type.
     await migrateConfigDatasets();
+    // Then clean any `key: ''` rows left over from the old POST/PUT bug
+    // so the sparse unique index stops blocking new inserts.
+    await cleanEmptyDatasetKeys();
 
     for (const seed of seeds) {
       const existing = await Dataset.findOne({ key: seed.key });

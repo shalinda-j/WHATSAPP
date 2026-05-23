@@ -48,6 +48,35 @@ export interface CompanyInfo {
   email?: string;
 }
 
+/**
+ * Lead-intake fallback templates — used when the AI providers are down or
+ * not configured. Each value supports {name}, {country}, {phone} placeholders.
+ * Configure via Admin Panel > Datasets > LEAD_FALLBACK_TEMPLATES.
+ *
+ * NO hardcoded defaults — operators MUST configure each slot via the admin
+ * panel. If a slot is empty when the fallback runs, the bot logs and skips
+ * the reply rather than echoing made-up text at the customer.
+ */
+export interface LeadFallbackTemplates {
+  haveAll: string;
+  havePhoneCountry: string;
+  havePhone: string;
+  haveCountry: string;
+  haveName: string;
+  greeting: string;
+  empty: string;
+}
+
+export const EMPTY_LEAD_FALLBACK_TEMPLATES: LeadFallbackTemplates = {
+  haveAll: '',
+  havePhoneCountry: '',
+  havePhone: '',
+  haveCountry: '',
+  haveName: '',
+  greeting: '',
+  empty: '',
+};
+
 // Country for Job Placement
 export interface CountryOption {
   code: string;
@@ -533,6 +562,25 @@ export class ConfigService {
       config.message ||
       '⚠️ Start message not configured. Configure via Admin Panel > Datasets > START_MESSAGE'
     );
+  }
+
+  /**
+   * Get the lead-intake fallback templates used when AI providers are down.
+   * Configure via Admin Panel > Datasets > LEAD_FALLBACK_TEMPLATES.
+   * Each template supports {name}, {country}, {phone} placeholders.
+   *
+   * Empty defaults: operators MUST configure each slot. The caller is
+   * responsible for checking whether the returned slot is empty and
+   * handling that case (typically: log and skip the reply).
+   */
+  public async getLeadFallbackTemplates(): Promise<LeadFallbackTemplates> {
+    const config = await this.get(
+      'LEAD_FALLBACK_TEMPLATES',
+      EMPTY_LEAD_FALLBACK_TEMPLATES,
+    );
+    // Merge so missing keys from a partial admin edit fall back to empty
+    // (not undefined) — caller can safely check `template === ''`.
+    return { ...EMPTY_LEAD_FALLBACK_TEMPLATES, ...config };
   }
 }
 
