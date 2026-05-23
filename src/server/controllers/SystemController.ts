@@ -5,6 +5,10 @@ import { aiLoadBalancer } from '../../services/AILoadBalancer';
 import ChatMessage from '../../models/ChatMessage';
 import Config from '../../models/Config';
 import Dataset from '../../models/Dataset';
+import KnowledgeEntry from '../../models/KnowledgeEntry';
+import AgentSkill from '../../models/AgentSkill';
+import FormTemplate from '../../models/FormTemplate';
+import FormSubmission from '../../models/FormSubmission';
 import Session from '../../models/Session';
 import Admin from '../../models/Admin';
 import mongoose from 'mongoose';
@@ -172,5 +176,120 @@ export const resetSystem = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('CRITICAL ERROR during Factory Reset:', error);
     res.status(500).json({ error: 'Failed to reset system: ' + error.message });
+  }
+};
+
+/**
+ * Surgical wipe of user-visible Data Sets content.
+ *
+ * Deletes everything operators see in the admin /datasets tabs PLUS the
+ * collections those tabs cross-reference, but leaves the bot's runtime
+ * config intact so the deployment keeps working. Equivalent to running
+ * `scripts/wipe_datasets.ts --execute --confirm=YES-WIPE-ALL-DATA` but
+ * callable from the browser (DigitalOcean App Platform doesn't expose
+ * a shell — this endpoint is how operators trigger it in production).
+ *
+ * Targets:
+ *   - Dataset rows where type ≠ 'config'   (Knowledge / Commands /
+ *                                            Links / Mega Text /
+ *                                            Personality / Ack)
+ *   - KnowledgeEntry rows                  (auto-learned Q/A)
+ *   - AgentSkill rows                      (per-tenant skill chunks)
+ *   - FormTemplate rows                    (Form Builder definitions)
+ *   - FormSubmission rows                  (customer responses)
+ *
+ * Preserves:
+ *   - Dataset rows with type='config' (HELP_MESSAGE, AI_PERSONALITY,
+ *     JOBS_MESSAGE, COMPANY_INFO, etc.) — internal runtime config
+ *   - ChatMessage / Lead / Contact / Booking / Session / Tenant /
+ *     Admin / LidPhoneMapping — operational data unrelated to the
+ *     Data Sets tabs
+ *
+ * SECURITY: requires the calling admin's password as a second factor
+ * (same pattern as resetSystem). Mounted behind authenticateToken AND
+ * strictRateLimit so a stolen JWT can't fire this in a brute-force loop.
+ */
+export const wipeDatasetsContent = async (
+  req: AuthRequest,
+  res: Response,
+) => {
+  try {
+    const { password } = (req.body ?? {}) as { password?: string };
+
+    if (typeof password !== 'string' || password.length === 0) {
+      return res
+        .status(400)
+        .json({ error: 'Admin password is required to authorise this wipe.' });
+    }
+
+    const adminId = req.user?.id;
+    if (!adminId) {
+      return res.status(401).json({ error: 'Not authenticated.' });
+    }
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return res.status(401).json({ error: 'Admin account no longer exists.' });
+    }
+    const passwordOk = await bcrypt.compare(password, admin.passwordHash);
+    if (!passwordOk) {
+      return res.status(403).json({ error: 'Password verification failed.' });
+    }
+
+    console.log(
+      `⚠️ DATA SETS WIPE TRIGGERED by admin=${admin.username ?? adminId}`,
+    );
+
+    // Run all five deletions in parallel. Per-collection failures are
+    // surfaced individually so the operator can see which (if any)
+    // partially failed without halting the rest.
+    const results = await Promise.allSettled([
+      Dataset.deleteMany({ type: { $ne: 'config' } }),
+      KnowledgeEntry.deleteMany({}),
+      AgentSkill.deleteMany({}),
+      FormTemplate.deleteMany({}),
+      FormSubmission.deleteMany({}),
+    ]);
+
+    const labels = [
+      'datasets (non-config)',
+      'knowledgeentries',
+      'agentskills',
+      'formtemplates',
+      'formsubmissions',
+    ];
+    const summary: Record<string, number | string> = {};
+    let totalDeleted = 0;
+    const errors: string[] = [];
+
+    results.forEach((r, i) => {
+      const label = labels[i];
+      if (r.status === 'fulfilled') {
+        const count = (r.value as { deletedCount?: number }).deletedCount ?? 0;
+        summary[label] = count;
+        totalDeleted += count;
+        console.log(`   🗑️ ${label}: ${count} row(s) deleted`);
+      } else {
+        const msg = (r.reason as Error)?.message ?? String(r.reason);
+        summary[label] = `error: ${msg}`;
+        errors.push(`${label}: ${msg}`);
+        console.error(`   ❌ ${label}: ${msg}`);
+      }
+    });
+
+    console.log(
+      `✅ DATA SETS WIPE COMPLETE — totalDeleted=${totalDeleted}, errors=${errors.length}`,
+    );
+
+    res.json({
+      success: errors.length === 0,
+      totalDeleted,
+      deleted: summary,
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  } catch (error: any) {
+    console.error('CRITICAL ERROR during Datasets wipe:', error);
+    res
+      .status(500)
+      .json({ error: 'Failed to wipe datasets: ' + (error?.message ?? String(error)) });
   }
 };

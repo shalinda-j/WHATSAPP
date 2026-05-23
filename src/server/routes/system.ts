@@ -22,4 +22,13 @@ router.get('/export', SystemController.exportData);
 // be slow even if the JWT is already compromised.
 router.post('/reset', strictRateLimit, SystemController.resetSystem);
 
+// POST /api/system/wipe-datasets-content
+// Surgical destructive wipe — only the Data Sets tabs' content, leaves
+// runtime config intact. Password-gated + rate-limited like /reset.
+router.post(
+  '/wipe-datasets-content',
+  strictRateLimit,
+  SystemController.wipeDatasetsContent,
+);
+
 export default router;

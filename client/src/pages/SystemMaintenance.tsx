@@ -49,6 +49,17 @@ export default function SystemMaintenance() {
   const [resetConfirmationInput, setResetConfirmationInput] = useState('');
   const [isResetting, setIsResetting] = useState(false);
 
+  // Data Sets wipe modal state (surgical wipe — leaves runtime config
+  // intact). Separate from factory reset on purpose: this is what
+  // operators ACTUALLY want when they say "delete the Data Sets tabs".
+  const [showWipeModal, setShowWipeModal] = useState(false);
+  const [wipePassword, setWipePassword] = useState('');
+  const [wiping, setWiping] = useState(false);
+  const [wipeResult, setWipeResult] = useState<{
+    totalDeleted: number;
+    deleted: Record<string, number | string>;
+  } | null>(null);
+
   const fetchStats = async () => {
     setLoading(true);
     try {
@@ -127,6 +138,47 @@ export default function SystemMaintenance() {
       setIsResetting(false);
       setShowResetModal(false);
       setResetStep(0);
+    }
+  };
+
+  // Wipe ONLY the Data Sets tabs (Knowledge / Commands / Links / Mega
+  // Text / AI Personality / Acknowledgements / Skills / Forms). Bot
+  // runtime config and CRM data stay intact. Requires the admin's
+  // password as a second factor — same protection level as factory
+  // reset, but at a smaller blast radius.
+  const handleWipeDatasets = async () => {
+    setWiping(true);
+    try {
+      const res = await api.post<{
+        success: boolean;
+        totalDeleted: number;
+        deleted: Record<string, number | string>;
+        errors?: string[];
+      }>('/api/system/wipe-datasets-content', { password: wipePassword });
+      setWipeResult({
+        totalDeleted: res.data.totalDeleted,
+        deleted: res.data.deleted,
+      });
+      setWipePassword('');
+      if (res.data.errors && res.data.errors.length > 0) {
+        setMessage({
+          type: 'error',
+          text: `Wipe partially failed: ${res.data.errors.join('; ')}`,
+        });
+      } else {
+        setMessage({
+          type: 'success',
+          text: `Wiped ${res.data.totalDeleted} row(s) across the Data Sets tabs.`,
+        });
+      }
+    } catch (error: any) {
+      console.error('Wipe failed:', error);
+      const errorMessage =
+        error?.response?.data?.error ??
+        (error instanceof Error ? error.message : 'Wipe failed.');
+      setMessage({ type: 'error', text: errorMessage });
+    } finally {
+      setWiping(false);
     }
   };
 
@@ -250,7 +302,7 @@ export default function SystemMaintenance() {
           <AlertTriangle className="mr-2 text-orange-500" /> Maintenance Actions
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {/* Clear Cache */}
           <div className="border rounded-lg p-4 bg-gray-50 flex flex-col justify-between">
             <div>
@@ -292,6 +344,31 @@ export default function SystemMaintenance() {
             >
               <Download className="mr-2 h-4 w-4" />
               {exporting ? 'Exporting...' : 'Export Data'}
+            </button>
+          </div>
+
+          {/* Wipe Data Sets tabs (surgical — keeps runtime config) */}
+          <div className="border border-orange-200 rounded-lg p-4 bg-orange-50 flex flex-col justify-between">
+            <div>
+              <h3 className="font-semibold text-orange-700 mb-2">
+                Wipe Data Sets
+              </h3>
+              <p className="text-sm text-orange-600 mb-4">
+                Deletes everything in Knowledge / Commands / Links / Mega Text
+                / AI Personality / Skills / Forms tabs. Keeps runtime config
+                so the bot still works. Irreversible.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setShowWipeModal(true);
+                setWipePassword('');
+                setWipeResult(null);
+              }}
+              className="w-full px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 flex items-center justify-center transition-colors font-bold"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Wipe Data Sets
             </button>
           </div>
 
@@ -419,6 +496,93 @@ export default function SystemMaintenance() {
                     {isResetting ? 'Wiping...' : 'YES, WIPE ALL'}
                   </button>
                 </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* WIPE DATA SETS MODAL */}
+      {showWipeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-xl">
+            <div className="flex items-center justify-center mb-6">
+              <div className="bg-orange-100 p-3 rounded-full">
+                <AlertTriangle className="h-8 w-8 text-orange-600" />
+              </div>
+            </div>
+
+            {!wipeResult ? (
+              <>
+                <h3 className="text-xl font-bold text-center text-gray-900 mb-2">
+                  Wipe Data Sets content
+                </h3>
+                <p className="text-sm text-gray-600 text-center mb-4">
+                  Deletes everything in the Knowledge / Commands / Links /
+                  Mega Text / AI Personality / Skills / Forms tabs.
+                  <br />
+                  <br />
+                  <b>Preserved:</b> bot runtime config (HELP_MESSAGE,
+                  AI_PERSONALITY config key, JOB_TYPES, COUNTRIES, …),
+                  CRM contacts, leads, chat history, and the LID→phone
+                  mapping.
+                </p>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Confirm with your admin password
+                </label>
+                <input
+                  type="password"
+                  value={wipePassword}
+                  onChange={(e) => setWipePassword(e.target.value)}
+                  className="w-full p-2 border border-orange-300 rounded mb-6 focus:ring-2 focus:ring-orange-500 outline-none"
+                  placeholder="Admin password"
+                  autoFocus
+                  disabled={wiping}
+                />
+                <div className="flex space-x-4">
+                  <button
+                    onClick={() => {
+                      setShowWipeModal(false);
+                      setWipePassword('');
+                    }}
+                    disabled={wiping}
+                    className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 disabled:opacity-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleWipeDatasets}
+                    disabled={wiping || !wipePassword}
+                    className="flex-1 px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50 transition-colors flex justify-center items-center"
+                  >
+                    {wiping ? 'Wiping…' : 'Wipe now'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="text-xl font-bold text-center text-green-700 mb-4">
+                  Done
+                </h3>
+                <p className="text-center text-gray-700 mb-2">
+                  Deleted <b>{wipeResult.totalDeleted}</b> row(s).
+                </p>
+                <ul className="text-xs text-gray-600 bg-gray-50 rounded p-3 mb-4 font-mono">
+                  {Object.entries(wipeResult.deleted).map(([k, v]) => (
+                    <li key={k}>
+                      {k}: <b>{String(v)}</b>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  onClick={() => {
+                    setShowWipeModal(false);
+                    setWipeResult(null);
+                  }}
+                  className="w-full px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors"
+                >
+                  Close
+                </button>
               </>
             )}
           </div>
