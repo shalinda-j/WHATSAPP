@@ -133,6 +133,18 @@ export class AILoadBalancer {
       const configs = await Config.find({ isProvider: true, isActive: true });
 
       for (const conf of configs) {
+        // conf.apiKey is undefined when CryptoService.decrypt failed
+        // (ENCRYPTION_KEY mismatch). Skip the provider with a clear log
+        // instead of attempting to use a garbage key — that produced the
+        // 401/400 errors customers were seeing.
+        if (!conf.apiKey) {
+          console.warn(
+            `⚠️ Skipping provider ${conf.providerType} (${conf.aiModel}): ` +
+              `API key could not be decrypted. Re-enter the key in ` +
+              `Admin Panel > Configuration > AI Providers.`,
+          );
+          continue;
+        }
         if (conf.apiKey) {
           if (conf.providerType === 'google') {
             this.services.push(

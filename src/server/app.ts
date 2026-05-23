@@ -47,17 +47,28 @@ import { auditLog } from './middleware/auditLog';
 const app = express();
 
 // Middleware
-// CORS Configuration - Restrict to allowed origins
-const allowedOrigins = [
+// CORS Configuration - Restrict to allowed origins.
+// Production origins come from the ALLOWED_ORIGINS env var (comma-separated
+// list, see .do/app.yaml). Without this the deployed admin panel calls
+// were all rejected by CORS even though the env var was set.
+const localOrigins = [
   'http://localhost:5000', // Vite dev server
   'http://localhost:5173', // Vite default port
   'http://localhost:8080', // Backend server (same origin)
   'http://127.0.0.1:5000',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:8080',
-  // Add production origins here when deploying
-  // 'https://your-domain.com',
 ];
+const envOrigins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((o) => o.trim().replace(/\/$/, '')) // strip trailing slash
+  .filter((o) => o.length > 0);
+const allowedOrigins = [...localOrigins, ...envOrigins];
+if (envOrigins.length > 0) {
+  console.log(
+    `✅ CORS: allowed production origins → ${envOrigins.join(', ')}`,
+  );
+}
 
 const corsOptions = {
   origin: (
@@ -67,7 +78,9 @@ const corsOptions = {
     // Allow requests with no origin (mobile apps, webhooks, etc.)
     if (!origin) return callback(null, true);
 
-    if (allowedOrigins.includes(origin)) {
+    // Normalise so "https://foo.com" and "https://foo.com/" both match.
+    const normalised = origin.replace(/\/$/, '');
+    if (allowedOrigins.includes(normalised)) {
       callback(null, true);
     } else {
       console.warn(`⚠️ CORS blocked request from: ${origin}`);

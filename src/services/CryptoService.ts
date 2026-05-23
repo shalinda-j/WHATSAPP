@@ -63,11 +63,19 @@ export class CryptoService {
       decrypted += decipher.final('utf8');
       return decrypted;
     } catch (error) {
+      // Return undefined (NOT the raw ciphertext) so callers can detect a
+      // bad key. The old behaviour returned the encrypted blob — every
+      // caller then tried to use it as if it were the real value, causing
+      // downstream API calls to fail with 401/400. Returning undefined
+      // forces the load balancer to skip this provider cleanly.
       console.error(
-        'Decryption error, returning raw text. Please reset your API keys:',
-        error,
+        '❌ ENCRYPTION_KEY mismatch — cannot decrypt stored value. ' +
+          'The ENCRYPTION_KEY env var is different from when this value was saved. ' +
+          'Either restore the original ENCRYPTION_KEY or re-enter the value via Admin Panel. ' +
+          'Error:',
+        (error as Error).message || error,
       );
-      return text;
+      return undefined;
     }
   }
 }
