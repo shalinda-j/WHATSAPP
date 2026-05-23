@@ -332,9 +332,13 @@ export class ConfigurationManagerService {
       return personality;
     } catch (error) {
       console.error('Error fetching AI personality:', error);
-
+      // Generic, brand-neutral fallback. The previous string leaked the
+      // original operator name ("Jayalath Global") to any tenant whose
+      // AI_PERSONALITY dataset row was missing or empty. We return a
+      // neutral one-liner instead and let the operator override it via
+      // Admin Panel > Datasets > AI_PERSONALITY.
       const defaultPersonality =
-        'You are a helpful AI assistant for Jayalath Global. Respond in a professional yet friendly manner.';
+        'You are a helpful AI assistant. Respond professionally and concisely.';
       this.setCache(cacheKey, defaultPersonality);
       return defaultPersonality;
     }
