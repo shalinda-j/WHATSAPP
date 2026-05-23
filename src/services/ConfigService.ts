@@ -209,15 +209,12 @@ export class ConfigService {
   }
 
   public async getLocalNLPEnabled(): Promise<boolean> {
-    try {
-      const ConfigModel = (await import('../models/Config')).default;
-      const config = await ConfigModel.findOne({ key: 'LOCAL_NLP_ENABLED' });
-      // Default to false if not set
-      return config?.value === 'true';
-    } catch (error) {
-      console.error('Error fetching Local NLP flag:', error);
-      return false;
-    }
+    // Hard-disabled by operator policy: the shared NLP response cache caused
+    // FAQ-style answers (from an earlier prompt era) to be served to every
+    // customer instead of the live sales/marketing personality. Forced off
+    // so every inbound message reaches the AI Load Balancer and the current
+    // AI_PERSONALITY prompt. Re-enable by restoring the DB lookup below.
+    return false;
   }
 
   /**

@@ -190,7 +190,8 @@ async function startServer() {
       await seedAIProviders();
       await seedDatasets();
       await seedDefaultFormTemplate();
-      await nlpService.initializeNLP();
+      // NLP cache disabled by operator policy (see ConfigService.getLocalNLPEnabled).
+      // Skip the model load to save boot time and memory while the cache is dormant.
 
       // CRITICAL: Clean up any old/stuck sessions on startup
       // This prevents old sessions from triggering forms unexpectedly
