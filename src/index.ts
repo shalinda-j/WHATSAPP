@@ -66,6 +66,21 @@ import {
 const PORT = process.env.PORT || 8080;
 let server: any;
 
+/**
+ * Distinguish real English from Singlish (Sinhala written in Latin letters,
+ * e.g. "ayubowan kohomada", "mata Japan job ekak ona"). The old "is the
+ * text only Latin letters?" check classified Singlish as English and the
+ * bot replied in English to Sinhala-speaking customers. We now require at
+ * least two common English function words; Singlish phrases rarely contain
+ * any, so they fall through to the Sinhala branch.
+ */
+const ENGLISH_FUNCTION_WORDS =
+  /\b(the|is|are|am|i|you|he|she|we|they|my|your|it|and|or|but|what|how|why|when|where|can|could|would|should|please|hello|hi|thank|thanks|yes|no|okay|ok|need|want|have|has|had|do|does|did|will|with|from|about|for|on|in|at|by|of|me|us|them|this|that|these|those|been|was|were|going|going to|just|now|here|there)\b/gi;
+function isEnglishText(text: string): boolean {
+  if (!text) return false;
+  return (text.match(ENGLISH_FUNCTION_WORDS) || []).length >= 2;
+}
+
 type LeadFlowFact = {
   phone: string | null;
   country: string | null;
@@ -896,44 +911,38 @@ onMessage(async (message, sock, sessionId) => {
         // Analyze Intent first for metadata
         intentAnalysis = await analyzeLeadIntent(text);
 
-        // LANGUAGE DETECTION: Detect language and set response language accordingly
-        // Default language is SINHALA. If user writes in English only, reply in English.
+        // LANGUAGE DETECTION: Primary languages are Sinhala and Singlish
+        // (Sinhala written in Latin letters). English replies are only
+        // issued when the customer actually writes English \u2014 detected via
+        // real English function words, not "is it Latin letters?" (which
+        // previously misclassified Singlish as English and caused the bot
+        // to reply in English to Sinhala-speaking customers).
         let finalPrompt = text;
+        const hasSinhalaChars = /[\u0D80-\u0DFF]/.test(text);
+        const hasTamilChars = /[\u0B80-\u0BFF]/.test(text);
+        const isRealEnglish = isEnglishText(text);
         if (isVoiceMessage) {
-          const looksLikeEnglish =
-            /^([a-zA-Z]+\s*){3,}$/.test(text.trim()) &&
-            /\b(the|is|are|I|you|he|she|we|they|my|your|it|and|or|but|what|how|can|could|please|hello|hi|thank|yes|no|okay|ok)\b/i.test(
-              text,
-            );
-          const hasSinhalaChars = /[\u0D80-\u0DFF]/.test(text);
-          const hasTamilChars = /[\u0B80-\u0BFF]/.test(text);
 
           if (hasSinhalaChars) {
             finalPrompt += `\n\n(SYSTEM: මෙය VOICE පණිවිඩයකි. සිංහල භාෂාවෙන් කෙටිව, ස්වාභාවිකව ප්‍රතිඋත්තර දෙන්න.)`;
           } else if (hasTamilChars) {
             finalPrompt += `\n\n(SYSTEM: இது குரல் செய்தி. தமிழில் சுருக்கமாக, இயல்பாக பதிலளிக்கவும்.)`;
-          } else if (looksLikeEnglish) {
+          } else if (isRealEnglish) {
             finalPrompt += `\n\n(SYSTEM: This is a VOICE message in English. Reply ONLY in English, short and natural.)`;
           } else {
-            finalPrompt += `\n\n(SYSTEM: මෙය VOICE පණිවිඩයකි. සිංහල භාෂාවෙන් කෙටිව ප්‍රතිඋත්තර දෙන්න.)`;
+            // Singlish or names/numbers — default to Sinhala, mirror Singlish style if user did.
+            finalPrompt += `\n\n(SYSTEM: මෙය VOICE පණිවිඩයකි. පරිශීලකයා Singlish (සිංහල + ඉංග්‍රීසි අකුරු) හෝ සිංහල භාවිතා කරයි. සිංහල භාෂාවෙන් කෙටිව, ස්වාභාවිකව ප්‍රතිඋත්තර දෙන්න. පරිශීලකයා Singlish ලිවුවොත් එම ශෛලියට ගැලපීමට Singlish භාවිතා කරන්න. ඉංග්‍රීසි පමණක් භාවිතා නොකරන්න.)`;
           }
         } else {
-          // Text message: detect language
-          const hasSinhala = /[\u0D80-\u0DFF]/.test(text);
-          const hasTamil = /[\u0B80-\u0BFF]/.test(text);
-          const isLikelyEnglish =
-            /^[a-zA-Z0-9\s\p{P}!?.,;&'"()+\-*#@%$^\[\]{}|\\/<>=`~]+$/u.test(
-              text.trim(),
-            );
-
-          if (hasSinhala) {
+          if (hasSinhalaChars) {
             finalPrompt += `\n\n(SYSTEM: සිංහල භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න.)`;
-          } else if (hasTamil) {
+          } else if (hasTamilChars) {
             finalPrompt += `\n\n(SYSTEM: தமிழ் மொழியில் பதிலளிக்கவும்.)`;
-          } else if (isLikelyEnglish) {
+          } else if (isRealEnglish) {
             finalPrompt += `\n\n(SYSTEM: The user is writing in English. Reply ONLY in English.)`;
           } else {
-            finalPrompt += `\n\n(SYSTEM: Default language is Sinhala. සිංහල භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න.)`;
+            // Singlish or names/numbers — default to Sinhala, mirror Singlish style if user did.
+            finalPrompt += `\n\n(SYSTEM: පරිශීලකයා Singlish (සිංහල + ඉංග්‍රීසි අකුරු) හෝ සිංහල භාවිතා කරයි. සිංහල භාෂාවෙන් ප්‍රතිඋත්තර දෙන්න. පරිශීලකයා Singlish ලිවුවොත් එම ශෛලියට ගැලපීමට Singlish භාවිතා කරන්න. ඉංග්‍රීසි පමණක් භාවිතා නොකරන්න.)`;
           }
         }
 
