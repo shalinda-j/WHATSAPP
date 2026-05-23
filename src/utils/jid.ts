@@ -90,18 +90,23 @@ export function extractRealPhone(
 /**
  * Last-resort label for a JID we couldn't resolve to a contact. Returns
  * a short stable string the operator can recognise across re-renders —
- * never a fake `+<lid>` number.
+ * never a fake `+<lid>` number, and never the opaque LID digits.
  *   `+94771234567`                     for phone-backed JIDs
- *   `LID …4567`                        for LIDs (last 4 of the opaque id)
+ *   `Unknown contact`                  for LIDs we have no mapping for yet
  *   `Group …a1b2`                      for groups
  *   `Unknown`                          for everything else
+ *
+ * Why this changed: returning `LID …<digits>` was the bug surfacing the
+ * raw WhatsApp identifier to operators. The 4-digit suffix LOOKS like a
+ * phone fragment, which is misleading — those digits are an internal
+ * privacy identifier, not part of any phone number. Falling back to
+ * 'Unknown contact' forces the chat list to either show the WhatsApp
+ * pushName (when present) or surface the "Verifying number…" pill that
+ * prompts the operator to map the LID manually.
  */
 export function fallbackJidLabel(jid: string | undefined | null): string {
   if (!jid) return 'Unknown';
-  if (isLidJid(jid)) {
-    const tail = jid.replace('@lid', '').slice(-4);
-    return `LID …${tail}`;
-  }
+  if (isLidJid(jid)) return 'Unknown contact';
   if (isGroupJid(jid)) {
     const tail = jid.replace('@g.us', '').slice(-4);
     return `Group …${tail}`;
@@ -109,4 +114,55 @@ export function fallbackJidLabel(jid: string | undefined | null): string {
   const phone = extractRealPhone(jid);
   if (phone) return `+${phone}`;
   return 'Unknown';
+}
+
+/**
+ * Best-effort phone extraction from a `contactMessage` or
+ * `contactsArrayMessage` payload (the result of the customer tapping
+ * "Share my contact" or "Share a contact" in WhatsApp). The actual phone
+ * lives inside a vCard string as a `TEL` field with optional parameters,
+ * e.g. `TEL;type=CELL;waid=94771234567:+94 77 123 4567`.
+ *
+ * We try the structured `waid=` parameter first (always digits, no
+ * formatting) and fall back to a phone-shaped regex over the TEL value.
+ * Returns null when no recognisable phone is present.
+ */
+export function extractPhoneFromContactCard(
+  rawMessage: unknown,
+): string | null {
+  if (!rawMessage || typeof rawMessage !== 'object') return null;
+  const m = rawMessage as { message?: Record<string, unknown> };
+  const inner = m.message ?? {};
+  const contactMsg =
+    (inner as any).contactMessage ??
+    (inner as any).ephemeralMessage?.message?.contactMessage ??
+    (inner as any).viewOnceMessage?.message?.contactMessage ??
+    (inner as any).viewOnceMessageV2?.message?.contactMessage;
+  const arrayMsg =
+    (inner as any).contactsArrayMessage ??
+    (inner as any).ephemeralMessage?.message?.contactsArrayMessage;
+
+  const vcards: string[] = [];
+  if (typeof contactMsg?.vcard === 'string') vcards.push(contactMsg.vcard);
+  if (Array.isArray(arrayMsg?.contacts)) {
+    for (const c of arrayMsg.contacts) {
+      if (typeof c?.vcard === 'string') vcards.push(c.vcard);
+    }
+  }
+  if (vcards.length === 0) return null;
+
+  for (const vcard of vcards) {
+    // 1. The structured waid= parameter is the cleanest signal — always
+    //    pure digits, no country-code ambiguity, no formatting noise.
+    const waid = vcard.match(/waid=(\d{8,15})/i);
+    if (waid) return waid[1];
+    // 2. Fallback: a phone-shaped value on a TEL line. Mostly catches
+    //    cards exported from other systems that don't carry waid.
+    const telLine = vcard.match(/TEL[^:\r\n]*:([^\r\n]+)/i);
+    if (telLine) {
+      const digits = telLine[1].replace(/\D/g, '');
+      if (digits.length >= 8 && digits.length <= 15) return digits;
+    }
+  }
+  return null;
 }

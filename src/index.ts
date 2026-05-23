@@ -57,7 +57,11 @@ import { HumanizerService } from './services/HumanizerService';
 import { isStopKeyword, markContactOptedOut } from './services/optOut';
 import { scoreSentiment } from './services/sentiment';
 import { autoTagLeadFromMessage } from './services/leadAutoTag';
-import { extractPhoneJidFromMessage, extractRealPhone } from './utils/jid';
+import {
+  extractPhoneJidFromMessage,
+  extractRealPhone,
+  extractPhoneFromContactCard,
+} from './utils/jid';
 import {
   extractPhoneFromText,
   rememberLidPhoneMapping,
@@ -599,16 +603,80 @@ onMessage(async (message, sock, sessionId) => {
     const pushName =
       (message as any).pushName || (message.key as any)?.pushName;
     const phoneJidFromMsg = extractPhoneJidFromMessage(message);
-    const inboundRealPhone =
+    let inboundRealPhone =
       extractRealPhone(phoneJidFromMsg) ?? extractRealPhone(jid) ?? undefined;
+
+    // ── Resolution layer 1: phone shared via a vCard contact card ────────
+    // When the customer taps "Share my contact" in WhatsApp, the message
+    // carries a `contactMessage` (or contactsArrayMessage) payload with a
+    // vCard string. The vCard contains the real phone in TEL fields even
+    // when the conversation JID is an opaque @lid. Extract once here so
+    // every downstream consumer benefits — CRM auto-register, the chat
+    // back-fill, exports — without each one re-parsing.
+    const contactSharedPhone = extractPhoneFromContactCard(message);
+    if (!inboundRealPhone && contactSharedPhone) {
+      inboundRealPhone = contactSharedPhone;
+    }
+
     rememberLidPhoneMapping({
       sessionId,
       lidJid: jid,
-      phoneJid: phoneJidFromMsg ?? extractPhoneFromText(text),
-      source: 'message',
+      phoneJid:
+        phoneJidFromMsg ??
+        (contactSharedPhone ? `${contactSharedPhone}@s.whatsapp.net` : null) ??
+        extractPhoneFromText(text),
+      source: contactSharedPhone ? 'phone_number_share' : 'message',
     }).catch((err) => {
       console.error('   ⚠️ LID phone mapping save error:', err);
     });
+
+    // ── Resolution layer 2: verify any phone-shaped text via sock.onWhatsApp ─
+    // The customer might type their number ("මගේ අංකය 0771234567") instead
+    // of sharing a contact. extractPhoneFromText returns digits; that alone
+    // doesn't prove they belong to this conversation, so we ask WhatsApp:
+    // sock.onWhatsApp(['+94...']) returns { exists, jid, lid? } — only when
+    // exists===true do we persist the mapping. Fire-and-forget: the result
+    // helps the NEXT refresh, not this message.
+    if (!inboundRealPhone) {
+      const textPhone = extractPhoneFromText(text);
+      if (textPhone && typeof (sock as any)?.onWhatsApp === 'function') {
+        (sock as any)
+          .onWhatsApp(`+${textPhone}`)
+          .then(
+            async (
+              results: Array<{ exists?: boolean; jid?: string; lid?: string }>,
+            ) => {
+              const hit = (results ?? []).find((r) => r?.exists);
+              if (!hit?.jid) return;
+              const verifiedPhone = extractRealPhone(hit.jid);
+              if (!verifiedPhone) return;
+              // Persist both the LID we already have AND the LID Baileys
+              // returns (some setups expose them as separate identifiers).
+              const lidCandidates = [jid, hit.lid].filter(
+                (v): v is string => typeof v === 'string' && v.length > 0,
+              );
+              for (const lid of lidCandidates) {
+                await rememberLidPhoneMapping({
+                  sessionId,
+                  lidJid: lid,
+                  phoneJid: `${verifiedPhone}@s.whatsapp.net`,
+                  source: 'message',
+                }).catch(() => undefined);
+              }
+              // Back-stamp realPhone on the message we just stored so the
+              // chat list resolves immediately on the next refresh without
+              // waiting for back-fill aggregation.
+              await ChatMessage.updateMany(
+                { userId: jid, 'metadata.realPhone': { $exists: false } },
+                { $set: { 'metadata.realPhone': verifiedPhone } },
+              ).catch(() => undefined);
+            },
+          )
+          .catch((err: unknown) => {
+            console.error('   ⚠️ sock.onWhatsApp reverse lookup failed:', err);
+          });
+      }
+    }
     autoRegistrationService
       .checkAndRegister(jid, pushName, sessionId, inboundRealPhone)
       .catch((err) => {

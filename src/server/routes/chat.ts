@@ -2,11 +2,16 @@ import { Router, Request, Response } from 'express';
 import ChatMessage from '../../models/ChatMessage';
 import Session from '../../models/Session';
 import { Contact } from '../../models/CRM';
+import LidPhoneMapping from '../../models/LidPhoneMapping';
 import { sendMessage, getSocket } from '../../services/whatsapp';
 import { getIO } from '../socket';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { resolveTenant } from '../middleware/tenantContext';
-import { extractRealPhone, fallbackJidLabel } from '../../utils/jid';
+import { extractRealPhone, fallbackJidLabel, isLidJid } from '../../utils/jid';
+import {
+  normaliseLidJid,
+  normalisePhoneJid,
+} from '../../services/LidPhoneMappingService';
 
 const router = Router();
 
@@ -105,8 +110,9 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
       unresolvedLidUserIds.push(conv._id);
     }
 
-    // Back-fill for LIDs by checking any earlier ChatMessage that carries
-    // a realPhone for the same userId. One $group over the index hits.
+    // Back-fill #1 — any earlier ChatMessage that carries a realPhone
+    // for the same userId. One $group over the (userId, metadata.realPhone)
+    // path.
     if (unresolvedLidUserIds.length > 0) {
       const backfill = (await ChatMessage.aggregate([
         {
@@ -124,6 +130,50 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
       ])) as Array<{ _id: string; realPhone: string }>;
       for (const row of backfill) {
         if (row.realPhone) phoneByUserId.set(row._id, row.realPhone);
+      }
+    }
+
+    // Back-fill #2 — for LIDs STILL unresolved after the ChatMessage
+    // back-fill, consult the LidPhoneMapping collection. That collection
+    // is populated by Baileys hooks (contacts.upsert / contacts.update /
+    // messaging-history.set / chats.phoneNumberShare) as well as by
+    // text-extraction during inbound. It captures mappings that the
+    // chat-history aggregation cannot see — e.g. a customer who shared
+    // their phone via a contact card whose vCard the bot parsed, or a
+    // mapping the operator entered manually via POST /api/chat/lid/map.
+    //
+    // Without this step the chat list would forever render "Verifying
+    // number…" for those conversations even though we know who the
+    // person is — the gap that surfaced the LID digits to the operator.
+    const stillUnresolved = unresolvedLidUserIds.filter(
+      (uid) => !phoneByUserId.has(uid),
+    );
+    if (stillUnresolved.length > 0) {
+      const lidKeys = stillUnresolved
+        .map((uid) => normaliseLidJid(uid) ?? (isLidJid(uid) ? uid : null))
+        .filter((v): v is string => Boolean(v));
+      if (lidKeys.length > 0) {
+        const mappings = await LidPhoneMapping.find({
+          lidJid: { $in: lidKeys },
+          // Don't constrain by sessionId — a mapping learned on session A
+          // is still valid for the same LID on session B (same person).
+        })
+          .sort({ lastSeenAt: -1 })
+          .lean();
+        // The find() may return multiple rows per lid (different sessions);
+        // .sort lastSeenAt desc means the first row we see per lid is the
+        // freshest.
+        const byLid = new Map<string, string>();
+        for (const row of mappings as Array<{ lidJid: string; phone: string }>) {
+          if (!byLid.has(row.lidJid) && row.phone) {
+            byLid.set(row.lidJid, row.phone);
+          }
+        }
+        for (const uid of stillUnresolved) {
+          const lidKey = normaliseLidJid(uid) ?? uid;
+          const phone = byLid.get(lidKey);
+          if (phone) phoneByUserId.set(uid, phone);
+        }
       }
     }
 
@@ -348,6 +398,83 @@ router.post('/mark-read/:userId', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error marking as read:', error);
     res.status(500).json({ error: 'Failed to mark as read' });
+  }
+});
+
+/**
+ * POST /api/chat/lid/map
+ * Body: { userId: '<lid>@lid', phone: '+94771234567' }
+ *
+ * Manual LID → phone mapping written by the operator from the chat UI
+ * when none of the automatic resolvers (Baileys senderPn, contact sync,
+ * vCard parse, text extraction) caught the customer's real number. The
+ * mapping is shared across all sessions — once an operator types it once,
+ * the same LID resolves on every device the bot is connected to.
+ *
+ * Also rewrites ANY ChatMessage rows that share this userId so the back-
+ * fill on the conversations endpoint picks it up immediately (no need to
+ * wait for the next inbound message).
+ */
+router.post('/lid/map', async (req: AuthRequest, res: Response) => {
+  try {
+    const { userId, phone } = (req.body ?? {}) as {
+      userId?: unknown;
+      phone?: unknown;
+    };
+    if (typeof userId !== 'string' || !userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+    if (typeof phone !== 'string' || !phone) {
+      return res.status(400).json({ error: 'phone is required' });
+    }
+    const lidJid = normaliseLidJid(userId) ?? (isLidJid(userId) ? userId : null);
+    if (!lidJid) {
+      return res.status(400).json({
+        error:
+          'userId must be a Linked-ID (@lid) JID — phone-backed JIDs do not need mapping',
+      });
+    }
+    const phoneInfo = normalisePhoneJid(phone);
+    if (!phoneInfo) {
+      return res
+        .status(400)
+        .json({ error: 'phone must be a valid 8-15 digit number (E.164)' });
+    }
+
+    const now = new Date();
+    await LidPhoneMapping.updateOne(
+      { lidJid },
+      {
+        $set: {
+          lidJid,
+          phoneJid: phoneInfo.phoneJid,
+          phone: phoneInfo.phone,
+          source: 'manual',
+          lastSeenAt: now,
+        },
+        $setOnInsert: { firstSeenAt: now },
+      },
+      { upsert: true },
+    );
+
+    // Stamp realPhone on every ChatMessage for this LID so the chat list
+    // resolves on the next refresh without waiting for new traffic.
+    const stamped = await ChatMessage.updateMany(
+      { userId: lidJid },
+      { $set: { 'metadata.realPhone': phoneInfo.phone } },
+    );
+
+    res.json({
+      success: true,
+      lidJid,
+      phone: phoneInfo.phone,
+      messagesStamped: stamped.modifiedCount ?? 0,
+    });
+  } catch (error: any) {
+    console.error('Error mapping LID to phone:', error);
+    res
+      .status(500)
+      .json({ error: error?.message ?? 'Failed to map LID to phone' });
   }
 });
 

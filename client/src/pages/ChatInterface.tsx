@@ -142,6 +142,16 @@ export default function ChatInterface() {
     new Date().toISOString().slice(0, 7),
   );
   const [exportIncludeUnresolved, setExportIncludeUnresolved] = useState(true);
+
+  // Manual LID → phone mapping. Operator opens this when the chat list
+  // shows "Unknown contact" because the automatic resolvers (Baileys
+  // senderPn, contact-card vCard, address-book sync, text extraction)
+  // didn't catch the number. Submitting writes to LidPhoneMapping AND
+  // stamps realPhone on every existing message for the LID — so the row
+  // resolves immediately on the next refresh.
+  const [mapLidFor, setMapLidFor] = useState<string | null>(null);
+  const [mapLidPhone, setMapLidPhone] = useState('');
+  const [mapLidBusy, setMapLidBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   const openExportModal = () => {
@@ -452,9 +462,14 @@ export default function ChatInterface() {
   /**
    * Display label for a user. The backend now hands us a resolved
    * userInfo with name + real phone, so prefer that. Falls back to the
-   * pushName captured on the last message, then a LID-aware label so
-   * Linked-IDs render as 'LID …xxxx' instead of a garbage '+15889…'
-   * number that doesn't dial.
+   * pushName captured on the last message, then a safe placeholder.
+   *
+   * IMPORTANT: this function MUST NOT return the opaque LID digits.
+   * The previous behaviour ('LID …xxxx') leaked the WhatsApp privacy
+   * identifier into the chat list, which operators mistook for a phone
+   * number fragment. Unresolved LIDs now show as 'Unknown contact' and
+   * the row renders a "Map to phone" action so the operator can fix it
+   * in one click.
    */
   const getUserDisplayName = (userId: string) => {
     const conv = conversations.find((c) => c.userId === userId);
@@ -465,11 +480,7 @@ export default function ChatInterface() {
       ?.pushName;
     if (pushName) return pushName;
 
-    // No userInfo and no pushName — derive a safe label from the raw JID.
-    if (userId.endsWith('@lid')) {
-      const tail = userId.replace('@lid', '').slice(-4);
-      return `LID …${tail}`;
-    }
+    if (userId.endsWith('@lid')) return 'Unknown contact';
     if (userId.endsWith('@g.us')) {
       const tail = userId.replace('@g.us', '').slice(-4);
       return `Group …${tail}`;
@@ -478,6 +489,37 @@ export default function ChatInterface() {
     const digits = local.replace(/\D/g, '');
     if (digits.length >= 8 && digits.length <= 15) return `+${digits}`;
     return 'Unknown';
+  };
+
+  // Submit handler for the manual LID → phone mapping modal. Hits the
+  // backend endpoint that writes LidPhoneMapping AND back-stamps every
+  // existing ChatMessage for the LID, then refreshes the conversation
+  // list so the now-resolved row renders with the real phone.
+  const submitLidMap = async () => {
+    if (!mapLidFor) return;
+    const digits = mapLidPhone.replace(/\D/g, '');
+    if (digits.length < 8 || digits.length > 15) {
+      alert('Phone must be 8–15 digits (E.164 format, no spaces).');
+      return;
+    }
+    setMapLidBusy(true);
+    try {
+      const { api } = await import('../config');
+      await api.post('/api/chat/lid/map', {
+        userId: mapLidFor,
+        phone: digits,
+      });
+      setMapLidFor(null);
+      setMapLidPhone('');
+      // Force a refresh so the conversation row picks up the new mapping.
+      // We rely on the existing polling/socket refresh path rather than
+      // mutating local state — keeps the source of truth on the server.
+      window.location.reload();
+    } catch (err: any) {
+      alert(err?.response?.data?.error ?? err?.message ?? 'Mapping failed.');
+    } finally {
+      setMapLidBusy(false);
+    }
   };
 
   const filteredConversations = conversations.filter((c) => {
@@ -704,6 +746,23 @@ export default function ChatInterface() {
                           </span>
                         </div>
                       )}
+                    {/* Unresolved LID — show a pill + one-click map action.
+                        Click on the pill stops the row-select handler so the
+                        modal opens without ALSO opening the conversation. */}
+                    {conv.userInfo?.isUnresolved && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMapLidFor(conv.userId);
+                          setMapLidPhone('');
+                        }}
+                        className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800 ring-1 ring-amber-200 hover:bg-amber-200"
+                        title="Map this WhatsApp Linked-ID to the real phone number"
+                      >
+                        Verifying number… map →
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -1167,6 +1226,77 @@ export default function ChatInterface() {
                     <Download className="h-4 w-4" />
                     Download CSV
                   </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual LID → phone mapping modal. Opens when the operator clicks
+          the "Verifying number…" pill on an unresolved conversation row.
+          The submitted phone goes through normalisation server-side, so
+          local entry is forgiving — 0703179882 / +94 70 317 9882 /
+          94703179882 all collapse to the same E.164 form. */}
+      {mapLidFor && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-800">
+                Map to real phone
+              </h2>
+              <button
+                onClick={() => {
+                  setMapLidFor(null);
+                  setMapLidPhone('');
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">
+              WhatsApp gave us a privacy Linked-ID instead of the real
+              number. Enter the customer's phone in international format
+              (e.g. <span className="font-mono">94771234567</span>) and
+              the chat list will resolve immediately.
+            </p>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Phone number
+            </label>
+            <input
+              type="tel"
+              autoFocus
+              value={mapLidPhone}
+              onChange={(e) => setMapLidPhone(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !mapLidBusy) submitLidMap();
+              }}
+              placeholder="94771234567"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 font-mono"
+            />
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setMapLidFor(null);
+                  setMapLidPhone('');
+                }}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitLidMap}
+                disabled={mapLidBusy || !mapLidPhone.trim()}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {mapLidBusy ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Saving…
+                  </>
+                ) : (
+                  'Save mapping'
                 )}
               </button>
             </div>
