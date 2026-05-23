@@ -7,6 +7,7 @@ import {
   Bot,
   MessageSquare,
   GraduationCap,
+  ClipboardList,
 } from 'lucide-react';
 import { api } from '../config';
 import LanguageSwitcher, {
@@ -20,6 +21,7 @@ import MegaTextTab from '../components/datasets/MegaTextTab';
 import AIPersonalityTab from '../components/datasets/AIPersonalityTab';
 import AcknowledgementsTab from '../components/datasets/AcknowledgementsTab';
 import SkillsTab from '../components/datasets/SkillsTab';
+import FormsTab from '../components/datasets/FormsTab';
 
 type TabType =
   | 'knowledge'
@@ -28,7 +30,8 @@ type TabType =
   | 'megatext'
   | 'personality'
   | 'acknowledgements'
-  | 'skills';
+  | 'skills'
+  | 'forms';
 
 interface Tab {
   id: TabType;
@@ -45,6 +48,7 @@ const tabs: Tab[] = [
   { id: 'personality', label: 'AI Personality', icon: Bot },
   { id: 'acknowledgements', label: 'Acknowledgements', icon: MessageSquare },
   { id: 'skills', label: 'Skills', icon: GraduationCap },
+  { id: 'forms', label: 'Forms', icon: ClipboardList },
 ];
 
 export default function Datasets() {
@@ -58,6 +62,7 @@ export default function Datasets() {
     personality: 0,
     acknowledgements: 0,
     skills: 0,
+    forms: 0,
   });
 
   // Fetch counts for each tab
@@ -76,6 +81,7 @@ export default function Datasets() {
         personality: 0,
         acknowledgements: 0,
         skills: 0,
+        forms: 0,
       };
 
       // Filter out 'config' type (internal configuration items, not displayed in tabs)
@@ -116,6 +122,31 @@ export default function Datasets() {
         newCounts.skills = Array.isArray(skillsArr) ? skillsArr.length : 0;
       } catch {
         /* skills count is informational — non-fatal */
+      }
+
+      // Auto-learned Q/A rows live in the KnowledgeEntry collection
+      // (separate from Dataset). Roll their count into the Knowledge tab
+      // badge so the total matches what the merged Knowledge tab shows.
+      try {
+        const kbRes = await api.get('/api/knowledge');
+        const kbArr = Array.isArray(kbRes.data)
+          ? kbRes.data
+          : kbRes.data?.entries ?? [];
+        newCounts.knowledge += Array.isArray(kbArr) ? kbArr.length : 0;
+      } catch {
+        /* /api/knowledge missing on older builds is non-fatal */
+      }
+
+      // Forms tab reads from /api/forms/templates (FormTemplate collection),
+      // not /api/datasets.
+      try {
+        const formsRes = await api.get('/api/forms/templates');
+        const formsArr = Array.isArray(formsRes.data)
+          ? formsRes.data
+          : formsRes.data?.templates ?? [];
+        newCounts.forms = Array.isArray(formsArr) ? formsArr.length : 0;
+      } catch {
+        /* forms count non-fatal */
       }
 
       setCounts(newCounts);
@@ -187,6 +218,8 @@ export default function Datasets() {
             onDataChange={handleDataChange}
           />
         );
+      case 'forms':
+        return <FormsTab onDataChange={handleDataChange} />;
       default:
         return null;
     }

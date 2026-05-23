@@ -1,8 +1,19 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../config';
-import { Plus, Trash, Edit, Save, X, Upload, Database } from 'lucide-react';
+import {
+  Plus,
+  Trash,
+  Edit,
+  Save,
+  X,
+  Upload,
+  Database,
+  Sparkles,
+  ArrowUpRight,
+} from 'lucide-react';
 import LanguageSwitcher, { type Language } from './LanguageSwitcher';
 
+// Hand-curated row coming from /api/datasets (Dataset collection).
 interface KnowledgeItem {
   _id: string;
   name: string;
@@ -16,7 +27,29 @@ interface KnowledgeItem {
   category: string;
   key?: string;
   isActive: boolean;
+  // Discriminator added client-side so the merged list can render two shapes.
+  source: 'dataset';
 }
+
+// Auto-learned Q/A row coming from /api/knowledge (KnowledgeEntry collection).
+// This was previously invisible in the Datasets page — every successful
+// AI response is appended here by KnowledgeTrainingService.addKnowledge,
+// plus anything imported via POST /api/knowledge/batch.
+interface KnowledgeEntryItem {
+  _id: string;
+  question: string;
+  answer: string;
+  category: string;
+  tags?: string[];
+  source: 'knowledge_entry';
+  origin?: 'manual' | 'conversation' | 'document' | 'import';
+  confidence?: number;
+  usageCount?: number;
+  language?: 'en' | 'si' | 'ta' | 'hi' | 'all';
+  isActive: boolean;
+}
+
+type AnyKnowledgeRow = KnowledgeItem | KnowledgeEntryItem;
 
 interface KnowledgeTabProps {
   language: Language;
@@ -35,9 +68,15 @@ export default function KnowledgeTab({
   language,
   onDataChange,
 }: KnowledgeTabProps) {
-  const [items, setItems] = useState<KnowledgeItem[]>([]);
+  const [items, setItems] = useState<AnyKnowledgeRow[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Which collection the row being edited belongs to. Determines whether
+  // handleSave PUTs to /api/datasets/:id or /api/knowledge/:id — without
+  // this, edits of auto-learned Q/A rows hit the wrong endpoint and 404.
+  const [editingSource, setEditingSource] = useState<
+    'dataset' | 'knowledge_entry'
+  >('dataset');
   const [formData, setFormData] = useState<Partial<KnowledgeItem>>({
     name: '',
     description: '',
@@ -49,16 +88,95 @@ export default function KnowledgeTab({
   const [editLanguage, setEditLanguage] = useState<Language>(language);
   const [isExtracting, setIsExtracting] = useState(false);
 
+  // Fetch BOTH stores in parallel and merge.
+  //
+  // Why: the original implementation only read /api/datasets, but the
+  // KnowledgeTrainingService writes every auto-learned Q/A into the
+  // separate KnowledgeEntry collection (POST /api/knowledge). All that
+  // production data was previously invisible in the UI even though the
+  // bot was using it to answer customers.
   const fetchItems = async () => {
     try {
-      const res = await api.get('/api/datasets?type=knowledge');
-      setItems(
-        Array.isArray(res.data)
-          ? res.data
-          : res.data?.datasets || res.data?.data || [],
-      );
+      const [datasetsRes, knowledgeRes] = await Promise.allSettled([
+        api.get('/api/datasets?type=knowledge'),
+        api.get('/api/knowledge'),
+      ]);
+
+      const datasetRows: KnowledgeItem[] = [];
+      if (datasetsRes.status === 'fulfilled') {
+        const raw = datasetsRes.value.data;
+        const arr = Array.isArray(raw)
+          ? raw
+          : raw?.datasets || raw?.data || [];
+        for (const r of arr) {
+          datasetRows.push({ ...r, source: 'dataset' });
+        }
+      } else {
+        console.error('Failed to fetch /api/datasets:', datasetsRes.reason);
+      }
+
+      const entryRows: KnowledgeEntryItem[] = [];
+      if (knowledgeRes.status === 'fulfilled') {
+        const raw = knowledgeRes.value.data;
+        const arr = Array.isArray(raw) ? raw : raw?.entries || [];
+        for (const r of arr) {
+          entryRows.push({
+            _id: r._id,
+            question: r.question,
+            answer: r.answer,
+            category: r.category ?? 'general',
+            tags: r.tags ?? [],
+            source: 'knowledge_entry',
+            origin: r.source,
+            confidence: r.confidence,
+            usageCount: r.usageCount,
+            language: r.language,
+            isActive: r.isActive !== false,
+          });
+        }
+      } else {
+        // /api/knowledge may not exist on older deployments — log but don't
+        // block, the Dataset rows still render.
+        console.warn(
+          'Failed to fetch /api/knowledge (auto-learned rows hidden):',
+          knowledgeRes.reason,
+        );
+      }
+
+      setItems([...datasetRows, ...entryRows]);
     } catch (error) {
       console.error('Failed to fetch knowledge items:', error);
+    }
+  };
+
+  // Promote an auto-learned Q/A row into a hand-curated Dataset entry, so
+  // the operator can edit/translate it like any other knowledge item.
+  const handlePromote = async (entry: KnowledgeEntryItem) => {
+    if (
+      !window.confirm(
+        'Copy this auto-learned Q/A into the curated knowledge base? You can then edit and translate it.',
+      )
+    ) {
+      return;
+    }
+    try {
+      await api.post('/api/datasets', {
+        name: entry.question.slice(0, 120),
+        description: 'Promoted from auto-learned Q/A',
+        type: 'knowledge',
+        content: {
+          [entry.language && entry.language !== 'all' ? entry.language : 'en']:
+            `Q: ${entry.question}\n\nA: ${entry.answer}`,
+        },
+        scope: 'ALL',
+        category: entry.category || 'general',
+        isActive: true,
+      });
+      fetchItems();
+      onDataChange();
+    } catch (err) {
+      console.error('Failed to promote entry:', err);
+      alert('Failed to promote entry');
     }
   };
 
@@ -76,25 +194,50 @@ export default function KnowledgeTab({
       isActive: true,
     });
     setEditingId(null);
+    setEditingSource('dataset'); // new rows always go to /api/datasets
     setEditLanguage(language);
     setIsEditing(true);
   };
 
-  const handleEdit = (item: KnowledgeItem) => {
-    setFormData({
-      ...item,
-      content: item.content || { en: '', si: '', ta: '' },
-    });
-    setEditingId(item._id);
+  const handleEdit = (row: AnyKnowledgeRow) => {
+    // Translate KnowledgeEntry shape (question/answer) into the Dataset
+    // form shape so the same modal can edit both. On save we map back.
+    if (row.source === 'knowledge_entry') {
+      setFormData({
+        name: row.question,
+        description: '',
+        content: {
+          [row.language && row.language !== 'all' ? row.language : 'en']:
+            row.answer,
+        } as KnowledgeItem['content'],
+        scope: 'ALL',
+        category: row.category ?? 'general',
+        isActive: row.isActive,
+      });
+      setEditingSource('knowledge_entry');
+    } else {
+      setFormData({
+        ...row,
+        content: row.content || { en: '', si: '', ta: '' },
+      });
+      setEditingSource('dataset');
+    }
+    setEditingId(row._id);
     setEditLanguage(language);
     setIsEditing(true);
   };
 
-  const handleDelete = async (id: string) => {
+  // Routes the delete to the correct collection. Dataset rows hit
+  // /api/datasets/:id; KnowledgeEntry rows hit /api/knowledge/:id.
+  const handleDelete = async (row: AnyKnowledgeRow) => {
     if (!window.confirm('Are you sure you want to delete this item?')) return;
 
     try {
-      await api.delete(`/api/datasets/${id}`);
+      const endpoint =
+        row.source === 'knowledge_entry'
+          ? `/api/knowledge/${row._id}`
+          : `/api/datasets/${row._id}`;
+      await api.delete(endpoint);
       fetchItems();
       onDataChange();
     } catch (error) {
@@ -104,24 +247,61 @@ export default function KnowledgeTab({
   };
 
   const handleSave = async () => {
-    try {
-      const payload = {
-        ...formData,
-        type: 'knowledge',
-      };
+    // Required-field guard: schema requires `name`. Without this guard the
+    // server returns 400 and the old generic alert hid the reason.
+    if (!formData.name || !formData.name.trim()) {
+      alert('Name is required.');
+      return;
+    }
 
-      if (editingId) {
-        await api.put(`/api/datasets/${editingId}`, payload);
+    try {
+      if (editingId && editingSource === 'knowledge_entry') {
+        // KnowledgeEntry has its own schema: question/answer/category.
+        // Pick whichever language slot the user typed into.
+        const content = formData.content || {};
+        const answer =
+          (typeof content.en === 'string' && content.en) ||
+          (typeof content.si === 'string' && content.si) ||
+          (typeof content.ta === 'string' && content.ta) ||
+          '';
+        await api.put(`/api/knowledge/${editingId}`, {
+          question: formData.name,
+          answer,
+          category: formData.category ?? 'general',
+          isActive: formData.isActive ?? true,
+        });
+      } else if (editingId) {
+        await api.put(`/api/datasets/${editingId}`, {
+          ...formData,
+          type: 'knowledge',
+        });
       } else {
-        await api.post('/api/datasets', payload);
+        // New rows always land in Dataset — auto-learned entries are
+        // only created server-side by KnowledgeTrainingService.
+        await api.post('/api/datasets', {
+          ...formData,
+          type: 'knowledge',
+        });
       }
 
       setIsEditing(false);
       fetchItems();
       onDataChange();
-    } catch (error) {
+    } catch (error: unknown) {
+      // Surface the actual server error instead of a generic message so
+      // operators can see WHY the save failed (validation, duplicate key,
+      // auth, etc.).
+      const err = error as {
+        response?: { data?: { error?: string; message?: string } };
+        message?: string;
+      };
+      const serverMsg =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        err.message ||
+        'Unknown error';
       console.error('Failed to save:', error);
-      alert('Failed to save item');
+      alert(`Failed to save: ${serverMsg}`);
     }
   };
 
@@ -171,6 +351,11 @@ export default function KnowledgeTab({
     if (item.content?.ta) translated.push('ta');
     return translated;
   };
+
+  const datasetCount = items.filter((i) => i.source === 'dataset').length;
+  const entryCount = items.filter(
+    (i) => i.source === 'knowledge_entry',
+  ).length;
 
   if (isEditing) {
     return (
@@ -342,10 +527,18 @@ export default function KnowledgeTab({
     <div>
       {/* Header */}
       <div className="flex justify-between items-center mb-4">
-        <p className="text-gray-600 text-sm">
-          Knowledge entries are used by the AI to answer user questions. Add
-          company info, FAQs, policies, etc.
-        </p>
+        <div>
+          <p className="text-gray-600 text-sm">
+            Knowledge entries are used by the AI to answer user questions. Add
+            company info, FAQs, policies, etc.
+          </p>
+          {entryCount > 0 && (
+            <p className="text-xs text-gray-500 mt-1">
+              Showing {datasetCount} curated entries + {entryCount}{' '}
+              auto-learned Q/A from past conversations.
+            </p>
+          )}
+        </div>
         <button
           onClick={handleCreate}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
@@ -365,20 +558,100 @@ export default function KnowledgeTab({
         </div>
       ) : (
         <div className="space-y-3">
-          {items.map((item) => {
-            const translated = getTranslatedLanguages(item);
-            const _hasCurrentLang = translated.includes(language);
+          {items.map((row) => {
+            if (row.source === 'knowledge_entry') {
+              // Auto-learned Q/A row — read-only display + Promote + Delete.
+              return (
+                <div
+                  key={row._id}
+                  className="border border-amber-200 bg-amber-50/30 rounded-lg p-4 hover:border-amber-300 transition"
+                >
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-800 text-xs rounded-full">
+                          <Sparkles className="h-3 w-3" /> Auto-learned
+                        </span>
+                        {row.origin && (
+                          <span className="text-[10px] uppercase font-medium text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                            {row.origin}
+                          </span>
+                        )}
+                        {row.isActive ? (
+                          <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">
+                            Active
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+                            Inactive
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="font-medium text-gray-800 mt-2 line-clamp-2">
+                        Q: {row.question}
+                      </h3>
+                      <p className="text-sm text-gray-600 mt-1 line-clamp-3 whitespace-pre-wrap">
+                        A: {row.answer}
+                      </p>
+                      <div className="flex items-center gap-3 mt-2 text-xs text-gray-500 flex-wrap">
+                        <span className="px-2 py-0.5 bg-purple-50 text-purple-600 rounded">
+                          {row.category}
+                        </span>
+                        {row.language && (
+                          <span className="px-1.5 py-0.5 bg-green-50 text-green-600 rounded">
+                            {row.language.toUpperCase()}
+                          </span>
+                        )}
+                        {typeof row.usageCount === 'number' && (
+                          <span title="Times this entry was matched">
+                            used {row.usageCount}×
+                          </span>
+                        )}
+                        {typeof row.confidence === 'number' && (
+                          <span title="AI confidence">
+                            conf {(row.confidence * 100).toFixed(0)}%
+                          </span>
+                        )}
+                        {row.tags && row.tags.length > 0 && (
+                          <span className="text-gray-400">
+                            tags: {row.tags.join(', ')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => handlePromote(row)}
+                        title="Copy into curated knowledge base (then editable)"
+                        className="p-2 text-gray-400 hover:text-amber-700 hover:bg-amber-100 rounded"
+                      >
+                        <ArrowUpRight className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(row)}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                      >
+                        <Trash className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            // Curated Dataset row — full edit form available.
+            const translated = getTranslatedLanguages(row);
 
             return (
               <div
-                key={item._id}
+                key={row._id}
                 className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition"
               >
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-medium text-gray-800">{item.name}</h3>
-                      {item.isActive ? (
+                      <h3 className="font-medium text-gray-800">{row.name}</h3>
+                      {row.isActive ? (
                         <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">
                           Active
                         </span>
@@ -388,17 +661,17 @@ export default function KnowledgeTab({
                         </span>
                       )}
                     </div>
-                    {item.description && (
+                    {row.description && (
                       <p className="text-sm text-gray-500 mt-1">
-                        {item.description}
+                        {row.description}
                       </p>
                     )}
                     <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
                       <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded">
-                        {item.scope}
+                        {row.scope}
                       </span>
                       <span className="px-2 py-0.5 bg-purple-50 text-purple-600 rounded">
-                        {item.category}
+                        {row.category}
                       </span>
                       <div className="flex items-center gap-1">
                         {translated.map((lang) => (
@@ -414,13 +687,13 @@ export default function KnowledgeTab({
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => handleEdit(item)}
+                      onClick={() => handleEdit(row)}
                       className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
                     >
                       <Edit className="h-4 w-4" />
                     </button>
                     <button
-                      onClick={() => handleDelete(item._id)}
+                      onClick={() => handleDelete(row)}
                       className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
                     >
                       <Trash className="h-4 w-4" />

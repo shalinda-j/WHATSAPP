@@ -242,17 +242,29 @@ router.post('/', async (req, res) => {
       }
     }
 
-    const newDataset = new Dataset({
+    // Only set `key` when the caller actually provided a non-empty one.
+    //
+    // Why: the schema declares `key` with `unique: true, sparse: true`.
+    // A sparse unique index skips docs where the field is missing/null,
+    // but an empty string `''` counts as a value — so writing `key: ''`
+    // for every UI-created row makes the FIRST row succeed and every
+    // subsequent row fail with E11000. The frontend then shows "Failed
+    // to save" and the row never actually lands in Mongo. This is the
+    // root cause of "saves in the moment but doesn't persist".
+    const datasetPayload: Record<string, unknown> = {
       name,
       description: description || '',
       type: type || 'knowledge',
       content: content || {},
       scope: scope || 'ALL',
       category: category || 'general',
-      key: key || '',
       isActive: isActive !== undefined ? isActive : true,
       metadata: metadata || {},
-    });
+    };
+    if (typeof key === 'string' && key.trim() !== '') {
+      datasetPayload.key = key.trim();
+    }
+    const newDataset = new Dataset(datasetPayload);
 
     await newDataset.save();
     res.json(newDataset);
@@ -296,19 +308,33 @@ router.put('/:id', validateObjectId(), async (req, res) => {
     });
 
     const updateData: Record<string, unknown> = {};
+    const unsetData: Record<string, unknown> = {};
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
     if (type !== undefined) updateData.type = type;
     if (content !== undefined) updateData.content = content;
     if (scope !== undefined) updateData.scope = scope;
     if (category !== undefined) updateData.category = category;
-    if (key !== undefined) updateData.key = key;
+    // Mirror the POST fix: never store `key: ''`. If the client sends an
+    // empty string (or whitespace), $unset the field so the sparse unique
+    // index continues to treat this row as keyless.
+    if (key !== undefined) {
+      if (typeof key === 'string' && key.trim() !== '') {
+        updateData.key = key.trim();
+      } else {
+        unsetData.key = '';
+      }
+    }
     if (isActive !== undefined) updateData.isActive = isActive;
     if (metadata !== undefined) updateData.metadata = metadata;
 
+    const updateOp: Record<string, unknown> = {};
+    if (Object.keys(updateData).length > 0) updateOp.$set = updateData;
+    if (Object.keys(unsetData).length > 0) updateOp.$unset = unsetData;
+
     let updatedDataset = await Dataset.findByIdAndUpdate(
       req.params.id,
-      updateData,
+      updateOp,
       { new: true },
     );
 
@@ -316,11 +342,11 @@ router.put('/:id', validateObjectId(), async (req, res) => {
     // deleted, fall back to the unique `key` to locate the live record and
     // update that one instead of returning a confusing 404.
     if (!updatedDataset && key && typeof key === 'string' && key.trim() !== '') {
-      const byKey = await Dataset.findOne({ key });
+      const byKey = await Dataset.findOne({ key: key.trim() });
       if (byKey) {
         updatedDataset = await Dataset.findByIdAndUpdate(
           byKey._id,
-          updateData,
+          updateOp,
           { new: true },
         );
       }
