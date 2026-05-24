@@ -7,3 +7,7 @@
 
 **Learning:** When using Mongoose to fetch read-only queries, not using `.lean()` adds unnecessary overhead since documents are hydrated as Mongoose objects. In performance-sensitive routes where we only need plain objects for serialization or simple reading, this overhead is noticeable, especially for analytics endpoints which fetch large volumes of chat messages or datasets.
 **Action:** Always append `.lean()` to Mongoose read-only queries (e.g., `ChatMessage.find().lean()`) to bypass document hydration and improve performance.
+## 2024-05-24 - Precompile Static Keyword Categorization Regexes
+
+**Learning:** Recreating static keyword arrays and using nested `Array.some()` with `String.includes()` inside high-traffic request handlers (like `/questions` analytics) creates an O(M*N) CPU bottleneck and unnecessary Garbage Collection overhead.
+**Action:** Precompile keywords into `RegExp` objects at the module scope for static categorization to significantly reduce per-request CPU load and memory allocations.
