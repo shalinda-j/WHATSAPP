@@ -46,12 +46,7 @@ export function detectLanguage(text: string): DetectedLang {
 // Sinhala question / politeness suffixes that don't change semantics.
 // "මිල කීයද?" → "මිල කී"; "ඔයාගේ වෙලාව මොකද්ද?" → "ඔයාගේ වෙලාව මොක".
 // Conservative list — only the highest-frequency endings.
-const SI_SUFFIXES = [
-  'ද\\?', 'ද$',
-  'දෝ\\?', 'දෝ$',
-  'ද්ද\\?', 'ද්ද$',
-  'යි$',
-];
+const SI_SUFFIXES = ['ද\\?', 'ද$', 'දෝ\\?', 'දෝ$', 'ද්ද\\?', 'ද්ද$', 'යි$'];
 const SI_SUFFIX_REGEX = new RegExp(`(?:${SI_SUFFIXES.join('|')})`, 'g');
 
 // Tamil question particles.

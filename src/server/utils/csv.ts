@@ -18,9 +18,7 @@ export function toCsv(
   const cols =
     columns && columns.length > 0
       ? columns
-      : Array.from(
-          new Set(rows.flatMap((r) => Object.keys(r))),
-        );
+      : Array.from(new Set(rows.flatMap((r) => Object.keys(r))));
 
   const escape = (v: unknown): string => {
     if (v === null || v === undefined) return '';

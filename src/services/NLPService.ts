@@ -371,8 +371,9 @@ class NLPService {
       if (cache) {
         // Dedupe on the canonical form, not the raw text — that's what
         // makes the cache learn variants instead of accumulating duplicates.
-        const cacheCanonicals = (cache as { canonicalUtterances?: string[] })
-          .canonicalUtterances ?? [];
+        const cacheCanonicals =
+          (cache as { canonicalUtterances?: string[] }).canonicalUtterances ??
+          [];
         const utteranceExists =
           cacheCanonicals.includes(canonical) ||
           cache.userUtterances.some(
@@ -392,9 +393,8 @@ class NLPService {
           // Backfill the embedding when we have one and the existing row
           // doesn't — lets a row created pre-embedding participate in
           // future semantic-merge lookups.
-          const existingEmbedding = (
-            cache as { responseEmbedding?: number[] }
-          ).responseEmbedding;
+          const existingEmbedding = (cache as { responseEmbedding?: number[] })
+            .responseEmbedding;
           if (
             responseEmbedding &&
             (!existingEmbedding || existingEmbedding.length === 0)

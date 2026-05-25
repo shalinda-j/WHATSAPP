@@ -32,11 +32,7 @@ export function withTenantScope(
   const tenantId = (req as Request & { tenant?: ITenant }).tenant?._id;
   if (!tenantId) return baseFilter;
   const tenantClause = {
-    $or: [
-      { tenantId },
-      { tenantId: { $exists: false } },
-      { tenantId: null },
-    ],
+    $or: [{ tenantId }, { tenantId: { $exists: false } }, { tenantId: null }],
   };
   // If baseFilter is empty just return the tenant clause.
   if (Object.keys(baseFilter).length === 0) return tenantClause;

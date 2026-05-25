@@ -108,7 +108,9 @@ router.post(
       });
     }
 
-    res.status(201).json({ example: { ...ex.toObject(), embedding: undefined } });
+    res
+      .status(201)
+      .json({ example: { ...ex.toObject(), embedding: undefined } });
   },
 );
 
@@ -191,10 +193,11 @@ router.post(
     // concurrency at 5 so we don't hammer the embeddings endpoint.
     if (agentRAGService.isEmbeddingReady()) {
       void runWithConcurrency(
-        created.map((c) => () =>
-          agentRAGService.indexExample(String(c._id)).catch((err) => {
-            console.error(`bulk-index ${c._id} failed:`, err);
-          }),
+        created.map(
+          (c) => () =>
+            agentRAGService.indexExample(String(c._id)).catch((err) => {
+              console.error(`bulk-index ${c._id} failed:`, err);
+            }),
         ),
         5,
       );
@@ -235,10 +238,11 @@ router.post(
     // Don't block the request on the actual embedding pass — kick it off
     // in the background and report back the queued count.
     void runWithConcurrency(
-      candidates.map((c: any) => () =>
-        agentRAGService.indexExample(String(c._id)).catch((err) => {
-          console.error(`reindex ${c._id} failed:`, err);
-        }),
+      candidates.map(
+        (c: any) => () =>
+          agentRAGService.indexExample(String(c._id)).catch((err) => {
+            console.error(`reindex ${c._id} failed:`, err);
+          }),
       ),
       5,
     );

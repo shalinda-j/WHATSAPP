@@ -127,7 +127,11 @@ router.get('/leads.csv', async (req: Request, res: Response) => {
       'notes',
     ]);
     res
-      .set(csvDownloadHeaders(`leads-${new Date().toISOString().slice(0, 10)}.csv`))
+      .set(
+        csvDownloadHeaders(
+          `leads-${new Date().toISOString().slice(0, 10)}.csv`,
+        ),
+      )
       .send(csv);
   } catch (err: any) {
     console.error('export leads.csv failed:', err);
@@ -411,18 +415,21 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
     ])) as Agg[];
 
     if (agg.length === 0) {
-      const empty = toCsv([], [
-        'phone',
-        'name',
-        'email',
-        'identifierType',
-        'rawJid',
-        'lastSeen',
-        'firstSeen',
-        'messageCount',
-        'deviceSessions',
-        'optedOut',
-      ]);
+      const empty = toCsv(
+        [],
+        [
+          'phone',
+          'name',
+          'email',
+          'identifierType',
+          'rawJid',
+          'lastSeen',
+          'firstSeen',
+          'messageCount',
+          'deviceSessions',
+          'optedOut',
+        ],
+      );
       res
         .set(csvDownloadHeaders(buildFilename(sessionId, month, from, to)))
         .send(empty);
@@ -451,14 +458,19 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
     );
     for (const [lid, phone] of mappedPhones) {
       const lidJid = normaliseLidJid(lid);
-      if (lidJid && (!phoneByUserId.get(lidJid) || !phoneByUserId.has(lidJid))) {
+      if (
+        lidJid &&
+        (!phoneByUserId.get(lidJid) || !phoneByUserId.has(lidJid))
+      ) {
         phoneByUserId.set(lidJid, phone);
       }
       if (phoneByUserId.has(lid)) phoneByUserId.set(lid, phone);
     }
     const distinctDigits = Array.from(
       new Set(
-        Array.from(phoneByUserId.values()).filter((p): p is string => Boolean(p)),
+        Array.from(phoneByUserId.values()).filter((p): p is string =>
+          Boolean(p),
+        ),
       ),
     );
 
@@ -515,8 +527,9 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
       .map((r) => {
         const phone = phoneByUserId.get(r._id) || '';
         const contact = phone ? contactsByPhone.get(phone) : undefined;
-        const deviceSessions = (r.sessionIds || [])
-          .filter((s): s is string => Boolean(s));
+        const deviceSessions = (r.sessionIds || []).filter((s): s is string =>
+          Boolean(s),
+        );
         const deviceLabels = deviceSessions.map(
           (s) => sessionLabelById.get(s) || s,
         );
@@ -637,10 +650,7 @@ router.get('/phones.csv', async (req: Request, res: Response) => {
       : null;
     const tenantOrLegacy = tenantObjectId
       ? {
-          $or: [
-            { tenantId: tenantObjectId },
-            { tenantId: { $exists: false } },
-          ],
+          $or: [{ tenantId: tenantObjectId }, { tenantId: { $exists: false } }],
         }
       : {};
 
@@ -735,9 +745,8 @@ router.get('/phones.csv', async (req: Request, res: Response) => {
     //    inbound). No name column for these — the mapping only tracks
     //    LID→phone, not display name.
     if (!onlySource || onlySource === 'lid-mapping') {
-      const LidPhoneMapping = (
-        await import('../../models/LidPhoneMapping')
-      ).default;
+      const LidPhoneMapping = (await import('../../models/LidPhoneMapping'))
+        .default;
       const mappings = (await LidPhoneMapping.find(
         {},
         { phone: 1 },

@@ -67,7 +67,9 @@ describe('tenantQuietHours', () => {
   it('returns undefined when the tenant has no quiet hours', () => {
     expect(tenantQuietHours(null)).toBeUndefined();
     expect(tenantQuietHours(undefined)).toBeUndefined();
-    expect(tenantQuietHours({ quietHours: undefined, brand: {} } as any)).toBeUndefined();
+    expect(
+      tenantQuietHours({ quietHours: undefined, brand: {} } as any),
+    ).toBeUndefined();
   });
 
   it('returns undefined when the configured window is disabled', () => {

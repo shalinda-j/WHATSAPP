@@ -8,7 +8,9 @@ export type LidPhoneMappingSource =
   | 'chat_metadata'
   | 'manual';
 
-export function normaliseLidJid(value: string | null | undefined): string | null {
+export function normaliseLidJid(
+  value: string | null | undefined,
+): string | null {
   if (!value) return null;
   const raw = String(value).trim().replace(/^\+/, '');
   if (!raw) return null;
@@ -44,7 +46,9 @@ export function normalisePhoneDigits(
   return digits;
 }
 
-export function extractPhoneFromText(text: string | null | undefined): string | null {
+export function extractPhoneFromText(
+  text: string | null | undefined,
+): string | null {
   if (!text) return null;
   const candidates = String(text).match(/\+?\d[\d\s().-]{7,}\d/g) ?? [];
   for (const candidate of candidates) {

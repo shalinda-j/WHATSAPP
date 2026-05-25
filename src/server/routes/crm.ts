@@ -227,44 +227,48 @@ router.patch('/contacts/:id', validateObjectId(), async (req, res) => {
   }
 });
 
-router.post('/contacts/:id/resolve-phone', validateObjectId(), async (req, res) => {
-  try {
-    const phone = normalisePhoneDigits(String(req.body?.phone ?? ''));
-    if (!phone) {
-      return res.status(400).json({ error: 'Valid phone is required' });
+router.post(
+  '/contacts/:id/resolve-phone',
+  validateObjectId(),
+  async (req, res) => {
+    try {
+      const phone = normalisePhoneDigits(String(req.body?.phone ?? ''));
+      if (!phone) {
+        return res.status(400).json({ error: 'Valid phone is required' });
+      }
+
+      const contact = await Contact.findById(req.params.id);
+      if (!contact) {
+        return res.status(404).json({ error: 'Contact not found' });
+      }
+
+      const lidCandidates = [
+        contact.phone,
+        contact.whatsappNumber,
+        contact.whatsappId,
+      ].filter((v): v is string => typeof v === 'string' && v.length > 0);
+      await Promise.all(
+        lidCandidates.map((lidJid) =>
+          rememberLidPhoneMapping({
+            sessionId: contact.sessionId,
+            lidJid,
+            phoneJid: phone,
+            source: 'manual',
+          }),
+        ),
+      );
+
+      contact.phone = `+${phone}`;
+      contact.whatsappNumber = phone;
+      contact.updatedAt = new Date();
+      await contact.save();
+
+      res.json({ success: true, phone: `+${phone}`, contact });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-
-    const contact = await Contact.findById(req.params.id);
-    if (!contact) {
-      return res.status(404).json({ error: 'Contact not found' });
-    }
-
-    const lidCandidates = [
-      contact.phone,
-      contact.whatsappNumber,
-      contact.whatsappId,
-    ].filter((v): v is string => typeof v === 'string' && v.length > 0);
-    await Promise.all(
-      lidCandidates.map((lidJid) =>
-        rememberLidPhoneMapping({
-          sessionId: contact.sessionId,
-          lidJid,
-          phoneJid: phone,
-          source: 'manual',
-        }),
-      ),
-    );
-
-    contact.phone = `+${phone}`;
-    contact.whatsappNumber = phone;
-    contact.updatedAt = new Date();
-    await contact.save();
-
-    res.json({ success: true, phone: `+${phone}`, contact });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
+  },
+);
 
 router.delete('/contacts/:id', validateObjectId(), async (req, res) => {
   try {
@@ -565,10 +569,7 @@ router.get('/registrations', async (req, res) => {
         : null;
     const sessionClause = sessionIdQ
       ? {
-          $or: [
-            { sessionId: sessionIdQ },
-            { sessionId: { $exists: false } },
-          ],
+          $or: [{ sessionId: sessionIdQ }, { sessionId: { $exists: false } }],
         }
       : null;
 

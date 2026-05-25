@@ -57,5 +57,7 @@ const AgentConfigSchema = new Schema(
   { timestamps: true },
 );
 
-const __AgentConfigModel = mongoose.models.AgentConfig || mongoose.model('AgentConfig', AgentConfigSchema as any);
+const __AgentConfigModel =
+  mongoose.models.AgentConfig ||
+  mongoose.model('AgentConfig', AgentConfigSchema as any);
 export default __AgentConfigModel as unknown as mongoose.Model<IAgentConfig>;

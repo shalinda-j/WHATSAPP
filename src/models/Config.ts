@@ -48,5 +48,6 @@ const ConfigSchema = new Schema(
   },
 );
 
-const __ConfigModel = mongoose.models.Config || mongoose.model('Config', ConfigSchema as any);
+const __ConfigModel =
+  mongoose.models.Config || mongoose.model('Config', ConfigSchema as any);
 export default __ConfigModel as unknown as mongoose.Model<IConfig>;

@@ -56,7 +56,8 @@ interface CollectionPlan {
 const PLAN: CollectionPlan[] = [
   {
     collection: 'datasets',
-    label: 'Datasets (Knowledge / Commands / Links / Mega Text / Personality / Acknowledgements)',
+    label:
+      'Datasets (Knowledge / Commands / Links / Mega Text / Personality / Acknowledgements)',
     filter: { type: { $ne: 'config' } },
   },
   {
@@ -124,7 +125,9 @@ async function main() {
     }
 
     if (matched === 0) {
-      console.log(`   ✓ ${item.label}\n     [${item.collection}] already empty`);
+      console.log(
+        `   ✓ ${item.label}\n     [${item.collection}] already empty`,
+      );
       continue;
     }
 

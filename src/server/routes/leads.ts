@@ -97,9 +97,9 @@ router.post('/register', strictRateLimit, async (req, res) => {
       // from the admin UI may also supply it.
       sessionId:
         typeof (req.body as { sessionId?: unknown })?.sessionId === 'string'
-          ? ((req.body as { sessionId: string }).sessionId !== 'all'
-              ? (req.body as { sessionId: string }).sessionId
-              : undefined)
+          ? (req.body as { sessionId: string }).sessionId !== 'all'
+            ? (req.body as { sessionId: string }).sessionId
+            : undefined
           : undefined,
     });
 

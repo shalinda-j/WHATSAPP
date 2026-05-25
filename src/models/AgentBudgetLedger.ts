@@ -37,5 +37,7 @@ AgentBudgetLedgerSchema.index(
   { expireAfterSeconds: 60 * 60 * 24 * 180 },
 );
 
-const __AgentBudgetLedgerModel = mongoose.models.AgentBudgetLedger || mongoose.model('AgentBudgetLedger', AgentBudgetLedgerSchema as any);
+const __AgentBudgetLedgerModel =
+  mongoose.models.AgentBudgetLedger ||
+  mongoose.model('AgentBudgetLedger', AgentBudgetLedgerSchema as any);
 export default __AgentBudgetLedgerModel as unknown as mongoose.Model<IAgentBudgetLedger>;

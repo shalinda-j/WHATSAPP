@@ -365,8 +365,16 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const tid = tenantIdOf(req);
+    // Explicitly pick allowed fields to prevent mass assignment (e.g., maliciously setting tenantId)
+    const { name, url, events, secret, isActive, category, format } = req.body;
     const webhook = new (Webhook as any)({
-      ...req.body,
+      name,
+      url,
+      events,
+      secret,
+      isActive,
+      category,
+      format,
       ...(tid ? { tenantId: tid } : {}),
     });
     await webhook.save();
@@ -379,9 +387,28 @@ router.post('/', async (req, res) => {
 // Update webhook
 router.put('/:id', async (req, res) => {
   try {
-    const webhook = await (Webhook as any).findByIdAndUpdate(
-      req.params.id,
-      req.body,
+    // Explicitly pick allowed fields to prevent mass assignment
+    const { name, url, events, secret, isActive, category, format } = req.body;
+    const updateData = {
+      name,
+      url,
+      events,
+      secret,
+      isActive,
+      category,
+      format,
+    };
+
+    // Remove undefined values so we don't overwrite existing fields with undefined
+    Object.keys(updateData).forEach(
+      (key) =>
+        updateData[key as keyof typeof updateData] === undefined &&
+        delete updateData[key as keyof typeof updateData],
+    );
+
+    const webhook = await (Webhook as any).findOneAndUpdate(
+      withTenantScope(req, { _id: req.params.id }),
+      updateData,
       {
         new: true,
       },
@@ -396,7 +423,9 @@ router.put('/:id', async (req, res) => {
 // Delete webhook
 router.delete('/:id', async (req, res) => {
   try {
-    const webhook = await (Webhook as any).findByIdAndDelete(req.params.id);
+    const webhook = await (Webhook as any).findOneAndDelete(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
     res.json({ message: 'Webhook deleted' });
   } catch (error: any) {
@@ -407,7 +436,9 @@ router.delete('/:id', async (req, res) => {
 // Test webhook
 router.post('/:id/test', async (req, res) => {
   try {
-    const webhook = await (Webhook as any).findById(req.params.id);
+    const webhook = await (Webhook as any).findOne(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
 
     // This is a bit of a hack to use the private sendPayload method by exposing a test mechanism

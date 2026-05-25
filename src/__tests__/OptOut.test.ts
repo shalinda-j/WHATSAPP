@@ -34,8 +34,9 @@ describe('isStopKeyword', () => {
   it('does NOT match keywords embedded in a sentence', () => {
     expect(isStopKeyword('how do I stop the recurring payment?')).toBe(false);
     expect(isStopKeyword('please cancel my order #1234')).toBe(false);
-    expect(isStopKeyword('I want to unsubscribe from the newsletter not the bot'))
-      .toBe(false);
+    expect(
+      isStopKeyword('I want to unsubscribe from the newsletter not the bot'),
+    ).toBe(false);
     expect(isStopKeyword('do not stop sending me messages')).toBe(false);
   });
 

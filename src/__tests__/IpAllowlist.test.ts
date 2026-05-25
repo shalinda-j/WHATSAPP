@@ -48,9 +48,9 @@ describe('isIpAllowed', () => {
   });
 
   it('allows when at least one entry matches', () => {
-    expect(
-      isIpAllowed('203.0.113.5', ['10.0.0.0/8', '203.0.113.0/24']),
-    ).toBe(true);
+    expect(isIpAllowed('203.0.113.5', ['10.0.0.0/8', '203.0.113.0/24'])).toBe(
+      true,
+    );
   });
 });
 
@@ -65,7 +65,9 @@ describe('clientIpFromRequest', () => {
   });
 
   it('falls back to req.ip when xff is missing', () => {
-    expect(clientIpFromRequest({ headers: {}, ip: '10.0.0.1' })).toBe('10.0.0.1');
+    expect(clientIpFromRequest({ headers: {}, ip: '10.0.0.1' })).toBe(
+      '10.0.0.1',
+    );
   });
 
   it('falls back to socket.remoteAddress as the last resort', () => {

@@ -77,10 +77,7 @@ const HARD_DEADLINE_MS = 30_000;
  * workflow during a slow connect/DNS phase. 30s is well above any normal
  * provider latency.
  */
-async function withHardDeadline<T>(
-  label: string,
-  p: Promise<T>,
-): Promise<T> {
+async function withHardDeadline<T>(label: string, p: Promise<T>): Promise<T> {
   let to: NodeJS.Timeout;
   const deadline = new Promise<never>((_, reject) => {
     to = setTimeout(
@@ -106,7 +103,9 @@ function readableAxiosError(err: unknown): string {
     const detail =
       typeof data === 'string'
         ? data.slice(0, 200)
-        : data?.error?.message ?? data?.message ?? JSON.stringify(data ?? {}).slice(0, 200);
+        : (data?.error?.message ??
+          data?.message ??
+          JSON.stringify(data ?? {}).slice(0, 200));
     return `HTTP ${status}: ${detail}`;
   }
   return err instanceof Error ? err.message : 'Unknown provider error';
@@ -193,14 +192,11 @@ const facebookPagePost: Executor = async (cfg) => {
 };
 
 const instagramBusinessPost: Executor = async (cfg) => {
-  const igUserId = String(
-    cfg.businessAccountId ?? cfg.igUserId ?? '',
-  ).trim();
+  const igUserId = String(cfg.businessAccountId ?? cfg.igUserId ?? '').trim();
   const accessToken = String(cfg.accessToken ?? '').trim();
   const imageUrl = String(cfg.imageUrl ?? cfg.mediaUrl ?? '').trim();
   const caption = String(cfg.caption ?? cfg.message ?? cfg.text ?? '').trim();
-  if (!igUserId)
-    return { ok: false, error: '"businessAccountId" is required' };
+  if (!igUserId) return { ok: false, error: '"businessAccountId" is required' };
   if (!accessToken) return { ok: false, error: '"accessToken" is required' };
   if (!imageUrl)
     return { ok: false, error: '"imageUrl" is required (publicly reachable)' };

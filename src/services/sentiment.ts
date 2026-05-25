@@ -1,32 +1,106 @@
 const POSITIVE = new Set([
   // English
-  'good', 'great', 'excellent', 'amazing', 'awesome', 'love', 'loved', 'happy',
-  'satisfied', 'perfect', 'thanks', 'thank', 'thankyou', 'helpful', 'nice',
-  'best', 'fast', 'quick', 'wonderful', 'fantastic', 'super',
+  'good',
+  'great',
+  'excellent',
+  'amazing',
+  'awesome',
+  'love',
+  'loved',
+  'happy',
+  'satisfied',
+  'perfect',
+  'thanks',
+  'thank',
+  'thankyou',
+  'helpful',
+  'nice',
+  'best',
+  'fast',
+  'quick',
+  'wonderful',
+  'fantastic',
+  'super',
   // Sinhala phonetic
-  'hodai', 'hodayi', 'hodama', 'patta', 'lassanai', 'pinkamak', 'apoo',
-  'bohoma', 'stuti', 'praweena', 'usasai',
+  'hodai',
+  'hodayi',
+  'hodama',
+  'patta',
+  'lassanai',
+  'pinkamak',
+  'apoo',
+  'bohoma',
+  'stuti',
+  'praweena',
+  'usasai',
   // Tamil phonetic
-  'nandri', 'arumai', 'nalla', 'nallavar',
+  'nandri',
+  'arumai',
+  'nalla',
+  'nallavar',
 ]);
 
 const NEGATIVE = new Set([
   // English
-  'bad', 'worst', 'terrible', 'awful', 'hate', 'angry', 'frustrated', 'slow',
-  'broken', 'useless', 'scam', 'fraud', 'fake', 'wrong', 'poor', 'rude',
-  'unprofessional', 'disappointed', 'cheat', 'refund', 'complaint',
+  'bad',
+  'worst',
+  'terrible',
+  'awful',
+  'hate',
+  'angry',
+  'frustrated',
+  'slow',
+  'broken',
+  'useless',
+  'scam',
+  'fraud',
+  'fake',
+  'wrong',
+  'poor',
+  'rude',
+  'unprofessional',
+  'disappointed',
+  'cheat',
+  'refund',
+  'complaint',
   // Sinhala phonetic
-  'naraka', 'narakai', 'narak', 'epaa', 'epa', 'kunu', 'wedakata',
+  'naraka',
+  'narakai',
+  'narak',
+  'epaa',
+  'epa',
+  'kunu',
+  'wedakata',
   // Tamil phonetic
-  'mosham', 'kettavar', 'kashtam',
+  'mosham',
+  'kettavar',
+  'kashtam',
 ]);
 
 const INTENSIFIERS = new Set([
-  'very', 'really', 'super', 'extremely', 'so', 'too', 'so much',
-  'bohoma', 'godak', 'godaakma', 'rohama',
+  'very',
+  'really',
+  'super',
+  'extremely',
+  'so',
+  'too',
+  'so much',
+  'bohoma',
+  'godak',
+  'godaakma',
+  'rohama',
 ]);
 
-const NEGATORS = new Set(['not', "don't", 'dont', 'never', 'no', 'nope', 'epaa', 'epa']);
+const NEGATORS = new Set([
+  'not',
+  "don't",
+  'dont',
+  'never',
+  'no',
+  'nope',
+  'epaa',
+  'epa',
+]);
 
 export type SentimentLabel = 'positive' | 'neutral' | 'negative';
 
@@ -51,7 +125,9 @@ export interface SentimentResult {
  *  - Resilient to noise: very long messages and empty/whitespace inputs
  *    short-circuit to neutral so the heuristic can't mis-score essays.
  */
-export function scoreSentiment(text: string | undefined | null): SentimentResult {
+export function scoreSentiment(
+  text: string | undefined | null,
+): SentimentResult {
   if (!text || typeof text !== 'string') {
     return { score: 0, label: 'neutral', matchedTerms: 0 };
   }

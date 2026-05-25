@@ -209,10 +209,7 @@ export const resetSystem = async (req: AuthRequest, res: Response) => {
  * (same pattern as resetSystem). Mounted behind authenticateToken AND
  * strictRateLimit so a stolen JWT can't fire this in a brute-force loop.
  */
-export const wipeDatasetsContent = async (
-  req: AuthRequest,
-  res: Response,
-) => {
+export const wipeDatasetsContent = async (req: AuthRequest, res: Response) => {
   try {
     const { password } = (req.body ?? {}) as { password?: string };
 
@@ -288,8 +285,8 @@ export const wipeDatasetsContent = async (
     });
   } catch (error: any) {
     console.error('CRITICAL ERROR during Datasets wipe:', error);
-    res
-      .status(500)
-      .json({ error: 'Failed to wipe datasets: ' + (error?.message ?? String(error)) });
+    res.status(500).json({
+      error: 'Failed to wipe datasets: ' + (error?.message ?? String(error)),
+    });
   }
 };

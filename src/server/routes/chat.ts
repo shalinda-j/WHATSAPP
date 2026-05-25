@@ -164,7 +164,10 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
         // .sort lastSeenAt desc means the first row we see per lid is the
         // freshest.
         const byLid = new Map<string, string>();
-        for (const row of mappings as Array<{ lidJid: string; phone: string }>) {
+        for (const row of mappings as Array<{
+          lidJid: string;
+          phone: string;
+        }>) {
           if (!byLid.has(row.lidJid) && row.phone) {
             byLid.set(row.lidJid, row.phone);
           }
@@ -427,7 +430,8 @@ router.post('/lid/map', async (req: AuthRequest, res: Response) => {
     if (typeof phone !== 'string' || !phone) {
       return res.status(400).json({ error: 'phone is required' });
     }
-    const lidJid = normaliseLidJid(userId) ?? (isLidJid(userId) ? userId : null);
+    const lidJid =
+      normaliseLidJid(userId) ?? (isLidJid(userId) ? userId : null);
     if (!lidJid) {
       return res.status(400).json({
         error:

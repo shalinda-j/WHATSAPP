@@ -279,12 +279,7 @@ export class CRMService {
         }
       : {};
 
-    const query = combineQuery(
-      base,
-      tenantFilter,
-      sessionFilter,
-      searchFilter,
-    );
+    const query = combineQuery(base, tenantFilter, sessionFilter, searchFilter);
 
     const total = await Deal.countDocuments(query);
     const deals = await Deal.find(query)

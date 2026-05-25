@@ -376,7 +376,10 @@ export class WhatsAppSessionManager {
         );
       });
 
-      const rememberContactMapping = (contact: { id?: string; lid?: string }) => {
+      const rememberContactMapping = (contact: {
+        id?: string;
+        lid?: string;
+      }) => {
         if (!contact.lid || !contact.id) return;
         rememberLidPhoneMapping({
           sessionId,

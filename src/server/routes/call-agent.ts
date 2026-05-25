@@ -11,7 +11,9 @@ const router = Router();
 router.use(authenticateToken);
 router.use(resolveTenant);
 
-function tenantScope(req: { tenant?: { _id?: unknown } }): Record<string, unknown> {
+function tenantScope(req: {
+  tenant?: { _id?: unknown };
+}): Record<string, unknown> {
   const tenantId = req.tenant?._id ? String(req.tenant._id) : null;
   return tenantId
     ? { $or: [{ tenantId }, { tenantId: { $exists: false } }] }
@@ -35,8 +37,7 @@ router.get('/logs', async (req, res) => {
     const scope = tenantScope(req as { tenant?: { _id?: unknown } });
     const sessionClause = sessionId ? { sessionId } : null;
     const subClauses = [scope, sessionClause].filter(
-      (c): c is Record<string, unknown> =>
-        !!c && Object.keys(c).length > 0,
+      (c): c is Record<string, unknown> => !!c && Object.keys(c).length > 0,
     );
     const query =
       subClauses.length === 0

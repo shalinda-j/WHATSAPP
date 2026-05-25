@@ -60,5 +60,7 @@ AgentApprovalQueueSchema.index({ status: 1, createdAt: -1 });
 AgentApprovalQueueSchema.index({ agentName: 1, status: 1 });
 AgentApprovalQueueSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-const __AgentApprovalQueueModel = mongoose.models.AgentApprovalQueue || mongoose.model('AgentApprovalQueue', AgentApprovalQueueSchema as any);
+const __AgentApprovalQueueModel =
+  mongoose.models.AgentApprovalQueue ||
+  mongoose.model('AgentApprovalQueue', AgentApprovalQueueSchema as any);
 export default __AgentApprovalQueueModel as unknown as mongoose.Model<IAgentApprovalQueue>;
