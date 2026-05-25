@@ -11,10 +11,7 @@ export interface QuietHoursWindow {
  * Returns the local hour (0-23) for the given timezone using Intl.DateTimeFormat.
  * Falls back to system-local hour if the timezone is invalid or unsupported.
  */
-export function hourInZone(
-  now: Date = new Date(),
-  timezone?: string,
-): number {
+export function hourInZone(now: Date = new Date(), timezone?: string): number {
   if (!timezone) return now.getHours();
   try {
     const parts = new Intl.DateTimeFormat('en-US', {

@@ -67,5 +67,7 @@ const AgentFeedbackSchema = new Schema(
 AgentFeedbackSchema.index({ agentName: 1, promptVersion: 1, score: 1 });
 AgentFeedbackSchema.index({ agentName: 1, createdAt: -1 });
 
-const __AgentFeedbackModel = mongoose.models.AgentFeedback || mongoose.model('AgentFeedback', AgentFeedbackSchema as any);
+const __AgentFeedbackModel =
+  mongoose.models.AgentFeedback ||
+  mongoose.model('AgentFeedback', AgentFeedbackSchema as any);
 export default __AgentFeedbackModel as unknown as mongoose.Model<IAgentFeedback>;

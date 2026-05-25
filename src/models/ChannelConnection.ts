@@ -51,5 +51,7 @@ const ChannelConnectionSchema = new Schema(
 
 ChannelConnectionSchema.index({ tenantId: 1, channel: 1 });
 
-const __ChannelConnectionModel = mongoose.models.ChannelConnection || mongoose.model('ChannelConnection', ChannelConnectionSchema as any);
+const __ChannelConnectionModel =
+  mongoose.models.ChannelConnection ||
+  mongoose.model('ChannelConnection', ChannelConnectionSchema as any);
 export default __ChannelConnectionModel as unknown as mongoose.Model<IChannelConnection>;

@@ -166,8 +166,11 @@ function isGreetingMessage(text: string): boolean {
 const leadFlowState = new Map<string, LeadFlowFact>();
 
 function mergeLeadFacts(jid: string, latest: LeadFlowFact): LeadFlowFact {
-  const existing =
-    leadFlowState.get(jid) ?? { phone: null, country: null, name: null };
+  const existing = leadFlowState.get(jid) ?? {
+    phone: null,
+    country: null,
+    name: null,
+  };
   const merged: LeadFlowFact = {
     phone: latest.phone ?? existing.phone,
     country: latest.country ?? existing.country,
@@ -723,7 +726,11 @@ onMessage(async (message, sock, sessionId) => {
     if (text && isStopKeyword(text)) {
       console.log(`   🚫 STOP keyword detected from ${jid}, marking opted-out`);
       try {
-        const modified = await markContactOptedOut(jid, 'whatsapp', 'inbound_stop_keyword');
+        const modified = await markContactOptedOut(
+          jid,
+          'whatsapp',
+          'inbound_stop_keyword',
+        );
         console.log(`   ✅ Opted out ${modified} matching contact(s)`);
       } catch (err) {
         console.error('   ⚠️ markContactOptedOut failed:', err);
@@ -1048,7 +1055,6 @@ onMessage(async (message, sock, sessionId) => {
         const hasTamilChars = /[\u0B80-\u0BFF]/.test(text);
         const isRealEnglish = isEnglishText(text);
         if (isVoiceMessage) {
-
           if (hasSinhalaChars) {
             finalPrompt += `\n\n(SYSTEM: මෙය VOICE පණිවිඩයකි. සිංහල භාෂාවෙන් කෙටිව, ස්වාභාවිකව ප්‍රතිඋත්තර දෙන්න.)`;
           } else if (hasTamilChars) {

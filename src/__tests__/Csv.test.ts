@@ -23,7 +23,9 @@ describe('toCsv', () => {
   });
 
   it('quotes cells with commas, quotes, or newlines', () => {
-    const csv = toCsv([{ name: 'Smith, John', note: 'has "quotes"\nand newline' }]);
+    const csv = toCsv([
+      { name: 'Smith, John', note: 'has "quotes"\nand newline' },
+    ]);
     const lines = csv.trim().split('\n');
     expect(lines[1]).toContain('"Smith, John"');
     expect(lines[1]).toContain('"has ""quotes""\nand newline"');
@@ -60,16 +62,20 @@ describe('csvDownloadHeaders', () => {
 
 describe('resolveContactExportPhone', () => {
   it('exports normal phone-backed identifiers as clean phone numbers', () => {
+    expect(resolveContactExportPhone({ phone: '+94 77 123 4567' })).toBe(
+      '+94771234567',
+    );
     expect(
-      resolveContactExportPhone({ phone: '+94 77 123 4567' }),
-    ).toBe('+94771234567');
-    expect(
-      resolveContactExportPhone({ whatsappNumber: '94771234567@s.whatsapp.net' }),
+      resolveContactExportPhone({
+        whatsappNumber: '94771234567@s.whatsapp.net',
+      }),
     ).toBe('+94771234567');
   });
 
   it('does not export a LID as a phone number', () => {
-    expect(resolveContactExportPhone({ phone: '+29141520924734@lid' })).toBe('');
+    expect(resolveContactExportPhone({ phone: '+29141520924734@lid' })).toBe(
+      '',
+    );
   });
 
   it('repairs old LID contacts from stored chat realPhone metadata', () => {

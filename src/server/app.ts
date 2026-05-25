@@ -65,9 +65,7 @@ const envOrigins = (process.env.ALLOWED_ORIGINS || '')
   .filter((o) => o.length > 0);
 const allowedOrigins = [...localOrigins, ...envOrigins];
 if (envOrigins.length > 0) {
-  console.log(
-    `✅ CORS: allowed production origins → ${envOrigins.join(', ')}`,
-  );
+  console.log(`✅ CORS: allowed production origins → ${envOrigins.join(', ')}`);
 }
 
 const corsOptions = {
@@ -409,12 +407,8 @@ app.use((req, res, next) => {
 app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
   // Don't double-respond if a handler already partially wrote a response.
   if (res.headersSent) return;
-  const message =
-    err instanceof Error ? err.message : 'Internal server error';
-  console.error(
-    `❌ Unhandled error on ${req.method} ${req.originalUrl}:`,
-    err,
-  );
+  const message = err instanceof Error ? err.message : 'Internal server error';
+  console.error(`❌ Unhandled error on ${req.method} ${req.originalUrl}:`, err);
   res.status(500).json({
     error: 'internal_error',
     message,

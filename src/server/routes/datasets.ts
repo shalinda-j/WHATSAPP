@@ -44,9 +44,8 @@ router.get('/__diag', async (req, res) => {
   try {
     const connState = mongoose.connection.readyState; // 0=disc 1=conn 2=connecting 3=disconnecting
     const stateLabel =
-      ['disconnected', 'connected', 'connecting', 'disconnecting'][
-        connState
-      ] ?? `unknown(${connState})`;
+      ['disconnected', 'connected', 'connecting', 'disconnecting'][connState] ??
+      `unknown(${connState})`;
 
     const tenant = req.tenant
       ? {
@@ -439,14 +438,17 @@ router.put('/:id', validateObjectId(), async (req, res) => {
     // Stale `_id` recovery: if the doc the frontend thought it had has been
     // deleted, fall back to the unique `key` to locate the live record and
     // update that one instead of returning a confusing 404.
-    if (!updatedDataset && key && typeof key === 'string' && key.trim() !== '') {
+    if (
+      !updatedDataset &&
+      key &&
+      typeof key === 'string' &&
+      key.trim() !== ''
+    ) {
       const byKey = await Dataset.findOne({ key: key.trim() });
       if (byKey) {
-        updatedDataset = await Dataset.findByIdAndUpdate(
-          byKey._id,
-          updateOp,
-          { new: true },
-        );
+        updatedDataset = await Dataset.findByIdAndUpdate(byKey._id, updateOp, {
+          new: true,
+        });
       }
     }
 

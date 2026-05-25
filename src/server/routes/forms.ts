@@ -89,10 +89,9 @@ router.post(
       // If setting as default, unset other defaults — scoped to THIS
       // tenant only, otherwise one tenant's default could clobber another's.
       if (isDefault) {
-        await FormTemplate.updateMany(
-          tid ? { tenantId: tid } : {},
-          { isDefault: false },
-        );
+        await FormTemplate.updateMany(tid ? { tenantId: tid } : {}, {
+          isDefault: false,
+        });
       }
 
       const template = new FormTemplate({

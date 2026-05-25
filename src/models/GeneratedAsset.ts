@@ -63,5 +63,7 @@ const GeneratedAssetSchema = new Schema(
 
 GeneratedAssetSchema.index({ tenantId: 1, createdAt: -1 });
 
-const __GeneratedAssetModel = mongoose.models.GeneratedAsset || mongoose.model('GeneratedAsset', GeneratedAssetSchema as any);
+const __GeneratedAssetModel =
+  mongoose.models.GeneratedAsset ||
+  mongoose.model('GeneratedAsset', GeneratedAssetSchema as any);
 export default __GeneratedAssetModel as unknown as mongoose.Model<IGeneratedAsset>;

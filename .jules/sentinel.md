@@ -9,3 +9,9 @@
 **Vulnerability:** A simple string comparison (`!==`) was used to validate the `WEBHOOK_SECRET` against the incoming payload secret in the webhook inbound endpoint.
 **Learning:** Simple string comparison can expose the application to timing attacks, where an attacker can theoretically guess the secret character by character by measuring the time it takes for the comparison to fail.
 **Prevention:** Use `crypto.timingSafeEqual` with a constant-time comparison algorithm (such as SHA-256 hashes of the strings) to ensure that comparisons always take the same amount of time, regardless of whether they succeed or fail.
+
+## 2025-02-21 - [IDOR and Mass Assignment in Webhooks API]
+
+**Vulnerability:** The webhooks API (`src/server/routes/webhooks.ts`) used `findByIdAndUpdate`, `findByIdAndDelete`, and `findById` without restricting queries to the authenticated user's tenant (`tenantId`). Furthermore, the `POST` and `PUT` endpoints directly passed `req.body` into database operations.
+**Learning:** This allowed Insecure Direct Object Reference (IDOR) attacks, enabling users to access or modify webhooks belonging to other tenants. Passing `req.body` directly allowed mass assignment attacks where a malicious user could overwrite sensitive fields like `tenantId` to reassign ownership of a webhook.
+**Prevention:** Always use `withTenantScope(req, { _id: id })` combined with `findOne`, `findOneAndUpdate`, and `findOneAndDelete` for tenant-scoped resources. Explicitly extract and validate allowed fields from `req.body` before saving or updating documents to prevent mass assignment.

@@ -54,5 +54,6 @@ const NLPCacheSchema = new Schema(
 NLPCacheSchema.index({ intentName: 1 });
 NLPCacheSchema.index({ canonicalUtterances: 1 });
 
-const __NLPCacheModel = mongoose.models.NLPCache || mongoose.model('NLPCache', NLPCacheSchema as any);
+const __NLPCacheModel =
+  mongoose.models.NLPCache || mongoose.model('NLPCache', NLPCacheSchema as any);
 export default __NLPCacheModel as unknown as mongoose.Model<INLPCache>;

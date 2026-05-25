@@ -55,5 +55,7 @@ AuditEventSchema.index(
   { expireAfterSeconds: AUDIT_RETENTION_DAYS * 24 * 60 * 60 },
 );
 
-const __AuditEventModel = mongoose.models.AuditEvent || mongoose.model('AuditEvent', AuditEventSchema as any);
+const __AuditEventModel =
+  mongoose.models.AuditEvent ||
+  mongoose.model('AuditEvent', AuditEventSchema as any);
 export default __AuditEventModel as unknown as mongoose.Model<IAuditEvent>;

@@ -122,7 +122,8 @@ class AgentRAGService {
       const scored = candidates
         .filter(
           (c: any) =>
-            Array.isArray(c.embedding) && c.embedding.length === queryVec.length,
+            Array.isArray(c.embedding) &&
+            c.embedding.length === queryVec.length,
         )
         .map((c: any) => ({
           example: c as IAgentTrainingExample,

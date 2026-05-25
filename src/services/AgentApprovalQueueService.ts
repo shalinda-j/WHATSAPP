@@ -78,7 +78,8 @@ export class AgentApprovalQueueService {
     ) {
       lastApprovalAlertAt = Date.now();
       void WebhookService.triggerOpsAlert({
-        level: pending >= APPROVAL_BACKLOG_ALERT_THRESHOLD * 2 ? 'error' : 'warn',
+        level:
+          pending >= APPROVAL_BACKLOG_ALERT_THRESHOLD * 2 ? 'error' : 'warn',
         title: 'Agent approval queue backlog',
         body: `Pending approvals: ${pending}. Reviews are falling behind — outbound for agents in approval mode is blocked until cleared.`,
         fields: {

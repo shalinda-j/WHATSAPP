@@ -432,8 +432,7 @@ router.get(
             : 0,
         avgCostPerExecution:
           executions > 0 ? (s?.totalCostUsd ?? 0) / executions : 0,
-        rejectRate:
-          executions > 0 ? (s?.rejectedByAdmin ?? 0) / executions : 0,
+        rejectRate: executions > 0 ? (s?.rejectedByAdmin ?? 0) / executions : 0,
       };
     };
 
@@ -641,8 +640,7 @@ router.get(
       return {
         agentName: r._id,
         executions: r.executions,
-        successRate:
-          r.executions > 0 ? r.successes / r.executions : 0,
+        successRate: r.executions > 0 ? r.successes / r.executions : 0,
         failures: r.failures,
         p50LatencyMs: percentile(sortedLat, 50),
         p95LatencyMs: percentile(sortedLat, 95),

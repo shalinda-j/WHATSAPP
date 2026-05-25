@@ -1,5 +1,9 @@
 import express, { Request, Response } from 'express';
-import { computeBulkSla, computeUserSla, DEFAULT_SLA_MS } from '../../services/slaTracker';
+import {
+  computeBulkSla,
+  computeUserSla,
+  DEFAULT_SLA_MS,
+} from '../../services/slaTracker';
 
 const router = express.Router();
 

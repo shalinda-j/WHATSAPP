@@ -93,7 +93,7 @@ async function tick(
   let fired = 0;
   for (const lead of dormantLeads) {
     const phone = lead.phoneNumber;
-    const contact = phone ? contactsByPhone.get(phone) ?? null : null;
+    const contact = phone ? (contactsByPhone.get(phone) ?? null) : null;
 
     // Skip opted-out contacts: a STOP from the user must silence every
     // future outbound — including agent-driven follow-ups, not just
