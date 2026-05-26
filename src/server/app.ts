@@ -46,6 +46,11 @@ import { auditLog } from './middleware/auditLog';
 
 const app = express();
 
+// Trust DigitalOcean's reverse proxy so req.ip and secure cookies work correctly
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // Middleware
 // CORS Configuration - Restrict to allowed origins.
 // Production origins come from the ALLOWED_ORIGINS env var (comma-separated

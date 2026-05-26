@@ -1,3 +1,6 @@
+import { validateEnvironment } from './config/env';
+validateEnvironment();
+
 import {
   onMessage,
   sendMessage,
@@ -68,7 +71,7 @@ import {
   backfillRealPhoneOnExistingMessages,
 } from './services/LidPhoneMappingService';
 
-const PORT = process.env.PORT || 8080;
+const PORT = parseInt(process.env.PORT || '8080', 10);
 let server: any;
 
 /**
@@ -239,6 +242,14 @@ async function buildLeadFlowFallback(
 
 async function startServer() {
   // 1. Connect to Database
+  if (!process.env.MONGODB_URI) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('❌ MONGODB_URI is required in production. Exiting.');
+      process.exit(1);
+    }
+    console.warn('⚠️ No MONGODB_URI found. Some features (Admin Panel) may not work.');
+  }
+
   if (process.env.MONGODB_URI) {
     try {
       await connectToMongoDB(process.env.MONGODB_URI);
@@ -325,15 +336,13 @@ async function startServer() {
         await import('./services/FollowUpScheduler');
       startFollowUpScheduler();
     } catch (dbErr) {
-      console.error(
-        '❌ MongoDB Connection Failed. Server starting in LIMITED MODE.',
-      );
-      console.error(dbErr);
+      console.error('❌ MongoDB Connection Failed:', dbErr);
+      if (process.env.NODE_ENV === 'production') {
+        console.error('Exiting — cannot run without database in production.');
+        process.exit(1);
+      }
+      console.warn('Server starting in LIMITED MODE (dev only).');
     }
-  } else {
-    console.warn(
-      '⚠️ No MONGODB_URI found. Some features (Admin Panel) may not work.',
-    );
   }
 
   // 2. Start Admin API

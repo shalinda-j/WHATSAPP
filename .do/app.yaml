@@ -14,12 +14,10 @@ services:
     source_dir: /
     github:
       branch: main
-      # Auto-deploy disabled to stop the rolling-deploy 440 conflict storm:
-      # every push used to spin up a NEW pod while the OLD one still held a
-      # WhatsApp socket, and WhatsApp would kick BOTH with 440 ("replaced").
-      # During that 30-60s overlap window customers saw the typing indicator
-      # but no reply. Deploy manually from the DO dashboard now.
-      deploy_on_push: false
+      # Auto-deploy enabled. The 60s WHATSAPP_STARTUP_DELAY_MS below gives the
+      # old pod time to fully disconnect its WhatsApp socket before the new pod
+      # connects, preventing the 440 "replaced" conflict storm.
+      deploy_on_push: true
       repo: shalinda-j/WHATSAPP
     http_port: 8080
     instance_count: 1
@@ -69,5 +67,14 @@ services:
       - key: ALLOWED_ORIGINS
         scope: RUN_TIME
         # Comma-separated list of accepted CORS origins for the admin panel.
-        # Replace with the production frontend origin once known.
+        # Replace with your actual DO app URL.
         value: "https://lobster-app-m74la.ondigitalocean.app"
+      - key: WEBHOOK_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: SENDGRID_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: TELEGRAM_BOT_TOKEN
+        scope: RUN_TIME
+        type: SECRET

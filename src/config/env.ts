@@ -119,6 +119,22 @@ export function validateEnvironment(): void {
         );
       }
     }
+
+    // ENCRYPTION_KEY must be exactly 32 characters for AES-256
+    if (req.name === 'ENCRYPTION_KEY' && value && value.length !== 32) {
+      errors.push(
+        `CRITICAL: ENCRYPTION_KEY must be exactly 32 characters. Current: ${value.length} characters.`,
+      );
+    }
+
+    // MONGODB_URI must be a valid connection string format
+    if (req.name === 'MONGODB_URI' && value) {
+      if (!value.startsWith('mongodb://') && !value.startsWith('mongodb+srv://')) {
+        errors.push(
+          'CRITICAL: MONGODB_URI must start with mongodb:// or mongodb+srv://',
+        );
+      }
+    }
   }
 
   // Check if at least one AI provider is configured
