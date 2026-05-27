@@ -116,39 +116,40 @@ router.get('/', async (req, res) => {
   try {
     const { type, scope, category, key } = req.query;
 
-    // Build filter - always exclude 'config' type (internal configuration items)
-    const filter: Record<string, unknown> = {
-      type: { $ne: 'config' },
-    };
+    const filter: Record<string, unknown> = {};
 
     if (key) {
+      // Explicit key lookup from the admin panel (e.g. key=AI_PERSONALITY).
+      // AI_PERSONALITY and similar config datasets are stored with type:'config'
+      // so we MUST NOT apply the config-exclusion filter here — otherwise the
+      // record is invisible and the UI falls back to a hardcoded stub, letting
+      // operators accidentally overwrite the seeded prompt with garbage.
       filter.key = key;
+    } else {
+      // List views (no specific key): hide internal config records because they
+      // have their own editor UI (AI Personality tab) and don't belong in the
+      // generic knowledge/command/link lists.
+      filter.type = { $ne: 'config' };
     }
 
     if (type) {
       // For specific type filter, override the default
       if (type === 'knowledge') {
         // Knowledge type filter: include documents without type field (legacy) but exclude config
-        filter.$or = [
+        const knowledgeOr = [
           { type: 'knowledge' },
           { type: { $exists: false } },
           { type: null },
         ];
-        delete filter.type; // Remove $ne since $or handles it
-        // Add explicit exclusion of config
-        filter.$and = [
-          {
-            $or: [
-              { type: 'knowledge' },
-              { type: { $exists: false } },
-              { type: null },
-            ],
-          },
-          { type: { $ne: 'config' } },
-        ];
-        delete filter.$or;
+        if (filter.type) {
+          // Already have a type constraint (non-key path) — merge as $and
+          filter.$and = [{ $or: knowledgeOr }, { type: { $ne: 'config' } }];
+          delete filter.type;
+        } else {
+          filter.$and = [{ $or: knowledgeOr }, { type: { $ne: 'config' } }];
+        }
       } else {
-        // Other types: simple type filter (config is already excluded)
+        // Other types: simple type filter
         filter.type = type;
       }
     }
@@ -324,10 +325,23 @@ router.post('/', async (req, res) => {
       if (existing) {
         if (name !== undefined) existing.name = name;
         if (description !== undefined) existing.description = description;
-        if (type !== undefined) existing.type = type;
+        // CRITICAL: never change a config-type record's type.
+        // AI_PERSONALITY is seeded as type:'config' so it stays out of generic
+        // list views. If the UI sends type:'personality', accepting it would
+        // (a) show the record in the Knowledge/Personality list, causing confusion
+        // (b) break the seeder's marker-based upgrade detection on next restart
+        // (c) hide the record from the GET ?key= filter that was using config exclusion
+        //     (now fixed, but still semantically wrong to change).
+        if (type !== undefined && existing.type !== 'config') {
+          existing.type = type;
+        }
         if (content !== undefined) existing.content = content;
-        if (scope !== undefined) existing.scope = scope;
-        if (category !== undefined) existing.category = category;
+        if (scope !== undefined && existing.type !== 'config') {
+          existing.scope = scope;
+        }
+        if (category !== undefined && existing.type !== 'config') {
+          existing.category = category;
+        }
         if (isActive !== undefined) existing.isActive = isActive;
         if (metadata !== undefined) existing.metadata = metadata;
         await existing.save();

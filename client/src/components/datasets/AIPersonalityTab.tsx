@@ -68,9 +68,16 @@ export default function AIPersonalityTab({
         ? examplesRes.data
         : examplesRes.data?.datasets || examplesRes.data?.data || [];
       if (examplesData && examplesData.length > 0) {
-        setExamples(
-          Array.isArray(examplesData[0].content) ? examplesData[0].content : [],
-        );
+        // content.en may be an array (new format stored by seeder/UI) OR
+        // content itself may be an array (legacy UI save that bypassed content.en).
+        // Either way, extract the first valid array we find.
+        const raw = examplesData[0]?.content;
+        const resolvedExamples: ConversationExample[] = Array.isArray(raw)
+          ? raw                          // legacy: array stored at content root
+          : Array.isArray(raw?.en)
+            ? raw.en                     // new: array stored in content.en
+            : [];                        // old string seed or empty — show empty
+        setExamples(resolvedExamples);
       }
     } catch (error) {
       console.error('Failed to fetch AI personality:', error);
@@ -97,9 +104,15 @@ export default function AIPersonalityTab({
     setSaving(true);
     try {
       const { _id: _unused, ...rest } = personality;
+      // Send type:'config' to match how DatasetSeeder creates AI_PERSONALITY.
+      // The backend GET filter now passes config records through when a
+      // specific key is requested, so the UI can always read/edit this record.
+      // For upsert of an existing config record, the backend ignores the type
+      // field (preserving 'config'); for a fresh create (no existing record),
+      // 'config' keeps it out of the generic list views.
       const payload = {
         ...rest,
-        type: 'personality',
+        type: 'config',
         key: 'AI_PERSONALITY',
       };
 
@@ -122,11 +135,15 @@ export default function AIPersonalityTab({
   const handleSaveExamples = async () => {
     setSaving(true);
     try {
+      // Store examples as content.en (array) so ConfigService.get() can read
+      // them via the standard "if content.en exists, use it" unwrapping path.
+      // Storing as a bare array at the content root breaks ConfigService because
+      // it checks content.en !== undefined before unwrapping.
       const payload = {
         name: 'Conversation Examples',
-        type: 'personality',
+        type: 'knowledge',
         key: 'CONVERSATION_EXAMPLES',
-        content: examples,
+        content: { en: examples },
         isActive: true,
       };
 

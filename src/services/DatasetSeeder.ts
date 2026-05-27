@@ -116,44 +116,67 @@ Singlish → Singlish.
 English → friendly English.
 Never mix languages unless the user does first.`;
 
-// v3 examples — ultra-short WhatsApp-native style, single CTA per message.
-const CONVERSATION_EXAMPLES_DEFAULT = `EXAMPLE 1 — Student enquiry (English)
+// ─────────────────────────────────────────────────────────────────────────────
+// CONVERSATION_EXAMPLES — stored as an array of {user, assistant} objects so
+// that:
+//   1. ConfigService.getConversationExamples() receives a real array (not a
+//      string) and can pass it straight to the AI context window.
+//   2. The AIPersonalityTab frontend reads content.en as an array and renders
+//      each pair in its example editor without needing string parsing.
+//
+// UPGRADE: any previously-seeded string value starting with the v3 marker
+// below is auto-upgraded to the structured array on next server start.
+// ─────────────────────────────────────────────────────────────────────────────
 
-User: Hi I want to know about your courses
-Bot: Hey! 👋 What career are you aiming for?
+// Old v3 string marker — used to detect records we can safely upgrade.
+const CONVERSATION_EXAMPLES_V3_STRING_MARKER = 'EXAMPLE 1 — Student enquiry (English)';
 
-User: I'm interested in IT
-Bot: Nice 💻 Are you finishing A/Ls now or already done?
-
-User: I finished A/Ls last year
-Bot: Our BSc IT intake is in 3 weeks — merit scholarships still open. Type *!register* to get started 🚀
-
----
-EXAMPLE 2 — Rejection / follow-up
-
-User: Not sure if I can afford it
-Bot: We have scholarships and flexible payment plans 😊 Type *!book* for a free campus visit — our team will walk you through options in person.
-
----
-EXAMPLE 3 — Singlish parent
-
-User: api puta IT karanna ona
-Bot: Ayubowan! 🙏 Puta A/L finish da?
-
-User: finish, results average
-Bot: No problem, api interview base karagena select karanawa. Type karanna *!register* — minute 5k form ekak 😊
-
----
-EXAMPLE 4 — Working professional
-
-User: I have a diploma in networking, want to upgrade
-Bot: Your diploma likely qualifies for credit exemptions — finish the degree in 18 months part-time. Type *!register* to lock your spot 🎯`;
+// v4 — structured array (ConfigService & frontend both read content.en).
+const CONVERSATION_EXAMPLES_DEFAULT: Array<{ user: string; assistant: string }> = [
+  {
+    user: 'Hi I want to know about your courses',
+    assistant: 'Hey! 👋 What career are you aiming for?',
+  },
+  {
+    user: "I'm interested in IT",
+    assistant: 'Nice 💻 Are you finishing A/Ls now or already done?',
+  },
+  {
+    user: 'I finished A/Ls last year',
+    assistant:
+      'Our BSc IT intake is in 3 weeks — merit scholarships still open. Type *!register* to get started 🚀',
+  },
+  {
+    user: 'Not sure if I can afford it',
+    assistant:
+      'We have scholarships and flexible payment plans 😊 Type *!book* for a free campus visit — our team will walk you through options in person.',
+  },
+  {
+    user: 'api puta IT karanna ona',
+    assistant: 'Ayubowan! 🙏 Puta A/L finish da?',
+  },
+  {
+    user: 'finish, results average',
+    assistant:
+      'No problem, api interview base karagena select karanawa. Type karanna *!register* — minute 5k form ekak 😊',
+  },
+  {
+    user: 'I have a diploma in networking, want to upgrade',
+    assistant:
+      'Your diploma likely qualifies for credit exemptions — finish the degree in 18 months part-time. Type *!register* to lock your spot 🎯',
+  },
+];
 
 // Tracks which auto-seeded keys we can safely upgrade on version bump.
 // Key = dataset key, value = array of marker strings from older auto-seeded versions.
-// If existing content starts with ANY of these, it was never customised and is safe to upgrade.
+// If existing content.en starts with ANY of these markers, it was never
+// customised by the operator and is safe to upgrade to the current seed value.
 const UPGRADEABLE_MARKERS: Record<string, string[]> = {
   AI_PERSONALITY: [AI_PERSONALITY_V1_MARKER, AI_PERSONALITY_V2_MARKER],
+  // CONVERSATION_EXAMPLES was previously seeded as a multiline string.
+  // Upgrade those records to the structured array format so ConfigService and
+  // the admin UI both receive a proper [{user, assistant}] array.
+  CONVERSATION_EXAMPLES: [CONVERSATION_EXAMPLES_V3_STRING_MARKER],
 };
 
 async function seedConversionDatasets(): Promise<void> {
@@ -179,16 +202,23 @@ async function seedConversionDatasets(): Promise<void> {
       const existing = await Dataset.findOne({ key: seed.key });
 
       if (existing) {
-        // Check if this record was auto-seeded by us (not customised by operator).
-        // We compare the start of content.en to the v1 marker string.
+        // Determine whether the stored content was auto-seeded by us (never
+        // customised by the operator) by checking known marker strings.
+        //
+        // content.en may be:
+        //   - a string (AI_PERSONALITY text, or old CONVERSATION_EXAMPLES string)
+        //   - an array [{user, assistant}] (new CONVERSATION_EXAMPLES format)
+        // If it is an array it was saved by the UI after at least one seeder
+        // run — treat it as operator-authored and do not overwrite.
+        const existingEn = existing.content?.en;
         const existingContent: string =
-          typeof existing.content?.en === 'string'
-            ? existing.content.en
-            : '';
+          typeof existingEn === 'string' ? existingEn : '';
         const markers = UPGRADEABLE_MARKERS[seed.key];
-        // isOurSeed is true if existing content starts with any known auto-seeded version.
+        // isOurSeed is true if existing content starts with any known auto-seeded string version.
+        // Array-format values are never auto-seeded strings so they fall through to !isOurSeed.
         const isOurSeed =
           markers &&
+          typeof existingEn === 'string' &&
           markers.some((m) => existingContent.startsWith(m));
 
         if (!isOurSeed) {
