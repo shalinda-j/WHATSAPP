@@ -49,13 +49,29 @@ class NLPService {
   private canonicalIndex: Map<string, string> = new Map();
 
   constructor() {
-    // Initialize standard NlpManager using default settings.
-    // We use generic tokenization since Sinhala isn't natively supported, space separation works out of the box.
+    // Register 'en', 'si' (Sinhala), and 'ta' (Tamil) so node-nlp uses the
+    // right tokenizer for each script. node-nlp falls back to space-based
+    // tokenization for scripts it doesn't have a linguistic model for, which
+    // is fine — Sinhala and Tamil are already space-separated. Adding 'si'
+    // and 'ta' here means processMessage() can call manager.process(detectedLang)
+    // instead of always passing 'en', giving the classifier the correct
+    // language context for scoring.
     this.manager = new (NlpManager as any)({
-      languages: ['en'],
+      languages: ['en', 'si', 'ta'],
       forceNER: true,
       nlu: { log: false },
     });
+  }
+
+  /**
+   * Map an arbitrary language code to one of the three languages registered
+   * with the NlpManager. Falls back to 'en' for anything else (Arabic, Hindi,
+   * etc.) so the classifier always gets a valid language tag.
+   */
+  private resolveNlpLang(lang: string): 'en' | 'si' | 'ta' {
+    if (lang === 'si') return 'si';
+    if (lang === 'ta') return 'ta';
+    return 'en';
   }
 
   /**
@@ -89,6 +105,11 @@ class NLPService {
       let utteranceCount = 0;
       this.canonicalIndex.clear();
       for (const cache of caches) {
+        // Resolve the NLP language once per cache row (all utterances share
+        // the same detected language stored on the row).
+        const docLang = this.resolveNlpLang(
+          (cache as { languages?: string[] }).languages?.[0] ?? 'en',
+        );
         const canonicals = (cache as { canonicalUtterances?: string[] })
           .canonicalUtterances?.length
           ? (cache as { canonicalUtterances: string[] }).canonicalUtterances
@@ -99,14 +120,14 @@ class NLPService {
           // Feed both the raw + canonical forms so node-nlp's classifier
           // sees the widest training surface for variants we miss in
           // the suffix list.
-          this.manager.addDocument('en', raw, cache.intentName);
+          this.manager.addDocument(docLang, raw, cache.intentName);
           if (canon && canon !== raw.toLowerCase()) {
-            this.manager.addDocument('en', canon, cache.intentName);
+            this.manager.addDocument(docLang, canon, cache.intentName);
           }
           if (canon) this.canonicalIndex.set(canon, cache.intentName);
           utteranceCount++;
         }
-        this.manager.addAnswer('en', cache.intentName, cache.aiResponse);
+        this.manager.addAnswer(docLang, cache.intentName, cache.aiResponse);
       }
 
       console.log(
@@ -213,7 +234,11 @@ class NLPService {
       }
 
       // ── Slow path: node-nlp classifier ───────────────────────────────
-      const result = await this.manager.process('en', userMessage);
+      // Use the detected language so Sinhala/Tamil utterances hit their own
+      // classifier space rather than the English one. resolveNlpLang() maps
+      // unsupported languages to 'en' so the call never fails.
+      const nlpLang = this.resolveNlpLang(detectLanguage(userMessage));
+      const result = await this.manager.process(nlpLang, userMessage);
 
       // Debug logging for development
       if (process.env.NODE_ENV === 'development') {
@@ -371,8 +396,9 @@ class NLPService {
       if (cache) {
         // Dedupe on the canonical form, not the raw text — that's what
         // makes the cache learn variants instead of accumulating duplicates.
-        const cacheCanonicals = (cache as { canonicalUtterances?: string[] })
-          .canonicalUtterances ?? [];
+        const cacheCanonicals =
+          (cache as { canonicalUtterances?: string[] }).canonicalUtterances ??
+          [];
         const utteranceExists =
           cacheCanonicals.includes(canonical) ||
           cache.userUtterances.some(
@@ -392,9 +418,8 @@ class NLPService {
           // Backfill the embedding when we have one and the existing row
           // doesn't — lets a row created pre-embedding participate in
           // future semantic-merge lookups.
-          const existingEmbedding = (
-            cache as { responseEmbedding?: number[] }
-          ).responseEmbedding;
+          const existingEmbedding = (cache as { responseEmbedding?: number[] })
+            .responseEmbedding;
           if (
             responseEmbedding &&
             (!existingEmbedding || existingEmbedding.length === 0)
@@ -406,9 +431,10 @@ class NLPService {
 
           // Feed both raw and canonical to the classifier so suffix
           // variants and partial-match phrasings both classify.
-          this.manager.addDocument('en', rawMessage, intentName);
+          const learnLang = this.resolveNlpLang(lang);
+          this.manager.addDocument(learnLang, rawMessage, intentName);
           if (canonical && canonical !== rawMessage.toLowerCase()) {
-            this.manager.addDocument('en', canonical, intentName);
+            this.manager.addDocument(learnLang, canonical, intentName);
           }
           this.canonicalIndex.set(canonical, intentName);
           console.log(
@@ -438,11 +464,12 @@ class NLPService {
       });
       await cache.save();
 
-      this.manager.addDocument('en', rawMessage, intentName);
+      const newLang = this.resolveNlpLang(lang);
+      this.manager.addDocument(newLang, rawMessage, intentName);
       if (canonical && canonical !== rawMessage.toLowerCase()) {
-        this.manager.addDocument('en', canonical, intentName);
+        this.manager.addDocument(newLang, canonical, intentName);
       }
-      this.manager.addAnswer('en', intentName, normalizedResponse);
+      this.manager.addAnswer(newLang, intentName, normalizedResponse);
       this.canonicalIndex.set(canonical, intentName);
       console.log(
         `✨ [NLP LEARN] Created new intent: ${intentName} (lang=${lang})`,

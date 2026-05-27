@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useDebounce } from '../hooks/useDebounce';
 import { api } from '../config';
 import {
   Users,
@@ -309,6 +310,7 @@ export default function CRM() {
   const [, setContactsTotal] = useState(0);
   const [contactsPage] = useState(1);
   const [contactSearch, setContactSearch] = useState('');
+  const debouncedContactSearch = useDebounce(contactSearch, 300);
   const [contactTypeFilter] = useState('');
   const [showContactModal, setShowContactModal] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
@@ -398,6 +400,7 @@ export default function CRM() {
   const [registrationsPage, setRegistrationsPage] = useState(1);
   const [registrationsTotalPages, setRegistrationsTotalPages] = useState(1);
   const [registrationSearch, setRegistrationSearch] = useState('');
+  const debouncedRegistrationSearch = useDebounce(registrationSearch, 300);
   const [registrationStatusFilter, setRegistrationStatusFilter] = useState('');
   const [registrationJobFilter, setRegistrationJobFilter] = useState('');
   const [jobTypes, setJobTypes] = useState<string[]>([]);
@@ -450,7 +453,7 @@ export default function CRM() {
       const params = new URLSearchParams();
       params.append('page', contactsPage.toString());
       params.append('limit', '20');
-      if (contactSearch) params.append('search', contactSearch);
+      if (debouncedContactSearch) params.append('search', debouncedContactSearch);
       if (contactTypeFilter) params.append('type', contactTypeFilter);
       appendSessionScope(params);
 
@@ -553,7 +556,7 @@ export default function CRM() {
       const params = new URLSearchParams();
       params.append('page', registrationsPage.toString());
       params.append('limit', '20');
-      if (registrationSearch) params.append('search', registrationSearch);
+      if (debouncedRegistrationSearch) params.append('search', debouncedRegistrationSearch);
       if (registrationStatusFilter)
         params.append('status', registrationStatusFilter);
       if (registrationJobFilter)
@@ -655,7 +658,7 @@ export default function CRM() {
     activeTab,
     sessionFilter,
     contactsPage,
-    contactSearch,
+    debouncedContactSearch,  // debounced — fires 300 ms after the user stops typing
     contactTypeFilter,
     dealsPage,
     dealSearch,
@@ -664,7 +667,7 @@ export default function CRM() {
     activityTypeFilter,
     analyticsPeriod,
     registrationsPage,
-    registrationSearch,
+    debouncedRegistrationSearch,  // debounced
     registrationStatusFilter,
     registrationJobFilter,
   ]);
