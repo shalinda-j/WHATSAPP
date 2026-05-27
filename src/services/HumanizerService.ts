@@ -43,7 +43,8 @@ export class HumanizerService {
 
   private static evictIfOversized(): void {
     while (
-      HumanizerService.sendTimestamps.size > HumanizerService.MAX_TRACKED_SESSIONS
+      HumanizerService.sendTimestamps.size >
+      HumanizerService.MAX_TRACKED_SESSIONS
     ) {
       const oldest = HumanizerService.sendTimestamps.keys().next().value;
       if (!oldest) break;
@@ -347,6 +348,55 @@ export class HumanizerService {
     this.isProcessingQueue = false;
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // WhatsApp text sanitizer
+  //
+  // AI models are trained on markdown-heavy corpora and frequently output
+  // **double-asterisk bold**, # headings, and markdown bullet points.
+  // WhatsApp has its own formatting rules:
+  //   *single asterisk* → bold (the only supported bold syntax)
+  //   _single underscore_ → italic
+  //   ~tilde~ → strikethrough
+  //
+  // Double asterisks (**) are NOT bold in WhatsApp — they appear as two
+  // literal star characters on both sides of the word, making messages look
+  // broken and unprofessional. This sanitizer converts AI output to clean
+  // WhatsApp-native formatting before every outbound message.
+  // ─────────────────────────────────────────────────────────────────────────
+  public static sanitizeForWhatsApp(text: string): string {
+    if (!text) return text;
+    let s = text;
+
+    // 1. Triple/quad asterisks (***bold*** or ****bold****) → *bold*
+    s = s.replace(/\*{3,}([^*\n]{1,300}?)\*{3,}/g, '*$1*');
+
+    // 2. Double asterisks (**bold**) → *bold*  [WhatsApp bold]
+    s = s.replace(/\*\*([^*\n]{1,300}?)\*\*/g, '*$1*');
+
+    // 3. Double underscores (__italic__) → _italic_  [WhatsApp italic]
+    s = s.replace(/__([^_\n]{1,300}?)__/g, '_$1_');
+
+    // 4. Markdown headings (# Title / ## Title / ### Title) → plain text
+    //    Strip the leading # characters; keep the heading text itself.
+    s = s.replace(/^#{1,6}[ \t]+/gm, '');
+
+    // 5. Markdown bullet points at line start (- item  or  * item) → • item
+    //    Only match when the asterisk is followed by whitespace (a bullet),
+    //    not when it's followed by text (already-converted WhatsApp *bold*).
+    s = s.replace(/^[ \t]*-[ \t]+/gm, '• ');
+    s = s.replace(/^[ \t]*\*[ \t]+/gm, '• ');
+
+    // 6. Strip trailing whitespace per line (markdown adds 2+ spaces for <br>)
+    s = s.replace(/[ \t]+$/gm, '');
+
+    // 7. Collapse 3+ consecutive blank lines → single blank line
+    //    WhatsApp renders each blank line as visible vertical space; three
+    //    or more make the message feel like a formal document.
+    s = s.replace(/\n{3,}/g, '\n\n');
+
+    return s.trim();
+  }
+
   /**
    * Send message directly without queueing
    */
@@ -360,13 +410,17 @@ export class HumanizerService {
       throw new Error('Socket not available');
     }
 
+    // Sanitize markdown formatting before every send — AI models frequently
+    // output **double-asterisk bold** which shows as literal stars in WhatsApp.
+    const cleanText = HumanizerService.sanitizeForWhatsApp(text);
+
     const config = await this.getConfig();
 
     // Check if humanizer is enabled
     if (!config.enabled) {
       // Send immediately without delays
       console.log(`📤 Sending message immediately (humanizer disabled)`);
-      await sock.sendMessage(jid, { text });
+      await sock.sendMessage(jid, { text: cleanText });
       return true;
     }
 
@@ -378,7 +432,7 @@ export class HumanizerService {
     await this.sleep(reactionDelay);
 
     // 2. Calculate typing duration based on typing speed
-    const charCount = text.length;
+    const charCount = cleanText.length;
     const charsPerSecond = config.typingSpeedCharsPerMin / 60;
     let typingDelay = Math.floor((charCount / charsPerSecond) * 1000);
     const variance = typingDelay * 0.15;
@@ -404,7 +458,7 @@ export class HumanizerService {
     console.log(
       `📤 Sending humanized message to ${jid} using session: ${sessionId}`,
     );
-    await sock.sendMessage(jid, { text });
+    await sock.sendMessage(jid, { text: cleanText });
 
     return true;
   }
