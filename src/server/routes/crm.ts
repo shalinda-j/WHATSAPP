@@ -227,44 +227,48 @@ router.patch('/contacts/:id', validateObjectId(), async (req, res) => {
   }
 });
 
-router.post('/contacts/:id/resolve-phone', validateObjectId(), async (req, res) => {
-  try {
-    const phone = normalisePhoneDigits(String(req.body?.phone ?? ''));
-    if (!phone) {
-      return res.status(400).json({ error: 'Valid phone is required' });
+router.post(
+  '/contacts/:id/resolve-phone',
+  validateObjectId(),
+  async (req, res) => {
+    try {
+      const phone = normalisePhoneDigits(String(req.body?.phone ?? ''));
+      if (!phone) {
+        return res.status(400).json({ error: 'Valid phone is required' });
+      }
+
+      const contact = await Contact.findById(req.params.id);
+      if (!contact) {
+        return res.status(404).json({ error: 'Contact not found' });
+      }
+
+      const lidCandidates = [
+        contact.phone,
+        contact.whatsappNumber,
+        contact.whatsappId,
+      ].filter((v): v is string => typeof v === 'string' && v.length > 0);
+      await Promise.all(
+        lidCandidates.map((lidJid) =>
+          rememberLidPhoneMapping({
+            sessionId: contact.sessionId,
+            lidJid,
+            phoneJid: phone,
+            source: 'manual',
+          }),
+        ),
+      );
+
+      contact.phone = `+${phone}`;
+      contact.whatsappNumber = phone;
+      contact.updatedAt = new Date();
+      await contact.save();
+
+      res.json({ success: true, phone: `+${phone}`, contact });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-
-    const contact = await Contact.findById(req.params.id);
-    if (!contact) {
-      return res.status(404).json({ error: 'Contact not found' });
-    }
-
-    const lidCandidates = [
-      contact.phone,
-      contact.whatsappNumber,
-      contact.whatsappId,
-    ].filter((v): v is string => typeof v === 'string' && v.length > 0);
-    await Promise.all(
-      lidCandidates.map((lidJid) =>
-        rememberLidPhoneMapping({
-          sessionId: contact.sessionId,
-          lidJid,
-          phoneJid: phone,
-          source: 'manual',
-        }),
-      ),
-    );
-
-    contact.phone = `+${phone}`;
-    contact.whatsappNumber = phone;
-    contact.updatedAt = new Date();
-    await contact.save();
-
-    res.json({ success: true, phone: `+${phone}`, contact });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
+  },
+);
 
 router.delete('/contacts/:id', validateObjectId(), async (req, res) => {
   try {
@@ -565,10 +569,7 @@ router.get('/registrations', async (req, res) => {
         : null;
     const sessionClause = sessionIdQ
       ? {
-          $or: [
-            { sessionId: sessionIdQ },
-            { sessionId: { $exists: false } },
-          ],
+          $or: [{ sessionId: sessionIdQ }, { sessionId: { $exists: false } }],
         }
       : null;
 
@@ -666,6 +667,67 @@ router.get('/registrations/stats', async (req, res) => {
         return acc;
       }, {}),
     });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Export registrations to CSV — must come BEFORE /registrations/:id or
+// Express will match the literal "export" as the :id parameter and return
+// a MongoDB CastError instead of the CSV download.
+router.get('/registrations/export', async (req, res) => {
+  try {
+    const tenantId = req.tenant?._id ? String(req.tenant._id) : null;
+    const tenantScope: Record<string, unknown> = tenantId
+      ? { $or: [{ tenantId }, { tenantId: { $exists: false } }] }
+      : {};
+    const registrations = await Lead.find(tenantScope)
+      .sort({ registeredAt: -1 })
+      .lean();
+
+    if (registrations.length === 0) {
+      return res.status(400).json({ error: 'No registrations to export' });
+    }
+
+    const headers = [
+      'ID',
+      'Full Name',
+      'Age',
+      'Phone',
+      'Country',
+      'Experience',
+      'Job Type',
+      'CV',
+      'Status',
+      'Registered At',
+    ];
+
+    const csvRows = registrations.map((r: any) => [
+      r._id,
+      `"${r.fullName || ''}"`,
+      r.age || '',
+      `"${r.phoneNumber || ''}"`,
+      `"${r.interestedCountry || ''}"`,
+      `"${r.experienceYears || ''}"`,
+      `"${r.jobVacancyType || ''}"`,
+      r.cvUrl ? 'Yes' : 'No',
+      `"${r.status || ''}"`,
+      new Date(r.registeredAt).toISOString(),
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...csvRows.map((row: string[]) => row.join(',')),
+    ].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="registrations-${
+        new Date().toISOString().split('T')[0]
+      }.csv"`,
+    );
+    res.send(csvContent);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -804,65 +866,6 @@ router.delete('/registrations/:id', async (req, res) => {
 
     await registration.deleteOne();
     res.json({ success: true, message: 'Registration deleted successfully' });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Export registrations to CSV
-router.get('/registrations/export', async (req, res) => {
-  try {
-    const tenantId = req.tenant?._id ? String(req.tenant._id) : null;
-    const tenantScope: Record<string, unknown> = tenantId
-      ? { $or: [{ tenantId }, { tenantId: { $exists: false } }] }
-      : {};
-    const registrations = await Lead.find(tenantScope)
-      .sort({ registeredAt: -1 })
-      .lean();
-
-    if (registrations.length === 0) {
-      return res.status(400).json({ error: 'No registrations to export' });
-    }
-
-    const headers = [
-      'ID',
-      'Full Name',
-      'Age',
-      'Phone',
-      'Country',
-      'Experience',
-      'Job Type',
-      'CV',
-      'Status',
-      'Registered At',
-    ];
-
-    const csvRows = registrations.map((r: any) => [
-      r._id,
-      `"${r.fullName || ''}"`,
-      r.age || '',
-      `"${r.phoneNumber || ''}"`,
-      `"${r.interestedCountry || ''}"`,
-      `"${r.experienceYears || ''}"`,
-      `"${r.jobVacancyType || ''}"`,
-      r.cvUrl ? 'Yes' : 'No',
-      `"${r.status || ''}"`,
-      new Date(r.registeredAt).toISOString(),
-    ]);
-
-    const csvContent = [
-      headers.join(','),
-      ...csvRows.map((row: string[]) => row.join(',')),
-    ].join('\n');
-
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="registrations-${
-        new Date().toISOString().split('T')[0]
-      }.csv"`,
-    );
-    res.send(csvContent);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

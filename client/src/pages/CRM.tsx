@@ -323,6 +323,15 @@ export default function CRM() {
   const [showDealModal, setShowDealModal] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
 
+  // Lightweight lists used only by Deal / Activity modal pickers so we don't
+  // depend on the user having visited the Contacts or Deals tab first.
+  const [modalContacts, setModalContacts] = useState<
+    { _id: string; firstName: string; lastName: string; company?: string }[]
+  >([]);
+  const [modalDeals, setModalDeals] = useState<
+    { _id: string; title: string }[]
+  >([]);
+
   // Activities state
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [, setActivitiesTotal] = useState(0);
@@ -772,6 +781,42 @@ export default function CRM() {
       contact: '',
       expectedCloseDate: '',
     });
+  };
+
+  /** Fetch a lightweight contact list for the Deal / Activity modal pickers. */
+  const fetchModalContacts = async () => {
+    try {
+      const params = new URLSearchParams({ limit: '200' });
+      appendSessionScope(params);
+      const res = await api.get(`/api/crm/contacts?${params.toString()}`);
+      setModalContacts(
+        (res.data.contacts ?? res.data ?? []).map((c: any) => ({
+          _id: c._id,
+          firstName: c.firstName,
+          lastName: c.lastName,
+          company: c.company,
+        })),
+      );
+    } catch {
+      /* non-fatal — picker just stays empty */
+    }
+  };
+
+  /** Fetch a lightweight deal list for the Activity modal picker. */
+  const fetchModalDeals = async () => {
+    try {
+      const params = new URLSearchParams({ limit: '200' });
+      appendSessionScope(params);
+      const res = await api.get(`/api/crm/deals?${params.toString()}`);
+      setModalDeals(
+        (res.data.deals ?? res.data ?? []).map((d: any) => ({
+          _id: d._id,
+          title: d.title,
+        })),
+      );
+    } catch {
+      /* non-fatal */
+    }
   };
 
   // Activity handlers
@@ -1388,6 +1433,7 @@ export default function CRM() {
           onClick={() => {
             resetDealForm();
             setEditingDeal(null);
+            void fetchModalContacts();
             setShowDealModal(true);
           }}
           className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 transition"
@@ -1427,6 +1473,7 @@ export default function CRM() {
                         ? deal.expectedCloseDate.toString().split('T')[0]
                         : '',
                     });
+                    void fetchModalContacts();
                     setShowDealModal(true);
                   }}
                 >
@@ -1474,6 +1521,8 @@ export default function CRM() {
           onClick={() => {
             resetActivityForm();
             setEditingActivity(null);
+            void fetchModalContacts();
+            void fetchModalDeals();
             setShowActivityModal(true);
           }}
           className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-xl font-medium hover:bg-purple-700 transition"
@@ -2731,6 +2780,22 @@ export default function CRM() {
                   className="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none"
                 />
               </div>
+              {/* Contact picker */}
+              <select
+                value={dealForm.contact}
+                onChange={(e) =>
+                  setDealForm({ ...dealForm, contact: e.target.value })
+                }
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none"
+              >
+                <option value="">— No contact linked —</option>
+                {modalContacts.map((c) => (
+                  <option key={c._id} value={c._id}>
+                    {c.firstName} {c.lastName}
+                    {c.company ? ` (${c.company})` : ''}
+                  </option>
+                ))}
+              </select>
               <input
                 type="date"
                 placeholder="Expected Close Date"
@@ -2810,6 +2875,37 @@ export default function CRM() {
                 rows={3}
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none resize-none"
               />
+              {/* Contact picker */}
+              <select
+                value={activityForm.contact}
+                onChange={(e) =>
+                  setActivityForm({ ...activityForm, contact: e.target.value })
+                }
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
+              >
+                <option value="">— No contact linked —</option>
+                {modalContacts.map((c) => (
+                  <option key={c._id} value={c._id}>
+                    {c.firstName} {c.lastName}
+                    {c.company ? ` (${c.company})` : ''}
+                  </option>
+                ))}
+              </select>
+              {/* Deal picker */}
+              <select
+                value={activityForm.deal}
+                onChange={(e) =>
+                  setActivityForm({ ...activityForm, deal: e.target.value })
+                }
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
+              >
+                <option value="">— No deal linked —</option>
+                {modalDeals.map((d) => (
+                  <option key={d._id} value={d._id}>
+                    {d.title}
+                  </option>
+                ))}
+              </select>
               <div className="grid grid-cols-2 gap-4">
                 <select
                   value={activityForm.priority}
