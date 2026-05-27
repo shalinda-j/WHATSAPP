@@ -21,6 +21,13 @@ export interface IAgentConfig extends Document {
   promotionPolicy: 'auto' | 'manual';
   autoPromoteMinSamples: number;
   autoPromoteMinPValue: number;
+  /**
+   * How long (in hours) items queued for this agent's approval stay pending
+   * before auto-expiring. Range 1–168 (one week). Default: 4 hours.
+   * Configurable per-agent so a low-volume campaign agent can hold 48h
+   * while a real-time chat agent expires in 1h.
+   */
+  approvalTtlHours: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,9 +60,12 @@ const AgentConfigSchema = new Schema(
     },
     autoPromoteMinSamples: { type: Number, default: 50 },
     autoPromoteMinPValue: { type: Number, default: 0.05 },
+    approvalTtlHours: { type: Number, default: 4, min: 1, max: 168 },
   } as any,
   { timestamps: true },
 );
 
-const __AgentConfigModel = mongoose.models.AgentConfig || mongoose.model('AgentConfig', AgentConfigSchema as any);
+const __AgentConfigModel =
+  mongoose.models.AgentConfig ||
+  mongoose.model('AgentConfig', AgentConfigSchema as any);
 export default __AgentConfigModel as unknown as mongoose.Model<IAgentConfig>;

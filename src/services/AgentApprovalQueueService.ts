@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import AgentApprovalQueue, {
   IAgentApprovalQueue,
 } from '../models/AgentApprovalQueue';
+import AgentConfig from '../models/AgentConfig';
 import AgentExecution from '../models/AgentExecution';
 import AgentFeedback from '../models/AgentFeedback';
 import AgentPromptVersion from '../models/AgentPromptVersion';
@@ -34,9 +35,22 @@ export class AgentApprovalQueueService {
     proposedMessage: string;
     expiresInMs?: number;
   }): Promise<IAgentApprovalQueue> {
-    const expiresAt = new Date(
-      Date.now() + (params.expiresInMs ?? 1000 * 60 * 60 * 4),
-    );
+    // Read per-agent TTL from AgentConfig (fallback: 4 hours).
+    // This allows operators to set a longer TTL for slow campaign agents and
+    // a short TTL for real-time chat agents from the Admin Panel → Agents Hub.
+    let defaultTtlMs = 1000 * 60 * 60 * 4; // 4h
+    try {
+      const cfg = await AgentConfig.findOne(
+        { name: params.agentName },
+        { approvalTtlHours: 1 },
+      ).lean();
+      if (cfg && typeof (cfg as any).approvalTtlHours === 'number') {
+        defaultTtlMs = (cfg as any).approvalTtlHours * 60 * 60 * 1000;
+      }
+    } catch {
+      /* DB error — use default TTL */
+    }
+    const expiresAt = new Date(Date.now() + (params.expiresInMs ?? defaultTtlMs));
     const entry = await AgentApprovalQueue.create({
       executionId: params.executionId,
       traceId: params.traceId,
@@ -78,7 +92,8 @@ export class AgentApprovalQueueService {
     ) {
       lastApprovalAlertAt = Date.now();
       void WebhookService.triggerOpsAlert({
-        level: pending >= APPROVAL_BACKLOG_ALERT_THRESHOLD * 2 ? 'error' : 'warn',
+        level:
+          pending >= APPROVAL_BACKLOG_ALERT_THRESHOLD * 2 ? 'error' : 'warn',
         title: 'Agent approval queue backlog',
         body: `Pending approvals: ${pending}. Reviews are falling behind — outbound for agents in approval mode is blocked until cleared.`,
         fields: {

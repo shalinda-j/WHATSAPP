@@ -243,6 +243,18 @@ async function metaWebhookHandshake(
 // method, which normalises Meta's batch shape into InboundMessage and
 // runs them through the channelRouter handlers — same orchestrator
 // path Telegram + WhatsApp use.
+//
+// Security: verifies X-Hub-Signature-256 HMAC when the operator has stored
+// an `appSecret` in ChannelConnection.credentials. Meta signs every POST
+// body with HMAC-SHA256 using the app secret and sends it in this header.
+// Without this check, any attacker who knows the webhook URL can inject
+// fake messages. When appSecret is absent, verification is skipped so
+// that operators who haven't added the secret yet aren't silently broken.
+//
+// Note: verification uses JSON.stringify(req.body) which is byte-equivalent
+// to the original body only when Express's JSON parser doesn't reformat
+// it. For byte-exact verification in production, configure express.raw()
+// on this route and store the raw buffer (see rawBody middleware pattern).
 async function metaWebhookIngest(
   req: express.Request,
   res: express.Response,
@@ -253,6 +265,47 @@ async function metaWebhookIngest(
     const Tenant = (await import('../../models/Tenant')).default;
     const tenant = await Tenant.findOne({ slug: tenantSlug });
     if (!tenant) return res.status(404).json({ error: 'tenant_not_found' });
+
+    // ── X-Hub-Signature-256 verification ──────────────────────────────────
+    const ChannelConnection = (
+      await import('../../models/ChannelConnection')
+    ).default;
+    const conn = await ChannelConnection.findOne({
+      tenantId: tenant._id,
+      channel,
+    }).lean();
+    const appSecret = (conn?.credentials as any)?.appSecret as
+      | string
+      | undefined;
+    if (appSecret) {
+      const sigHeader = req.headers['x-hub-signature-256'] as string | undefined;
+      if (!sigHeader) {
+        console.warn(`[${channel}] Missing X-Hub-Signature-256 from Meta`);
+        return res.status(401).json({ error: 'missing_signature' });
+      }
+      const bodyStr =
+        typeof req.body === 'string'
+          ? req.body
+          : JSON.stringify(req.body);
+      const expected =
+        'sha256=' +
+        crypto.createHmac('sha256', appSecret).update(bodyStr).digest('hex');
+      // timingSafeEqual prevents timing-based secret extraction attacks
+      try {
+        const sigBuf = Buffer.from(sigHeader);
+        const expBuf = Buffer.from(expected);
+        if (
+          sigBuf.length !== expBuf.length ||
+          !crypto.timingSafeEqual(sigBuf, expBuf)
+        ) {
+          console.warn(`[${channel}] Invalid X-Hub-Signature-256 — rejecting`);
+          return res.status(403).json({ error: 'invalid_signature' });
+        }
+      } catch {
+        return res.status(403).json({ error: 'invalid_signature' });
+      }
+    }
+    // ── end signature verification ─────────────────────────────────────────
 
     const { channelRouter } = await import('../../channels');
     const adapter = channelRouter.get(channel) as any;

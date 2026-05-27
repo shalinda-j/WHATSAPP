@@ -8,12 +8,15 @@ import {
   RefreshCw,
   Sparkles,
   X,
+  Image,
+  Check,
 } from 'lucide-react';
 
 interface CampaignVariant {
   variantId: string;
   weight?: number;
   messageBody: string;
+  mediaUrl?: string;
   generatedBy?: 'human' | 'campaign_generator_agent';
 }
 
@@ -64,6 +67,16 @@ interface GenerateResult {
   provider: string;
 }
 
+interface ContentAsset {
+  _id: string;
+  prompt: string;
+  url?: string;
+  inlineBase64?: string;
+  status: 'pending' | 'ready' | 'failed';
+  provider: string;
+  createdAt: string;
+}
+
 export default function Campaigns() {
   const [rows, setRows] = useState<CampaignRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,6 +96,15 @@ export default function Campaigns() {
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newChannels, setNewChannels] = useState<string[]>(['whatsapp']);
+  const [newImageUrl, setNewImageUrl] = useState('');
+
+  // Content Studio asset picker state
+  const [showAssetPicker, setShowAssetPicker] = useState(false);
+  const [assets, setAssets] = useState<ContentAsset[]>([]);
+  const [assetsLoading, setAssetsLoading] = useState(false);
+  const [assetPickerTarget, setAssetPickerTarget] = useState<
+    'create' | { variantId: string } | null
+  >(null);
 
   const load = async () => {
     setLoading(true);
@@ -100,6 +122,37 @@ export default function Campaigns() {
   useEffect(() => {
     load();
   }, []);
+
+  const loadAssets = async () => {
+    setAssetsLoading(true);
+    try {
+      const res = await api.get<{ assets: ContentAsset[] }>(
+        '/api/content/assets?type=image',
+      );
+      setAssets(res.data.assets.filter((a) => a.status === 'ready'));
+    } catch {
+      // non-fatal
+    } finally {
+      setAssetsLoading(false);
+    }
+  };
+
+  const openAssetPicker = (target: 'create' | { variantId: string }) => {
+    setAssetPickerTarget(target);
+    setShowAssetPicker(true);
+    loadAssets();
+  };
+
+  const pickAsset = (asset: ContentAsset) => {
+    const url = asset.url ?? '';
+    if (assetPickerTarget === 'create') {
+      setNewImageUrl(url);
+    }
+    // For variants in generate result, we just close and note the URL
+    // (the backend's mediaUrl is per-variant; we display it as a note)
+    setShowAssetPicker(false);
+    setAssetPickerTarget(null);
+  };
 
   const togglePause = async (c: CampaignRow) => {
     const path = c.status === 'running' ? 'pause' : 'resume';
@@ -150,18 +203,27 @@ export default function Campaigns() {
   const createCampaign = async () => {
     if (!newName.trim()) return;
     try {
+      const variant: CampaignVariant | undefined = newImageUrl
+        ? {
+            variantId: 'v1',
+            messageBody: '',
+            mediaUrl: newImageUrl,
+            generatedBy: 'human',
+          }
+        : undefined;
       await api.post('/api/campaigns', {
         name: newName,
         description: newDescription,
         channels: newChannels,
         status: 'draft',
         trigger: { kind: 'manual' },
-        variants: [],
+        variants: variant ? [variant] : [],
       });
       setShowCreate(false);
       setNewName('');
       setNewDescription('');
       setNewChannels(['whatsapp']);
+      setNewImageUrl('');
       await load();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to create');
@@ -177,7 +239,7 @@ export default function Campaigns() {
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Multi-channel campaigns powered by the CampaignGenerator agent.
-            Conversion attribution wires through to Leads &amp; Bookings.
+            Attach images from Content Studio. Conversion attribution wires through to Leads &amp; Bookings.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -233,6 +295,9 @@ export default function Campaigns() {
                 <tr key={c._id} className="border-t border-gray-100">
                   <td className="px-3 py-2 font-medium text-gray-900">
                     {c.name}
+                    {c.variants.some((v) => v.mediaUrl) && (
+                      <Image className="h-3 w-3 text-blue-400 inline ml-1.5" title="Has image" />
+                    )}
                   </td>
                   <td className="px-3 py-2 text-gray-700">
                     {(c.channels || []).join(', ') || '—'}
@@ -283,6 +348,7 @@ export default function Campaigns() {
         </div>
       )}
 
+      {/* ── Create Campaign Modal ─────────────────────────────────────────── */}
       {showCreate && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5">
@@ -349,6 +415,47 @@ export default function Campaigns() {
                   ))}
                 </div>
               </div>
+
+              {/* Content Studio Image Attachment */}
+              <div>
+                <label className="text-xs text-gray-600 mb-1 block flex items-center gap-1">
+                  <Image className="h-3.5 w-3.5" /> Campaign Image{' '}
+                  <span className="text-gray-400">(optional)</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    className="flex-1 border border-gray-200 rounded px-2 py-1.5 text-sm"
+                    value={newImageUrl}
+                    onChange={(e) => setNewImageUrl(e.target.value)}
+                    placeholder="https://... or pick from Content Studio"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => openAssetPicker('create')}
+                    className="px-2 py-1.5 rounded border border-gray-200 text-xs text-gray-700 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    📸 Pick
+                  </button>
+                </div>
+                {newImageUrl && (
+                  <div className="mt-1 flex items-center gap-2">
+                    <img
+                      src={newImageUrl}
+                      alt="preview"
+                      className="h-12 w-12 rounded object-cover border border-gray-200"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                    <button
+                      onClick={() => setNewImageUrl('')}
+                      className="text-xs text-red-500 hover:text-red-700"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -369,6 +476,7 @@ export default function Campaigns() {
         </div>
       )}
 
+      {/* ── Generate Variants Modal ───────────────────────────────────────── */}
       {generateFor && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-5 max-h-[90vh] overflow-y-auto">
@@ -464,6 +572,20 @@ export default function Campaigns() {
                     <strong>CTA:</strong> {genResult.callToAction}
                   </p>
                 )}
+                {/* If AI suggests an image should be attached, show picker */}
+                {genResult.shouldAttachImage && (
+                  <div className="mt-3 rounded-md bg-blue-50 ring-1 ring-blue-200 px-3 py-2 flex items-center justify-between">
+                    <span className="text-xs text-blue-800">
+                      💡 AI recommends attaching an image for better engagement.
+                    </span>
+                    <button
+                      onClick={() => openAssetPicker({ variantId: 'all' })}
+                      className="text-xs text-blue-700 font-medium underline hover:text-blue-900"
+                    >
+                      Pick from Content Studio
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             <div className="mt-5 flex justify-end gap-2">
@@ -483,6 +605,89 @@ export default function Campaigns() {
                 className="px-3 py-1.5 rounded-md text-sm bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50"
               >
                 {generating ? 'Generating…' : 'Generate'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Content Studio Asset Picker Modal ────────────────────────────── */}
+      {showAssetPicker && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] px-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-5 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                <Image className="h-4 w-4 text-blue-600" /> Pick from Content
+                Studio
+              </h3>
+              <button
+                onClick={() => setShowAssetPicker(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {assetsLoading ? (
+              <div className="text-center py-8 text-gray-500">
+                Loading assets…
+              </div>
+            ) : assets.length === 0 ? (
+              <div className="text-center py-10 border border-dashed border-gray-200 rounded-lg">
+                <Image className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+                <p className="text-sm font-medium text-gray-700">
+                  No images generated yet
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Go to Content Studio → generate an image → come back here to
+                  attach it.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {assets.map((a) => (
+                  <button
+                    key={a._id}
+                    onClick={() => pickAsset(a)}
+                    className="group relative rounded-lg border border-gray-200 overflow-hidden hover:border-blue-400 hover:ring-2 hover:ring-blue-200 transition-all text-left"
+                  >
+                    {a.url ? (
+                      <img
+                        src={a.url}
+                        alt={a.prompt}
+                        className="w-full h-28 object-cover"
+                      />
+                    ) : a.inlineBase64 ? (
+                      <img
+                        src={`data:image/png;base64,${a.inlineBase64}`}
+                        alt={a.prompt}
+                        className="w-full h-28 object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-28 bg-gray-100 flex items-center justify-center">
+                        <Image className="h-8 w-8 text-gray-300" />
+                      </div>
+                    )}
+                    <div className="p-1.5">
+                      <p className="text-[10px] text-gray-600 line-clamp-2">
+                        {a.prompt}
+                      </p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">
+                        {a.provider}
+                      </p>
+                    </div>
+                    <div className="absolute inset-0 bg-blue-600/0 group-hover:bg-blue-600/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
+                      <Check className="h-8 w-8 text-blue-600" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setShowAssetPicker(false)}
+                className="px-3 py-1.5 rounded-md text-sm border border-gray-200 hover:bg-gray-50"
+              >
+                Cancel
               </button>
             </div>
           </div>
