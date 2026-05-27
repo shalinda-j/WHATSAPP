@@ -70,9 +70,7 @@ const envOrigins = (process.env.ALLOWED_ORIGINS || '')
   .filter((o) => o.length > 0);
 const allowedOrigins = [...localOrigins, ...envOrigins];
 if (envOrigins.length > 0) {
-  console.log(
-    `✅ CORS: allowed production origins → ${envOrigins.join(', ')}`,
-  );
+  console.log(`✅ CORS: allowed production origins → ${envOrigins.join(', ')}`);
 }
 
 const corsOptions = {
@@ -80,8 +78,14 @@ const corsOptions = {
     origin: string | undefined,
     callback: (err: Error | null, allow: boolean) => void,
   ) => {
-    // Allow requests with no origin (mobile apps, webhooks, etc.)
-    if (!origin) return callback(null, true);
+    // FIX M12: In production, only allow requests with a known origin.
+    // Requests with no origin header (curl, Postman, server-to-server)
+    // are allowed ONLY in development so operators can test locally.
+    // In production this gate prevents CSRF-style tool-based abuse.
+    if (!origin) {
+      const isDev = process.env.NODE_ENV !== 'production';
+      return callback(null, isDev);
+    }
 
     // Normalise so "https://foo.com" and "https://foo.com/" both match.
     const normalised = origin.replace(/\/$/, '');
@@ -414,12 +418,8 @@ app.use((req, res, next) => {
 app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
   // Don't double-respond if a handler already partially wrote a response.
   if (res.headersSent) return;
-  const message =
-    err instanceof Error ? err.message : 'Internal server error';
-  console.error(
-    `❌ Unhandled error on ${req.method} ${req.originalUrl}:`,
-    err,
-  );
+  const message = err instanceof Error ? err.message : 'Internal server error';
+  console.error(`❌ Unhandled error on ${req.method} ${req.originalUrl}:`, err);
   res.status(500).json({
     error: 'internal_error',
     message,

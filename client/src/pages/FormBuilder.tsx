@@ -867,7 +867,33 @@ function FormSubmissions() {
   };
 
   const exportCSV = async () => {
-    window.open('/api/forms/submissions/export', '_blank');
+    // FIX H6: window.open() doesn't attach the JWT auth header — the
+    // export endpoint returns 401 for unauthenticated requests. Use fetch
+    // with the Authorization header, receive the CSV as a blob, then
+    // trigger the download via a temporary anchor element.
+    try {
+      const token = localStorage.getItem('token') || '';
+      const response = await fetch('/api/forms/submissions/export', {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        alert(`Export failed: HTTP ${response.status}`);
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `form-submissions-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export error:', err);
+      alert('Export failed. Please try again.');
+    }
   };
 
   if (loading) {

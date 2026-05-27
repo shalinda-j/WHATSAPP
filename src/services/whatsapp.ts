@@ -376,7 +376,10 @@ export class WhatsAppSessionManager {
         );
       });
 
-      const rememberContactMapping = (contact: { id?: string; lid?: string }) => {
+      const rememberContactMapping = (contact: {
+        id?: string;
+        lid?: string;
+      }) => {
         if (!contact.lid || !contact.id) return;
         rememberLidPhoneMapping({
           sessionId,
@@ -468,6 +471,22 @@ export class WhatsAppSessionManager {
         },
         { upsert: true },
       );
+
+      // FIX: Emit real-time Socket.io events so the frontend Sessions dashboard
+      // updates instantly instead of waiting for the 10-second fallback poll.
+      // QR changes get their own event so the new QR renders the moment it's
+      // available — critical for good scan UX. All other state changes
+      // (connected, disconnected, connecting) use the generic status event.
+      try {
+        const { getIO } = await import('../server/socket');
+        const io = getIO();
+        if (qr) {
+          io.emit('qr-update', { sessionId, qr, status });
+        }
+        io.emit('session-status-update', { sessionId, status, phoneNumber });
+      } catch {
+        // Socket.io may not be initialized yet during early boot — safe to ignore.
+      }
     } catch (err: any) {
       if (!err?.message?.includes('buffering timed out')) {
         console.warn('Failed to update session status in DB', err?.message);

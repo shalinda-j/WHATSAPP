@@ -85,7 +85,20 @@ export async function startBookingFlow(
     bookingConfig,
   };
 
-  await saveBookingSession(jid, session);
+  // FIX: Persist session state BEFORE sending the WhatsApp message. If the
+  // DB write fails we abort — never send the prompt without the session state,
+  // because the user's next reply would fall through to the AI with no context.
+  try {
+    await saveBookingSession(jid, session);
+  } catch (saveErr: any) {
+    console.error(
+      `[BookingService] Failed to save session state for ${jid}:`,
+      saveErr?.message,
+    );
+    // Let the caller know the flow couldn't start so it doesn't suppress the
+    // AI fallback or send a misleading booking prompt.
+    throw new Error(`Booking session save failed: ${saveErr?.message}`);
+  }
 
   await sendTyping(jid, sessionId);
   await sendMessage(

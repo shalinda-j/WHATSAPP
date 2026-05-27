@@ -1726,8 +1726,9 @@ export default function VoiceAgentHub() {
               Quick Actions
             </h3>
             <div className="space-y-2">
+              {/* FIX H8: /chats → /chat (correct route) */}
               <Link
-                to="/chats"
+                to="/chat"
                 className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group"
               >
                 <span className="text-sm font-medium text-gray-700">
@@ -1735,12 +1736,13 @@ export default function VoiceAgentHub() {
                 </span>
                 <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-gray-600" />
               </Link>
+              {/* FIX M8: /analytics redirects to /crm — link directly to /crm */}
               <Link
-                to="/analytics"
+                to="/crm"
                 className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group"
               >
                 <span className="text-sm font-medium text-gray-700">
-                  View Analytics
+                  View CRM & Analytics
                 </span>
                 <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-gray-600" />
               </Link>

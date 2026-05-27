@@ -117,6 +117,40 @@ export async function registerCoreAgents(): Promise<void> {
   }
 
   await agentRegistry.forceReload();
+
+  // FIX: Conversational agents must be active for the conversion pipeline to
+  // work. The AgentRegistry creates them with mode='disabled' on first boot so
+  // they appear in the dashboard but don't run until an operator enables them.
+  // That design intent was correct for operator-invoked agents (campaign
+  // generator, segmentation, follow_up) but wrong for the always-on
+  // conversational agents (lead_qualifier, personalization, deal_agent,
+  // content_recommender). We activate those here — matching the filter used in
+  // AgentRegistry.findBestAgent(): isActive=true AND mode!='disabled'.
+  // Using `mode: 'disabled'` in the filter means we only activate agents that
+  // haven't already been deliberately set to something else via the admin UI.
+  const CONVERSATIONAL_AGENTS = [
+    'lead_qualifier',
+    'personalization',
+    'deal_agent',
+    'content_recommender',
+  ] as const;
+
+  let activatedCount = 0;
+  for (const agentName of CONVERSATIONAL_AGENTS) {
+    const result = await AgentConfig.updateOne(
+      { name: agentName, mode: 'disabled' },
+      { $set: { mode: 'autonomous', isActive: true } },
+    );
+    if (result.modifiedCount > 0) {
+      activatedCount++;
+      console.log(`✅ Agent '${agentName}' activated → autonomous mode`);
+    }
+  }
+  if (activatedCount > 0) {
+    // Reload registry so in-memory mode reflects the DB update immediately.
+    await agentRegistry.forceReload();
+  }
+
   console.log(
     `🤖 Registered agents: ${agentRegistry.list().join(', ') || '(none)'}`,
   );

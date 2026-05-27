@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { bulkSenderService } from '../../services/BulkSenderService';
 import { authenticateToken } from '../middleware/auth';
+import { strictRateLimit } from '../middleware/rateLimit';
 
 const router = Router();
 const upload = multer({
@@ -9,7 +10,7 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 },
 });
 
-// SECURITY FIX: All bulk routes require authentication
+// All bulk routes require authentication
 router.use(authenticateToken);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -18,131 +19,140 @@ router.use(authenticateToken);
 // Each line is a JSON object:  {"type":"progress","current":1,"total":5,"number":"...","status":"ok"|"error","message":"..."}
 // Final line:                  {"type":"done","success":N,"failed":N,"errors":[...]}
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/send', upload.single('media'), async (req, res) => {
-  try {
-    const { recipients, message, delay, sessionId } = req.body;
-    let recipientList: string[] = [];
+// FIX M13: Rate-limit bulk send to prevent mass-spam via stolen JWT
+router.post(
+  '/send',
+  strictRateLimit,
+  upload.single('media'),
+  async (req, res) => {
+    try {
+      const { recipients, message, delay, sessionId } = req.body;
+      let recipientList: string[] = [];
 
-    if (typeof recipients === 'string') {
-      try {
-        recipientList = JSON.parse(recipients);
-      } catch {
-        recipientList = recipients
-          .split(',')
-          .map((s: string) => s.trim())
-          .filter(Boolean);
+      if (typeof recipients === 'string') {
+        try {
+          recipientList = JSON.parse(recipients);
+        } catch {
+          recipientList = recipients
+            .split(',')
+            .map((s: string) => s.trim())
+            .filter(Boolean);
+        }
+      } else if (Array.isArray(recipients)) {
+        recipientList = recipients;
       }
-    } else if (Array.isArray(recipients)) {
-      recipientList = recipients;
-    }
 
-    if (!recipientList || recipientList.length === 0) {
-      return res.status(400).json({ error: 'No recipients provided' });
-    }
-
-    if (!message && !req.file) {
-      return res
-        .status(400)
-        .json({ error: 'A message or media file is required' });
-    }
-
-    // Stream NDJSON progress back to client
-    res.setHeader('Content-Type', 'application/x-ndjson');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('X-Accel-Buffering', 'no');
-
-    const write = (obj: object) => {
-      try {
-        res.write(JSON.stringify(obj) + '\n');
-      } catch {
-        /* ignore write errors */
+      if (!recipientList || recipientList.length === 0) {
+        return res.status(400).json({ error: 'No recipients provided' });
       }
-    };
 
-    const result = {
-      total: recipientList.length,
-      success: 0,
-      failed: 0,
-      errors: [] as { number: string; error: string }[],
-    };
-    const delayMs = (Number(delay) || 5) * 1000;
-    const sid = sessionId || 'default';
+      if (!message && !req.file) {
+        return res
+          .status(400)
+          .json({ error: 'A message or media file is required' });
+      }
 
-    for (let i = 0; i < recipientList.length; i++) {
-      const number = recipientList[i];
-      const jid = number.includes('@') ? number : `${number}@s.whatsapp.net`;
+      // Stream NDJSON progress back to client
+      res.setHeader('Content-Type', 'application/x-ndjson');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('X-Accel-Buffering', 'no');
 
-      try {
-        if (req.file) {
-          let type: 'image' | 'document' | 'audio' | 'video' = 'document';
-          if (req.file.mimetype.startsWith('image/')) type = 'image';
-          else if (req.file.mimetype.startsWith('audio/')) type = 'audio';
-          else if (req.file.mimetype.startsWith('video/')) type = 'video';
+      const write = (obj: object) => {
+        try {
+          res.write(JSON.stringify(obj) + '\n');
+        } catch {
+          /* ignore write errors */
+        }
+      };
 
-          const { sendMediaMessage } = await import('../../services/whatsapp');
-          const sent = await sendMediaMessage(
-            jid,
-            req.file.buffer,
-            type,
-            {
-              caption: message || undefined,
-              mimetype: req.file.mimetype,
-              fileName: req.file.originalname,
-            },
-            sid,
-          );
-          if (!sent)
-            throw new Error('WhatsApp not connected — scan the QR code first');
-        } else {
-          const { sendMessage } = await import('../../services/whatsapp');
-          await sendMessage(jid, message, sid);
+      const result = {
+        total: recipientList.length,
+        success: 0,
+        failed: 0,
+        errors: [] as { number: string; error: string }[],
+      };
+      const delayMs = (Number(delay) || 5) * 1000;
+      const sid = sessionId || 'default';
+
+      for (let i = 0; i < recipientList.length; i++) {
+        const number = recipientList[i];
+        const jid = number.includes('@') ? number : `${number}@s.whatsapp.net`;
+
+        try {
+          if (req.file) {
+            let type: 'image' | 'document' | 'audio' | 'video' = 'document';
+            if (req.file.mimetype.startsWith('image/')) type = 'image';
+            else if (req.file.mimetype.startsWith('audio/')) type = 'audio';
+            else if (req.file.mimetype.startsWith('video/')) type = 'video';
+
+            const { sendMediaMessage } =
+              await import('../../services/whatsapp');
+            const sent = await sendMediaMessage(
+              jid,
+              req.file.buffer,
+              type,
+              {
+                caption: message || undefined,
+                mimetype: req.file.mimetype,
+                fileName: req.file.originalname,
+              },
+              sid,
+            );
+            if (!sent)
+              throw new Error(
+                'WhatsApp not connected — scan the QR code first',
+              );
+          } else {
+            const { sendMessage } = await import('../../services/whatsapp');
+            await sendMessage(jid, message, sid);
+          }
+
+          result.success++;
+          write({
+            type: 'progress',
+            current: i + 1,
+            total: result.total,
+            number,
+            status: 'ok',
+          });
+        } catch (err: any) {
+          result.failed++;
+          const errMsg = err?.message || String(err);
+          result.errors.push({ number, error: errMsg });
+          write({
+            type: 'progress',
+            current: i + 1,
+            total: result.total,
+            number,
+            status: 'error',
+            error: errMsg,
+          });
         }
 
-        result.success++;
-        write({
-          type: 'progress',
-          current: i + 1,
-          total: result.total,
-          number,
-          status: 'ok',
-        });
-      } catch (err: any) {
-        result.failed++;
-        const errMsg = err?.message || String(err);
-        result.errors.push({ number, error: errMsg });
-        write({
-          type: 'progress',
-          current: i + 1,
-          total: result.total,
-          number,
-          status: 'error',
-          error: errMsg,
-        });
+        if (i < recipientList.length - 1) {
+          await new Promise<void>((r) => setTimeout(r, delayMs));
+        }
       }
 
-      if (i < recipientList.length - 1) {
-        await new Promise<void>((r) => setTimeout(r, delayMs));
+      write({ type: 'done', ...result });
+      res.end();
+    } catch (error: any) {
+      console.error('Bulk Send Error:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: error.message });
+      } else {
+        try {
+          res.write(
+            JSON.stringify({ type: 'error', error: error.message }) + '\n',
+          );
+          res.end();
+        } catch {
+          /* ignore */
+        }
       }
     }
-
-    write({ type: 'done', ...result });
-    res.end();
-  } catch (error: any) {
-    console.error('Bulk Send Error:', error);
-    if (!res.headersSent) {
-      res.status(500).json({ error: error.message });
-    } else {
-      try {
-        res.write(
-          JSON.stringify({ type: 'error', error: error.message }) + '\n',
-        );
-        res.end();
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-});
+  },
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/bulk/upload-csv

@@ -70,9 +70,30 @@ import {
   rememberLidPhoneMapping,
   backfillRealPhoneOnExistingMessages,
 } from './services/LidPhoneMappingService';
+import { conversationHistoryService } from './services/ConversationHistoryService';
 
 const PORT = parseInt(process.env.PORT || '8080', 10);
 let server: any;
+
+// FIX M14: Cache VoiceConfig in memory (5-minute TTL) so we don't hit
+// MongoDB on every single incoming voice message.
+let voiceConfigCache: { mode: string } | null = null;
+let voiceConfigCacheTime = 0;
+const VOICE_CONFIG_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+async function getVoiceConfigCached(): Promise<{ mode: string }> {
+  const now = Date.now();
+  if (
+    voiceConfigCache &&
+    now - voiceConfigCacheTime < VOICE_CONFIG_CACHE_TTL_MS
+  ) {
+    return voiceConfigCache;
+  }
+  const fresh = await VoiceConfig.findOne().sort({ updatedAt: -1 }).lean();
+  voiceConfigCache = { mode: fresh?.mode || 'voice-and-text' };
+  voiceConfigCacheTime = now;
+  return voiceConfigCache;
+}
 
 /**
  * Distinguish real English from Singlish (Sinhala written in Latin letters,
@@ -169,8 +190,11 @@ function isGreetingMessage(text: string): boolean {
 const leadFlowState = new Map<string, LeadFlowFact>();
 
 function mergeLeadFacts(jid: string, latest: LeadFlowFact): LeadFlowFact {
-  const existing =
-    leadFlowState.get(jid) ?? { phone: null, country: null, name: null };
+  const existing = leadFlowState.get(jid) ?? {
+    phone: null,
+    country: null,
+    name: null,
+  };
   const merged: LeadFlowFact = {
     phone: latest.phone ?? existing.phone,
     country: latest.country ?? existing.country,
@@ -291,13 +315,28 @@ async function startServer() {
       channelRouter.onInbound(async (msg) => {
         if (msg.channel === 'whatsapp') return; // owned by legacy handler
         try {
+          const channelHistory = await conversationHistoryService
+            .getHistory(msg.externalUserId)
+            .then((h) =>
+              h.slice(-10).map((m) => ({
+                role: m.role as 'user' | 'assistant' | 'system',
+                content: m.content,
+              })),
+            )
+            .catch(
+              () =>
+                [] as {
+                  role: 'user' | 'assistant' | 'system';
+                  content: string;
+                }[],
+            );
           const outcome = await agentOrchestrator.handle({
             sessionId: msg.tenantId,
             userId: msg.externalUserId,
             channel: msg.channel,
             language: 'si',
             inputMessage: msg.text ?? '',
-            conversationHistory: [],
+            conversationHistory: channelHistory,
             metadata: { externalThreadId: msg.externalThreadId ?? '' },
           });
           if (outcome.handled && outcome.outbound) {
@@ -371,6 +410,11 @@ async function startServer() {
     );
     await new Promise((r) => setTimeout(r, startupDelayMs));
   }
+  // FIX C1: Start HumanizerService cleanup interval — prevents message
+  // queue from growing unbounded and eventually crashing the process.
+  HumanizerService.initializeCleanup();
+  console.log('🧹 HumanizerService cleanup scheduler started');
+
   await connectToWhatsApp();
 }
 
@@ -453,8 +497,20 @@ const AUTO_REG_DELAY_MS = 10 * 1000; // 10 seconds after last message
 const AUTO_REG_CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // Cleanup every hour
 const AUTO_REG_ENTRY_MAX_AGE_MS = 24 * 60 * 60 * 1000; // Remove entries older than 24 hours
 
-// Track users who have opted out of auto-registration
+// Track users who have opted out of auto-registration (in-memory cache).
+// FIX H2: Set now has a hard cap (10 k entries) to prevent unbounded growth.
+// Persistence for the !stop command is now also written to MongoDB via
+// markContactOptedOut() so opt-outs survive server restarts.
+const MAX_OPT_OUT_SIZE = 10_000;
 const autoRegOptOut = new Set<string>();
+function addToOptOut(jid: string): void {
+  // Evict oldest entries when the cap is hit (insertion-order eviction)
+  if (autoRegOptOut.size >= MAX_OPT_OUT_SIZE) {
+    const oldest = autoRegOptOut.values().next().value;
+    if (oldest) autoRegOptOut.delete(oldest);
+  }
+  autoRegOptOut.add(jid);
+}
 
 // Rate limiting: Track last processed message time per user
 const rateLimitMap = new Map<string, number>();
@@ -732,7 +788,11 @@ onMessage(async (message, sock, sessionId) => {
     if (text && isStopKeyword(text)) {
       console.log(`   🚫 STOP keyword detected from ${jid}, marking opted-out`);
       try {
-        const modified = await markContactOptedOut(jid, 'whatsapp', 'inbound_stop_keyword');
+        const modified = await markContactOptedOut(
+          jid,
+          'whatsapp',
+          'inbound_stop_keyword',
+        );
         console.log(`   ✅ Opted out ${modified} matching contact(s)`);
       } catch (err) {
         console.error('   ⚠️ markContactOptedOut failed:', err);
@@ -910,7 +970,18 @@ onMessage(async (message, sock, sessionId) => {
     // Handle commands starting with !
     if (text.startsWith('!')) {
       console.log(`   🤖 Processing command: ${text}`);
-      await handleCommand(jid, text, sessionId, message);
+      // FIX M4: Wrap command handler in try-catch so a failing command
+      // never crashes the message handler — customer always gets a reply.
+      try {
+        await handleCommand(jid, text, sessionId, message);
+      } catch (cmdErr) {
+        console.error('   ❌ Command handler error:', cmdErr);
+        await sendMessage(
+          jid,
+          '⚠️ Command failed. Please try again or type !help for available commands.',
+          sessionId,
+        ).catch(() => undefined);
+      }
       return;
     }
 
@@ -919,16 +990,33 @@ onMessage(async (message, sock, sessionId) => {
     // on `no_handler`, so behaviour is unchanged until agents are wired in.
     try {
       const intent = classifyIntent(text);
+      // FIX: Pass real conversation history so agents have context about this
+      // user's prior messages (last 10 turns). Empty array meant every agent
+      // call was "first message" — no personalisation, no BANT continuity.
+      const agentHistory = await conversationHistoryService
+        .getHistory(jid)
+        .then((h) =>
+          h.slice(-10).map((m) => ({
+            role: m.role as 'user' | 'assistant' | 'system',
+            content: m.content,
+          })),
+        )
+        .catch(
+          () =>
+            [] as { role: 'user' | 'assistant' | 'system'; content: string }[],
+        );
+
       const agentOutcome = await agentOrchestrator.handle({
         sessionId,
         userId: jid,
         channel: 'whatsapp',
         language: 'si',
         inputMessage: text,
-        conversationHistory: [],
+        conversationHistory: agentHistory,
         metadata: { intent },
       });
-      if (agentOutcome.handled) {
+      // FIX M1: Guard against null/undefined outcome before accessing properties.
+      if (agentOutcome && agentOutcome.handled) {
         if (agentOutcome.outbound) {
           await HumanizerService.sendHumanizedMessage(
             jid,
@@ -938,6 +1026,28 @@ onMessage(async (message, sock, sessionId) => {
           console.log(
             `   🧠 Handled by agent: ${agentOutcome.agentName} (trace=${agentOutcome.traceId})`,
           );
+          // FIX: Auto-trigger booking flow when DealAgent signals readiness.
+          // Previously the shouldStartBookingFlow flag was written to sideEffects
+          // but never consumed — the customer was primed to book but got no
+          // booking form. Now we immediately start the BookingService flow so
+          // the transition from "interested" to "booked" is seamless.
+          const bookingIntent = agentOutcome.result?.sideEffects?.find(
+            (e: any) =>
+              e.kind === 'memory.write' &&
+              e.payload?.tag === 'deal.booking_intent' &&
+              e.payload?.shouldStartBookingFlow === true,
+          );
+          if (bookingIntent) {
+            console.log(
+              `   📅 DealAgent flagged booking intent — starting BookingService flow for ${jid}`,
+            );
+            startBookingFlow(jid, sessionId).catch((err) =>
+              console.error(
+                '   ❌ Failed to start booking flow from DealAgent signal:',
+                err,
+              ),
+            );
+          }
           return;
         }
         // Only suppress the AI fallback when an operator-approval queue
@@ -1057,7 +1167,6 @@ onMessage(async (message, sock, sessionId) => {
         const hasTamilChars = /[\u0B80-\u0BFF]/.test(text);
         const isRealEnglish = isEnglishText(text);
         if (isVoiceMessage) {
-
           if (hasSinhalaChars) {
             finalPrompt += `\n\n(SYSTEM: මෙය VOICE පණිවිඩයකි. සිංහල භාෂාවෙන් කෙටිව, ස්වාභාවිකව ප්‍රතිඋත්තර දෙන්න.)`;
           } else if (hasTamilChars) {
@@ -1095,8 +1204,22 @@ onMessage(async (message, sock, sessionId) => {
         // 5. Fallback to AI Load Balancer if NLP doesn't know the answer
         if (!response) {
           response = await aiLoadBalancer.sendMessage(jid, finalPrompt);
-          if (/no ai services are configured/i.test(response)) {
+
+          // FIX C2: Handle "no services configured" error string from balancer
+          if (!response || /no ai services are configured/i.test(response)) {
             response = await buildLeadFlowFallback(text, jid);
+          }
+
+          // FIX C2 (second guard): If fallback templates are also unconfigured
+          // (buildLeadFlowFallback returns ''), set a hard-coded safe fallback
+          // so the customer always gets a reply — never silence.
+          if (!response || response.trim() === '') {
+            response =
+              'කරුණාකර ටිකක් ඉන්නකො. ඔබේ ප්‍රශ්නයට ඉක්මනින් පිළිතුරු දෙන්නම්. 🙏\n\n' +
+              'Please hold on. We will reply to your message shortly.';
+            console.warn(
+              '⚠️ All AI providers and fallback templates failed — sending hardcoded safe reply',
+            );
           }
 
           // Learn from AI response dynamically (Fire & Forget)
@@ -1161,10 +1284,10 @@ onMessage(async (message, sock, sessionId) => {
       }
 
       if (isVoiceMessage) {
-        // Fetch Voice Config to respect the response mode
-        // Default is 'voice-only' - when someone sends a voice note, reply with a voice note ONLY
-        const voiceConfig = await VoiceConfig.findOne().sort({ updatedAt: -1 });
-        const responseMode = voiceConfig?.mode || 'voice-only';
+        // FIX M14: Use cached voice config — avoids a MongoDB round-trip
+        // on every voice message. Cache expires every 5 minutes.
+        const voiceConfig = await getVoiceConfigCached();
+        const responseMode = voiceConfig.mode;
         let sentText = false;
 
         // If mode requires text, send it first
@@ -1316,8 +1439,11 @@ async function handleCommand(
 
     case '!stop':
     case '!unsubscribe':
-      // Opt out of auto-registration
-      autoRegOptOut.add(jid);
+      // FIX H2: Persist opt-out to MongoDB so it survives server restarts.
+      addToOptOut(jid);
+      markContactOptedOut(jid, 'whatsapp', '!stop command').catch((err) => {
+        console.error('   ⚠️ Failed to persist opt-out to MongoDB:', err);
+      });
       await sendMessage(
         jid,
         await configurationManager.getStopMessage(),

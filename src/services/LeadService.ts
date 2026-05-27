@@ -118,10 +118,25 @@ export async function startLeadRegistration(
   jid: string,
   sessionId: string,
 ): Promise<void> {
-  // Fetch configuration data - NO DEFAULTS, must be configured
-  const jobTypes = await configurationManager.getJobTypes();
-  const countries = await configurationManager.getCountries();
-  const experienceLevels = await configurationManager.getExperienceLevels();
+  // FIX C7: Wrap config fetches in try-catch so a momentary DB timeout
+  // doesn't crash the message handler — customer gets a clear error message.
+  let jobTypes: string[];
+  let countries: { code: string; name: string; flag: string }[];
+  let experienceLevels: { value: string; label: string }[];
+
+  try {
+    jobTypes = await configurationManager.getJobTypes();
+    countries = await configurationManager.getCountries();
+    experienceLevels = await configurationManager.getExperienceLevels();
+  } catch (configErr) {
+    console.error('❌ [LeadService] Config fetch failed:', configErr);
+    await sendMessage(
+      jid,
+      '⚠️ Registration service is temporarily unavailable. Please try again in a moment.',
+      sessionId,
+    );
+    return;
+  }
 
   // Validate configuration
   if (!jobTypes || jobTypes.length === 0) {

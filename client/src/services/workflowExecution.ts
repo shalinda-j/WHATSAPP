@@ -81,10 +81,14 @@ class WorkflowExecutionEngine {
 
       // Try to execute via backend API first
       try {
+        // FIX H7: Raw fetch() was missing the Authorization header — all
+        // workflow execution calls were returning 401 Unauthorized silently.
+        const token = localStorage.getItem('token') || '';
         const response = await fetch(`${API_BASE}/workflows/execute`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify({
             nodes,

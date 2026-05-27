@@ -145,15 +145,33 @@ export class LeadQualifierAgent implements IAgent {
       );
     }
 
-    // Side-effect: update existing Lead with VALIDATED fields only. Never
-    // create a new Lead here — Lead creation is the existing LeadService
-    // registration flow's job, so we don't compete with required-field
-    // validation (Lead.fullName is required).
+    // Side-effect: upsert a Lead for this phone number so BANT data is never
+    // discarded for first-time callers. We use $setOnInsert with minimal
+    // required fields (fullName placeholder + jobVacancyType placeholder) so
+    // the schema's required-field constraint is satisfied on insert, while
+    // existing full-profile Leads are never overwritten. BANT updates are then
+    // applied on top whether the record is new or pre-existing.
     const sideEffects: AgentResult['sideEffects'] = [];
     const phone = extractPhoneFromJid(ctx.userId);
-    const existing = await Lead.findOne({ phoneNumber: phone });
 
-    if (existing) {
+    // Ensure a Lead row exists for this phone (upsert = create-if-missing).
+    // $setOnInsert fields only apply when the document is newly created.
+    const lead = await Lead.findOneAndUpdate(
+      { phoneNumber: phone },
+      {
+        $setOnInsert: {
+          fullName: `WhatsApp Enquiry (${phone})`,
+          phoneNumber: phone,
+          jobVacancyType: 'Pending Registration',
+          source: 'whatsapp',
+          status: 'new',
+        },
+      },
+      { upsert: true, new: true },
+    );
+
+    // Apply BANT signals to whichever record we got (new or existing).
+    if (lead) {
       const updates: Record<string, unknown> = {};
       const { bant } = parsed;
 
@@ -163,7 +181,7 @@ export class LeadQualifierAgent implements IAgent {
         bant.need &&
         bant.need.confidence >= 0.6 &&
         bant.need.summary &&
-        !existing.jobVacancyType
+        (!lead.jobVacancyType || lead.jobVacancyType === 'Pending Registration')
       ) {
         updates.jobVacancyType = bant.need.summary.slice(0, 200);
       }
@@ -173,17 +191,17 @@ export class LeadQualifierAgent implements IAgent {
         bant.timing.timeframe
       ) {
         const note = `Timing: ${bant.timing.timeframe}`;
-        updates.notes = existing.notes ? `${existing.notes}\n${note}` : note;
+        updates.notes = lead.notes ? `${lead.notes}\n${note}` : note;
       }
-      if (bant.overallScore >= 0.7 && existing.status === 'new') {
+      if (bant.overallScore >= 0.7 && lead.status === 'new') {
         updates.status = 'reviewed';
       }
 
       if (Object.keys(updates).length > 0) {
-        await Lead.updateOne({ _id: existing._id }, { $set: updates });
+        await Lead.updateOne({ _id: lead._id }, { $set: updates });
         sideEffects.push({
           kind: 'lead.update',
-          targetId: String(existing._id),
+          targetId: String(lead._id),
           payload: updates,
         });
       }

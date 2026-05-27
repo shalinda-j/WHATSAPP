@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../config';
+import { io, Socket } from 'socket.io-client';
 import {
   Smartphone,
   Plus,
@@ -29,6 +30,7 @@ export default function Sessions() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const socketRef = useRef<Socket | null>(null);
 
   const fetchSessions = async () => {
     try {
@@ -46,9 +48,35 @@ export default function Sessions() {
 
   useEffect(() => {
     fetchSessions();
-    // Poll for status updates (QR codes change often)
-    const interval = setInterval(fetchSessions, 3000);
-    return () => clearInterval(interval);
+
+    // FIX M10: Replace aggressive 3-second polling with Socket.io-driven
+    // updates. The server emits 'session-status-update' whenever a session
+    // changes state (QR ready, connected, disconnected). We still keep a
+    // 10-second fallback poll for cases where the socket is unavailable
+    // (e.g. the server is behind a proxy that doesn't support WebSocket).
+    const token = localStorage.getItem('token') || '';
+    const socket = io('/', {
+      auth: { token },
+      transports: ['websocket', 'polling'],
+    });
+    socketRef.current = socket;
+
+    socket.on('session-status-update', () => {
+      // Any session state change → re-fetch the full list
+      fetchSessions();
+    });
+    socket.on('qr-update', () => {
+      // QR code changed → re-fetch so the new QR renders immediately
+      fetchSessions();
+    });
+
+    // Fallback poll — 10 s is acceptable; real-time updates come via socket
+    const interval = setInterval(fetchSessions, 10000);
+
+    return () => {
+      clearInterval(interval);
+      socket.disconnect();
+    };
   }, []);
 
   const handleCreateSession = async () => {
