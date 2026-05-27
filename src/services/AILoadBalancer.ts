@@ -564,13 +564,4 @@ export class AILoadBalancer {
   }
 }
 
-function conversationHistoryAdd(
-  history: AIChatMessage[],
-  role: 'user' | 'assistant',
-  content: string,
-) {
-  // Avoid duplicates if we are retrying? No, we add once before loop.
-  history.push({ role, content });
-}
-
 export const aiLoadBalancer = new AILoadBalancer();

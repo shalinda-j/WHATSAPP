@@ -14,13 +14,20 @@ import { agentReflectionService } from './AgentReflectionService';
 export enum BookingInitState {
   IDLE = 'IDLE',
   AWAITING_RESPONSE = 'AWAITING_RESPONSE',
+  /** User is picking a date from the next-N-days menu (D10 fix). */
+  SELECTING_DATE = 'SELECTING_DATE',
   SELECTING_TIME = 'SELECTING_TIME',
 }
+
+/** How many upcoming days to offer in the date picker. */
+const DATE_OFFER_DAYS = 7;
 
 interface UserSession {
   state: BookingInitState;
   selectedDate?: Date;
   availableSlots?: number[];
+  /** Ordered list of candidate dates shown to the user in the date menu. */
+  availableDates?: string[]; // ISO date strings
   bookingConfig?: any;
 }
 
@@ -48,6 +55,7 @@ async function getBookingSession(jid: string): Promise<UserSession | null> {
       ? new Date(session.data.selectedDate)
       : undefined,
     availableSlots: session.data.availableSlots,
+    availableDates: session.data.availableDates,
     bookingConfig: session.data.bookingConfig,
   };
 }
@@ -66,6 +74,7 @@ async function saveBookingSession(
     {
       selectedDate: session.selectedDate?.toISOString(),
       availableSlots: session.availableSlots,
+      availableDates: session.availableDates,
       bookingConfig: session.bookingConfig,
     },
     SESSION_TTL_MS,
@@ -138,16 +147,27 @@ export async function handleBookingMessage(
   // 1. Awaiting "Yes" to invitation
   if (session.state === BookingInitState.AWAITING_RESPONSE) {
     if (acceptanceKeywords.includes(cleanText)) {
-      // User accepted, show slots
-      session.state = BookingInitState.SELECTING_TIME;
+      // User accepted — show a date picker for the next DATE_OFFER_DAYS days
+      // instead of hard-coding "Tomorrow". This also skips today (index 0) so
+      // same-day bookings don't appear without lead time.
+      session.state = BookingInitState.SELECTING_DATE;
       session.bookingConfig = bookingConfig;
 
-      // For MVP, offer slots for "Tomorrow"
-      const tomorrow = addDays(new Date(), 1);
-      session.selectedDate = tomorrow;
-
+      const today = new Date();
+      const candidateDates: string[] = [];
+      for (let d = 1; d <= DATE_OFFER_DAYS; d++) {
+        candidateDates.push(addDays(today, d).toISOString());
+      }
+      session.availableDates = candidateDates;
       await saveBookingSession(jid, session);
-      await sendTimeSlotMenu(jid, tomorrow, session, sessionId);
+
+      // Build date menu
+      let dateMenu = `📅 *Choose a Date*\n\nAvailable dates:\n\n`;
+      candidateDates.forEach((iso, idx) => {
+        dateMenu += `${idx + 1}️⃣ *${format(new Date(iso), 'EEEE, MMMM do')}*\n`;
+      });
+      dateMenu += `\nReply with the number of your preferred date.`;
+      await sendMessage(jid, dateMenu, sessionId);
       return true;
     } else {
       // User rejected or said something else
@@ -161,7 +181,30 @@ export async function handleBookingMessage(
     }
   }
 
-  // 2. Selecting Time Slot
+  // 2. User picks a date from the date menu
+  if (session.state === BookingInitState.SELECTING_DATE) {
+    const dates = session.availableDates;
+    if (!dates || dates.length === 0) {
+      await sessionStateService.deleteSession(jid, 'booking');
+      return false;
+    }
+    const pick = parseInt(cleanText);
+    if (isNaN(pick) || pick < 1 || pick > dates.length) {
+      await sendMessage(
+        jid,
+        `⚠️ Please reply with the number of your preferred date (1-${dates.length}).`,
+        sessionId,
+      );
+      return true;
+    }
+    const chosenDate = new Date(dates[pick - 1]);
+    session.selectedDate = chosenDate;
+    session.state = BookingInitState.SELECTING_TIME;
+    await sendTimeSlotMenu(jid, chosenDate, session, sessionId);
+    return true;
+  }
+
+  // 3. Selecting Time Slot
   if (session.state === BookingInitState.SELECTING_TIME) {
     if (!session.availableSlots) {
       await sessionStateService.deleteSession(jid, 'booking');
