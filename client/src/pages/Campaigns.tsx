@@ -296,7 +296,7 @@ export default function Campaigns() {
                   <td className="px-3 py-2 font-medium text-gray-900">
                     {c.name}
                     {c.variants.some((v) => v.mediaUrl) && (
-                      <Image className="h-3 w-3 text-blue-400 inline ml-1.5" title="Has image" />
+                      <span title="Has image" className="inline"><Image className="h-3 w-3 text-blue-400 inline ml-1.5" /></span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-gray-700">

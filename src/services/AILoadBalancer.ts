@@ -5,6 +5,81 @@ import {
   JOB_KNOWLEDGE_BASE,
   getConversationExamples,
 } from '../config/ai-personality';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WhatsApp Response Post-Processor
+//
+// Enforces short, conversion-focused messages every time — regardless of which
+// AI provider replied. Rules applied in order:
+//  1. Fix markdown syntax that WhatsApp renders literally (**, ##, __).
+//  2. Collapse bullet / numbered lists into flowing prose.
+//  3. Cap at MAX_WHATSAPP_PARAGRAPHS paragraph blocks.
+//  4. Emergency hard-cap at MAX_WHATSAPP_CHARS characters.
+// ─────────────────────────────────────────────────────────────────────────────
+const MAX_WHATSAPP_PARAGRAPHS = 3;
+const MAX_WHATSAPP_CHARS = 700;
+
+/**
+ * Cleans and trims an AI response so it fits WhatsApp's conversational style:
+ * short, plain-text, single CTA.
+ *
+ * NOTE: This is the last line of defence. The AI personality prompt should
+ * already instruct the model to stay under 4 sentences — this function is the
+ * hard guarantee that fires only when the model ignores those instructions.
+ */
+export function enforceWhatsAppStyle(raw: string): string {
+  // 1. Fix markdown that renders as literal symbols in WhatsApp
+  let text = raw
+    // **bold** → *bold*  (WhatsApp uses single asterisk)
+    .replace(/\*\*([^*\n]+)\*\*/g, '*$1*')
+    // ### Heading → plain text
+    .replace(/^#{1,6}\s+/gm, '')
+    // --- / *** / ___ horizontal rules → remove
+    .replace(/^[-*_]{3,}\s*$/gm, '')
+    // - bullet / * bullet → plain line (keep the text)
+    .replace(/^[ \t]*[-*+]\s+/gm, '')
+    // 1. numbered list → plain line
+    .replace(/^[ \t]*\d+\.\s+/gm, '')
+    // __underline__ → plain
+    .replace(/__([^_\n]+)__/g, '$1')
+    // Collapse 3+ blank lines → single blank line
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  // 2. If already short enough, return immediately
+  if (text.length <= 400) return text;
+
+  // 3. Try paragraph-level cap (each \n\n is a "block")
+  const blocks = text.split(/\n\n+/);
+  if (blocks.length > MAX_WHATSAPP_PARAGRAPHS) {
+    // Keep only the first N paragraphs, making sure we always keep the last
+    // block IF it contains a CTA command (!register / !book).
+    const kept = blocks.slice(0, MAX_WHATSAPP_PARAGRAPHS);
+    const lastBlock = blocks[blocks.length - 1];
+    const lastHasCta = /!\w+/.test(lastBlock);
+    if (lastHasCta && !kept.includes(lastBlock)) {
+      kept[kept.length - 1] = lastBlock; // replace last kept block with CTA block
+    }
+    text = kept.join('\n\n').trim();
+  }
+
+  // 4. Hard character cap — emergency fallback
+  if (text.length > MAX_WHATSAPP_CHARS) {
+    const sub = text.slice(0, MAX_WHATSAPP_CHARS);
+    // Try to break at the last sentence boundary within the slice
+    const lastBreak = Math.max(
+      sub.lastIndexOf('. '),
+      sub.lastIndexOf('! '),
+      sub.lastIndexOf('? '),
+      sub.lastIndexOf('\n'),
+    );
+    text = lastBreak > 150
+      ? text.slice(0, lastBreak + 1).trim()
+      : sub.trim() + '…';
+  }
+
+  return text;
+}
 import Dataset from '../models/Dataset';
 
 import { OpenAIService } from './openai';
@@ -356,8 +431,13 @@ export class AILoadBalancer {
           );
 
         const start = Date.now();
-        const response = await service.generateResponse(history);
+        const rawResponse = await service.generateResponse(history);
         const duration = Date.now() - start;
+
+        // Apply WhatsApp style enforcement: fix markdown, cap length,
+        // preserve CTA. This is the hard guarantee — the AI prompt is the
+        // soft request; this post-processor is the non-negotiable gate.
+        const response = enforceWhatsAppStyle(rawResponse);
 
         // Add assistant response to history
         history.push({ role: 'assistant', content: response });
