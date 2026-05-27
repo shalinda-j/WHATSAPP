@@ -267,9 +267,8 @@ async function metaWebhookIngest(
     if (!tenant) return res.status(404).json({ error: 'tenant_not_found' });
 
     // ── X-Hub-Signature-256 verification ──────────────────────────────────
-    const ChannelConnection = (
-      await import('../../models/ChannelConnection')
-    ).default;
+    const ChannelConnection = (await import('../../models/ChannelConnection'))
+      .default;
     const conn = await ChannelConnection.findOne({
       tenantId: tenant._id,
       channel,
@@ -278,15 +277,15 @@ async function metaWebhookIngest(
       | string
       | undefined;
     if (appSecret) {
-      const sigHeader = req.headers['x-hub-signature-256'] as string | undefined;
+      const sigHeader = req.headers['x-hub-signature-256'] as
+        | string
+        | undefined;
       if (!sigHeader) {
         console.warn(`[${channel}] Missing X-Hub-Signature-256 from Meta`);
         return res.status(401).json({ error: 'missing_signature' });
       }
       const bodyStr =
-        typeof req.body === 'string'
-          ? req.body
-          : JSON.stringify(req.body);
+        typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
       const expected =
         'sha256=' +
         crypto.createHmac('sha256', appSecret).update(bodyStr).digest('hex');
@@ -432,9 +431,21 @@ router.post('/', async (req, res) => {
 // Update webhook
 router.put('/:id', async (req, res) => {
   try {
-    const webhook = await (Webhook as any).findByIdAndUpdate(
-      req.params.id,
-      req.body,
+    // Explicitly extract allowed fields to prevent mass assignment
+    const { url, events, secret, isActive, name, category, format } = req.body;
+    const updateData: Record<string, any> = {};
+
+    if (url !== undefined) updateData.url = url;
+    if (events !== undefined) updateData.events = events;
+    if (secret !== undefined) updateData.secret = secret;
+    if (isActive !== undefined) updateData.isActive = isActive;
+    if (name !== undefined) updateData.name = name;
+    if (category !== undefined) updateData.category = category;
+    if (format !== undefined) updateData.format = format;
+
+    const webhook = await (Webhook as any).findOneAndUpdate(
+      withTenantScope(req, { _id: req.params.id }),
+      updateData,
       {
         new: true,
       },
@@ -449,7 +460,9 @@ router.put('/:id', async (req, res) => {
 // Delete webhook
 router.delete('/:id', async (req, res) => {
   try {
-    const webhook = await (Webhook as any).findByIdAndDelete(req.params.id);
+    const webhook = await (Webhook as any).findOneAndDelete(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
     res.json({ message: 'Webhook deleted' });
   } catch (error: any) {
@@ -460,7 +473,9 @@ router.delete('/:id', async (req, res) => {
 // Test webhook
 router.post('/:id/test', async (req, res) => {
   try {
-    const webhook = await (Webhook as any).findById(req.params.id);
+    const webhook = await (Webhook as any).findOne(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
 
     // This is a bit of a hack to use the private sendPayload method by exposing a test mechanism
