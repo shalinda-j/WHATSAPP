@@ -50,8 +50,24 @@ async function getGeminiModel(modelName = 'gemini-1.5-flash-latest') {
   return genAI.getGenerativeModel({ model: activeModel });
 }
 
-// Store chat sessions for conversation memory
+// Store chat sessions for conversation memory.
+//
+// Cap at MAX_CHAT_SESSIONS entries: when the limit is hit, the oldest entry
+// (first-inserted — Map iteration order is insertion order) is evicted before
+// adding the new one. This bounds worst-case memory to ~MAX * (session object
+// size), typically a few MB, preventing the unbounded growth that would
+// eventually OOM a long-running production server.
+const MAX_CHAT_SESSIONS = 500;
 const chatSessions: Map<string, ChatSession> = new Map();
+
+function addChatSession(userId: string, session: ChatSession): void {
+  if (chatSessions.size >= MAX_CHAT_SESSIONS) {
+    // Evict the oldest (first) entry.
+    const oldestKey = chatSessions.keys().next().value;
+    if (oldestKey !== undefined) chatSessions.delete(oldestKey);
+  }
+  chatSessions.set(userId, session);
+}
 
 /**
  * Build conversation history from examples
@@ -136,7 +152,7 @@ export async function getChatSession(userId: string): Promise<ChatSession> {
         ...exampleHistory,
       ],
     });
-    chatSessions.set(userId, chat);
+    addChatSession(userId, chat);
   }
   return chatSessions.get(userId) as ChatSession;
 }

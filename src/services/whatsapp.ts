@@ -665,11 +665,35 @@ export async function connectToWhatsApp() {
 }
 
 export async function disconnectWhatsApp() {
-  // Gracefully close all active sockets
-  const activeSessions = await Session.find({ status: { $eq: 'connected' } });
-  for (const session of activeSessions) {
-    await manager.deleteSession(session.sessionId);
+  // Gracefully close all active sockets WITHOUT logging out or wiping auth.
+  //
+  // The original implementation called manager.deleteSession() here, which
+  // calls sock.logout() and clears MongoDB auth state — meaning every graceful
+  // server shutdown permanently de-linked the device and required a QR scan on
+  // the next start. That defeats the purpose of persistent sessions.
+  //
+  // The correct behaviour on shutdown is to close the socket cleanly (so
+  // WhatsApp's cloud side marks the device offline rather than in error) but
+  // leave all auth credentials intact so the next connectToWhatsApp() call
+  // can re-establish the session without re-scanning a QR code.
+  const allSessions = Array.from(manager['sessions'].entries()) as [
+    string,
+    import('@whiskeysockets/baileys').WASocket,
+  ][];
+  for (const [sessionId, sock] of allSessions) {
+    try {
+      // Update DB status without touching auth data or marking as deleted.
+      await Session.findOneAndUpdate(
+        { sessionId },
+        { status: 'disconnected' },
+      ).catch(() => undefined);
+      sock.end(undefined);
+      console.log(`🔌 Gracefully closed socket for session: ${sessionId}`);
+    } catch {
+      // Best-effort — don't let one failing socket block the rest.
+    }
   }
+  console.log('✅ All sockets closed. Auth state preserved for next start.');
 }
 
 // Forward compatible message registry

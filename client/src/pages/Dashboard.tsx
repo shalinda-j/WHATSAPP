@@ -58,6 +58,7 @@ const WHATS_NEW_STORAGE_KEY = `whats-new-dismissed-v${WHATS_NEW_VERSION}`;
 
 export default function Dashboard() {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [noSessions, setNoSessions] = useState(false);
   const [loading, setLoading] = useState(true);
   const [aiProviders, setAiProviders] = useState<AIProvider[]>([]);
   const [aiLoading, setAiLoading] = useState(true);
@@ -74,30 +75,36 @@ export default function Dashboard() {
   const fetchSessions = async () => {
     try {
       const res = await api.get('/api/sessions');
-      setSessions(res.data.sessions || []);
-      // Auto add default if none exist (legacy support).
-      // Guard: never recurse from inside the same call. The previous
-      // implementation called fetchSessions() unconditionally after the
-      // POST, which under a misbehaving backend could loop forever. We
-      // now seed once and read the result back via a single follow-up
-      // GET; if THAT still shows total===0 we surface the issue rather
-      // than retry indefinitely.
-      if (res.data.total === 0) {
-        try {
-          await api.post('/api/sessions', {
-            sessionId: 'default',
-            sessionName: 'Primary Device',
-          });
-          const next = await api.get('/api/sessions');
-          setSessions(next.data.sessions || []);
-        } catch (seedErr) {
-          console.error('Failed to seed default session:', seedErr);
-        }
-      }
+      const list: Session[] = res.data.sessions || [];
+      setSessions(list);
+      // Show the "no devices" call-to-action instead of silently
+      // auto-creating a session. The previous implementation POSTed
+      // /api/sessions on every page load when total===0, mutating state
+      // from a read-only page without operator consent. The operator
+      // should decide whether to connect a WhatsApp device.
+      setNoSessions(list.length === 0);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSetupFirstDevice = async () => {
+    const name = prompt(
+      'Enter a name for this device (e.g. "Support Phone"):',
+      'Primary Device',
+    );
+    if (!name) return;
+    try {
+      await api.post('/api/sessions', {
+        sessionId: 'default',
+        sessionName: name,
+      });
+      setNoSessions(false);
+      fetchSessions();
+    } catch {
+      alert('Failed to create session — check that the server is running.');
     }
   };
 
@@ -348,6 +355,24 @@ export default function Dashboard() {
           </div>
 
           <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+            {noSessions && (
+              <div className="flex flex-col items-center justify-center py-10 px-4 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50 text-center">
+                <Smartphone size={36} className="text-gray-300 mb-3" />
+                <p className="text-gray-600 font-medium mb-1">
+                  No WhatsApp devices connected
+                </p>
+                <p className="text-xs text-gray-400 mb-4 max-w-xs">
+                  Connect your first device to start receiving and sending
+                  WhatsApp messages.
+                </p>
+                <button
+                  onClick={handleSetupFirstDevice}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition font-medium"
+                >
+                  <Plus size={16} /> Connect First Device
+                </button>
+              </div>
+            )}
             {sessions.map((session) => (
               <div
                 key={session.sessionId}
