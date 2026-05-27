@@ -12,5 +12,6 @@ const AdminSchema = new Schema({
   role: { type: String, default: 'admin' },
 } as any);
 
-const __AdminModel = mongoose.models.Admin || mongoose.model('Admin', AdminSchema as any);
+const __AdminModel =
+  mongoose.models.Admin || mongoose.model('Admin', AdminSchema as any);
 export default __AdminModel as unknown as mongoose.Model<IAdmin>;

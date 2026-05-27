@@ -45,5 +45,6 @@ const WorkflowSchema = new Schema(
   { timestamps: true },
 );
 
-const __WorkflowModel = mongoose.models.Workflow || mongoose.model('Workflow', WorkflowSchema as any);
+const __WorkflowModel =
+  mongoose.models.Workflow || mongoose.model('Workflow', WorkflowSchema as any);
 export default __WorkflowModel as unknown as mongoose.Model<IWorkflow>;

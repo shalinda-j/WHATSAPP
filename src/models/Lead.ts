@@ -90,6 +90,7 @@ LeadSchema.index({ registeredAt: -1 });
 // to a collection scan on bigger datasets.
 LeadSchema.index({ status: 1, updatedAt: 1 });
 
-const Lead = mongoose.models.Lead || (mongoose as any).model('Lead', LeadSchema);
+const Lead =
+  mongoose.models.Lead || (mongoose as any).model('Lead', LeadSchema);
 
 export default Lead;

@@ -52,5 +52,7 @@ const AgentTrainingExampleSchema = new Schema(
 
 AgentTrainingExampleSchema.index({ tenantId: 1, agentName: 1, isActive: 1 });
 
-const __AgentTrainingExampleModel = mongoose.models.AgentTrainingExample || mongoose.model('AgentTrainingExample', AgentTrainingExampleSchema as any);
+const __AgentTrainingExampleModel =
+  mongoose.models.AgentTrainingExample ||
+  mongoose.model('AgentTrainingExample', AgentTrainingExampleSchema as any);
 export default __AgentTrainingExampleModel as unknown as mongoose.Model<IAgentTrainingExample>;

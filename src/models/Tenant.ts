@@ -94,5 +94,6 @@ const TenantSchema = new Schema(
   { timestamps: true },
 );
 
-const __TenantModel = mongoose.models.Tenant || mongoose.model('Tenant', TenantSchema as any);
+const __TenantModel =
+  mongoose.models.Tenant || mongoose.model('Tenant', TenantSchema as any);
 export default __TenantModel as unknown as mongoose.Model<ITenant>;

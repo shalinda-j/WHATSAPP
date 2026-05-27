@@ -145,10 +145,7 @@ export class AgentOrchestrator {
           };
         }
       } catch (err) {
-        console.error(
-          `AgentSkill injection failed for ${agent.name}:`,
-          err,
-        );
+        console.error(`AgentSkill injection failed for ${agent.name}:`, err);
       }
     }
 

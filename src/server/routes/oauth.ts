@@ -69,11 +69,7 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     channel: 'instagram',
     authorizeUrl: 'https://www.facebook.com/v19.0/dialog/oauth',
     tokenUrl: 'https://graph.facebook.com/v19.0/oauth/access_token',
-    scopes: [
-      'instagram_basic',
-      'instagram_manage_messages',
-      'pages_show_list',
-    ],
+    scopes: ['instagram_basic', 'instagram_manage_messages', 'pages_show_list'],
     clientIdEnv: 'FB_APP_ID',
     clientSecretEnv: 'FB_APP_SECRET',
     defaultLabel: 'Instagram account',
@@ -141,23 +137,31 @@ interface StatePayload {
 }
 
 const STATE_SECRET = (): string =>
-  process.env.OAUTH_STATE_SECRET || process.env.JWT_SECRET || 'dev-only-state-secret';
+  process.env.OAUTH_STATE_SECRET ||
+  process.env.JWT_SECRET ||
+  'dev-only-state-secret';
 
 const STATE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
 
 function signState(payload: StatePayload): string {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const sig = createHmac('sha256', STATE_SECRET()).update(body).digest('base64url');
+  const sig = createHmac('sha256', STATE_SECRET())
+    .update(body)
+    .digest('base64url');
   return `${body}.${sig}`;
 }
 
 function verifyState(state: string): StatePayload | null {
   const [body, sig] = state.split('.');
   if (!body || !sig) return null;
-  const expected = createHmac('sha256', STATE_SECRET()).update(body).digest('base64url');
+  const expected = createHmac('sha256', STATE_SECRET())
+    .update(body)
+    .digest('base64url');
   if (expected !== sig) return null;
   try {
-    const parsed = JSON.parse(Buffer.from(body, 'base64url').toString()) as StatePayload;
+    const parsed = JSON.parse(
+      Buffer.from(body, 'base64url').toString(),
+    ) as StatePayload;
     if (Date.now() - parsed.ts > STATE_MAX_AGE_MS) return null;
     return parsed;
   } catch {
@@ -167,8 +171,7 @@ function verifyState(state: string): StatePayload | null {
 
 function getRedirectUri(req: Request, provider: string): string {
   const base =
-    process.env.OAUTH_REDIRECT_BASE ||
-    `${req.protocol}://${req.get('host')}`;
+    process.env.OAUTH_REDIRECT_BASE || `${req.protocol}://${req.get('host')}`;
   return `${base}/api/auth/oauth/${provider}/callback`;
 }
 
@@ -185,8 +188,7 @@ router.get('/providers', (_req: Request, res: Response) => {
   const out = Object.entries(PROVIDERS).map(([key, p]) => ({
     provider: key,
     channel: p.channel,
-    ready:
-      !!process.env[p.clientIdEnv] && !!process.env[p.clientSecretEnv],
+    ready: !!process.env[p.clientIdEnv] && !!process.env[p.clientSecretEnv],
     missing: [
       ...(process.env[p.clientIdEnv] ? [] : [p.clientIdEnv]),
       ...(process.env[p.clientSecretEnv] ? [] : [p.clientSecretEnv]),
@@ -233,7 +235,10 @@ router.get(
 
     const url = new URL(cfg.authorizeUrl);
     url.searchParams.set('client_id', clientId);
-    url.searchParams.set('redirect_uri', getRedirectUri(req, req.params.provider));
+    url.searchParams.set(
+      'redirect_uri',
+      getRedirectUri(req, req.params.provider),
+    );
     url.searchParams.set('scope', cfg.scopes.join(','));
     url.searchParams.set('state', state);
     url.searchParams.set('response_type', 'code');
@@ -250,7 +255,12 @@ router.get(
 router.get(
   '/:provider/callback',
   async (
-    req: Request<{ provider: string }, unknown, unknown, { code?: string; state?: string; error?: string }>,
+    req: Request<
+      { provider: string },
+      unknown,
+      unknown,
+      { code?: string; state?: string; error?: string }
+    >,
     res: Response,
   ) => {
     const cfg = PROVIDERS[req.params.provider];
@@ -263,7 +273,8 @@ router.get(
     }
 
     const { code, state } = req.query;
-    if (!code || !state) return res.status(400).json({ error: 'missing_params' });
+    if (!code || !state)
+      return res.status(400).json({ error: 'missing_params' });
 
     const payload = verifyState(String(state));
     if (!payload || payload.provider !== req.params.provider) {

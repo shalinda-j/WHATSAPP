@@ -51,7 +51,13 @@ const VoiceConfigSchema = new Schema<IVoiceConfig>(
   {
     provider: {
       type: String,
-      enum: ['google-free', 'google-cloud', 'gemini-tts', 'openai', 'elevenlabs'],
+      enum: [
+        'google-free',
+        'google-cloud',
+        'gemini-tts',
+        'openai',
+        'elevenlabs',
+      ],
       default: 'google-free',
     },
     apiKey: encryptedKey,

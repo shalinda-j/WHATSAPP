@@ -62,7 +62,14 @@ const AgentSkillSchema = new Schema(
     description: { type: String },
     category: {
       type: String,
-      enum: ['sales', 'marketing', 'support', 'personalisation', 'tone', 'other'],
+      enum: [
+        'sales',
+        'marketing',
+        'support',
+        'personalisation',
+        'tone',
+        'other',
+      ],
       default: 'other',
       index: true,
     },
@@ -85,5 +92,7 @@ const AgentSkillSchema = new Schema(
 
 AgentSkillSchema.index({ tenantId: 1, assignedAgents: 1, isActive: 1 });
 
-const __AgentSkillModel = mongoose.models.AgentSkill || mongoose.model('AgentSkill', AgentSkillSchema as any);
+const __AgentSkillModel =
+  mongoose.models.AgentSkill ||
+  mongoose.model('AgentSkill', AgentSkillSchema as any);
 export default __AgentSkillModel as unknown as mongoose.Model<IAgentSkill>;

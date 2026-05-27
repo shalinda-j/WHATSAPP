@@ -133,5 +133,7 @@ const MarketingCampaignSchema = new Schema(
 MarketingCampaignSchema.index({ tenantId: 1, status: 1 });
 MarketingCampaignSchema.index({ tenantId: 1, 'trigger.scheduledAt': 1 });
 
-const __MarketingCampaignModel = mongoose.models.MarketingCampaign || mongoose.model('MarketingCampaign', MarketingCampaignSchema as any);
+const __MarketingCampaignModel =
+  mongoose.models.MarketingCampaign ||
+  mongoose.model('MarketingCampaign', MarketingCampaignSchema as any);
 export default __MarketingCampaignModel as unknown as mongoose.Model<IMarketingCampaign>;

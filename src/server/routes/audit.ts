@@ -36,7 +36,9 @@ router.get('/', async (req: Request, res: Response) => {
       filter.method = method;
     }
     if (pathSubstr) {
-      filter.path = { $regex: pathSubstr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') };
+      filter.path = {
+        $regex: pathSubstr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+      };
     }
     if (before && !Number.isNaN(before.getTime())) {
       filter.createdAt = { $lt: before };

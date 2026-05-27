@@ -57,7 +57,10 @@ export function ipMatchesEntry(rawIp: string, entry: string): boolean {
   return false;
 }
 
-export function isIpAllowed(ip: string, allowlist: string[] | undefined): boolean {
+export function isIpAllowed(
+  ip: string,
+  allowlist: string[] | undefined,
+): boolean {
   if (!allowlist || allowlist.length === 0) return true; // open by default
   if (!ip) return false;
   return allowlist.some((e) => ipMatchesEntry(ip, e));

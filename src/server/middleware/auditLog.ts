@@ -66,7 +66,11 @@ function summariseBody(body: unknown): Record<string, unknown> | undefined {
  * legitimate API call. The write happens after the response is sent so
  * latency is unaffected.
  */
-export function auditLog(req: Request, res: Response, next: NextFunction): void {
+export function auditLog(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
   if (!TRACKED_METHODS.has(req.method)) {
     return next();
   }
@@ -101,10 +105,10 @@ export function auditLog(req: Request, res: Response, next: NextFunction): void 
       userAgent,
       durationMs,
       requestSummary,
-      errorMessage: res.statusCode >= 400 ? `http_${res.statusCode}` : undefined,
+      errorMessage:
+        res.statusCode >= 400 ? `http_${res.statusCode}` : undefined,
     }).catch((err: unknown) => {
-      const message =
-        err instanceof Error ? err.message : String(err);
+      const message = err instanceof Error ? err.message : String(err);
       console.error('auditLog: failed to persist event:', message);
     });
   });

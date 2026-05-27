@@ -99,7 +99,12 @@ export class WebhookService {
         isActive: true,
         $and: [
           { $or: [{ events: event }, { events: '*' }] },
-          { $or: [{ category: { $ne: 'ops' } }, { category: { $exists: false } }] },
+          {
+            $or: [
+              { category: { $ne: 'ops' } },
+              { category: { $exists: false } },
+            ],
+          },
         ],
       });
 

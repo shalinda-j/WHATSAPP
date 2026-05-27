@@ -67,5 +67,7 @@ const ContactSegmentSchema = new Schema(
 
 ContactSegmentSchema.index({ tenantId: 1, name: 1 }, { unique: true });
 
-const __ContactSegmentModel = mongoose.models.ContactSegment || mongoose.model('ContactSegment', ContactSegmentSchema as any);
+const __ContactSegmentModel =
+  mongoose.models.ContactSegment ||
+  mongoose.model('ContactSegment', ContactSegmentSchema as any);
 export default __ContactSegmentModel as unknown as mongoose.Model<IContactSegment>;

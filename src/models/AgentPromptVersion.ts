@@ -67,5 +67,7 @@ AgentPromptVersionSchema.index({ agentName: 1, version: -1 }, { unique: true });
 AgentPromptVersionSchema.index({ agentName: 1, isCurrent: 1 });
 AgentPromptVersionSchema.index({ agentName: 1, isCandidate: 1 });
 
-const __AgentPromptVersionModel = mongoose.models.AgentPromptVersion || mongoose.model('AgentPromptVersion', AgentPromptVersionSchema as any);
+const __AgentPromptVersionModel =
+  mongoose.models.AgentPromptVersion ||
+  mongoose.model('AgentPromptVersion', AgentPromptVersionSchema as any);
 export default __AgentPromptVersionModel as unknown as mongoose.Model<IAgentPromptVersion>;

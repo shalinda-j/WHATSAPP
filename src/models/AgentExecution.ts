@@ -106,5 +106,7 @@ AgentExecutionSchema.index(
   { expireAfterSeconds: 60 * 60 * 24 * 90 },
 );
 
-const __AgentExecutionModel = mongoose.models.AgentExecution || mongoose.model('AgentExecution', AgentExecutionSchema as any);
+const __AgentExecutionModel =
+  mongoose.models.AgentExecution ||
+  mongoose.model('AgentExecution', AgentExecutionSchema as any);
 export default __AgentExecutionModel as unknown as mongoose.Model<IAgentExecution>;
