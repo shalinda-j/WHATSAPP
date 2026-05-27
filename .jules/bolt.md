@@ -7,3 +7,8 @@
 
 **Learning:** When using Mongoose to fetch read-only queries, not using `.lean()` adds unnecessary overhead since documents are hydrated as Mongoose objects. In performance-sensitive routes where we only need plain objects for serialization or simple reading, this overhead is noticeable, especially for analytics endpoints which fetch large volumes of chat messages or datasets.
 **Action:** Always append `.lean()` to Mongoose read-only queries (e.g., `ChatMessage.find().lean()`) to bypass document hydration and improve performance.
+
+## 2024-05-27 - Request Handler Loop CPU Bottlenecks
+
+**Learning:** Recreating static arrays and using nested `Array.some()` with `String.includes()` inside request handler loops (e.g., iterating over chat messages) introduces an O(M*N) CPU bottleneck and unnecessary Garbage Collection overhead on every request.
+**Action:** Always precompile static keyword lists into `RegExp` objects at the module scope and use `regex.test()` in request handlers. Combine this with fetching only the necessary fields (using `.select()`) to significantly speed up analytics and processing endpoints.
