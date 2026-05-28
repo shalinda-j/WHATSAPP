@@ -9,3 +9,9 @@
 **Vulnerability:** A simple string comparison (`!==`) was used to validate the `WEBHOOK_SECRET` against the incoming payload secret in the webhook inbound endpoint.
 **Learning:** Simple string comparison can expose the application to timing attacks, where an attacker can theoretically guess the secret character by character by measuring the time it takes for the comparison to fail.
 **Prevention:** Use `crypto.timingSafeEqual` with a constant-time comparison algorithm (such as SHA-256 hashes of the strings) to ensure that comparisons always take the same amount of time, regardless of whether they succeed or fail.
+
+## 2025-05-28 - [IDOR and Mass Assignment] Insecure Webhook Endpoints
+
+**Vulnerability:** The `src/server/routes/webhooks.ts` endpoints `PUT /:id`, `DELETE /:id`, and `POST /:id/test` used `findById*` methods directly, resulting in an Insecure Direct Object Reference (IDOR) vulnerability where any authenticated user could modify or delete webhooks across tenants by just guessing an ID. Furthermore, `POST /` and `PUT /:id` spread or passed `req.body` directly, which allows Mass Assignment attacks allowing users to maliciously overwrite fields like `tenantId`.
+**Learning:** Tenant-scoped collections must strictly check the current active tenant using `withTenantScope(req, ...)` inside `findOneAndUpdate`, `findOneAndDelete`, and `findOne` filters. For update payloads, NEVER pass the entire `req.body` directly into a Mongoose update operation.
+**Prevention:** Use `withTenantScope` to prevent IDOR. Explicitly destructure only the allowed update fields into a dynamically created `updateData` object to prevent Mass Assignment.
