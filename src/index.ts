@@ -271,7 +271,9 @@ async function startServer() {
       console.error('❌ MONGODB_URI is required in production. Exiting.');
       process.exit(1);
     }
-    console.warn('⚠️ No MONGODB_URI found. Some features (Admin Panel) may not work.');
+    console.warn(
+      '⚠️ No MONGODB_URI found. Some features (Admin Panel) may not work.',
+    );
   }
 
   if (process.env.MONGODB_URI) {

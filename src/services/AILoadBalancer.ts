@@ -73,9 +73,8 @@ export function enforceWhatsAppStyle(raw: string): string {
       sub.lastIndexOf('? '),
       sub.lastIndexOf('\n'),
     );
-    text = lastBreak > 150
-      ? text.slice(0, lastBreak + 1).trim()
-      : sub.trim() + '…';
+    text =
+      lastBreak > 150 ? text.slice(0, lastBreak + 1).trim() : sub.trim() + '…';
   }
 
   return text;
