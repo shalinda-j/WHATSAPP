@@ -9,3 +9,8 @@
 **Vulnerability:** A simple string comparison (`!==`) was used to validate the `WEBHOOK_SECRET` against the incoming payload secret in the webhook inbound endpoint.
 **Learning:** Simple string comparison can expose the application to timing attacks, where an attacker can theoretically guess the secret character by character by measuring the time it takes for the comparison to fail.
 **Prevention:** Use `crypto.timingSafeEqual` with a constant-time comparison algorithm (such as SHA-256 hashes of the strings) to ensure that comparisons always take the same amount of time, regardless of whether they succeed or fail.
+
+## 2024-05-29 - [Mass Assignment & IDOR] Unscoped CRUD operations in Webhook endpoints
+**Vulnerability:** The Webhooks CRUD API endpoints (`POST`, `PUT`, `DELETE`, `TEST`) directly passed `req.body` into `Webhook.findByIdAndUpdate()` and the constructor without explicitly picking fields, leading to Mass Assignment vulnerabilities. Similarly, `findById`, `findByIdAndUpdate`, and `findByIdAndDelete` were used without `withTenantScope()`, leading to Insecure Direct Object Reference (IDOR), potentially allowing tenants to access or modify other tenants' webhooks.
+**Learning:** Destructuring assignment provides an explicit security boundary against Mass Assignment attacks. Using tenant scoping middleware is essential when querying tenant-scoped collections.
+**Prevention:** Explicitly extract parameters from user input. Always use `withTenantScope` along with `findOneAndUpdate`, `findOneAndDelete`, or `findOne` when interacting with tenant-scoped collections.
