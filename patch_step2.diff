@@ -1,0 +1,10 @@
+--- src/server/routes/analytics.ts
++++ src/server/routes/analytics.ts
+@@ -109,6 +109,7 @@
+     const { limit = 20 } = req.query;
+
+     const userMessages = await ChatMessage.find({ role: 'user' })
++      .select('content -_id')
+       .sort({ timestamp: -1 })
+       .limit(Number(limit))
+       .lean();

@@ -1,0 +1,10 @@
+--- src/server/routes/analytics.ts
++++ src/server/routes/analytics.ts
+@@ -6,6 +6,7 @@
+
+ const router = Router();
+
++// ⚡ Bolt: Precompile static keywords into RegExp at the module scope to avoid O(M*N) CPU bottleneck in the request loop
+ const KEYWORDS_MAP: Record<string, string[]> = {
+   jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
+   register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
