@@ -164,7 +164,7 @@ class BusinessCallingApiProvider implements ILiveCallProvider {
   private get configured(): boolean {
     return Boolean(
       process.env.WHATSAPP_CALLING_API_TOKEN &&
-        process.env.WHATSAPP_PHONE_NUMBER_ID,
+      process.env.WHATSAPP_PHONE_NUMBER_ID,
     );
   }
 

@@ -1,7 +1,7 @@
 # Live Call Answering
 
 This document explains **why "direct live call answer" does not work today**, what
-*does* work, and how the new `LiveCallService` is set up so true live answering can
+_does_ work, and how the new `LiveCallService` is set up so true live answering can
 be switched on later without rewriting the app.
 
 ## TL;DR — why it doesn't answer calls live
@@ -67,13 +67,13 @@ available — you only implement the media bridge and supply the hooks.
 
 The spoken response uses a configurable TTS engine via `CallTtsModel`:
 
-| Value        | Engine                                                            |
-| ------------ | ---------------------------------------------------------------- |
+| Value        | Engine                                                                                                 |
+| ------------ | ------------------------------------------------------------------------------------------------------ |
 | `auto`       | Use the Admin Panel Voice config (Gemini → Google Cloud → OpenAI → ElevenLabs → Google Free waterfall) |
-| `gemini`     | Gemini TTS (`gemini-2.5-flash-preview-tts`) — best Sinhala/Tamil |
-| `openai`     | OpenAI TTS (`tts-1` / `tts-1-hd`)                                |
-| `elevenlabs` | ElevenLabs (premium)                                             |
-| `google`     | Google TTS                                                       |
+| `gemini`     | Gemini TTS (`gemini-2.5-flash-preview-tts`) — best Sinhala/Tamil                                       |
+| `openai`     | OpenAI TTS (`tts-1` / `tts-1-hd`)                                                                      |
+| `elevenlabs` | ElevenLabs (premium)                                                                                   |
+| `google`     | Google TTS                                                                                             |
 
 Set it with the `CALL_TTS_MODEL` environment variable, or at runtime via
 `liveCallService.setTtsModel(...)`. `synthesizeCallSpeech(text, language, model)`
@@ -81,14 +81,14 @@ applies the choice (falling back safely if the engine can't handle the language)
 
 ## Environment variables
 
-| Variable                       | Purpose                                                        | Default        |
-| ------------------------------ | ------------------------------------------------------------- | -------------- |
-| `LIVE_CALL_MODE`               | `reject-reply` (default) or `live-answer`                      | `reject-reply` |
-| `CALL_TTS_MODEL`               | `auto` / `gemini` / `openai` / `elevenlabs` / `google`        | `auto`         |
-| `CALL_LIVE_GREETING`           | Greeting spoken when a call is answered live                   | Sinhala default |
-| `DEFAULT_LANGUAGE`             | Fallback language for synthesis                                | `si`           |
-| `WHATSAPP_CALLING_API_TOKEN`   | Business Calling API token (required for live answer)          | —              |
-| `WHATSAPP_PHONE_NUMBER_ID`     | Business Calling API phone number id (required for live answer)| —              |
+| Variable                     | Purpose                                                         | Default         |
+| ---------------------------- | --------------------------------------------------------------- | --------------- |
+| `LIVE_CALL_MODE`             | `reject-reply` (default) or `live-answer`                       | `reject-reply`  |
+| `CALL_TTS_MODEL`             | `auto` / `gemini` / `openai` / `elevenlabs` / `google`          | `auto`          |
+| `CALL_LIVE_GREETING`         | Greeting spoken when a call is answered live                    | Sinhala default |
+| `DEFAULT_LANGUAGE`           | Fallback language for synthesis                                 | `si`            |
+| `WHATSAPP_CALLING_API_TOKEN` | Business Calling API token (required for live answer)           | —               |
+| `WHATSAPP_PHONE_NUMBER_ID`   | Business Calling API phone number id (required for live answer) | —               |
 
 ## Summary
 
