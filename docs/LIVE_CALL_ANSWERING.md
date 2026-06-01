@@ -63,6 +63,50 @@ its media to a server that plays our TTS audio. Concretely, all of:
 This means the rest of the codebase does **not** change when live answering becomes
 available — you only implement the media bridge and supply the hooks.
 
+## The live-answer implementation (`src/services/whatsappCalling/`)
+
+The Business Calling API path is **now implemented** (it ships disabled, gated on
+credentials + the optional WebRTC dependency). Three pieces:
+
+| File                        | Role                                                                                                                                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `WhatsAppCallingClient.ts`  | Control plane. Calls Graph API `POST /{phone_number_id}/calls` to `accept` / `reject` / `terminate`, exchanging SDP.                                                                        |
+| `MediaBridge.ts`            | Media plane. Builds a WebRTC peer from the caller's offer SDP (via optional `werift`), transcodes TTS audio to 48 kHz Opus with the bundled ffmpeg, and streams 20 ms frames into the call. |
+| `WhatsAppCallingService.ts` | Orchestration. Takes a webhook call event, wires `acceptCall` + `streamAudio` hooks to the above, and hands an `IncomingCallContext` to `LiveCallService`.                                  |
+
+Inbound events arrive at the public webhook **`POST /api/webhooks/whatsapp-calling`**
+(with a `GET` handshake for Meta verification). The webhook verifies
+`X-Hub-Signature-256` when `WHATSAPP_APP_SECRET` is set, returns `200` immediately,
+then processes each `entry[].changes[].value.calls[]` asynchronously.
+
+### Flow
+
+```
+Meta → POST /api/webhooks/whatsapp-calling   (call event + offer SDP)
+     → WhatsAppCallingService.handleWebhookCall
+     → MediaBridge.fromOffer(offerSdp)        (WebRTC answer SDP)
+     → LiveCallService.handleIncomingCall({ acceptCall, streamAudio, … })
+     → BusinessCallingApiProvider.handle
+         → client.accept(callId, answerSdp)   (Graph API)
+         → synthesizeCallSpeech(greeting)     (configurable TTS)
+         → media.playAudio(audio)             (Opus → RTP → caller hears it)
+```
+
+### What's still required to turn it on
+
+1. **Meta Business verification** + the number onboarded to the WhatsApp Business
+   Calling API (still pending — same blocker as the Instagram/Facebook adapters).
+2. Set the env vars below (`LIVE_CALL_MODE=live-answer`, the token, phone number id,
+   verify token, and app secret).
+3. Install the optional WebRTC dependency: `npm i werift`. Without it, `MediaBridge`
+   reports unavailable and the service falls back to reject+reply.
+4. Subscribe the `calls` webhook field for your WABA in the Meta App dashboard,
+   pointing at `https://<your-host>/api/webhooks/whatsapp-calling`.
+
+> ⚠️ The real-time audio path (WebRTC/SRTP negotiation + RTP pacing) can only be
+> verified against a live Meta-verified number. The code is complete and
+> type-checked, but end-to-end audio has **not** been exercised in CI.
+
 ## Configuring the TTS model
 
 The spoken response uses a configurable TTS engine via `CallTtsModel`:
@@ -81,14 +125,17 @@ applies the choice (falling back safely if the engine can't handle the language)
 
 ## Environment variables
 
-| Variable                     | Purpose                                                         | Default         |
-| ---------------------------- | --------------------------------------------------------------- | --------------- |
-| `LIVE_CALL_MODE`             | `reject-reply` (default) or `live-answer`                       | `reject-reply`  |
-| `CALL_TTS_MODEL`             | `auto` / `gemini` / `openai` / `elevenlabs` / `google`          | `auto`          |
-| `CALL_LIVE_GREETING`         | Greeting spoken when a call is answered live                    | Sinhala default |
-| `DEFAULT_LANGUAGE`           | Fallback language for synthesis                                 | `si`            |
-| `WHATSAPP_CALLING_API_TOKEN` | Business Calling API token (required for live answer)           | —               |
-| `WHATSAPP_PHONE_NUMBER_ID`   | Business Calling API phone number id (required for live answer) | —               |
+| Variable                        | Purpose                                                       | Default         |
+| ------------------------------- | ------------------------------------------------------------- | --------------- |
+| `LIVE_CALL_MODE`                | `reject-reply` (default) or `live-answer`                     | `reject-reply`  |
+| `CALL_TTS_MODEL`                | `auto` / `gemini` / `openai` / `elevenlabs` / `google`        | `auto`          |
+| `CALL_LIVE_GREETING`            | Greeting spoken when a call is answered live                  | Sinhala default |
+| `DEFAULT_LANGUAGE`              | Fallback language for synthesis                               | `si`            |
+| `WHATSAPP_CALLING_API_TOKEN`    | Business Calling API token (or `WHATSAPP_CLOUD_ACCESS_TOKEN`) | —               |
+| `WHATSAPP_PHONE_NUMBER_ID`      | WABA phone number id (or `WHATSAPP_CLOUD_PHONE_NUMBER_ID`)    | —               |
+| `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | Token echoed back on the Meta `GET` verification handshake    | —               |
+| `WHATSAPP_APP_SECRET`           | Meta app secret — enables `X-Hub-Signature-256` verification  | — (skipped)     |
+| `WHATSAPP_GRAPH_VERSION`        | Graph API version for the calls endpoint                      | `v21.0`         |
 
 ## Summary
 
