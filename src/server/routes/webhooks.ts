@@ -408,15 +408,13 @@ router.post('/sendgrid', metaEventRateLimit, async (req, res) => {
 // POST = call events. Signature verified via X-Hub-Signature-256 when an
 //        app secret is configured (env WHATSAPP_APP_SECRET or per-tenant).
 
-function whatsappCallingVerifyToken(): string | undefined {
-  return process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || undefined;
-}
-
-router.get('/whatsapp-calling', metaEventRateLimit, (req, res) => {
+router.get('/whatsapp-calling', metaEventRateLimit, async (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
-  const expected = whatsappCallingVerifyToken();
+  const { liveCallSettings } =
+    await import('../../services/LiveCallSettingsService');
+  const expected = await liveCallSettings.getWebhookVerifyToken();
   if (mode === 'subscribe' && expected && token === expected) {
     return res.status(200).send(String(challenge ?? ''));
   }
@@ -426,7 +424,9 @@ router.get('/whatsapp-calling', metaEventRateLimit, (req, res) => {
 router.post('/whatsapp-calling', metaEventRateLimit, async (req, res) => {
   try {
     // Optional HMAC verification: Meta signs the body with the app secret.
-    const appSecret = process.env.WHATSAPP_APP_SECRET;
+    const { liveCallSettings } =
+      await import('../../services/LiveCallSettingsService');
+    const appSecret = await liveCallSettings.getAppSecret();
     if (appSecret) {
       const sigHeader = req.headers['x-hub-signature-256'] as
         | string

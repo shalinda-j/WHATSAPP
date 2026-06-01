@@ -20,14 +20,15 @@ import axios, { AxiosInstance } from 'axios';
  * resolved from the encrypted ChannelConnection.credentials by the caller).
  */
 
-const GRAPH_VERSION = process.env.WHATSAPP_GRAPH_VERSION || 'v21.0';
-const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
+const DEFAULT_GRAPH_VERSION = 'v21.0';
 
 export interface WhatsAppCallingCreds {
   /** Permanent / system-user access token with whatsapp_business_messaging. */
   accessToken: string;
   /** The WABA phone number id that owns the call. */
   phoneNumberId: string;
+  /** Graph API version, e.g. 'v21.0'. Defaults when omitted. */
+  graphVersion?: string;
 }
 
 export type CallAction = 'pre_accept' | 'accept' | 'reject' | 'terminate';
@@ -38,8 +39,9 @@ export class WhatsAppCallingClient {
 
   constructor(creds: WhatsAppCallingCreds) {
     this.phoneNumberId = creds.phoneNumberId;
+    const version = creds.graphVersion || DEFAULT_GRAPH_VERSION;
     this.http = axios.create({
-      baseURL: GRAPH_BASE,
+      baseURL: `https://graph.facebook.com/${version}`,
       timeout: 15000,
       headers: {
         Authorization: `Bearer ${creds.accessToken}`,
@@ -49,20 +51,19 @@ export class WhatsAppCallingClient {
   }
 
   /**
-   * Resolve credentials from environment. Returns null when not configured so
-   * callers can cleanly fall back to reject+reply.
+   * Resolve credentials from the panel-managed LiveCallSettingsService (which
+   * itself falls back to env vars when nothing has been saved). Returns null
+   * when not configured so callers can cleanly fall back to reject+reply.
    */
-  static fromEnv(): WhatsAppCallingClient | null {
-    const accessToken =
-      process.env.WHATSAPP_CALLING_API_TOKEN ||
-      process.env.WHATSAPP_CLOUD_ACCESS_TOKEN ||
-      '';
-    const phoneNumberId =
-      process.env.WHATSAPP_PHONE_NUMBER_ID ||
-      process.env.WHATSAPP_CLOUD_PHONE_NUMBER_ID ||
-      '';
-    if (!accessToken || !phoneNumberId) return null;
-    return new WhatsAppCallingClient({ accessToken, phoneNumberId });
+  static async fromSettings(): Promise<WhatsAppCallingClient | null> {
+    const { liveCallSettings } = await import('../LiveCallSettingsService');
+    const s = await liveCallSettings.load();
+    if (!s.apiToken || !s.phoneNumberId) return null;
+    return new WhatsAppCallingClient({
+      accessToken: s.apiToken,
+      phoneNumberId: s.phoneNumberId,
+      graphVersion: s.graphVersion,
+    });
   }
 
   /**

@@ -86,9 +86,17 @@ export interface ILiveCallProvider {
   handle(ctx: IncomingCallContext): Promise<CallAnswerResult>;
 }
 
-interface LiveCallSettings {
+/**
+ * A resolved, decrypted snapshot of the panel-managed live-call settings,
+ * captured per call so providers read consistent values without async work
+ * mid-negotiation.
+ */
+interface ResolvedSettings {
   mode: LiveCallMode;
   ttsModel: CallTtsModel;
+  liveGreeting: string;
+  defaultLanguage: string;
+  callingConfigured: boolean;
 }
 
 /**
@@ -161,18 +169,13 @@ class RejectReplyProvider implements ILiveCallProvider {
 class BusinessCallingApiProvider implements ILiveCallProvider {
   readonly name = 'whatsapp-business-calling-api';
 
-  private get configured(): boolean {
-    return Boolean(
-      process.env.WHATSAPP_CALLING_API_TOKEN &&
-      process.env.WHATSAPP_PHONE_NUMBER_ID,
-    );
-  }
+  constructor(private readonly snapshot: () => ResolvedSettings) {}
 
   canAnswerLive(ctx: IncomingCallContext): boolean {
     // Need both the API credentials AND a transport that actually exposes the
     // accept + media-stream hooks. Baileys supplies neither.
     return (
-      this.configured &&
+      this.snapshot().callingConfigured &&
       typeof ctx.acceptCall === 'function' &&
       typeof ctx.streamAudio === 'function'
     );
@@ -185,17 +188,12 @@ class BusinessCallingApiProvider implements ILiveCallProvider {
         'BusinessCallingApiProvider.handle called without media hooks',
       );
     }
-    const language = process.env.DEFAULT_LANGUAGE || 'si';
-    const greeting =
-      process.env.CALL_LIVE_GREETING ||
-      'ඔබට ආයුබෝවන්! මම ඔබට උදව් කරන්න සූදානම්. කරුණාකර කියන්න.';
+    const snap = this.snapshot();
+    const language = snap.defaultLanguage;
+    const greeting = snap.liveGreeting;
 
     await ctx.acceptCall(ctx.callId, ctx.from);
-    const audio = await synthesizeCallSpeech(
-      greeting,
-      language,
-      liveCallService.getTtsModel(),
-    );
+    const audio = await synthesizeCallSpeech(greeting, language, snap.ttsModel);
     await ctx.streamAudio(ctx.callId, audio);
 
     try {
@@ -223,31 +221,52 @@ class BusinessCallingApiProvider implements ILiveCallProvider {
 }
 
 class LiveCallService {
-  private readonly rejectReply = new RejectReplyProvider();
-  private readonly businessCalling = new BusinessCallingApiProvider();
-
-  private settings: LiveCallSettings = {
-    mode:
-      (process.env.LIVE_CALL_MODE as LiveCallMode) === 'live-answer'
-        ? 'live-answer'
-        : 'reject-reply',
-    ttsModel: (process.env.CALL_TTS_MODEL as CallTtsModel) || 'auto',
+  // Snapshot captured at the start of each call so the (synchronous) provider
+  // capability checks read consistent, panel-managed values.
+  private current: ResolvedSettings = {
+    mode: 'reject-reply',
+    ttsModel: 'auto',
+    liveGreeting: '',
+    defaultLanguage: 'si',
+    callingConfigured: false,
   };
 
-  getTtsModel(): CallTtsModel {
-    return this.settings.ttsModel;
+  private readonly rejectReply = new RejectReplyProvider();
+  private readonly businessCalling = new BusinessCallingApiProvider(
+    () => this.current,
+  );
+
+  /**
+   * Pull the latest panel-managed settings from LiveCallSettingsService.
+   * Lazily imported to avoid a circular dependency at module load.
+   */
+  private async refreshSnapshot(): Promise<ResolvedSettings> {
+    try {
+      const { liveCallSettings } = await import('./LiveCallSettingsService');
+      const s = await liveCallSettings.load();
+      this.current = {
+        mode: s.mode,
+        ttsModel: s.ttsModel,
+        liveGreeting: s.liveGreeting,
+        defaultLanguage: s.defaultLanguage,
+        callingConfigured: Boolean(s.apiToken && s.phoneNumberId),
+      };
+    } catch (err) {
+      console.warn(
+        '📞 LiveCallService: could not load panel settings, using last/defaults:',
+        err,
+      );
+    }
+    return this.current;
   }
 
-  setTtsModel(model: CallTtsModel): void {
-    this.settings.ttsModel = model;
+  /** Current TTS model (panel-managed). Reads the cached snapshot. */
+  getTtsModel(): CallTtsModel {
+    return this.current.ttsModel;
   }
 
   getMode(): LiveCallMode {
-    return this.settings.mode;
-  }
-
-  setMode(mode: LiveCallMode): void {
-    this.settings.mode = mode;
+    return this.current.mode;
   }
 
   /**
@@ -258,16 +277,16 @@ class LiveCallService {
    */
   private selectProvider(ctx: IncomingCallContext): ILiveCallProvider {
     if (
-      this.settings.mode === 'live-answer' &&
+      this.current.mode === 'live-answer' &&
       this.businessCalling.canAnswerLive(ctx)
     ) {
       return this.businessCalling;
     }
-    if (this.settings.mode === 'live-answer') {
+    if (this.current.mode === 'live-answer') {
       console.warn(
-        '📞 LIVE_CALL_MODE=live-answer requested, but no live-capable ' +
-          'transport is available (Baileys cannot stream call audio). ' +
-          'Falling back to reject+reply. See LiveCallService docs.',
+        '📞 live-answer mode requested, but no live-capable transport is ' +
+          'available (missing API credentials or Baileys cannot stream call ' +
+          'audio). Falling back to reject+reply. See LiveCallService docs.',
       );
     }
     return this.rejectReply;
@@ -276,10 +295,11 @@ class LiveCallService {
   async handleIncomingCall(
     ctx: IncomingCallContext,
   ): Promise<CallAnswerResult> {
+    await this.refreshSnapshot();
     const provider = this.selectProvider(ctx);
     console.log(
       `📞 Incoming call from ${ctx.from} → provider="${provider.name}" ` +
-        `(mode=${this.settings.mode}, tts=${this.settings.ttsModel})`,
+        `(mode=${this.current.mode}, tts=${this.current.ttsModel})`,
     );
     try {
       return await provider.handle(ctx);
@@ -291,7 +311,7 @@ class LiveCallService {
       } catch {
         /* ignore */
       }
-      return { handled: false, mode: this.settings.mode, answeredLive: false };
+      return { handled: false, mode: this.current.mode, answeredLive: false };
     }
   }
 }

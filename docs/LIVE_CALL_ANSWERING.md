@@ -107,6 +107,39 @@ Meta → POST /api/webhooks/whatsapp-calling   (call event + offer SDP)
 > verified against a live Meta-verified number. The code is complete and
 > type-checked, but end-to-end audio has **not** been exercised in CI.
 
+## Managing it from the Admin Panel
+
+Everything above is manageable from the **Voice Agent Hub** page (no env editing
+required). The **Live Call Answering** section there lets an operator:
+
+- switch **answer mode** (`reject-reply` ↔ `live-answer`),
+- pick the **call TTS model** and **test** it (plays a sample in the browser),
+- set the **spoken greeting** and **default language**,
+- enter the **Business Calling API** credentials (phone number id, access token,
+  app secret, webhook verify token, Graph version), and
+- see a **readiness banner** that tells you exactly why live answering is or
+  isn't active (mode, credentials present, WebRTC media installed).
+
+Persistence is handled by `LiveCallSettingsService`: settings are written to the
+MongoDB `Config` collection (key `live_call_settings`) **and** a local JSON file,
+exactly like `VoiceCallAgentService`. Secrets (`apiToken`, `appSecret`) are
+**encrypted at rest** via `CryptoService` and never returned to the client — the
+API exposes only `hasApiToken` / `hasAppSecret` booleans, and submitting a blank
+secret field leaves the stored value untouched.
+
+Environment variables remain valid as **defaults**: a field that hasn't been set
+in the panel falls back to its env var, so existing env-based deployments keep
+working until the operator saves from the panel (after which the panel wins).
+
+API surface (all under `/api/call-agent`, auth + tenant scoped):
+
+| Endpoint              | Purpose                                             |
+| --------------------- | --------------------------------------------------- |
+| `GET /live-settings`  | Current settings (secrets redacted) + valid options |
+| `POST /live-settings` | Update any subset of settings                       |
+| `GET /live-status`    | Readiness: mode, credentials, media, reason         |
+| `POST /test-call-tts` | Synthesize with the configured call TTS model       |
+
 ## Configuring the TTS model
 
 The spoken response uses a configurable TTS engine via `CallTtsModel`:

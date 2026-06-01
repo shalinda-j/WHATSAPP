@@ -54,7 +54,7 @@ export class WhatsAppCallingService {
     }
 
     const offerSdp = call.session?.sdp;
-    const client = WhatsAppCallingClient.fromEnv();
+    const client = await WhatsAppCallingClient.fromSettings();
 
     // No creds → we can't talk to the Calling API at all. Let LiveCallService
     // run its fallback (it will produce a reject+reply via Baileys path if a
@@ -103,7 +103,7 @@ export class WhatsAppCallingService {
   /** True when both the API creds and the WebRTC stack are available. */
   static async canAnswerLive(): Promise<boolean> {
     return (
-      WhatsAppCallingClient.fromEnv() !== null &&
+      (await WhatsAppCallingClient.fromSettings()) !== null &&
       (await MediaBridge.isAvailable())
     );
   }

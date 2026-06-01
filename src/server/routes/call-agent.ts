@@ -4,8 +4,23 @@ import CallLog from '../../models/CallLog';
 import { authenticateToken } from '../middleware/auth';
 import { resolveTenant } from '../middleware/tenantContext';
 import { generateSpeech } from '../../services/voice';
+import { liveCallSettings } from '../../services/LiveCallSettingsService';
+import { synthesizeCallSpeech } from '../../services/LiveCallService';
+import type {
+  LiveCallMode,
+  CallTtsModel,
+} from '../../services/LiveCallService';
 
 const router = Router();
+
+const VALID_MODES: LiveCallMode[] = ['reject-reply', 'live-answer'];
+const VALID_TTS: CallTtsModel[] = [
+  'auto',
+  'gemini',
+  'openai',
+  'elevenlabs',
+  'google',
+];
 
 // All routes protected + tenant-scoped
 router.use(authenticateToken);
@@ -219,6 +234,135 @@ router.post('/test-voice', async (req, res) => {
   } catch (err: any) {
     console.error('❌ test-voice error:', err.message || err);
     res.status(500).json({ error: err.message || 'TTS generation failed' });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Live Call settings (WhatsApp Business Calling API + TTS model) — fully
+// managed from the Admin Panel. Secrets are never returned raw; the client
+// sees hasApiToken / hasAppSecret booleans and re-submits a value only to
+// change it.
+// ──────────────────────────────────────────────────────────────────────────
+
+// GET /api/call-agent/live-settings
+router.get('/live-settings', async (_req, res) => {
+  try {
+    const settings = await liveCallSettings.getPublic();
+    res.json({
+      settings,
+      options: { modes: VALID_MODES, ttsModels: VALID_TTS },
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load live call settings' });
+  }
+});
+
+// POST /api/call-agent/live-settings
+router.post('/live-settings', async (req, res) => {
+  try {
+    const body = req.body as Record<string, unknown>;
+    const patch: Record<string, unknown> = {};
+
+    if (typeof body.mode === 'string') {
+      if (!VALID_MODES.includes(body.mode as LiveCallMode)) {
+        return res.status(400).json({ error: 'invalid mode' });
+      }
+      patch.mode = body.mode;
+    }
+    if (typeof body.ttsModel === 'string') {
+      if (!VALID_TTS.includes(body.ttsModel as CallTtsModel)) {
+        return res.status(400).json({ error: 'invalid ttsModel' });
+      }
+      patch.ttsModel = body.ttsModel;
+    }
+    for (const f of [
+      'liveGreeting',
+      'defaultLanguage',
+      'phoneNumberId',
+      'webhookVerifyToken',
+      'graphVersion',
+      'apiToken',
+      'appSecret',
+    ]) {
+      if (typeof body[f] === 'string') patch[f] = body[f];
+    }
+
+    await liveCallSettings.update(patch);
+    const settings = await liveCallSettings.getPublic();
+    res.json({ success: true, settings });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save live call settings' });
+  }
+});
+
+// GET /api/call-agent/live-status — readiness diagnostics for the panel.
+router.get('/live-status', async (_req, res) => {
+  try {
+    const s = await liveCallSettings.load();
+    const callingConfigured = await liveCallSettings.isCallingConfigured();
+
+    // Probe the optional WebRTC media stack without importing it eagerly.
+    let mediaAvailable = false;
+    try {
+      const { MediaBridge } =
+        await import('../../services/whatsappCalling/MediaBridge');
+      mediaAvailable = await MediaBridge.isAvailable();
+    } catch {
+      mediaAvailable = false;
+    }
+
+    const liveAnswerReady =
+      s.mode === 'live-answer' && callingConfigured && mediaAvailable;
+
+    res.json({
+      mode: s.mode,
+      ttsModel: s.ttsModel,
+      callingConfigured,
+      mediaAvailable,
+      liveAnswerReady,
+      // Human-readable reason when live answer can't run, for the panel banner.
+      reason: liveAnswerReady
+        ? null
+        : s.mode !== 'live-answer'
+          ? 'Mode is reject-reply (calls are declined with a smart voice/text reply).'
+          : !callingConfigured
+            ? 'WhatsApp Business Calling API credentials are not configured.'
+            : 'WebRTC media library (werift) is not installed on the server.',
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load live status' });
+  }
+});
+
+// POST /api/call-agent/test-call-tts — synthesize using the configured CALL
+// TTS model specifically (not the global voice config), returns base64 WAV.
+router.post('/test-call-tts', async (req, res) => {
+  try {
+    const { language, text } = req.body as {
+      language?: string;
+      text?: string;
+    };
+    const s = await liveCallSettings.load();
+    const lang = language || s.defaultLanguage || 'si';
+    const sample =
+      text?.trim() || s.liveGreeting || 'ආයුබෝවන්! මෙය ඇමතුම් හඬ පරීක්ෂණයකි.';
+
+    const audio = await synthesizeCallSpeech(sample, lang, s.ttsModel);
+    if (!audio || audio.length < 100) {
+      return res
+        .status(500)
+        .json({ error: 'TTS generation failed — empty audio buffer' });
+    }
+    res.json({
+      success: true,
+      audio: audio.toString('base64'),
+      format: 'wav',
+      size: audio.length,
+      ttsModel: s.ttsModel,
+      text: sample,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'TTS generation failed' });
   }
 });
 
