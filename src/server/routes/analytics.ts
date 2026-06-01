@@ -98,31 +98,36 @@ router.get('/overview', async (req, res) => {
   }
 });
 
+const CATEGORY_REGEX_MAP = [
+  { category: 'jobs', regex: /(?:job|work|employment|vacancy|hire|recruit|jobs)/i },
+  { category: 'register', regex: /(?:register|apply|sign up|join|cv|registration)/i },
+  { category: 'payment', regex: /(?:payment|pay|salary|wage|bank|account)/i },
+  { category: 'booking', regex: /(?:book|visit|appointment|schedule|meeting|time)/i },
+  { category: 'location', regex: /(?:address|location|where|branch|office|map)/i },
+  { category: 'services', regex: /(?:service|what do you do|help|information|details)/i },
+  { category: 'hello', regex: /(?:hello|hi|hey|good morning|good afternoon)/i },
+  { category: 'language', regex: /(?:sinhala|english|tamil|translate)/i },
+];
+
 router.get('/questions', async (req, res) => {
   try {
     const { limit = 20 } = req.query;
 
     const userMessages = await ChatMessage.find({ role: 'user' })
+      .select('content -_id')
       .sort({ timestamp: -1 })
       .limit(Number(limit))
       .lean();
 
     const questionCounts: Record<string, number> = {};
-    const keywordsMap: Record<string, string[]> = {
-      jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
-      register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
-      payment: ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
-      booking: ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
-      location: ['address', 'location', 'where', 'branch', 'office', 'map'],
-      services: ['service', 'what do you do', 'help', 'information', 'details'],
-      hello: ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
-      language: ['sinhala', 'english', 'tamil', 'translate'],
-    };
 
+    // ⚡ Bolt: Precompile regexes and select only necessary fields
+    // Precompiled regex avoids recreating arrays and nested loops per request.
+    // .select('content -_id') reduces memory footprint.
     for (const msg of userMessages) {
-      const content = msg.content.toLowerCase();
-      for (const [category, keywords] of Object.entries(keywordsMap)) {
-        if (keywords.some((k) => content.includes(k))) {
+      const content = msg.content;
+      for (const { category, regex } of CATEGORY_REGEX_MAP) {
+        if (regex.test(content)) {
           questionCounts[category] = (questionCounts[category] || 0) + 1;
           break;
         }
