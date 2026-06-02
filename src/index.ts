@@ -256,13 +256,27 @@ async function buildLeadFlowFallback(
   }
 
   if (!template) {
+    // LEAD_FALLBACK_TEMPLATES isn't configured. Rather than go silent on a
+    // real customer (the worst outcome — they think we ignored them), send a
+    // safe, language-matched holding reply that still moves toward a visit.
+    // This is what keeps the bot responsive even when every AI provider is
+    // rate-limited / down. Operators can override the wording via the dataset.
     console.warn(
-      '⚠️ LEAD_FALLBACK_TEMPLATES slot not configured — fallback skipped. Configure via Admin Panel > Datasets > LEAD_FALLBACK_TEMPLATES.',
+      '⚠️ LEAD_FALLBACK_TEMPLATES slot not configured — using built-in safe reply. Configure via Admin Panel > Datasets > LEAD_FALLBACK_TEMPLATES.',
     );
-    return '';
+    return DEFAULT_SAFE_REPLY;
   }
   return fillLeadTemplate(template, facts);
 }
+
+// Last-resort customer reply used when AI providers are unavailable AND no
+// LEAD_FALLBACK_TEMPLATES are configured. Bilingual (Sinhala + English) so it
+// reads naturally for the default market while staying clear to English users.
+const DEFAULT_SAFE_REPLY =
+  'ස්තූතියි ඔබ අප හා සම්බන්ධ වීම ගැන! 🙏 අපි ඔබට ඉක්මනින්ම පිළිතුරු දෙන්නම්. ' +
+  'ඔබ සොයන රැකියාව / පුහුණුව මොකක්ද කියලා කියන්න — එවිට හරියටම උදව් කරන්න පුළුවන්.\n\n' +
+  'Thanks for reaching out! We will get back to you shortly. ' +
+  'Tell us what job or training you are looking for so we can help you best. 🌟';
 
 async function startServer() {
   // 1. Connect to Database
@@ -1371,13 +1385,21 @@ onMessage(async (message, sock, sessionId) => {
     } catch (aiError: any) {
       console.error('   ❌ AI response error:', aiError.message || aiError);
 
-      // Keep the customer-facing flow moving even when every AI provider fails.
-      // If LEAD_FALLBACK_TEMPLATES is not configured the helper returns ''
-      // and we stay silent — better than echoing made-up text at the customer.
-      const fallbackResponse = await buildLeadFlowFallback(text, jid);
-      if (fallbackResponse) {
-        await sendMessage(jid, fallbackResponse, sessionId);
+      // Keep the customer-facing flow moving even when every AI provider fails
+      // (e.g. all providers rate-limited / 429). buildLeadFlowFallback now
+      // always returns a non-empty reply, but we guard with DEFAULT_SAFE_REPLY
+      // so a thrown error here still never leaves the customer in silence.
+      let fallbackResponse = DEFAULT_SAFE_REPLY;
+      try {
+        fallbackResponse =
+          (await buildLeadFlowFallback(text, jid)) || DEFAULT_SAFE_REPLY;
+      } catch (fbErr) {
+        console.error(
+          '   ❌ Fallback builder failed, using safe reply:',
+          fbErr,
+        );
       }
+      await sendMessage(jid, fallbackResponse, sessionId);
     }
   } catch (error) {
     console.error('❌ Message handling error:', error);
