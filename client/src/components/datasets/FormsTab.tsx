@@ -83,9 +83,9 @@ export default function FormsTab({ onDataChange }: FormsTabProps) {
       <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
         <div>
           <p className="text-gray-600 text-sm">
-            Dynamic forms collected by the bot during chats. Build and edit
-            them in the Form Builder; this tab gives you a quick read-only
-            overview from the dataset dashboard.
+            Dynamic forms collected by the bot during chats. Build and edit them
+            in the Form Builder; this tab gives you a quick read-only overview
+            from the dataset dashboard.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -93,9 +93,7 @@ export default function FormsTab({ onDataChange }: FormsTabProps) {
             onClick={load}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50"
           >
-            <RefreshCw
-              className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
-            />{' '}
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />{' '}
             Refresh
           </button>
           <Link

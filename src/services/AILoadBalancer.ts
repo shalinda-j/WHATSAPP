@@ -73,9 +73,8 @@ export function enforceWhatsAppStyle(raw: string): string {
       sub.lastIndexOf('? '),
       sub.lastIndexOf('\n'),
     );
-    text = lastBreak > 150
-      ? text.slice(0, lastBreak + 1).trim()
-      : sub.trim() + '…';
+    text =
+      lastBreak > 150 ? text.slice(0, lastBreak + 1).trim() : sub.trim() + '…';
   }
 
   return text;
@@ -126,6 +125,9 @@ export class AILoadBalancer {
       () => this.cleanupCaches(),
       10 * 60 * 1000,
     );
+    // Don't let this timer keep the process alive (e.g. short-lived scripts
+    // and the test runner) — the cleanup is best-effort housekeeping.
+    this.cleanupInterval.unref?.();
   }
 
   /**

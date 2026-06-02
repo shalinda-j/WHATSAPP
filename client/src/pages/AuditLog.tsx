@@ -143,7 +143,9 @@ export default function AuditLog() {
       ) : events.length === 0 ? (
         <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
           <ShieldAlert className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500">No audit events match the current filters.</p>
+          <p className="text-gray-500">
+            No audit events match the current filters.
+          </p>
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -172,7 +174,9 @@ export default function AuditLog() {
                         {fmtTime(ev.createdAt)}
                       </td>
                       <td className="px-4 py-3 text-gray-700">
-                        {ev.adminUsername ?? <span className="text-gray-400">—</span>}
+                        {ev.adminUsername ?? (
+                          <span className="text-gray-400">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -203,7 +207,9 @@ export default function AuditLog() {
                         <td colSpan={7} className="px-4 py-3">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                             <div>
-                              <div className="text-gray-500 mb-1">User-Agent</div>
+                              <div className="text-gray-500 mb-1">
+                                User-Agent
+                              </div>
                               <div className="font-mono text-gray-700 break-all">
                                 {ev.userAgent ?? '—'}
                               </div>
@@ -224,7 +230,11 @@ export default function AuditLog() {
                                 Request summary (sensitive fields redacted)
                               </div>
                               <pre className="bg-white p-3 rounded-md border border-gray-200 overflow-x-auto text-gray-700">
-                                {JSON.stringify(ev.requestSummary ?? {}, null, 2)}
+                                {JSON.stringify(
+                                  ev.requestSummary ?? {},
+                                  null,
+                                  2,
+                                )}
                               </pre>
                             </div>
                           </div>

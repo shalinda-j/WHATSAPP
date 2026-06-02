@@ -129,10 +129,14 @@ Never mix languages unless the user does first.`;
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Old v3 string marker — used to detect records we can safely upgrade.
-const CONVERSATION_EXAMPLES_V3_STRING_MARKER = 'EXAMPLE 1 — Student enquiry (English)';
+const CONVERSATION_EXAMPLES_V3_STRING_MARKER =
+  'EXAMPLE 1 — Student enquiry (English)';
 
 // v4 — structured array (ConfigService & frontend both read content.en).
-const CONVERSATION_EXAMPLES_DEFAULT: Array<{ user: string; assistant: string }> = [
+const CONVERSATION_EXAMPLES_DEFAULT: Array<{
+  user: string;
+  assistant: string;
+}> = [
   {
     user: 'Hi I want to know about your courses',
     assistant: 'Hey! 👋 What career are you aiming for?',
@@ -179,6 +183,52 @@ const UPGRADEABLE_MARKERS: Record<string, string[]> = {
   CONVERSATION_EXAMPLES: [CONVERSATION_EXAMPLES_V3_STRING_MARKER],
 };
 
+// COMPANY_INFO — placeholder business profile the bot references when it
+// answers. The operator EDITS these values in Admin Panel → Datasets. Seeded
+// with obvious placeholders so it's clear what to fill in (never invented at
+// runtime — the AI is instructed to offer a visit/human rather than guess).
+const COMPANY_INFO_DEFAULT = {
+  name: 'Our Training Center',
+  tagline: 'Skills training & overseas job opportunities',
+  address: '[ADD YOUR TRAINING CENTER ADDRESS]',
+  phone: '[ADD YOUR CONTACT NUMBER]',
+  email: '[ADD YOUR EMAIL]',
+  openDays: '[e.g. Monday–Saturday, 9am–5pm]',
+  website: '',
+};
+
+// AI_KNOWLEDGE_BASE — placeholder FAQ the AI can draw on. Q/A pairs. The
+// operator replaces these with real course names, fees, durations, countries,
+// and requirements. Until edited, the bot answers honestly that it will
+// confirm exact details on a visit rather than guessing.
+const AI_KNOWLEDGE_BASE_DEFAULT = [
+  {
+    question: 'What do you offer?',
+    answer:
+      'We provide skills training and help with local and overseas job placement. [EDIT: list your actual courses/services here.]',
+  },
+  {
+    question: 'Which courses / services are available?',
+    answer:
+      '[EDIT: e.g. Welding, Caregiving, Hospitality, Language training, etc.]',
+  },
+  {
+    question: 'How much does it cost?',
+    answer:
+      '[EDIT: add your fees, or keep this and the bot will invite them to a free visit to discuss options.]',
+  },
+  {
+    question: 'Where are you located and when are you open?',
+    answer:
+      '[EDIT: add your address and open days/hours.] You are warmly welcome to visit us.',
+  },
+  {
+    question: 'How do I get started?',
+    answer:
+      'The easiest first step is a free, no-obligation campus visit — we assess your skills and show you matching opportunities. Just say "yes" and we will arrange a time.',
+  },
+];
+
 async function seedConversionDatasets(): Promise<void> {
   const seeds = [
     {
@@ -194,6 +244,20 @@ async function seedConversionDatasets(): Promise<void> {
       type: 'knowledge' as const,
       description:
         'Example conversion conversations (natural WhatsApp style) for AI guidance.',
+    },
+    {
+      key: 'COMPANY_INFO',
+      value: COMPANY_INFO_DEFAULT,
+      type: 'config' as const,
+      description:
+        'Your business profile (name, address, phone, open days). EDIT these placeholders in Admin Panel → Datasets so the bot answers with your real details.',
+    },
+    {
+      key: 'AI_KNOWLEDGE_BASE',
+      value: AI_KNOWLEDGE_BASE_DEFAULT,
+      type: 'knowledge' as const,
+      description:
+        'FAQ the AI draws on (courses, fees, location). EDIT these placeholders with your real details in Admin Panel → Datasets / Knowledge.',
     },
   ];
 

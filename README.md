@@ -4,14 +4,14 @@ A full-stack, multi-tenant, multi-channel marketing automation platform built on
 
 ## Features
 
-| Category | Capabilities |
-|----------|-------------|
-| **Channels** | WhatsApp (Baileys), Telegram (long-poll), Email (SendGrid); Instagram/Facebook stubs pending Meta verification |
-| **AI Agents** | Lead Qualifier, Personalization, Deal Closer, Content Recommender; Campaign Generator, Segmentation, Follow-up (cron-invoked) |
-| **CRM** | Contacts, Deals (Kanban pipeline), Activities, Lead Registrations with CV upload |
-| **Marketing** | Campaigns, Segments (rule compiler → MongoDB), Content Studio (DALL-E / Stability AI), Approval Queue |
-| **Admin Panel** | React 18 + Vite + TailwindCSS dashboard with real-time Socket.io updates |
-| **Multi-tenant** | Per-tenant credentials, plans, brand voice, budget caps |
+| Category         | Capabilities                                                                                                                  |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **Channels**     | WhatsApp (Baileys), Telegram (long-poll), Email (SendGrid); Instagram/Facebook stubs pending Meta verification                |
+| **AI Agents**    | Lead Qualifier, Personalization, Deal Closer, Content Recommender; Campaign Generator, Segmentation, Follow-up (cron-invoked) |
+| **CRM**          | Contacts, Deals (Kanban pipeline), Activities, Lead Registrations with CV upload                                              |
+| **Marketing**    | Campaigns, Segments (rule compiler → MongoDB), Content Studio (DALL-E / Stability AI), Approval Queue                         |
+| **Admin Panel**  | React 18 + Vite + TailwindCSS dashboard with real-time Socket.io updates                                                      |
+| **Multi-tenant** | Per-tenant credentials, plans, brand voice, budget caps                                                                       |
 
 ## Quick Start
 
@@ -131,18 +131,18 @@ Default login is created on first run — check server logs for credentials, or 
 
 Key pages:
 
-| Page | Path | Purpose |
-|------|------|---------|
-| Dashboard | `/dashboard` | System overview, device status |
-| Sessions | `/sessions` | WhatsApp device management + QR |
-| CRM | `/crm` | Contacts, Deals, Activities, Registrations |
-| Agents Hub | `/agents` | Configure AI agents, approval queue, skills |
-| Campaigns | `/campaigns` | Create and launch marketing campaigns |
-| Content Studio | `/content` | AI image generation for campaigns |
-| Channels | `/channels` | Telegram, Email, WhatsApp connections |
-| Datasets | `/datasets` | Knowledge base, AI personality, commands |
-| Workflows | `/workflows` | Visual automation builder |
-| Insights | `/insights` | Marketing analytics |
+| Page           | Path         | Purpose                                     |
+| -------------- | ------------ | ------------------------------------------- |
+| Dashboard      | `/dashboard` | System overview, device status              |
+| Sessions       | `/sessions`  | WhatsApp device management + QR             |
+| CRM            | `/crm`       | Contacts, Deals, Activities, Registrations  |
+| Agents Hub     | `/agents`    | Configure AI agents, approval queue, skills |
+| Campaigns      | `/campaigns` | Create and launch marketing campaigns       |
+| Content Studio | `/content`   | AI image generation for campaigns           |
+| Channels       | `/channels`  | Telegram, Email, WhatsApp connections       |
+| Datasets       | `/datasets`  | Knowledge base, AI personality, commands    |
+| Workflows      | `/workflows` | Visual automation builder                   |
+| Insights       | `/insights`  | Marketing analytics                         |
 
 ## Multi-tenant Setup
 

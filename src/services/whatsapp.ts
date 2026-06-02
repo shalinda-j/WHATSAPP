@@ -423,17 +423,23 @@ export class WhatsAppSessionManager {
       );
 
       // Handle Incoming Calls (AI Call Assistant)
+      // Routed through LiveCallService, which picks the best provider:
+      //  • reject-reply (default, Baileys) — reject + smart text/voice reply
+      //  • live-answer (WhatsApp Business Calling API) — accept + stream TTS,
+      //    only when credentials + a media-capable transport are available.
+      // Dynamic import keeps the module graph acyclic and the change minimal.
       sock.ev.on('call', async (calls) => {
+        const { liveCallService } = await import('./LiveCallService');
         for (const call of calls) {
           if (call.status === 'offer') {
-            await callAssistant.handleIncomingCall(
-              call.id,
-              call.from,
+            await liveCallService.handleIncomingCall({
+              callId: call.id,
+              from: call.from,
               sessionId,
-              async (callId, from) => {
+              rejectCall: async (callId, from) => {
                 await sock.rejectCall(callId, from);
               },
-            );
+            });
           }
         }
       });

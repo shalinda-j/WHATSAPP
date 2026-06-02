@@ -239,7 +239,8 @@ export default function Campaigns() {
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Multi-channel campaigns powered by the CampaignGenerator agent.
-            Attach images from Content Studio. Conversion attribution wires through to Leads &amp; Bookings.
+            Attach images from Content Studio. Conversion attribution wires
+            through to Leads &amp; Bookings.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -296,7 +297,9 @@ export default function Campaigns() {
                   <td className="px-3 py-2 font-medium text-gray-900">
                     {c.name}
                     {c.variants.some((v) => v.mediaUrl) && (
-                      <span title="Has image" className="inline"><Image className="h-3 w-3 text-blue-400 inline ml-1.5" /></span>
+                      <span title="Has image" className="inline">
+                        <Image className="h-3 w-3 text-blue-400 inline ml-1.5" />
+                      </span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-gray-700">

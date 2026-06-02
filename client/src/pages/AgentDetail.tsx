@@ -159,7 +159,8 @@ export default function AgentDetail() {
   };
 
   const clearCandidate = async () => {
-    if (!confirm('Clear candidate? Traffic returns to 100% on current.')) return;
+    if (!confirm('Clear candidate? Traffic returns to 100% on current.'))
+      return;
     const last = data?.versions.find((v) => v.isCandidate);
     if (!last) return;
     await api.patch(`/api/agents/${name}/versions/${last.version}`, {

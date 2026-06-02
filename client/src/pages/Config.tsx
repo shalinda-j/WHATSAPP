@@ -445,9 +445,7 @@ export default function Config() {
       description: '',
       isProvider: isAi || isImage,
       providerType: isImage ? 'image-openai' : 'openai',
-      aiModel: isImage
-        ? IMAGE_PROVIDER_META['image-openai'].defaultModel
-        : '',
+      aiModel: isImage ? IMAGE_PROVIDER_META['image-openai'].defaultModel : '',
       isActive: false,
       usageLimit: isImage ? 0 : 1000000,
       costPerToken: isImage ? 0 : 0.000002,
@@ -1484,9 +1482,8 @@ export default function Config() {
                 </h3>
                 <p className="text-sm text-gray-700 mt-1">
                   Plug an API key in here and Content Studio + every agent's
-                  image-generation calls pick it up immediately — no
-                  environment variable, no restart. Stored encrypted via
-                  CryptoService.
+                  image-generation calls pick it up immediately — no environment
+                  variable, no restart. Stored encrypted via CryptoService.
                 </p>
                 <button
                   onClick={() => {
@@ -1497,8 +1494,7 @@ export default function Config() {
                       isProvider: true,
                       providerType: 'image-openai',
                       apiKey: '',
-                      aiModel:
-                        IMAGE_PROVIDER_META['image-openai'].defaultModel,
+                      aiModel: IMAGE_PROVIDER_META['image-openai'].defaultModel,
                       isActive: true,
                     });
                     setEditingId(null);
@@ -1519,8 +1515,8 @@ export default function Config() {
                 No image providers connected yet
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                Click <em>Connect image provider</em> above to add an OpenAI
-                or Stability key.
+                Click <em>Connect image provider</em> above to add an OpenAI or
+                Stability key.
               </p>
             </div>
           ) : (

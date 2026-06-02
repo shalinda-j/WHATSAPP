@@ -73,7 +73,9 @@ export default function TelephonyProvidersSection() {
         `Call queued (${res.data.providerCallId}) — status: ${res.data.status}`,
       );
     } catch (err) {
-      const ax = err as { response?: { data?: { error?: string; hint?: string } } };
+      const ax = err as {
+        response?: { data?: { error?: string; hint?: string } };
+      };
       setCallResult(
         ax.response?.data?.hint ||
           ax.response?.data?.error ||
@@ -117,7 +119,8 @@ export default function TelephonyProvidersSection() {
           <>
             {pinnedEnv && (
               <div className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded px-3 py-1.5">
-                Pinned via env: <code>VOICE_TELEPHONY_PROVIDER={pinnedEnv}</code>
+                Pinned via env:{' '}
+                <code>VOICE_TELEPHONY_PROVIDER={pinnedEnv}</code>
               </div>
             )}
 

@@ -41,7 +41,7 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run client\"",
     "build:client": "cd client && npm install && npm run build",
     "build": "npm run build:client && tsc",
-    "test": "jest --passWithNoTests",
+    "test": "node --max-old-space-size=4096 node_modules/.bin/jest --passWithNoTests --runInBand",
     "start": "node dist/index.js"
   },
   "dependencies": {
@@ -78,6 +78,9 @@
     "socket.io": "^4.8.3",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "^4.4.3"
+  },
+  "optionalDependencies": {
+    "werift": "^0.19.0"
   },
   "overrides": {
     "axios": "^1.7.9",

@@ -453,7 +453,8 @@ export default function CRM() {
       const params = new URLSearchParams();
       params.append('page', contactsPage.toString());
       params.append('limit', '20');
-      if (debouncedContactSearch) params.append('search', debouncedContactSearch);
+      if (debouncedContactSearch)
+        params.append('search', debouncedContactSearch);
       if (contactTypeFilter) params.append('type', contactTypeFilter);
       appendSessionScope(params);
 
@@ -492,9 +493,7 @@ export default function CRM() {
       const params = new URLSearchParams();
       appendSessionScope(params);
       const qs = params.toString();
-      const res = await api.get(
-        `/api/crm/deals/kanban${qs ? `?${qs}` : ''}`,
-      );
+      const res = await api.get(`/api/crm/deals/kanban${qs ? `?${qs}` : ''}`);
       setDealsByStage(res.data);
     } catch (err) {
       console.error('Failed to fetch deals kanban', err);
@@ -556,7 +555,8 @@ export default function CRM() {
       const params = new URLSearchParams();
       params.append('page', registrationsPage.toString());
       params.append('limit', '20');
-      if (debouncedRegistrationSearch) params.append('search', debouncedRegistrationSearch);
+      if (debouncedRegistrationSearch)
+        params.append('search', debouncedRegistrationSearch);
       if (registrationStatusFilter)
         params.append('status', registrationStatusFilter);
       if (registrationJobFilter)
@@ -658,7 +658,7 @@ export default function CRM() {
     activeTab,
     sessionFilter,
     contactsPage,
-    debouncedContactSearch,  // debounced — fires 300 ms after the user stops typing
+    debouncedContactSearch, // debounced — fires 300 ms after the user stops typing
     contactTypeFilter,
     dealsPage,
     dealSearch,
@@ -667,7 +667,7 @@ export default function CRM() {
     activityTypeFilter,
     analyticsPeriod,
     registrationsPage,
-    debouncedRegistrationSearch,  // debounced
+    debouncedRegistrationSearch, // debounced
     registrationStatusFilter,
     registrationJobFilter,
   ]);
@@ -793,12 +793,19 @@ export default function CRM() {
       appendSessionScope(params);
       const res = await api.get(`/api/crm/contacts?${params.toString()}`);
       setModalContacts(
-        (res.data.contacts ?? res.data ?? []).map((c: any) => ({
-          _id: c._id,
-          firstName: c.firstName,
-          lastName: c.lastName,
-          company: c.company,
-        })),
+        (res.data.contacts ?? res.data ?? []).map(
+          (c: {
+            _id: string;
+            firstName?: string;
+            lastName?: string;
+            company?: string;
+          }) => ({
+            _id: c._id,
+            firstName: c.firstName,
+            lastName: c.lastName,
+            company: c.company,
+          }),
+        ),
       );
     } catch {
       /* non-fatal — picker just stays empty */
@@ -812,10 +819,12 @@ export default function CRM() {
       appendSessionScope(params);
       const res = await api.get(`/api/crm/deals?${params.toString()}`);
       setModalDeals(
-        (res.data.deals ?? res.data ?? []).map((d: any) => ({
-          _id: d._id,
-          title: d.title,
-        })),
+        (res.data.deals ?? res.data ?? []).map(
+          (d: { _id: string; title?: string }) => ({
+            _id: d._id,
+            title: d.title,
+          }),
+        ),
       );
     } catch {
       /* non-fatal */
@@ -1019,11 +1028,6 @@ export default function CRM() {
       `/api/export/contacts.csv${qs ? `?${qs}` : ''}`,
       `crm-contacts-${date}.csv`,
     );
-  };
-
-  const handleExportAllLeadsCSV = () => {
-    const date = new Date().toISOString().split('T')[0];
-    return downloadCsv('/api/export/leads.csv', `leads-${date}.csv`);
   };
 
   const getCategoryLabel = (cat: string) => {
@@ -2534,9 +2538,7 @@ export default function CRM() {
               {sessions.map((s) => (
                 <option key={s.sessionId} value={s.sessionId}>
                   {s.sessionName || s.sessionId}
-                  {s.status && s.status !== 'connected'
-                    ? ` (${s.status})`
-                    : ''}
+                  {s.status && s.status !== 'connected' ? ` (${s.status})` : ''}
                 </option>
               ))}
             </select>

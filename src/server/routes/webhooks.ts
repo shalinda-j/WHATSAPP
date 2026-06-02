@@ -267,9 +267,8 @@ async function metaWebhookIngest(
     if (!tenant) return res.status(404).json({ error: 'tenant_not_found' });
 
     // ── X-Hub-Signature-256 verification ──────────────────────────────────
-    const ChannelConnection = (
-      await import('../../models/ChannelConnection')
-    ).default;
+    const ChannelConnection = (await import('../../models/ChannelConnection'))
+      .default;
     const conn = await ChannelConnection.findOne({
       tenantId: tenant._id,
       channel,
@@ -278,15 +277,15 @@ async function metaWebhookIngest(
       | string
       | undefined;
     if (appSecret) {
-      const sigHeader = req.headers['x-hub-signature-256'] as string | undefined;
+      const sigHeader = req.headers['x-hub-signature-256'] as
+        | string
+        | undefined;
       if (!sigHeader) {
         console.warn(`[${channel}] Missing X-Hub-Signature-256 from Meta`);
         return res.status(401).json({ error: 'missing_signature' });
       }
       const bodyStr =
-        typeof req.body === 'string'
-          ? req.body
-          : JSON.stringify(req.body);
+        typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
       const expected =
         'sha256=' +
         crypto.createHmac('sha256', appSecret).update(bodyStr).digest('hex');
@@ -394,6 +393,98 @@ router.post('/sendgrid', metaEventRateLimit, async (req, res) => {
   } catch (err: any) {
     console.error('sendgrid webhook error:', err);
     res.status(500).json({ error: err?.message ?? 'server_error' });
+  }
+});
+
+// --- WHATSAPP BUSINESS CALLING API ---
+// Live voice call answering. Meta delivers call lifecycle events (ringing /
+// connect / terminate) to a Cloud API webhook, carrying the caller's WebRTC
+// offer SDP. We hand each event to WhatsAppCallingService, which negotiates a
+// media bridge and routes through LiveCallService → BusinessCallingApiProvider
+// to accept the call and stream TTS audio. Falls back to reject if the media
+// stack / credentials are unavailable.
+//
+// GET  = Meta verification handshake (hub.challenge).
+// POST = call events. Signature verified via X-Hub-Signature-256 when an
+//        app secret is configured (env WHATSAPP_APP_SECRET or per-tenant).
+
+router.get('/whatsapp-calling', metaEventRateLimit, async (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  const { liveCallSettings } =
+    await import('../../services/LiveCallSettingsService');
+  const expected = await liveCallSettings.getWebhookVerifyToken();
+  if (mode === 'subscribe' && expected && token === expected) {
+    return res.status(200).send(String(challenge ?? ''));
+  }
+  return res.status(403).send('forbidden');
+});
+
+router.post('/whatsapp-calling', metaEventRateLimit, async (req, res) => {
+  try {
+    // Optional HMAC verification: Meta signs the body with the app secret.
+    const { liveCallSettings } =
+      await import('../../services/LiveCallSettingsService');
+    const appSecret = await liveCallSettings.getAppSecret();
+    if (appSecret) {
+      const sigHeader = req.headers['x-hub-signature-256'] as
+        | string
+        | undefined;
+      const bodyStr =
+        typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+      const expected =
+        'sha256=' +
+        crypto.createHmac('sha256', appSecret).update(bodyStr).digest('hex');
+      let ok = false;
+      if (sigHeader) {
+        try {
+          const a = Buffer.from(sigHeader);
+          const b = Buffer.from(expected);
+          ok = a.length === b.length && crypto.timingSafeEqual(a, b);
+        } catch {
+          ok = false;
+        }
+      }
+      if (!ok) {
+        console.warn('[whatsapp-calling] Invalid X-Hub-Signature-256');
+        return res.status(403).json({ error: 'invalid_signature' });
+      }
+    }
+
+    // Always 200 fast so Meta doesn't retry; process calls asynchronously.
+    res.status(200).json({ ok: true });
+
+    const { WhatsAppCallingService } =
+      await import('../../services/whatsappCalling/WhatsAppCallingService');
+
+    // Cloud API shape: entry[].changes[].value.calls[]
+    const entries = Array.isArray(req.body?.entry) ? req.body.entry : [];
+    for (const entry of entries) {
+      const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+      for (const change of changes) {
+        const value = change?.value || {};
+        const calls = Array.isArray(value.calls) ? value.calls : [];
+        const phoneNumberId =
+          value?.metadata?.phone_number_id ||
+          process.env.WHATSAPP_PHONE_NUMBER_ID ||
+          'whatsapp-calling';
+        for (const call of calls) {
+          await WhatsAppCallingService.handleWebhookCall(
+            call,
+            String(phoneNumberId),
+          ).catch((err) =>
+            console.error('whatsapp-calling handleWebhookCall error:', err),
+          );
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error('whatsapp-calling webhook error:', err);
+    // Response already sent (200) in the happy path; guard double-send.
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message ?? 'server_error' });
+    }
   }
 });
 

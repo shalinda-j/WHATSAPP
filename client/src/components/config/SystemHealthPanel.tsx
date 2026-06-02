@@ -85,9 +85,9 @@ export default function SystemHealthPanel() {
             message:
               res.status >= 200 && res.status < 400
                 ? 'OK'
-                : (res.data as { error?: string; message?: string })?.error ??
+                : ((res.data as { error?: string; message?: string })?.error ??
                   (res.data as { message?: string })?.message ??
-                  `HTTP ${res.status}`,
+                  `HTTP ${res.status}`),
             detail: res.data,
           };
         } catch (err) {
@@ -128,9 +128,7 @@ export default function SystemHealthPanel() {
                   : 'bg-red-100 text-red-700'
               }`}
             >
-              {failedCount === 0
-                ? 'All systems OK'
-                : `${failedCount} failing`}
+              {failedCount === 0 ? 'All systems OK' : `${failedCount} failing`}
             </span>
           )}
         </div>
@@ -139,16 +137,14 @@ export default function SystemHealthPanel() {
           disabled={running}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-white border border-gray-200 rounded-md hover:bg-gray-50 disabled:opacity-50"
         >
-          <RefreshCw
-            className={`h-4 w-4 ${running ? 'animate-spin' : ''}`}
-          />
+          <RefreshCw className={`h-4 w-4 ${running ? 'animate-spin' : ''}`} />
           Re-run probes
         </button>
       </div>
 
       <p className="text-xs text-gray-600 mb-3">
-        Each row hits a real endpoint and shows what it returned. Failures
-        here will surface in the browser network tab as the same{' '}
+        Each row hits a real endpoint and shows what it returned. Failures here
+        will surface in the browser network tab as the same{' '}
         <code>ERR_CONNECTION_CLOSED</code> /<code>500</code> /<code>503</code>{' '}
         you saw — so this is the right place to debug from.
       </p>
@@ -214,12 +210,10 @@ export default function SystemHealthPanel() {
                 server process crashed. Check server logs.
               </li>
               <li>
-                HTTP 503 → MongoDB disconnected. Check{' '}
-                <code>MONGODB_URI</code> + IP whitelist.
+                HTTP 503 → MongoDB disconnected. Check <code>MONGODB_URI</code>{' '}
+                + IP whitelist.
               </li>
-              <li>
-                HTTP 401 → JWT expired. Sign out + sign back in.
-              </li>
+              <li>HTTP 401 → JWT expired. Sign out + sign back in.</li>
               <li>
                 HTTP 502 on a provider probe → provider SDK / credentials
                 misconfigured. Visit the provider's section below to set
