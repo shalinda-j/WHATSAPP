@@ -5,6 +5,31 @@ import Booking from '../../models/Booking';
 import { authenticateToken } from '../middleware/auth';
 import { resolveTenant } from '../middleware/tenantContext';
 
+const keywordsMap: Record<string, string[]> = {
+  jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
+  register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
+  payment: ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
+  booking: ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
+  location: ['address', 'location', 'where', 'branch', 'office', 'map'],
+  services: ['service', 'what do you do', 'help', 'information', 'details'],
+  hello: ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
+  language: ['sinhala', 'english', 'tamil', 'translate'],
+};
+
+// ⚡ Bolt: Precompile keywords into RegExp objects at the module scope
+// Recreating arrays and using nested Array.some() with String.includes()
+// inside the request loop introduces an O(M*N) CPU bottleneck and unnecessary GC overhead.
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const precompiledKeywordRegexes: { category: string; regex: RegExp }[] = Object.entries(
+  keywordsMap,
+).map(([category, keywords]) => ({
+  category,
+  regex: new RegExp(keywords.map(escapeRegex).join('|'), 'i'),
+}));
+
 const router = Router();
 
 router.use(authenticateToken);
@@ -108,21 +133,11 @@ router.get('/questions', async (req, res) => {
       .lean();
 
     const questionCounts: Record<string, number> = {};
-    const keywordsMap: Record<string, string[]> = {
-      jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
-      register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
-      payment: ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
-      booking: ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
-      location: ['address', 'location', 'where', 'branch', 'office', 'map'],
-      services: ['service', 'what do you do', 'help', 'information', 'details'],
-      hello: ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
-      language: ['sinhala', 'english', 'tamil', 'translate'],
-    };
 
     for (const msg of userMessages) {
-      const content = msg.content.toLowerCase();
-      for (const [category, keywords] of Object.entries(keywordsMap)) {
-        if (keywords.some((k) => content.includes(k))) {
+      const content = msg.content;
+      for (const { category, regex } of precompiledKeywordRegexes) {
+        if (regex.test(content)) {
           questionCounts[category] = (questionCounts[category] || 0) + 1;
           break;
         }
