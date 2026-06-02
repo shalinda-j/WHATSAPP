@@ -378,8 +378,20 @@ export class ConfigService {
     }
 
     try {
-      // Fetch all active datasets
-      const datasets = await Dataset.find({ isActive: true });
+      // Fetch only KNOWLEDGE-bearing datasets for the AI context. Previously
+      // this read EVERY active dataset (commands, links, personality, config,
+      // acknowledgements, etc.), dumping their raw JSON into the prompt — that
+      // bloated the token budget and fed the model internal config that looked
+      // like Q&A. We now include only the types meant to inform answers, which
+      // also means megatext documents finally reach the AI.
+      const datasets = await Dataset.find({
+        isActive: true,
+        $or: [
+          { type: { $in: ['knowledge', 'megatext'] } },
+          { type: { $exists: false } }, // legacy rows with no type
+          { type: null },
+        ],
+      });
 
       let dynamicContent = '';
       if (datasets.length > 0) {

@@ -228,7 +228,6 @@ export default function VoiceAgentHub() {
     }>
   >([]);
   const [savingCallAgent, setSavingCallAgent] = useState(false);
-  const [_testingLang, setTestingLang] = useState<string | null>(null);
   const [testingVoiceLang, setTestingVoiceLang] = useState<string | null>(null);
   const [testVoiceError, setTestVoiceError] = useState<string | null>(null);
 
@@ -320,6 +319,25 @@ export default function VoiceAgentHub() {
     }
   }, [message]);
 
+  // Toggle Call Agent on/off and PERSIST immediately. Previously this only
+  // flipped local state, so the change was lost on refresh (the toggle looked
+  // like it worked but never reached the backend). Optimistic update with
+  // revert-on-failure, matching the Voice Agent master toggle pattern.
+  const toggleCallAgent = async () => {
+    const next = !callAgentEnabled;
+    setCallAgentEnabled(next); // optimistic
+    try {
+      await api.post('/api/call-agent/toggle', { enabled: next });
+      setMessage({
+        type: 'success',
+        text: `Call Agent ${next ? 'enabled' : 'disabled'}.`,
+      });
+    } catch {
+      setCallAgentEnabled(!next); // revert
+      setMessage({ type: 'error', text: 'Failed to update Call Agent.' });
+    }
+  };
+
   // Save Call Agent settings
   const saveCallAgentSettings = async () => {
     setSavingCallAgent(true);
@@ -344,7 +362,6 @@ export default function VoiceAgentHub() {
 
   // Test language greeting — calls Gemini TTS and plays back audio in the browser
   const testLanguageGreeting = async (lang: 'en' | 'si' | 'ta') => {
-    setTestingLang(lang);
     setTestingVoiceLang(lang);
     setTestVoiceError(null);
     try {
@@ -384,7 +401,6 @@ export default function VoiceAgentHub() {
         'TTS test failed';
       setTestVoiceError(msg);
     } finally {
-      setTestingLang(null);
       setTestingVoiceLang(null);
     }
   };
@@ -1326,9 +1342,7 @@ export default function VoiceAgentHub() {
                       {callAgentEnabled ? '● Active' : '○ Inactive'}
                     </span>
                     <button
-                      onClick={() => {
-                        setCallAgentEnabled(!callAgentEnabled);
-                      }}
+                      onClick={toggleCallAgent}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
                         callAgentEnabled ? 'bg-green-500' : 'bg-gray-300'
                       }`}
