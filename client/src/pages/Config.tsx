@@ -205,9 +205,10 @@ export default function Config() {
     if (t.startsWith('sk-') && provider === 'openai-session') {
       return 'That looks like an OpenAI API key, not a session cookie. To use API keys, close this modal and add an "OpenAI" provider in the Providers list (NOT the "Session" option).';
     }
-    if (provider === 'openai-session' && !t.startsWith('ey')) {
-      return 'ChatGPT session cookies start with "eyJ" (JWT format). Get it from chatgpt.com -> F12 -> Application -> Cookies -> __Secure-next-auth.session-token.';
-    }
+    // NOTE: do NOT hard-block on a specific prefix for ChatGPT. OpenAI issues
+    // both JWT (eyJ...) and opaque (e.g. QACO...) session tokens depending on
+    // the account/region — the old `!startsWith('ey')` check rejected valid
+    // new cookies. Let the server be the source of truth via /session/test.
     if (provider === 'claude-session' && !t.startsWith('sk-ant-sid01-')) {
       return 'Claude session cookies start with "sk-ant-sid01-". Get it from claude.ai -> F12 -> Application -> Cookies -> sessionKey.';
     }
@@ -2260,6 +2261,13 @@ export default function Config() {
                     ? '~7 days'
                     : '~30 days'}{' '}
                   — you&apos;ll need to repeat this then.
+                  <span className="block mt-1.5">
+                    ⚠️ This often <strong>fails from a hosted server</strong>{' '}
+                    (Cloudflare blocks data-center IPs). For reliable replies,
+                    use an official API-key provider (Gemini / Groq / OpenAI) or
+                    a <strong>Custom</strong> OpenAI-compatible endpoint
+                    instead.
+                  </span>
                 </div>
               </div>
 
@@ -2274,12 +2282,12 @@ export default function Config() {
                       <li>
                         Open{' '}
                         <a
-                          href="https://chat.openai.com"
+                          href="https://chatgpt.com"
                           target="_blank"
                           rel="noopener noreferrer"
                           className="underline font-medium"
                         >
-                          chat.openai.com
+                          chatgpt.com
                         </a>{' '}
                         and log in.
                       </li>
@@ -2294,7 +2302,7 @@ export default function Config() {
                         Go to <strong>Application</strong> tab →{' '}
                         <strong>Cookies</strong> →{' '}
                         <code className="bg-white px-1 rounded">
-                          https://chat.openai.com
+                          https://chatgpt.com
                         </code>
                       </li>
                       <li>
@@ -2305,8 +2313,10 @@ export default function Config() {
                         and copy its <strong>Value</strong>.
                       </li>
                       <li>
-                        Paste it below. (Long string starting with{' '}
-                        <code className="bg-white px-1 rounded">eyJ...</code>)
+                        Paste it below — copy the <strong>whole</strong> value
+                        (it may start with{' '}
+                        <code className="bg-white px-1 rounded">eyJ…</code> or
+                        be an opaque string).
                       </li>
                     </>
                   ) : (
