@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../config';
-import { Building2, RefreshCw, Plus } from 'lucide-react';
+import { Building2, RefreshCw, Plus, X } from 'lucide-react';
 
 interface TenantRow {
   _id: string;
@@ -34,6 +34,17 @@ export default function Tenants() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // New-tenant modal
+  const [showCreate, setShowCreate] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({
+    name: '',
+    slug: '',
+    plan: 'free' as TenantRow['plan'],
+    industry: '',
+    primaryLanguage: 'si',
+  });
+
   const load = async () => {
     setLoading(true);
     setError(null);
@@ -44,6 +55,51 @@ export default function Tenants() {
       setError(err instanceof Error ? err.message : 'Failed to load');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const createTenant = async () => {
+    if (!form.name.trim() || !form.slug.trim()) {
+      alert('Name and slug are required');
+      return;
+    }
+    setCreating(true);
+    try {
+      await api.post('/api/tenants', {
+        name: form.name.trim(),
+        slug: form.slug.trim().toLowerCase(),
+        plan: form.plan,
+        brand: {
+          industry: form.industry.trim() || undefined,
+          primaryLanguage: form.primaryLanguage,
+        },
+      });
+      setShowCreate(false);
+      setForm({
+        name: '',
+        slug: '',
+        plan: 'free',
+        industry: '',
+        primaryLanguage: 'si',
+      });
+      await load();
+    } catch (err) {
+      const ax = err as { response?: { data?: { error?: string } } };
+      alert(ax?.response?.data?.error || 'Failed to create tenant');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const setTenantStatus = async (slug: string, activate: boolean) => {
+    try {
+      await api.post(
+        `/api/tenants/${slug}/${activate ? 'activate' : 'suspend'}`,
+      );
+      await load();
+    } catch (err) {
+      const ax = err as { response?: { data?: { error?: string } } };
+      alert(ax?.response?.data?.error || 'Failed to update tenant');
     }
   };
 
@@ -71,9 +127,8 @@ export default function Tenants() {
             <RefreshCw className="h-4 w-4" /> Refresh
           </button>
           <button
-            disabled
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm bg-green-600 text-white opacity-50 cursor-not-allowed"
-            title="Tenant onboarding wizard — Phase 4"
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm bg-green-600 text-white hover:bg-green-700"
           >
             <Plus className="h-4 w-4" /> New tenant
           </button>
@@ -108,6 +163,7 @@ export default function Tenants() {
                 <th className="text-left px-3 py-2">Status</th>
                 <th className="text-left px-3 py-2">Language</th>
                 <th className="text-left px-3 py-2">Industry</th>
+                <th className="text-right px-3 py-2">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -139,10 +195,143 @@ export default function Tenants() {
                   <td className="px-3 py-2 text-gray-700">
                     {t.brand?.industry ?? '—'}
                   </td>
+                  <td className="px-3 py-2 text-right">
+                    {t.status === 'active' ? (
+                      <button
+                        onClick={() => setTenantStatus(t.slug, false)}
+                        className="text-xs text-red-600 hover:underline"
+                      >
+                        Suspend
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setTenantStatus(t.slug, true)}
+                        className="text-xs text-green-600 hover:underline"
+                      >
+                        Activate
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* New tenant modal */}
+      {showCreate && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold">New tenant</h3>
+              <button onClick={() => setShowCreate(false)}>
+                <X className="h-5 w-5 text-gray-400" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Company name
+                </label>
+                <input
+                  className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  value={form.name}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, name: e.target.value }))
+                  }
+                  placeholder="Work 360 Training"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Slug (lowercase, a-z 0-9 -)
+                </label>
+                <input
+                  className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono"
+                  value={form.slug}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      slug: e.target.value
+                        .toLowerCase()
+                        .replace(/[^a-z0-9-]/g, ''),
+                    }))
+                  }
+                  placeholder="work360"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Plan
+                  </label>
+                  <select
+                    className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                    value={form.plan}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        plan: e.target.value as TenantRow['plan'],
+                      }))
+                    }
+                  >
+                    <option value="free">Free</option>
+                    <option value="starter">Starter</option>
+                    <option value="growth">Growth</option>
+                    <option value="enterprise">Enterprise</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Language
+                  </label>
+                  <select
+                    className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                    value={form.primaryLanguage}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        primaryLanguage: e.target.value,
+                      }))
+                    }
+                  >
+                    <option value="si">Sinhala</option>
+                    <option value="ta">Tamil</option>
+                    <option value="en">English</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Industry (optional)
+                </label>
+                <input
+                  className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  value={form.industry}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, industry: e.target.value }))
+                  }
+                  placeholder="Training / Recruitment"
+                />
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setShowCreate(false)}
+                className="px-3 py-2 text-sm rounded-md border border-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createTenant}
+                disabled={creating}
+                className="px-4 py-2 text-sm rounded-md bg-green-600 text-white disabled:opacity-50"
+              >
+                {creating ? 'Creating…' : 'Create tenant'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

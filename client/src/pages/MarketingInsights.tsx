@@ -154,6 +154,36 @@ export default function MarketingInsights() {
             )}
           </section>
 
+          {report.topCampaigns.length > 0 && (
+            <section>
+              <h2 className="text-sm font-semibold text-gray-700 mb-2">
+                Top campaigns
+              </h2>
+              <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Campaign</th>
+                      <th className="px-3 py-2 text-right">Converted</th>
+                      <th className="px-3 py-2 text-right">Conversion rate</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {report.topCampaigns.map((c) => (
+                      <tr key={c.campaignId}>
+                        <td className="px-3 py-2 text-gray-900">{c.name}</td>
+                        <td className="px-3 py-2 text-right">{c.converted}</td>
+                        <td className="px-3 py-2 text-right">
+                          {(c.conversionRate * 100).toFixed(1)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
           <section>
             <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
               <Sparkles className="h-4 w-4" /> AI recommendations
