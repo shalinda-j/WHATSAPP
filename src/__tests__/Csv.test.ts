@@ -26,9 +26,11 @@ describe('toCsv', () => {
     const csv = toCsv([
       { name: 'Smith, John', note: 'has "quotes"\nand newline' },
     ]);
-    const lines = csv.trim().split('\n');
-    expect(lines[1]).toContain('"Smith, John"');
-    expect(lines[1]).toContain('"has ""quotes""\nand newline"');
+    // Per RFC 4180 the embedded newline is preserved *inside* the quoted
+    // field, so we must assert against the whole CSV — splitting on '\n'
+    // would (correctly) break the field apart.
+    expect(csv).toContain('"Smith, John"');
+    expect(csv).toContain('"has ""quotes""\nand newline"');
   });
 
   it('serialises Date values as ISO-8601 UTC', () => {

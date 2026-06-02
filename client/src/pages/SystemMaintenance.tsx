@@ -171,10 +171,11 @@ export default function SystemMaintenance() {
           text: `Wiped ${res.data.totalDeleted} row(s) across the Data Sets tabs.`,
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Wipe failed:', error);
+      const apiErr = error as { response?: { data?: { error?: string } } };
       const errorMessage =
-        error?.response?.data?.error ??
+        apiErr?.response?.data?.error ??
         (error instanceof Error ? error.message : 'Wipe failed.');
       setMessage({ type: 'error', text: errorMessage });
     } finally {
@@ -354,9 +355,9 @@ export default function SystemMaintenance() {
                 Wipe Data Sets
               </h3>
               <p className="text-sm text-orange-600 mb-4">
-                Deletes everything in Knowledge / Commands / Links / Mega Text
-                / AI Personality / Skills / Forms tabs. Keeps runtime config
-                so the bot still works. Irreversible.
+                Deletes everything in Knowledge / Commands / Links / Mega Text /
+                AI Personality / Skills / Forms tabs. Keeps runtime config so
+                the bot still works. Irreversible.
               </p>
             </div>
             <button
@@ -518,14 +519,13 @@ export default function SystemMaintenance() {
                   Wipe Data Sets content
                 </h3>
                 <p className="text-sm text-gray-600 text-center mb-4">
-                  Deletes everything in the Knowledge / Commands / Links /
-                  Mega Text / AI Personality / Skills / Forms tabs.
+                  Deletes everything in the Knowledge / Commands / Links / Mega
+                  Text / AI Personality / Skills / Forms tabs.
                   <br />
                   <br />
                   <b>Preserved:</b> bot runtime config (HELP_MESSAGE,
-                  AI_PERSONALITY config key, JOB_TYPES, COUNTRIES, …),
-                  CRM contacts, leads, chat history, and the LID→phone
-                  mapping.
+                  AI_PERSONALITY config key, JOB_TYPES, COUNTRIES, …), CRM
+                  contacts, leads, chat history, and the LID→phone mapping.
                 </p>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Confirm with your admin password

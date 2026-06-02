@@ -41,7 +41,11 @@ interface RetrievedResult {
   formatted: string;
 }
 
-export default function AgentTrainingPanel({ agentName }: { agentName: string }) {
+export default function AgentTrainingPanel({
+  agentName,
+}: {
+  agentName: string;
+}) {
   const [examples, setExamples] = useState<TrainingExample[]>([]);
   const [loading, setLoading] = useState(true);
   const [embeddingReady, setEmbeddingReady] = useState(false);
@@ -131,7 +135,8 @@ export default function AgentTrainingPanel({ agentName }: { agentName: string })
   };
 
   const reindex = async () => {
-    if (!window.confirm('Re-embed every active example for this agent?')) return;
+    if (!window.confirm('Re-embed every active example for this agent?'))
+      return;
     try {
       const res = await api.post<{ queued: number }>(
         `/api/agent-training/${agentName}/examples/reindex`,
@@ -343,7 +348,10 @@ export default function AgentTrainingPanel({ agentName }: { agentName: string })
                     <p className="text-gray-700 truncate" title={r.input}>
                       <strong>U:</strong> {r.input}
                     </p>
-                    <p className="text-gray-700 truncate" title={r.expectedOutput}>
+                    <p
+                      className="text-gray-700 truncate"
+                      title={r.expectedOutput}
+                    >
                       <strong>A:</strong> {r.expectedOutput}
                     </p>
                   </div>
@@ -414,7 +422,10 @@ export default function AgentTrainingPanel({ agentName }: { agentName: string })
             >
               <div className="flex justify-between items-start gap-3">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-gray-800 truncate" title={ex.input}>
+                  <p
+                    className="text-xs text-gray-800 truncate"
+                    title={ex.input}
+                  >
                     <strong className="text-blue-700">User:</strong> {ex.input}
                   </p>
                   <p

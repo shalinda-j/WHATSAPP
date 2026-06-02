@@ -253,8 +253,13 @@ export default function ChatInterface() {
 
       // Honour the session filter — drop events from other devices when the
       // operator has scoped the view to a specific one.
-      const msgSessionId = data.metadata && (data.metadata as { sessionId?: string }).sessionId;
-      if (activeFilter !== 'all' && msgSessionId && msgSessionId !== activeFilter) {
+      const msgSessionId =
+        data.metadata && (data.metadata as { sessionId?: string }).sessionId;
+      if (
+        activeFilter !== 'all' &&
+        msgSessionId &&
+        msgSessionId !== activeFilter
+      ) {
         return;
       }
 
@@ -401,7 +406,6 @@ export default function ChatInterface() {
     // (and auto-focuses) without the operator having to refresh.
     const t = setInterval(fetchSessions, 10000);
     return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -482,8 +486,9 @@ export default function ChatInterface() {
     if (conv?.userInfo?.name) return conv.userInfo.name;
     if (conv?.userInfo?.phone) return `+${conv.userInfo.phone}`;
 
-    const pushName = (conv?.lastMessage?.metadata as { pushName?: string } | undefined)
-      ?.pushName;
+    const pushName = (
+      conv?.lastMessage?.metadata as { pushName?: string } | undefined
+    )?.pushName;
     if (pushName) return pushName;
 
     if (userId.endsWith('@lid')) return 'Unknown contact';
@@ -521,8 +526,14 @@ export default function ChatInterface() {
       // We rely on the existing polling/socket refresh path rather than
       // mutating local state — keeps the source of truth on the server.
       window.location.reload();
-    } catch (err: any) {
-      alert(err?.response?.data?.error ?? err?.message ?? 'Mapping failed.');
+    } catch (err: unknown) {
+      const apiErr = err as {
+        response?: { data?: { error?: string } };
+        message?: string;
+      };
+      alert(
+        apiErr?.response?.data?.error ?? apiErr?.message ?? 'Mapping failed.',
+      );
     } finally {
       setMapLidBusy(false);
     }
@@ -984,7 +995,8 @@ export default function ChatInterface() {
                         {/* Intent + sentiment badges (user messages only —
                             assistant replies inherit no inbound signal). */}
                         {(msg.metadata?.intent ||
-                          (isUser && msg.metadata?.sentimentLabel &&
+                          (isUser &&
+                            msg.metadata?.sentimentLabel &&
                             msg.metadata.sentimentLabel !== 'neutral')) && (
                           <div
                             className={`flex flex-wrap gap-1 ${
@@ -997,7 +1009,8 @@ export default function ChatInterface() {
                                 {msg.metadata.intent}
                               </span>
                             )}
-                            {isUser && msg.metadata?.sentimentLabel &&
+                            {isUser &&
+                              msg.metadata?.sentimentLabel &&
                               msg.metadata.sentimentLabel !== 'neutral' && (
                                 <span
                                   className={`text-[9px] px-1.5 py-0.5 rounded-full ${
@@ -1010,7 +1023,10 @@ export default function ChatInterface() {
                                       : undefined
                                   }
                                 >
-                                  {SENTIMENT_BADGE[msg.metadata.sentimentLabel].label}
+                                  {
+                                    SENTIMENT_BADGE[msg.metadata.sentimentLabel]
+                                      .label
+                                  }
                                 </span>
                               )}
                           </div>
@@ -1193,9 +1209,7 @@ export default function ChatInterface() {
                 <input
                   type="checkbox"
                   checked={exportIncludeUnresolved}
-                  onChange={(e) =>
-                    setExportIncludeUnresolved(e.target.checked)
-                  }
+                  onChange={(e) => setExportIncludeUnresolved(e.target.checked)}
                   disabled={exporting}
                   className="mt-0.5"
                 />
@@ -1203,9 +1217,9 @@ export default function ChatInterface() {
                   Also include unresolved LID rows (no phone number).{' '}
                   <span className="text-gray-400">
                     Off by default — output contains only dialable mobile
-                    numbers. Tick this on if you also want a list of LIDs
-                    the bot has not resolved yet so you can map them
-                    manually in the chat.
+                    numbers. Tick this on if you also want a list of LIDs the
+                    bot has not resolved yet so you can map them manually in the
+                    chat.
                   </span>
                 </span>
               </label>
@@ -1264,10 +1278,10 @@ export default function ChatInterface() {
               </button>
             </div>
             <p className="text-xs text-gray-500 mb-3">
-              WhatsApp gave us a privacy Linked-ID instead of the real
-              number. Enter the customer's phone in international format
-              (e.g. <span className="font-mono">94771234567</span>) and
-              the chat list will resolve immediately.
+              WhatsApp gave us a privacy Linked-ID instead of the real number.
+              Enter the customer's phone in international format (e.g.{' '}
+              <span className="font-mono">94771234567</span>) and the chat list
+              will resolve immediately.
             </p>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Phone number

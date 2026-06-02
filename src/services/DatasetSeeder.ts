@@ -129,10 +129,14 @@ Never mix languages unless the user does first.`;
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Old v3 string marker — used to detect records we can safely upgrade.
-const CONVERSATION_EXAMPLES_V3_STRING_MARKER = 'EXAMPLE 1 — Student enquiry (English)';
+const CONVERSATION_EXAMPLES_V3_STRING_MARKER =
+  'EXAMPLE 1 — Student enquiry (English)';
 
 // v4 — structured array (ConfigService & frontend both read content.en).
-const CONVERSATION_EXAMPLES_DEFAULT: Array<{ user: string; assistant: string }> = [
+const CONVERSATION_EXAMPLES_DEFAULT: Array<{
+  user: string;
+  assistant: string;
+}> = [
   {
     user: 'Hi I want to know about your courses',
     assistant: 'Hey! 👋 What career are you aiming for?',

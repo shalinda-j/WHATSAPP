@@ -85,18 +85,24 @@ export default function ContentStudio() {
     setGenerating(true);
     setError(null);
     try {
-      const res = await api.post<{ asset: Asset }>('/api/content/image/generate', {
-        prompt: prompt.trim(),
-        negativePrompt: negativePrompt.trim() || undefined,
-        size,
-        provider: provider || undefined,
-      });
+      const res = await api.post<{ asset: Asset }>(
+        '/api/content/image/generate',
+        {
+          prompt: prompt.trim(),
+          negativePrompt: negativePrompt.trim() || undefined,
+          size,
+          provider: provider || undefined,
+        },
+      );
       setAssets((prev) => [res.data.asset, ...prev]);
     } catch (err) {
       const ax = err as {
         response?: { data?: { error?: string; asset?: Asset } };
       };
-      setError(ax.response?.data?.error || (err instanceof Error ? err.message : 'Generation failed'));
+      setError(
+        ax.response?.data?.error ||
+          (err instanceof Error ? err.message : 'Generation failed'),
+      );
       if (ax.response?.data?.asset) {
         setAssets((prev) => [ax.response!.data!.asset!, ...prev]);
       }
@@ -158,7 +164,11 @@ export default function ContentStudio() {
                     ? 'bg-green-50 border-green-200 text-green-800'
                     : 'bg-amber-50 border-amber-200 text-amber-800'
                 }`}
-                title={p.ready ? `Default model: ${p.defaultModel}` : `Missing: ${p.missing.join(', ')}`}
+                title={
+                  p.ready
+                    ? `Default model: ${p.defaultModel}`
+                    : `Missing: ${p.missing.join(', ')}`
+                }
               >
                 {p.ready ? (
                   <CheckCircle2 className="h-3.5 w-3.5" />
@@ -190,9 +200,7 @@ export default function ContentStudio() {
           </h2>
           <div className="space-y-3">
             <div>
-              <label className="block text-xs text-gray-600 mb-1">
-                Prompt
-              </label>
+              <label className="block text-xs text-gray-600 mb-1">Prompt</label>
               <textarea
                 rows={4}
                 value={prompt}
@@ -326,7 +334,6 @@ export default function ContentStudio() {
                         </div>
                       )}
                       {a.status === 'ready' && src && (
-                        // eslint-disable-next-line jsx-a11y/img-redundant-alt
                         <img
                           src={src}
                           alt={a.prompt}

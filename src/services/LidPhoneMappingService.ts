@@ -27,23 +27,36 @@ export function normalisePhoneJid(
   return { phone, phoneJid: `${phone}@s.whatsapp.net` };
 }
 
+/**
+ * Apply Sri Lanka local-mobile normalisation to a bare digit string.
+ *   0703179882 -> 94703179882   (local trunk-0 form)
+ *   703179882  -> 94703179882   (9-digit subscriber form)
+ * Everything else (already in E.164-ish form) is returned unchanged.
+ */
+function applySriLankaNormalisation(digits: string): string {
+  if (/^0\d{9}$/.test(digits)) return `94${digits.slice(1)}`;
+  if (/^7\d{8}$/.test(digits)) return `94${digits}`;
+  return digits;
+}
+
 export function normalisePhoneDigits(
   value: string | null | undefined,
 ): string | null {
   if (!value) return null;
   if (isLidJid(String(value).trim().replace(/^\+/, ''))) return null;
-  const fromJid = extractRealPhone(value);
-  if (fromJid) return fromJid;
 
-  const digits = String(value).replace(/\D/g, '');
+  // Pull the digits out — either from a JID-shaped value or a raw string.
+  // We must NOT return extractRealPhone's result directly: for a bare local
+  // number like "0703179882" it hands back the digits unchanged and would
+  // skip the Sri Lanka trunk-0 → country-code repair below.
+  const fromJid = extractRealPhone(value);
+  const digits = fromJid ?? String(value).replace(/\D/g, '');
   if (digits.length < 8 || digits.length > 15) return null;
 
-  // Sri Lanka local mobile format: 0703179882 -> 94703179882.
-  // The app's default market is Sri Lanka, and this keeps manual/in-message
-  // repair ergonomic without treating opaque @lid ids as phones.
-  if (/^0\d{9}$/.test(digits)) return `94${digits.slice(1)}`;
-  if (/^7\d{8}$/.test(digits)) return `94${digits}`;
-  return digits;
+  // The app's default market is Sri Lanka, so normalise local mobile formats
+  // to the full country-code form. Keeps manual/in-message repair ergonomic
+  // without treating opaque @lid ids as phones.
+  return applySriLankaNormalisation(digits);
 }
 
 export function extractPhoneFromText(

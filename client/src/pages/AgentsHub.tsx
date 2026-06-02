@@ -114,7 +114,10 @@ export default function AgentsHub() {
   const [skillError, setSkillError] = useState<string | null>(null);
 
   // TTL edit state
-  const [editTtl, setEditTtl] = useState<{ name: string; value: number } | null>(null);
+  const [editTtl, setEditTtl] = useState<{
+    name: string;
+    value: number;
+  } | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -220,7 +223,12 @@ export default function AgentsHub() {
   };
 
   const deleteSkill = async (id: string) => {
-    if (!confirm('Delete this skill? Agents using it will lose the prompt injection immediately.')) return;
+    if (
+      !confirm(
+        'Delete this skill? Agents using it will lose the prompt injection immediately.',
+      )
+    )
+      return;
     try {
       await api.delete(`/api/agents/skills/${id}`);
       await loadSkills();
@@ -246,7 +254,8 @@ export default function AgentsHub() {
             <Bot className="h-6 w-6 text-green-600" /> Agents Hub
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Manage multi-agent orchestration, modes, budgets, approval TTLs, and skills.
+            Manage multi-agent orchestration, modes, budgets, approval TTLs, and
+            skills.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -397,7 +406,10 @@ export default function AgentsHub() {
                   ) : (
                     <button
                       onClick={() =>
-                        setEditTtl({ name: a.name, value: a.approvalTtlHours ?? 4 })
+                        setEditTtl({
+                          name: a.name,
+                          value: a.approvalTtlHours ?? 4,
+                        })
                       }
                       className="font-medium text-amber-700 hover:text-amber-900 underline decoration-dotted"
                       title="Click to edit TTL"
@@ -479,11 +491,13 @@ export default function AgentsHub() {
             ) : skills.length === 0 ? (
               <div className="text-center py-8 border border-dashed border-gray-200 rounded-lg">
                 <Zap className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm font-medium text-gray-700">No skills yet</p>
+                <p className="text-sm font-medium text-gray-700">
+                  No skills yet
+                </p>
                 <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
-                  Create skills (BANT framework, tone guide, objection handling…)
-                  and assign them to agents. They get injected into the system
-                  prompt automatically at inference time.
+                  Create skills (BANT framework, tone guide, objection
+                  handling…) and assign them to agents. They get injected into
+                  the system prompt automatically at inference time.
                 </p>
               </div>
             ) : (
@@ -612,13 +626,18 @@ export default function AgentsHub() {
                     }))
                   }
                 >
-                  {['sales', 'marketing', 'support', 'personalisation', 'tone', 'other'].map(
-                    (c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ),
-                  )}
+                  {[
+                    'sales',
+                    'marketing',
+                    'support',
+                    'personalisation',
+                    'tone',
+                    'other',
+                  ].map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -718,7 +737,11 @@ export default function AgentsHub() {
                 disabled={skillSaving}
                 className="px-3 py-1.5 rounded-md text-sm bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50"
               >
-                {skillSaving ? 'Saving…' : editSkill ? 'Update Skill' : 'Create Skill'}
+                {skillSaving
+                  ? 'Saving…'
+                  : editSkill
+                    ? 'Update Skill'
+                    : 'Create Skill'}
               </button>
             </div>
           </div>

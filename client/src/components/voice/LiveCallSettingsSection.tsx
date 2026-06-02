@@ -137,10 +137,11 @@ export default function LiveCallSettingsSection() {
         await a.play();
         setMsg({ ok: true, text: `Played sample via "${res.data.ttsModel}".` });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { error?: string } } };
       setMsg({
         ok: false,
-        text: err?.response?.data?.error || 'TTS test failed.',
+        text: apiErr?.response?.data?.error || 'TTS test failed.',
       });
     } finally {
       setTesting(false);

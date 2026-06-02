@@ -105,9 +105,7 @@ export default function KnowledgeTab({
       const datasetRows: KnowledgeItem[] = [];
       if (datasetsRes.status === 'fulfilled') {
         const raw = datasetsRes.value.data;
-        const arr = Array.isArray(raw)
-          ? raw
-          : raw?.datasets || raw?.data || [];
+        const arr = Array.isArray(raw) ? raw : raw?.datasets || raw?.data || [];
         for (const r of arr) {
           datasetRows.push({ ...r, source: 'dataset' });
         }
@@ -353,9 +351,7 @@ export default function KnowledgeTab({
   };
 
   const datasetCount = items.filter((i) => i.source === 'dataset').length;
-  const entryCount = items.filter(
-    (i) => i.source === 'knowledge_entry',
-  ).length;
+  const entryCount = items.filter((i) => i.source === 'knowledge_entry').length;
 
   if (isEditing) {
     return (
@@ -534,8 +530,8 @@ export default function KnowledgeTab({
           </p>
           {entryCount > 0 && (
             <p className="text-xs text-gray-500 mt-1">
-              Showing {datasetCount} curated entries + {entryCount}{' '}
-              auto-learned Q/A from past conversations.
+              Showing {datasetCount} curated entries + {entryCount} auto-learned
+              Q/A from past conversations.
             </p>
           )}
         </div>
