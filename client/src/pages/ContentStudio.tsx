@@ -29,6 +29,7 @@ interface Asset {
   inlineBase64?: string;
   status: 'pending' | 'ready' | 'failed';
   errorMessage?: string;
+  costUsd?: number;
   createdAt: string;
 }
 
@@ -352,6 +353,9 @@ export default function ContentStudio() {
                         <span className="capitalize">
                           {a.provider}
                           {a.size ? ` · ${a.size}` : ''}
+                          {typeof a.costUsd === 'number' && a.costUsd > 0
+                            ? ` · $${a.costUsd.toFixed(3)}`
+                            : ''}
                         </span>
                         <div className="flex items-center gap-1">
                           {src && a.status === 'ready' && (

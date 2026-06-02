@@ -187,7 +187,7 @@ app.use('/api/campaigns', campaignsRouter);
 app.use('/api/segments', segmentsRouter);
 app.use('/api/tenants', tenantsRouter);
 app.use('/api/marketing-insights', marketingInsightsRouter);
-app.use('/api/audit', authenticateToken, auditRouter);
+app.use('/api/audit', authenticateToken, resolveTenant, auditRouter);
 app.use('/api/sla', authenticateToken, slaRouter);
 app.use('/api/export', authenticateToken, resolveTenant, exportsRouter);
 
