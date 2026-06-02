@@ -1,5 +1,36 @@
 ﻿import mongoose, { Schema, Document } from 'mongoose';
 import { Channel } from '../types/agent';
+import { CryptoService } from '../services/CryptoService';
+
+/**
+ * Encrypt/decrypt every value in a credentials map at rest. Applied via the
+ * Mongoose getter/setter below so adapters and routes keep reading/writing
+ * plain `{ botToken, apiKey, ... }` while MongoDB only ever holds ciphertext.
+ * CryptoService.encrypt is idempotent (skips already-encrypted values) and
+ * decrypt returns the input unchanged for plaintext — so legacy rows that were
+ * stored before encryption keep working and get encrypted on next save.
+ */
+function encryptCredentials(
+  creds: Record<string, string> | undefined | null,
+): Record<string, string> {
+  if (!creds || typeof creds !== 'object') return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(creds)) {
+    out[k] = typeof v === 'string' ? (CryptoService.encrypt(v) ?? v) : v;
+  }
+  return out;
+}
+
+function decryptCredentials(
+  creds: Record<string, string> | undefined | null,
+): Record<string, string> {
+  if (!creds || typeof creds !== 'object') return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(creds)) {
+    out[k] = typeof v === 'string' ? (CryptoService.decrypt(v) ?? v) : v;
+  }
+  return out;
+}
 
 export interface IChannelConnection extends Document {
   tenantId: mongoose.Types.ObjectId;
@@ -34,7 +65,13 @@ const ChannelConnectionSchema = new Schema(
     },
     channel: { type: String, required: true, index: true },
     label: { type: String, required: true },
-    credentials: { type: Schema.Types.Mixed, default: {} },
+    credentials: {
+      type: Schema.Types.Mixed,
+      default: {},
+      // Encrypt secrets at rest; decrypt transparently on read.
+      set: encryptCredentials,
+      get: decryptCredentials,
+    },
     config: { type: Schema.Types.Mixed, default: {} },
     agentBindings: { type: [String], default: [] },
     status: {
@@ -46,7 +83,7 @@ const ChannelConnectionSchema = new Schema(
     lastError: { type: String },
     lastConnectedAt: { type: Date },
   } as any,
-  { timestamps: true },
+  { timestamps: true, toJSON: { getters: true }, toObject: { getters: true } },
 );
 
 ChannelConnectionSchema.index({ tenantId: 1, channel: 1 });

@@ -305,13 +305,20 @@ router.get('/bookings', async (req, res) => {
   try {
     const { year, month } = req.query as { year?: string; month?: string };
 
-    let query: Record<string, any> = {};
+    const query: Record<string, any> = {};
     if (year && month) {
       const y = parseInt(year, 10);
       const m = parseInt(month, 10) - 1; // 0-indexed
       const start = new Date(y, m, 1);
       const end = new Date(y, m + 1, 0, 23, 59, 59, 999);
-      query = { date: { $gte: start, $lte: end } };
+      query.date = { $gte: start, $lte: end };
+    }
+
+    // Tenant scope: only this tenant's bookings (plus legacy rows with no
+    // tenantId, so single-tenant / pre-migration data still shows up).
+    const tenantId = (req as any).tenant?._id;
+    if (tenantId) {
+      query.$or = [{ tenantId }, { tenantId: { $exists: false } }];
     }
 
     const bookings = await Booking.find(query).sort({ date: 1 }).lean();
@@ -360,6 +367,7 @@ router.post('/bookings', async (req, res) => {
       sessionId,
       location,
       status: 'confirmed',
+      tenantId: (req as any).tenant?._id,
     });
 
     res.status(201).json(booking);

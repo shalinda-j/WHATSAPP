@@ -8,6 +8,12 @@ export interface IConfig extends Document {
   providerType?: string;
   apiKey?: string;
   aiModel?: string;
+  /**
+   * Custom OpenAI-compatible base URL (e.g. a self-hosted vLLM / Ollama /
+   * LM Studio / together.ai / any OpenAI-spec endpoint). Only used by the
+   * 'custom' and 'local' provider types.
+   */
+  baseUrl?: string;
   usageLimit?: number;
   usageUsed?: number;
   costPerToken?: number;
@@ -33,6 +39,7 @@ const ConfigSchema = new Schema(
       get: (val: string) => CryptoService.decrypt(val),
     },
     aiModel: { type: String },
+    baseUrl: { type: String },
     usageLimit: { type: Number, default: 0 },
     usageUsed: { type: Number, default: 0 },
     costPerToken: { type: Number, default: 0 },

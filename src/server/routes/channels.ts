@@ -49,8 +49,9 @@ router.post('/', async (req: Request, res: Response) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.message });
   }
-  // Phase 4: encrypt every credential value before persisting via CryptoService.
-  // const encrypted = mapValues(parsed.data.credentials, cryptoService.encrypt)
+  // Credentials are encrypted at rest by the ChannelConnection model's
+  // setter (CryptoService), so they're stored as ciphertext and decrypted
+  // transparently when adapters read them — no plaintext secrets in Mongo.
   const conn = await ChannelConnection.create({
     tenantId,
     ...parsed.data,

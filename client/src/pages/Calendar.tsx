@@ -71,7 +71,6 @@ export default function Calendar() {
     today.getDate(),
   );
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
-  const [_view, _setView] = useState<'month' | 'week' | 'day'>('month');
   const [showNewBooking, setShowNewBooking] = useState(false);
   const [newBooking, setNewBooking] = useState({
     clientName: '',

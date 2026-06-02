@@ -376,7 +376,12 @@ export class CampaignService {
 
     let sent = 0;
     for (const [campaignKey, execs] of byCampaign.entries()) {
-      const campaign = await MarketingCampaign.findById(campaignKey);
+      // Defense-in-depth: scope the campaign lookup to this tenant so a
+      // mis-stamped execution can never pull in another tenant's campaign.
+      const campaign = await MarketingCampaign.findOne({
+        _id: campaignKey,
+        tenantId,
+      });
       if (!campaign || campaign.status !== 'running') continue;
       if (isInQuietHours(campaign)) continue;
 

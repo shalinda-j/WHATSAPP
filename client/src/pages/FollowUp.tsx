@@ -253,9 +253,8 @@ export default function FollowUp() {
     if (!contact.whatsappId && !contact.phone) return;
     setSendingWA(contact._id);
     try {
-      const msg = `Hi ${
-        (contact.name || 'Friend').split(' ')[0]
-      }! 👋 Just following up with you. How are you doing? Is there anything I can help you with?`;
+      const firstName = (contact.name || 'there').split(' ')[0];
+      const msg = `Hi ${firstName}! 👋 Just checking in from our team. We would love to help you take the next step — would you like to arrange a quick free visit to see your options? Just reply and we'll set it up. 🌟`;
       await api.post('/api/chat/send', {
         userId:
           contact.whatsappId ||

@@ -520,15 +520,13 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Update webhook
+// Update webhook (tenant-scoped: a tenant can only update its own webhooks)
 router.put('/:id', async (req, res) => {
   try {
-    const webhook = await (Webhook as any).findByIdAndUpdate(
-      req.params.id,
+    const webhook = await (Webhook as any).findOneAndUpdate(
+      withTenantScope(req, { _id: req.params.id }),
       req.body,
-      {
-        new: true,
-      },
+      { new: true },
     );
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
     res.json(webhook);
@@ -537,10 +535,12 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Delete webhook
+// Delete webhook (tenant-scoped)
 router.delete('/:id', async (req, res) => {
   try {
-    const webhook = await (Webhook as any).findByIdAndDelete(req.params.id);
+    const webhook = await (Webhook as any).findOneAndDelete(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
     res.json({ message: 'Webhook deleted' });
   } catch (error: any) {
@@ -548,10 +548,12 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// Test webhook
+// Test webhook (tenant-scoped: can only test your own tenant's webhooks)
 router.post('/:id/test', async (req, res) => {
   try {
-    const webhook = await (Webhook as any).findById(req.params.id);
+    const webhook = await (Webhook as any).findOne(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
 
     // This is a bit of a hack to use the private sendPayload method by exposing a test mechanism

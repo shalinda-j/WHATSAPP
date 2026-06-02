@@ -104,9 +104,23 @@ router.get(
   }),
 );
 
+// NOTE: literal /:name routes below must NOT shadow the static sub-resources
+// that share this router (e.g. /skills, /approvals, /traces). Those are
+// registered with their own literal prefixes; to be safe, the /:name handlers
+// reject reserved first segments so a stray ordering never 404s a real feature.
+const RESERVED_AGENT_NAMES = new Set([
+  'skills',
+  'approvals',
+  'traces',
+  'reflections',
+]);
+
 router.get(
   '/:name',
   asyncHandler(async (req, res) => {
+    if (RESERVED_AGENT_NAMES.has(String(req.params.name))) {
+      return res.status(404).json({ error: 'not_found' });
+    }
     const config = await AgentConfig.findOne({ name: String(req.params.name) });
     if (!config) throw new Error('Agent not found');
     const [versions, recentExecutions, todayStats] = await Promise.all([

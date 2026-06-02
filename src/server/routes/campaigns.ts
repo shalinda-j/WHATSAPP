@@ -4,6 +4,7 @@ import { authenticateToken } from '../middleware/auth';
 import { resolveTenant } from '../middleware/tenantContext';
 import { strictRateLimit } from '../middleware/rateLimit';
 import { campaignService } from '../../services/CampaignService';
+import MarketingCampaign from '../../models/MarketingCampaign';
 import { ChannelSchema } from '../../types/agent';
 
 const router = Router();
@@ -99,5 +100,17 @@ router.post(
     }
   },
 );
+
+// Delete a campaign (tenant-scoped). Draft/paused/completed campaigns can be
+// removed; queued executions are left to drain or can be cleaned separately.
+router.delete('/:id', async (req: Request<{ id: string }>, res: Response) => {
+  const tenantId = String(req.tenant?._id);
+  const r = await MarketingCampaign.deleteOne({
+    _id: req.params.id,
+    tenantId,
+  });
+  if (r.deletedCount === 0) return res.status(404).json({ error: 'not_found' });
+  res.status(204).end();
+});
 
 export default router;

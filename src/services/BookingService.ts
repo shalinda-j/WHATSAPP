@@ -6,6 +6,7 @@ import {
 } from './GoogleCalendarService';
 import { addDays, setHours, setMinutes, format } from 'date-fns';
 import { configurationManager } from './ConfigurationManagerService';
+import { WebhookService } from './WebhookService';
 import sessionStateService from './SessionStateService';
 import Booking from '../models/Booking';
 import { agentReflectionService } from './AgentReflectionService';
@@ -343,6 +344,21 @@ async function finalizeBooking(
         location: campusLocation,
         gcalLink: gcalLink || undefined,
       });
+
+      // Notify any subscribed webhooks that a booking was confirmed.
+      WebhookService.triggerWebhook('booking.created', {
+        id: booking._id,
+        clientName: booking.clientName,
+        clientPhone: booking.clientPhone,
+        date: booking.date,
+        time: booking.time,
+        type: booking.type,
+        location: booking.location,
+        sessionId,
+        timestamp: new Date(),
+      }).catch((err) =>
+        console.error('booking.created webhook trigger failed:', err),
+      );
 
       // Outcome correlation: credit any agents that handled this user's
       // recent conversation turns. Fire-and-forget so a slow reflection

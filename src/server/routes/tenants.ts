@@ -58,12 +58,36 @@ router.post('/', async (req: Request, res: Response) => {
   res.status(201).json(tenant);
 });
 
+// Only these fields are editable via PATCH. Previously the handler applied
+// `$set: req.body` verbatim, which let a caller overwrite slug / _id /
+// createdAt or inject invalid enum values for plan / status.
+const TenantUpdateSchema = z
+  .object({
+    name: z.string().min(1).max(120).optional(),
+    plan: z.enum(['free', 'starter', 'growth', 'enterprise']).optional(),
+    status: z.enum(['active', 'suspended', 'archived']).optional(),
+    brand: z
+      .object({
+        industry: z.string().optional(),
+        voice: z.string().optional(),
+        primaryLanguage: z.string().optional(),
+        timezone: z.string().optional(),
+        websiteUrl: z.string().url().optional(),
+      })
+      .optional(),
+  })
+  .strict();
+
 router.patch(
   '/:slug',
   async (req: Request<{ slug: string }>, res: Response) => {
+    const parsed = TenantUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.message });
+    }
     const updated = await Tenant.findOneAndUpdate(
       { slug: req.params.slug },
-      { $set: req.body },
+      { $set: parsed.data },
       { new: true },
     );
     if (!updated) return res.status(404).json({ error: 'not_found' });
@@ -74,10 +98,12 @@ router.patch(
 router.post(
   '/:slug/suspend',
   async (req: Request<{ slug: string }>, res: Response) => {
-    await Tenant.updateOne(
+    const r = await Tenant.updateOne(
       { slug: req.params.slug },
       { $set: { status: 'suspended' } },
     );
+    if (r.matchedCount === 0)
+      return res.status(404).json({ error: 'not_found' });
     res.status(204).end();
   },
 );
@@ -85,10 +111,12 @@ router.post(
 router.post(
   '/:slug/activate',
   async (req: Request<{ slug: string }>, res: Response) => {
-    await Tenant.updateOne(
+    const r = await Tenant.updateOne(
       { slug: req.params.slug },
       { $set: { status: 'active' } },
     );
+    if (r.matchedCount === 0)
+      return res.status(404).json({ error: 'not_found' });
     res.status(204).end();
   },
 );

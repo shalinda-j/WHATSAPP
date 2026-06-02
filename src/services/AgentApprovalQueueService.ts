@@ -141,6 +141,10 @@ export class AgentApprovalQueueService {
       { $set: { outcome: 'success' } },
     );
 
+    // Deliver the approved message to the customer (this is the whole point
+    // of the approval — without it the operator's "approve" did nothing).
+    await this.deliver(entry, entry.proposedMessage);
+
     tryEmit('agent:approval:resolved', {
       id: entry._id,
       status: 'approved',
@@ -248,6 +252,9 @@ export class AgentApprovalQueueService {
       });
     }
 
+    // Send the operator-edited message to the customer.
+    await this.deliver(entry, editedText);
+
     tryEmit('agent:approval:resolved', {
       id: entry._id,
       status: 'edited',
@@ -261,6 +268,40 @@ export class AgentApprovalQueueService {
       { _id: approvalId },
       { $set: { status: 'sent', sentAt: new Date() } },
     );
+  }
+
+  /**
+   * Actually DELIVER an approved/edited message to the customer. Previously
+   * approve()/edit() only flipped the queue status and returned the text —
+   * nothing sent it, so operators approved messages the customer never got.
+   * WhatsApp goes through the legacy session sender; other channels through
+   * the channel router. Marks the entry 'sent' on success. Best-effort: a
+   * delivery failure is logged but doesn't roll back the approval decision.
+   */
+  private async deliver(
+    entry: IAgentApprovalQueue,
+    text: string,
+  ): Promise<void> {
+    try {
+      if (!entry.channel || entry.channel === 'whatsapp') {
+        const { sendMessage } = await import('./whatsapp');
+        await sendMessage(entry.userId, text, entry.sessionId);
+      } else {
+        const { channelRouter } = await import('../channels');
+        await channelRouter.send({
+          channel: entry.channel as any,
+          tenantId: String((entry as any).tenantId ?? ''),
+          recipient: entry.userId,
+          text,
+        });
+      }
+      await this.markSent(String(entry._id));
+    } catch (err) {
+      console.error(
+        `❌ Failed to deliver approved message (approval ${entry._id}):`,
+        err,
+      );
+    }
   }
 
   async listPending(params: {
