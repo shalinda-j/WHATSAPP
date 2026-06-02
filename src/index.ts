@@ -514,38 +514,48 @@ function addToOptOut(jid: string): void {
   autoRegOptOut.add(jid);
 }
 
-// Rate limiting: Track last processed message time per user
-const rateLimitMap = new Map<string, number>();
-const RATE_LIMIT_MS = 1000; // Minimum 1 second between messages per user
+// De-duplication: guard against the SAME message being processed twice in a
+// short window (Baileys can redeliver, and double-taps resend identical text).
+// IMPORTANT: this must NOT drop *distinct* messages a customer sends quickly —
+// people very often send "hi" then immediately "mata Japan job ekak ona". The
+// old logic dropped every second message within 1s, silently losing real
+// customer intent. We now only suppress an exact-duplicate (same text) from the
+// same user inside the window; genuinely different messages always go through.
+const lastMessageMap = new Map<string, { text: string; at: number }>();
+const DUPLICATE_WINDOW_MS = 1500;
 const RATE_LIMIT_CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // Cleanup every hour
 
-// Check if user is rate limited
-function isRateLimited(jid: string): boolean {
+// Check whether this is a redundant duplicate we should skip.
+function isRateLimited(jid: string, text = ''): boolean {
   const now = Date.now();
-  const lastTime = rateLimitMap.get(jid);
+  const prev = lastMessageMap.get(jid);
+  const normalized = text.trim();
 
-  if (lastTime && now - lastTime < RATE_LIMIT_MS) {
-    return true;
-  }
+  const isDuplicate =
+    !!prev &&
+    now - prev.at < DUPLICATE_WINDOW_MS &&
+    normalized !== '' &&
+    prev.text === normalized;
 
-  rateLimitMap.set(jid, now);
-  return false;
+  lastMessageMap.set(jid, { text: normalized, at: now });
+  return isDuplicate;
 }
 
-// Cleanup rate limit entries periodically
-setInterval(() => {
+// Cleanup de-dup entries periodically
+const dedupCleanupTimer = setInterval(() => {
   const now = Date.now();
   let cleaned = 0;
-  for (const [jid, time] of rateLimitMap.entries()) {
-    if (now - time > AUTO_REG_ENTRY_MAX_AGE_MS) {
-      rateLimitMap.delete(jid);
+  for (const [jid, entry] of lastMessageMap.entries()) {
+    if (now - entry.at > AUTO_REG_ENTRY_MAX_AGE_MS) {
+      lastMessageMap.delete(jid);
       cleaned++;
     }
   }
   if (cleaned > 0) {
-    console.log(`🧹 Cleaned up ${cleaned} rate limit entries`);
+    console.log(`🧹 Cleaned up ${cleaned} de-dup entries`);
   }
 }, RATE_LIMIT_CLEANUP_INTERVAL_MS);
+dedupCleanupTimer.unref?.();
 
 // Cleanup old entries periodically to prevent memory leak
 setInterval(() => {
@@ -657,9 +667,10 @@ onMessage(async (message, sock, sessionId) => {
     // Debug: Log incoming messages
     console.log(`📩 Message: "${text.substring(0, 50)}..." from ${jid}`);
 
-    // Rate limiting check - skip if user is sending messages too quickly
-    if (isRateLimited(jid)) {
-      console.log('   ⚡ Rate limited - skipping duplicate message');
+    // De-dup check — skip only an exact-duplicate resend, never a distinct
+    // follow-up message (those carry real customer intent and must be handled).
+    if (isRateLimited(jid, text)) {
+      console.log('   ⚡ Skipping exact-duplicate message');
       return;
     }
 
@@ -1008,11 +1019,24 @@ onMessage(async (message, sock, sessionId) => {
             [] as { role: 'user' | 'assistant' | 'system'; content: string }[],
         );
 
+      // Detect the user's language up front so agents reply in the SAME
+      // language the customer wrote in. Previously this was hardcoded to 'si',
+      // so an English/Tamil customer handled by an agent got a Sinhala-biased
+      // reply. Sinhala script → si, Tamil script → ta, real English words → en,
+      // Singlish/unknown → si (the default market language).
+      const detectedAgentLanguage: 'si' | 'ta' | 'en' = /[඀-෿]/.test(text)
+        ? 'si'
+        : /[஀-௿]/.test(text)
+          ? 'ta'
+          : isEnglishText(text)
+            ? 'en'
+            : 'si';
+
       const agentOutcome = await agentOrchestrator.handle({
         sessionId,
         userId: jid,
         channel: 'whatsapp',
-        language: 'si',
+        language: detectedAgentLanguage,
         inputMessage: text,
         conversationHistory: agentHistory,
         metadata: { intent },
