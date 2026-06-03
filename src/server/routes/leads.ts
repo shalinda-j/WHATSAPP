@@ -6,7 +6,7 @@ import Lead from '../../models/Lead';
 import { authenticateToken } from '../middleware/auth';
 import { strictRateLimit } from '../middleware/rateLimit';
 import { validateObjectId } from '../middleware/validation';
-import { resolveTenant } from '../middleware/tenantContext';
+import { resolveTenant, withTenantScope } from '../middleware/tenantContext';
 import pdf from 'pdf-parse';
 import ChatMessage from '../../models/ChatMessage';
 import { configurationManager } from '../../services/ConfigurationManagerService';
@@ -439,13 +439,45 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', validateObjectId(), async (req, res) => {
   try {
-    const previous = await Lead.findById(req.params.id);
+    const previous = await Lead.findOne(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!previous) {
       return res.status(404).json({ error: 'Lead not found' });
     }
-    const lead = await Lead.findByIdAndUpdate(
-      req.params.id,
-      { ...req.body, updatedAt: new Date() },
+
+    // SECURITY FIX: Prevent Mass Assignment by explicitly defining allowed fields
+    const {
+      fullName,
+      phoneNumber,
+      email,
+      address,
+      age,
+      interestedCountry,
+      experienceYears,
+      jobVacancyType,
+      status,
+      notes,
+    } = req.body;
+
+    const updateData: any = { updatedAt: new Date() };
+    if (fullName !== undefined) updateData.fullName = fullName;
+    if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
+    if (email !== undefined) updateData.email = email;
+    if (address !== undefined) updateData.address = address;
+    if (age !== undefined) updateData.age = age;
+    if (interestedCountry !== undefined)
+      updateData.interestedCountry = interestedCountry;
+    if (experienceYears !== undefined)
+      updateData.experienceYears = experienceYears;
+    if (jobVacancyType !== undefined)
+      updateData.jobVacancyType = jobVacancyType;
+    if (status !== undefined) updateData.status = status;
+    if (notes !== undefined) updateData.notes = notes;
+
+    const lead = await Lead.findOneAndUpdate(
+      withTenantScope(req, { _id: req.params.id }),
+      updateData,
       { new: true },
     );
 
