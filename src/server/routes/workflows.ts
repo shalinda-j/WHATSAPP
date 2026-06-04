@@ -721,7 +721,7 @@ router.post('/execute', async (req: Request, res: Response) => {
  */
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const workflow = await Workflow.findById(req.params.id);
+    const workflow = await Workflow.findOne(withTenantScope(req, { _id: req.params.id }));
     if (!workflow) return res.status(404).json({ error: 'Workflow not found' });
     res.json(workflow);
   } catch (error) {
@@ -768,8 +768,8 @@ router.post('/', async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   try {
     const { name, description, nodes, edges, isActive, metadata } = req.body;
-    const workflow = await Workflow.findByIdAndUpdate(
-      req.params.id,
+    const workflow = await Workflow.findOneAndUpdate(
+      withTenantScope(req, { _id: req.params.id }),
       {
         name,
         description,
@@ -794,7 +794,7 @@ router.put('/:id', async (req: Request, res: Response) => {
  */
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    const workflow = await Workflow.findByIdAndDelete(req.params.id);
+    const workflow = await Workflow.findOneAndDelete(withTenantScope(req, { _id: req.params.id }));
     if (!workflow) return res.status(404).json({ error: 'Workflow not found' });
     res.json({ message: 'Workflow deleted successfully' });
   } catch (error) {
@@ -808,7 +808,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
  */
 router.post('/:id/execute', async (req: Request, res: Response) => {
   try {
-    const workflow = await Workflow.findById(req.params.id);
+    const workflow = await Workflow.findOne(withTenantScope(req, { _id: req.params.id }));
     if (!workflow) return res.status(404).json({ error: 'Workflow not found' });
     if (!workflow.isActive)
       return res.status(400).json({ error: 'Workflow is not active' });
@@ -848,7 +848,7 @@ router.post('/:id/execute', async (req: Request, res: Response) => {
  */
 router.post('/:id/duplicate', async (req: Request, res: Response) => {
   try {
-    const original = await Workflow.findById(req.params.id);
+    const original = await Workflow.findOne(withTenantScope(req, { _id: req.params.id }));
     if (!original) return res.status(404).json({ error: 'Workflow not found' });
 
     const duplicate = new Workflow({
