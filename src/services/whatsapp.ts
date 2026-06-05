@@ -188,8 +188,16 @@ export class WhatsAppSessionManager {
         printQRInTerminal: false, // We update DB instead
         browser: [BRAND_NAME, 'Chrome', '120.0.0'],
         connectTimeoutMs: 60000,
-        defaultQueryTimeoutMs: 60000,
+        // A finite defaultQueryTimeoutMs makes the initial app-state sync
+        // ("init queries") throw a 408 Request Time-out on slower links / busy
+        // WhatsApp servers, which destabilises the session. Baileys' own
+        // recommendation is to disable the blanket query timeout (undefined)
+        // and rely on keep-alive + retry instead.
+        defaultQueryTimeoutMs: undefined,
+        keepAliveIntervalMs: 30000,
+        retryRequestDelayMs: 1000,
         syncFullHistory: false,
+        markOnlineOnConnect: false,
       });
 
       this.sessions.set(sessionId, sock);

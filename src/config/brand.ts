@@ -17,12 +17,20 @@ export const DEFAULT_COUNTRY_CODE = process.env.DEFAULT_COUNTRY_CODE || '94';
  * Default Google Gemini model used when a provider config does not pin one.
  * Override: GEMINI_DEFAULT_MODEL.
  *
- * IMPORTANT — keep this current. Google retires Gemini models on a rolling
- * schedule and a retired name returns HTTP 404 on EVERY call, which silently
- * collapses the whole AI chain into the lead-fallback template. As of
- * 2026-06: gemini-1.5* and gemini-2.0* are SHUT DOWN. Valid: gemini-2.5-flash,
- * gemini-2.5-flash-lite, gemini-2.5-pro, gemini-3.5-flash. See
- * DEPRECATED_GEMINI_MODEL_PATTERNS in AIProviderSeeder for the self-heal list.
+ * IMPORTANT — keep this current. A wrong model name silently collapses the
+ * whole AI chain into the "we'll get back to you shortly" lead-fallback
+ * template. Two failure modes:
+ *   - RETIRED models return HTTP 404 on every call. As of 2026-06
+ *     gemini-1.5* and gemini-2.0* are SHUT DOWN.
+ *   - PAID-ONLY / preview models return HTTP 429 on a FREE-TIER key. The
+ *     entire gemini-3.x line (incl. gemini-3.5-flash) is paid-only as of
+ *     2026-06 — do NOT pin it unless you have billing enabled AND set
+ *     GEMINI_DEFAULT_MODEL=gemini-3.5-flash (the migration's escape hatch).
+ *
+ * Valid on the FREE tier: gemini-2.5-flash (10 rpm / 250-day),
+ * gemini-2.5-flash-lite (15 rpm / 1000-day), gemini-2.5-pro (5 rpm / 100-day).
+ * See AIProviderSeeder (DEPRECATED_/PAID_ONLY_GEMINI_MODEL_PATTERNS) for the
+ * boot-time self-heal that rewrites a bad stored model to this default.
  */
 export const GEMINI_DEFAULT_MODEL =
   process.env.GEMINI_DEFAULT_MODEL || 'gemini-2.5-flash';
