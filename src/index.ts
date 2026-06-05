@@ -247,13 +247,27 @@ async function buildLeadFlowFallback(
   }
 
   if (!template) {
+    // LEAD_FALLBACK_TEMPLATES isn't configured. Rather than go silent on a
+    // real customer (the worst outcome — they think we ignored them), send a
+    // safe, language-matched holding reply that still moves toward a visit.
+    // This is what keeps the bot responsive even when every AI provider is
+    // rate-limited / down. Operators can override the wording via the dataset.
     console.warn(
-      '⚠️ LEAD_FALLBACK_TEMPLATES slot not configured — fallback skipped. Configure via Admin Panel > Datasets > LEAD_FALLBACK_TEMPLATES.',
+      '⚠️ LEAD_FALLBACK_TEMPLATES slot not configured — using built-in safe reply. Configure via Admin Panel > Datasets > LEAD_FALLBACK_TEMPLATES.',
     );
-    return '';
+    return DEFAULT_SAFE_REPLY;
   }
   return fillLeadTemplate(template, facts);
 }
+
+// Last-resort customer reply used when AI providers are unavailable AND no
+// LEAD_FALLBACK_TEMPLATES are configured. Bilingual (Sinhala + English) so it
+// reads naturally for the default market while staying clear to English users.
+const DEFAULT_SAFE_REPLY =
+  'ස්තූතියි ඔබ අප හා සම්බන්ධ වීම ගැන! 🙏 අපි ඔබට ඉක්මනින්ම පිළිතුරු දෙන්නම්. ' +
+  'ඔබ සොයන රැකියාව / පුහුණුව මොකක්ද කියලා කියන්න — එවිට හරියටම උදව් කරන්න පුළුවන්.\n\n' +
+  'Thanks for reaching out! We will get back to you shortly. ' +
+  'Tell us what job or training you are looking for so we can help you best. 🌟';
 
 async function startServer() {
   // 1. Connect to Database
@@ -508,38 +522,48 @@ function addToOptOut(jid: string): void {
   autoRegOptOut.add(jid);
 }
 
-// Rate limiting: Track last processed message time per user
-const rateLimitMap = new Map<string, number>();
-const RATE_LIMIT_MS = 1000; // Minimum 1 second between messages per user
+// De-duplication: guard against the SAME message being processed twice in a
+// short window (Baileys can redeliver, and double-taps resend identical text).
+// IMPORTANT: this must NOT drop *distinct* messages a customer sends quickly —
+// people very often send "hi" then immediately "mata Japan job ekak ona". The
+// old logic dropped every second message within 1s, silently losing real
+// customer intent. We now only suppress an exact-duplicate (same text) from the
+// same user inside the window; genuinely different messages always go through.
+const lastMessageMap = new Map<string, { text: string; at: number }>();
+const DUPLICATE_WINDOW_MS = 1500;
 const RATE_LIMIT_CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // Cleanup every hour
 
-// Check if user is rate limited
-function isRateLimited(jid: string): boolean {
+// Check whether this is a redundant duplicate we should skip.
+function isRateLimited(jid: string, text = ''): boolean {
   const now = Date.now();
-  const lastTime = rateLimitMap.get(jid);
+  const prev = lastMessageMap.get(jid);
+  const normalized = text.trim();
 
-  if (lastTime && now - lastTime < RATE_LIMIT_MS) {
-    return true;
-  }
+  const isDuplicate =
+    !!prev &&
+    now - prev.at < DUPLICATE_WINDOW_MS &&
+    normalized !== '' &&
+    prev.text === normalized;
 
-  rateLimitMap.set(jid, now);
-  return false;
+  lastMessageMap.set(jid, { text: normalized, at: now });
+  return isDuplicate;
 }
 
-// Cleanup rate limit entries periodically
-setInterval(() => {
+// Cleanup de-dup entries periodically
+const dedupCleanupTimer = setInterval(() => {
   const now = Date.now();
   let cleaned = 0;
-  for (const [jid, time] of rateLimitMap.entries()) {
-    if (now - time > AUTO_REG_ENTRY_MAX_AGE_MS) {
-      rateLimitMap.delete(jid);
+  for (const [jid, entry] of lastMessageMap.entries()) {
+    if (now - entry.at > AUTO_REG_ENTRY_MAX_AGE_MS) {
+      lastMessageMap.delete(jid);
       cleaned++;
     }
   }
   if (cleaned > 0) {
-    console.log(`🧹 Cleaned up ${cleaned} rate limit entries`);
+    console.log(`🧹 Cleaned up ${cleaned} de-dup entries`);
   }
 }, RATE_LIMIT_CLEANUP_INTERVAL_MS);
+dedupCleanupTimer.unref?.();
 
 // Cleanup old entries periodically to prevent memory leak
 setInterval(() => {
@@ -657,9 +681,10 @@ onMessage(async (message, sock, sessionId) => {
     // Debug: Log incoming messages
     console.log(`📩 Message: "${text.substring(0, 50)}..." from ${jid}`);
 
-    // Rate limiting check - skip if user is sending messages too quickly
-    if (isRateLimited(jid)) {
-      console.log('   ⚡ Rate limited - skipping duplicate message');
+    // De-dup check — skip only an exact-duplicate resend, never a distinct
+    // follow-up message (those carry real customer intent and must be handled).
+    if (isRateLimited(jid, text)) {
+      console.log('   ⚡ Skipping exact-duplicate message');
       return;
     }
 
@@ -1008,11 +1033,24 @@ onMessage(async (message, sock, sessionId) => {
             [] as { role: 'user' | 'assistant' | 'system'; content: string }[],
         );
 
+      // Detect the user's language up front so agents reply in the SAME
+      // language the customer wrote in. Previously this was hardcoded to 'si',
+      // so an English/Tamil customer handled by an agent got a Sinhala-biased
+      // reply. Sinhala script → si, Tamil script → ta, real English words → en,
+      // Singlish/unknown → si (the default market language).
+      const detectedAgentLanguage: 'si' | 'ta' | 'en' = /[඀-෿]/.test(text)
+        ? 'si'
+        : /[஀-௿]/.test(text)
+          ? 'ta'
+          : isEnglishText(text)
+            ? 'en'
+            : 'si';
+
       const agentOutcome = await agentOrchestrator.handle({
         sessionId,
         userId: jid,
         channel: 'whatsapp',
-        language: 'si',
+        language: detectedAgentLanguage,
         inputMessage: text,
         conversationHistory: agentHistory,
         metadata: { intent },
@@ -1347,13 +1385,21 @@ onMessage(async (message, sock, sessionId) => {
     } catch (aiError: any) {
       console.error('   ❌ AI response error:', aiError.message || aiError);
 
-      // Keep the customer-facing flow moving even when every AI provider fails.
-      // If LEAD_FALLBACK_TEMPLATES is not configured the helper returns ''
-      // and we stay silent — better than echoing made-up text at the customer.
-      const fallbackResponse = await buildLeadFlowFallback(text, jid);
-      if (fallbackResponse) {
-        await sendMessage(jid, fallbackResponse, sessionId);
+      // Keep the customer-facing flow moving even when every AI provider fails
+      // (e.g. all providers rate-limited / 429). buildLeadFlowFallback now
+      // always returns a non-empty reply, but we guard with DEFAULT_SAFE_REPLY
+      // so a thrown error here still never leaves the customer in silence.
+      let fallbackResponse = DEFAULT_SAFE_REPLY;
+      try {
+        fallbackResponse =
+          (await buildLeadFlowFallback(text, jid)) || DEFAULT_SAFE_REPLY;
+      } catch (fbErr) {
+        console.error(
+          '   ❌ Fallback builder failed, using safe reply:',
+          fbErr,
+        );
       }
+      await sendMessage(jid, fallbackResponse, sessionId);
     }
   } catch (error) {
     console.error('❌ Message handling error:', error);

@@ -1,6 +1,7 @@
 import { sendMessage, sendTyping, getSocket } from './whatsapp';
 import { configurationManager } from './ConfigurationManagerService';
 import { CRMService } from './CRMService';
+import { WebhookService } from './WebhookService';
 import Lead from '../models/Lead';
 import sessionStateService from './SessionStateService';
 
@@ -486,6 +487,20 @@ async function saveLeadRegistration(
 
     const lead = await Lead.create(leadData);
     console.log('✅ Lead created successfully:', lead._id);
+
+    // Notify any subscribed webhooks that a new lead was captured.
+    // Fire-and-forget so a slow/failing webhook never blocks registration.
+    WebhookService.triggerWebhook('lead.created', {
+      id: lead._id,
+      name: session.data.fullName,
+      phone: session.data.phoneNumber,
+      country: session.data.interestedCountry,
+      jobType: session.data.jobVacancyType,
+      sessionId,
+      timestamp: new Date(),
+    }).catch((err) =>
+      console.error('lead.created webhook trigger failed:', err),
+    );
 
     // Also create CRM contact
     try {

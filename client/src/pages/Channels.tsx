@@ -156,11 +156,13 @@ const CREDENTIAL_FIELDS: Partial<
 // Per-channel setup guide — shown above the credential fields so the user
 // knows exactly where to grab each value from, instead of having to dig
 // through provider docs.
-const SETUP_GUIDES: Partial<Record<Channel, { steps: string[]; href?: string; hrefLabel?: string }>> = {
+const SETUP_GUIDES: Partial<
+  Record<Channel, { steps: string[]; href?: string; hrefLabel?: string }>
+> = {
   telegram: {
     steps: [
       'Open @BotFather in Telegram.',
-      "Send /newbot, pick a name and username for the bot.",
+      'Send /newbot, pick a name and username for the bot.',
       'BotFather replies with a token like 123456:ABC… — paste it below.',
     ],
     href: 'https://t.me/BotFather',
@@ -225,14 +227,16 @@ const CHANNEL_TILES: ChannelTile[] = [
   {
     channel: 'whatsapp',
     title: 'WhatsApp',
-    description: 'QR-code pairing via WhatsApp Web. Manage devices on the Linked Devices page.',
+    description:
+      'QR-code pairing via WhatsApp Web. Manage devices on the Linked Devices page.',
     flow: 'qr',
     flowLabel: 'QR code',
   },
   {
     channel: 'telegram',
     title: 'Telegram',
-    description: 'Bot token from @BotFather. 30-second setup, no business verification needed.',
+    description:
+      'Bot token from @BotFather. 30-second setup, no business verification needed.',
     flow: 'token',
     flowLabel: 'Bot token',
   },
@@ -253,14 +257,16 @@ const CHANNEL_TILES: ChannelTile[] = [
   {
     channel: 'linkedin',
     title: 'LinkedIn',
-    description: 'Marketing Developer Platform. Requires app review for posting at scale.',
+    description:
+      'Marketing Developer Platform. Requires app review for posting at scale.',
     flow: 'oauth-pending',
     flowLabel: 'Access token (OAuth coming)',
   },
   {
     channel: 'tiktok',
     title: 'TikTok',
-    description: 'TikTok for Business / Marketing API. Long-lived access token.',
+    description:
+      'TikTok for Business / Marketing API. Long-lived access token.',
     flow: 'oauth-pending',
     flowLabel: 'Access token (OAuth coming)',
   },

@@ -31,7 +31,11 @@ export class AppErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     this.setState({ errorInfo });
     // Log to console so the developer still sees the stack in DevTools.
-    console.error('[AppErrorBoundary] Unhandled render error:', error, errorInfo);
+    console.error(
+      '[AppErrorBoundary] Unhandled render error:',
+      error,
+      errorInfo,
+    );
   }
 
   handleReload = () => {
@@ -56,8 +60,8 @@ export class AppErrorBoundary extends Component<Props, State> {
               Something went wrong
             </h1>
             <p className="text-gray-500 text-sm mb-6">
-              An unexpected error occurred in the admin panel. Your data is
-              safe — this is a display error only.
+              An unexpected error occurred in the admin panel. Your data is safe
+              — this is a display error only.
             </p>
 
             {this.state.error.message && (

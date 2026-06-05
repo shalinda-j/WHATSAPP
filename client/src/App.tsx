@@ -68,10 +68,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route
-          index
-          element={<Navigate to="/dashboard" />}
-        />
+        <Route index element={<Navigate to="/dashboard" />} />
         <Route
           path="dashboard"
           element={

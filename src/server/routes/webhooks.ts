@@ -436,6 +436,98 @@ router.post('/sendgrid', metaEventRateLimit, async (req, res) => {
   }
 });
 
+// --- WHATSAPP BUSINESS CALLING API ---
+// Live voice call answering. Meta delivers call lifecycle events (ringing /
+// connect / terminate) to a Cloud API webhook, carrying the caller's WebRTC
+// offer SDP. We hand each event to WhatsAppCallingService, which negotiates a
+// media bridge and routes through LiveCallService → BusinessCallingApiProvider
+// to accept the call and stream TTS audio. Falls back to reject if the media
+// stack / credentials are unavailable.
+//
+// GET  = Meta verification handshake (hub.challenge).
+// POST = call events. Signature verified via X-Hub-Signature-256 when an
+//        app secret is configured (env WHATSAPP_APP_SECRET or per-tenant).
+
+router.get('/whatsapp-calling', metaEventRateLimit, async (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  const { liveCallSettings } =
+    await import('../../services/LiveCallSettingsService');
+  const expected = await liveCallSettings.getWebhookVerifyToken();
+  if (mode === 'subscribe' && expected && token === expected) {
+    return res.status(200).send(String(challenge ?? ''));
+  }
+  return res.status(403).send('forbidden');
+});
+
+router.post('/whatsapp-calling', metaEventRateLimit, async (req, res) => {
+  try {
+    // Optional HMAC verification: Meta signs the body with the app secret.
+    const { liveCallSettings } =
+      await import('../../services/LiveCallSettingsService');
+    const appSecret = await liveCallSettings.getAppSecret();
+    if (appSecret) {
+      const sigHeader = req.headers['x-hub-signature-256'] as
+        | string
+        | undefined;
+      const bodyStr =
+        typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+      const expected =
+        'sha256=' +
+        crypto.createHmac('sha256', appSecret).update(bodyStr).digest('hex');
+      let ok = false;
+      if (sigHeader) {
+        try {
+          const a = Buffer.from(sigHeader);
+          const b = Buffer.from(expected);
+          ok = a.length === b.length && crypto.timingSafeEqual(a, b);
+        } catch {
+          ok = false;
+        }
+      }
+      if (!ok) {
+        console.warn('[whatsapp-calling] Invalid X-Hub-Signature-256');
+        return res.status(403).json({ error: 'invalid_signature' });
+      }
+    }
+
+    // Always 200 fast so Meta doesn't retry; process calls asynchronously.
+    res.status(200).json({ ok: true });
+
+    const { WhatsAppCallingService } =
+      await import('../../services/whatsappCalling/WhatsAppCallingService');
+
+    // Cloud API shape: entry[].changes[].value.calls[]
+    const entries = Array.isArray(req.body?.entry) ? req.body.entry : [];
+    for (const entry of entries) {
+      const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+      for (const change of changes) {
+        const value = change?.value || {};
+        const calls = Array.isArray(value.calls) ? value.calls : [];
+        const phoneNumberId =
+          value?.metadata?.phone_number_id ||
+          process.env.WHATSAPP_PHONE_NUMBER_ID ||
+          'whatsapp-calling';
+        for (const call of calls) {
+          await WhatsAppCallingService.handleWebhookCall(
+            call,
+            String(phoneNumberId),
+          ).catch((err) =>
+            console.error('whatsapp-calling handleWebhookCall error:', err),
+          );
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error('whatsapp-calling webhook error:', err);
+    // Response already sent (200) in the happy path; guard double-send.
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message ?? 'server_error' });
+    }
+  }
+});
+
 // --- CRUD for Admin Panel ---
 // SECURITY FIX: All CRUD routes require authentication + tenant scope.
 router.use(authenticateToken);
@@ -468,15 +560,13 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Update webhook
+// Update webhook (tenant-scoped: a tenant can only update its own webhooks)
 router.put('/:id', async (req, res) => {
   try {
-    const webhook = await (Webhook as any).findByIdAndUpdate(
-      req.params.id,
+    const webhook = await (Webhook as any).findOneAndUpdate(
+      withTenantScope(req, { _id: req.params.id }),
       req.body,
-      {
-        new: true,
-      },
+      { new: true },
     );
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
     res.json(webhook);
@@ -485,10 +575,12 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Delete webhook
+// Delete webhook (tenant-scoped)
 router.delete('/:id', async (req, res) => {
   try {
-    const webhook = await (Webhook as any).findByIdAndDelete(req.params.id);
+    const webhook = await (Webhook as any).findOneAndDelete(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
     res.json({ message: 'Webhook deleted' });
   } catch (error: any) {
@@ -496,10 +588,12 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// Test webhook
+// Test webhook (tenant-scoped: can only test your own tenant's webhooks)
 router.post('/:id/test', async (req, res) => {
   try {
-    const webhook = await (Webhook as any).findById(req.params.id);
+    const webhook = await (Webhook as any).findOne(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
 
     // This is a bit of a hack to use the private sendPayload method by exposing a test mechanism

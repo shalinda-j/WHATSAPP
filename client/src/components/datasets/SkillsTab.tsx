@@ -44,23 +44,25 @@ interface ListResponse {
   availableAgents: string[];
 }
 
-const CATEGORY_META: Record<Category, { label: string; bg: string; fg: string }> =
-  {
-    sales: { label: 'Sales', bg: 'bg-blue-100', fg: 'text-blue-800' },
-    marketing: {
-      label: 'Marketing',
-      bg: 'bg-purple-100',
-      fg: 'text-purple-800',
-    },
-    support: { label: 'Support', bg: 'bg-green-100', fg: 'text-green-800' },
-    personalisation: {
-      label: 'Personalisation',
-      bg: 'bg-pink-100',
-      fg: 'text-pink-800',
-    },
-    tone: { label: 'Tone', bg: 'bg-yellow-100', fg: 'text-yellow-800' },
-    other: { label: 'Other', bg: 'bg-gray-100', fg: 'text-gray-700' },
-  };
+const CATEGORY_META: Record<
+  Category,
+  { label: string; bg: string; fg: string }
+> = {
+  sales: { label: 'Sales', bg: 'bg-blue-100', fg: 'text-blue-800' },
+  marketing: {
+    label: 'Marketing',
+    bg: 'bg-purple-100',
+    fg: 'text-purple-800',
+  },
+  support: { label: 'Support', bg: 'bg-green-100', fg: 'text-green-800' },
+  personalisation: {
+    label: 'Personalisation',
+    bg: 'bg-pink-100',
+    fg: 'text-pink-800',
+  },
+  tone: { label: 'Tone', bg: 'bg-yellow-100', fg: 'text-yellow-800' },
+  other: { label: 'Other', bg: 'bg-gray-100', fg: 'text-gray-700' },
+};
 
 const STARTER_TEMPLATES: Array<{
   label: string;
@@ -293,7 +295,9 @@ export default function SkillsTab({
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <GraduationCap className="h-5 w-5 text-purple-600" />
-          <h3 className="text-lg font-semibold text-gray-800">Skills library</h3>
+          <h3 className="text-lg font-semibold text-gray-800">
+            Skills library
+          </h3>
           <span className="text-xs text-gray-500">
             {skills.length} {skills.length === 1 ? 'skill' : 'skills'}
           </span>
@@ -585,10 +589,7 @@ export default function SkillsTab({
                   }
                   className="h-4 w-4 text-purple-600 rounded"
                 />
-                <label
-                  htmlFor="skill-active"
-                  className="text-sm text-gray-700"
-                >
+                <label htmlFor="skill-active" className="text-sm text-gray-700">
                   Active (skill applies to assigned agents)
                 </label>
               </div>
@@ -603,7 +604,8 @@ export default function SkillsTab({
               <button
                 onClick={save}
                 disabled={
-                  !editing.name.trim() || editing.promptSection.trim().length < 10
+                  !editing.name.trim() ||
+                  editing.promptSection.trim().length < 10
                 }
                 className="px-3 py-1.5 rounded-md text-sm bg-purple-600 text-white font-semibold hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-1"
               >

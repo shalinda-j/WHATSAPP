@@ -85,6 +85,7 @@ import Dataset from '../models/Dataset';
 import { OpenAIService } from './openai';
 import { GroqService } from './groq';
 import { OpenRouterService } from './openrouter';
+import { CustomAIService } from './custom';
 import { ChatGPTSessionService } from './ChatGPTSessionService';
 import { ClaudeSessionService } from './ClaudeSessionService';
 
@@ -132,6 +133,9 @@ export class AILoadBalancer {
       () => this.cleanupCaches(),
       10 * 60 * 1000,
     );
+    // Don't let this timer keep the process alive (e.g. short-lived scripts
+    // and the test runner) — the cleanup is best-effort housekeeping.
+    this.cleanupInterval.unref?.();
   }
 
   /**
@@ -280,6 +284,29 @@ export class AILoadBalancer {
                 providerType: 'claude-session',
               }),
             );
+          } else if (
+            conf.providerType === 'custom' ||
+            conf.providerType === 'local'
+          ) {
+            // Any OpenAI-compatible endpoint (self-hosted Ollama/vLLM/LM Studio
+            // or a hosted gateway). The operator supplies the base URL so we
+            // are never locked to the few built-in providers.
+            const baseUrl = (conf as any).baseUrl as string | undefined;
+            if (!baseUrl) {
+              console.warn(
+                `⚠️ Skipping ${conf.providerType} provider (${conf.aiModel}): ` +
+                  `no Base URL configured. Set it in Admin Panel > Configuration.`,
+              );
+            } else {
+              this.services.push(
+                new CustomAIService({
+                  apiKey: conf.apiKey,
+                  baseUrl,
+                  model: conf.aiModel,
+                  providerType: conf.providerType,
+                }),
+              );
+            }
           }
           // Add other providers here (e.g. Anthropic)
         }
@@ -302,6 +329,7 @@ export class AILoadBalancer {
         GeminiService: 2,
         OpenRouterService: 3,
         OpenAIService: 4,
+        CustomAIService: 5,
         ChatGPTSessionService: 90,
         ClaudeSessionService: 91,
       };

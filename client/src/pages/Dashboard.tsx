@@ -150,7 +150,6 @@ export default function Dashboard() {
       clearInterval(interval);
       socket.disconnect();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleCreateSession = async () => {
@@ -276,9 +275,10 @@ export default function Dashboard() {
             Now a full marketing automation platform
           </h2>
           <p className="text-sm text-white/90 mb-4 max-w-3xl">
-            We've grown beyond WhatsApp. v{WHATS_NEW_VERSION} ships multi-channel
-            delivery, a multi-agent orchestrator, and per-tenant isolation —
-            all on the same prompt-version, budget, and feedback machinery.
+            We've grown beyond WhatsApp. v{WHATS_NEW_VERSION} ships
+            multi-channel delivery, a multi-agent orchestrator, and per-tenant
+            isolation — all on the same prompt-version, budget, and feedback
+            machinery.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -289,8 +289,8 @@ export default function Dashboard() {
               </div>
               <p className="text-xs text-white/85">
                 Telegram and Email adapters live alongside WhatsApp via a
-                channel-agnostic router. Instagram and Messenger stubbed
-                pending Meta verification.
+                channel-agnostic router. Instagram and Messenger stubbed pending
+                Meta verification.
               </p>
             </div>
 
@@ -312,8 +312,8 @@ export default function Dashboard() {
                 <h3 className="font-semibold text-sm">Multi-tenant</h3>
               </div>
               <p className="text-xs text-white/85">
-                Per-tenant credentials, plans, brand voice and budget caps,
-                with a backfill script to migrate single-tenant deployments.
+                Per-tenant credentials, plans, brand voice and budget caps, with
+                a backfill script to migrate single-tenant deployments.
               </p>
             </div>
           </div>

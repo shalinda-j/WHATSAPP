@@ -102,10 +102,12 @@ router.patch(
 router.post(
   '/:slug/suspend',
   async (req: Request<{ slug: string }>, res: Response) => {
-    await Tenant.updateOne(
+    const r = await Tenant.updateOne(
       { slug: req.params.slug },
       { $set: { status: 'suspended' } },
     );
+    if (r.matchedCount === 0)
+      return res.status(404).json({ error: 'not_found' });
     res.status(204).end();
   },
 );
@@ -113,10 +115,12 @@ router.post(
 router.post(
   '/:slug/activate',
   async (req: Request<{ slug: string }>, res: Response) => {
-    await Tenant.updateOne(
+    const r = await Tenant.updateOne(
       { slug: req.params.slug },
       { $set: { status: 'active' } },
     );
+    if (r.matchedCount === 0)
+      return res.status(404).json({ error: 'not_found' });
     res.status(204).end();
   },
 );

@@ -131,7 +131,7 @@ export default function Datasets() {
         const kbRes = await api.get('/api/knowledge');
         const kbArr = Array.isArray(kbRes.data)
           ? kbRes.data
-          : kbRes.data?.entries ?? [];
+          : (kbRes.data?.entries ?? []);
         newCounts.knowledge += Array.isArray(kbArr) ? kbArr.length : 0;
       } catch {
         /* /api/knowledge missing on older builds is non-fatal */
@@ -143,7 +143,7 @@ export default function Datasets() {
         const formsRes = await api.get('/api/forms/templates');
         const formsArr = Array.isArray(formsRes.data)
           ? formsRes.data
-          : formsRes.data?.templates ?? [];
+          : (formsRes.data?.templates ?? []);
         newCounts.forms = Array.isArray(formsArr) ? formsArr.length : 0;
       } catch {
         /* forms count non-fatal */

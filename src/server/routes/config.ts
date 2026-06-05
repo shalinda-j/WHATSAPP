@@ -38,6 +38,7 @@ const CONFIG_EDITABLE_FIELDS = [
   'providerType',
   'apiKey',
   'aiModel',
+  'baseUrl',
   'usageLimit',
   'usageUsed',
   'costPerToken',

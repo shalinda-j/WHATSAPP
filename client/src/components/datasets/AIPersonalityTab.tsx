@@ -73,10 +73,10 @@ export default function AIPersonalityTab({
         // Either way, extract the first valid array we find.
         const raw = examplesData[0]?.content;
         const resolvedExamples: ConversationExample[] = Array.isArray(raw)
-          ? raw                          // legacy: array stored at content root
+          ? raw // legacy: array stored at content root
           : Array.isArray(raw?.en)
-            ? raw.en                     // new: array stored in content.en
-            : [];                        // old string seed or empty — show empty
+            ? raw.en // new: array stored in content.en
+            : []; // old string seed or empty — show empty
         setExamples(resolvedExamples);
       }
     } catch (error) {

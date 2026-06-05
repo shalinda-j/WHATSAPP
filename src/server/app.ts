@@ -123,6 +123,7 @@ app.use(async (req, res, next) => {
     '/api/auth',
     '/api/marketing',
     '/api/webhooks/inbound', // External systems need to send webhooks even without DB
+    '/api/webhooks/whatsapp-calling', // Live call events must answer even if DB is down
     '/api/bulk', // Bulk sender uses WhatsApp socket directly, not MongoDB
     '/api/call-agent', // Call agent settings now use file-system fallback
     '/api/voice-config', // Voice TTS config (graceful error if no DB)
@@ -197,7 +198,7 @@ app.use('/api/campaigns', campaignsRouter);
 app.use('/api/segments', segmentsRouter);
 app.use('/api/tenants', tenantsRouter);
 app.use('/api/marketing-insights', marketingInsightsRouter);
-app.use('/api/audit', authenticateToken, auditRouter);
+app.use('/api/audit', authenticateToken, resolveTenant, auditRouter);
 app.use('/api/sla', authenticateToken, slaRouter);
 app.use('/api/export', authenticateToken, resolveTenant, exportsRouter);
 

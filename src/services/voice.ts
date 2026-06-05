@@ -503,6 +503,7 @@ async function ttsGoogleCloud(
   text: string,
   lang: string,
   apiKey: string,
+  voiceId?: string,
 ): Promise<Buffer> {
   const voice = GOOGLE_CLOUD_VOICES[lang];
   if (!voice) {
@@ -511,13 +512,24 @@ async function ttsGoogleCloud(
     );
   }
 
-  console.log(`   🎙️ Google Cloud TTS — voice: ${voice.name}, lang: ${lang}`);
+  // Honour an operator-selected voice name from the Admin Panel (VoiceConfig
+  // voiceId, e.g. "en-US-Neural2-F"). Falls back to our per-language default
+  // when none is set. The languageCode is derived from the chosen voice name
+  // (Google voice names are "<lang>-<region>-..." so the first two segments
+  // give a valid BCP-47 code).
+  const name = voiceId?.trim() || voice.name;
+  const languageCode =
+    voiceId?.trim() && name.split('-').length >= 2
+      ? name.split('-').slice(0, 2).join('-')
+      : voice.languageCode;
+
+  console.log(`   🎙️ Google Cloud TTS — voice: ${name}, lang: ${lang}`);
 
   const payload = {
     input: { ssml: wrapSSML(text) },
     voice: {
-      languageCode: voice.languageCode,
-      name: voice.name,
+      languageCode,
+      name,
       ssmlGender: voice.gender,
     },
     audioConfig: {
@@ -754,7 +766,7 @@ export async function generateSpeech(
   if (primaryProvider === 'google-cloud' && lang !== 'si' && googleApiKey) {
     waterfall.push({
       name: 'Google Cloud TTS (primary)',
-      fn: () => ttsGoogleCloud(text, lang, googleApiKey),
+      fn: () => ttsGoogleCloud(text, lang, googleApiKey, voiceId),
     });
   }
 
@@ -795,7 +807,7 @@ export async function generateSpeech(
   if (primaryProvider !== 'google-cloud' && lang !== 'si' && googleApiKey) {
     waterfall.push({
       name: 'Google Cloud TTS (fallback)',
-      fn: () => ttsGoogleCloud(text, lang, googleApiKey),
+      fn: () => ttsGoogleCloud(text, lang, googleApiKey, voiceId),
     });
   }
 

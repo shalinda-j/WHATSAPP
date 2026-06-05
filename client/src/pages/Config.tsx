@@ -69,6 +69,7 @@ interface Config {
   providerType?: string;
   apiKey?: string;
   aiModel?: string;
+  baseUrl?: string;
   usageLimit?: number;
   usageUsed?: number;
   costPerToken?: number;
@@ -291,6 +292,7 @@ export default function Config() {
     providerType: 'openai',
     apiKey: '',
     aiModel: '',
+    baseUrl: '',
     isActive: false,
   });
 
@@ -445,9 +447,8 @@ export default function Config() {
       description: '',
       isProvider: isAi || isImage,
       providerType: isImage ? 'image-openai' : 'openai',
-      aiModel: isImage
-        ? IMAGE_PROVIDER_META['image-openai'].defaultModel
-        : '',
+      aiModel: isImage ? IMAGE_PROVIDER_META['image-openai'].defaultModel : '',
+      baseUrl: '',
       isActive: false,
       usageLimit: isImage ? 0 : 1000000,
       costPerToken: isImage ? 0 : 0.000002,
@@ -661,6 +662,9 @@ export default function Config() {
                       OpenRouter (Multi-Provider)
                     </option>
                     <option value="local">Local (Ollama/LM Studio)</option>
+                    <option value="custom">
+                      Custom (any OpenAI-compatible endpoint)
+                    </option>
                   </optgroup>
                   <optgroup label="Image generation">
                     {IMAGE_PROVIDER_TYPES.map((t) => (
@@ -748,6 +752,32 @@ export default function Config() {
                   </p>
                 )}
               </div>
+              {(formData.providerType === 'custom' ||
+                formData.providerType === 'local') && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Base URL
+                  </label>
+                  <input
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                    value={formData.baseUrl || ''}
+                    onChange={(e) =>
+                      setFormData({ ...formData, baseUrl: e.target.value })
+                    }
+                    placeholder={
+                      formData.providerType === 'local'
+                        ? 'e.g. http://localhost:11434/v1'
+                        : 'e.g. https://api.together.xyz/v1'
+                    }
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    The OpenAI-compatible endpoint. Works with Ollama, vLLM, LM
+                    Studio, Together.ai, DeepInfra, Fireworks, DeepSeek,
+                    Mistral, Grok, or any private gateway. Must end in{' '}
+                    <code>/v1</code>.
+                  </p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
@@ -1484,9 +1514,8 @@ export default function Config() {
                 </h3>
                 <p className="text-sm text-gray-700 mt-1">
                   Plug an API key in here and Content Studio + every agent's
-                  image-generation calls pick it up immediately — no
-                  environment variable, no restart. Stored encrypted via
-                  CryptoService.
+                  image-generation calls pick it up immediately — no environment
+                  variable, no restart. Stored encrypted via CryptoService.
                 </p>
                 <button
                   onClick={() => {
@@ -1497,8 +1526,7 @@ export default function Config() {
                       isProvider: true,
                       providerType: 'image-openai',
                       apiKey: '',
-                      aiModel:
-                        IMAGE_PROVIDER_META['image-openai'].defaultModel,
+                      aiModel: IMAGE_PROVIDER_META['image-openai'].defaultModel,
                       isActive: true,
                     });
                     setEditingId(null);
@@ -1519,8 +1547,8 @@ export default function Config() {
                 No image providers connected yet
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                Click <em>Connect image provider</em> above to add an OpenAI
-                or Stability key.
+                Click <em>Connect image provider</em> above to add an OpenAI or
+                Stability key.
               </p>
             </div>
           ) : (

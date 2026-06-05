@@ -56,6 +56,11 @@ export function resolveContactExportPhone(
   }
 
   for (const candidate of contactIdentifierCandidates(contact)) {
+    // The stored mapping may be keyed by any of: the raw value, the value
+    // without a leading '+', the normalised `<digits>@lid` form, or the bare
+    // local digits (older rows persisted the suffix-less identifier). Try all
+    // so a LID contact resolves regardless of which shape was saved.
+    const bareDigits = candidate.split('@')[0]?.replace(/\D/g, '') ?? '';
     const phone =
       realPhoneByIdentifier.get(candidate) ??
       realPhoneByIdentifier.get(candidate.replace(/^\+/, '')) ??
@@ -63,7 +68,8 @@ export function resolveContactExportPhone(
       // Tolerate mappings keyed by the bare local part (no @lid suffix):
       // loadPhoneMapForLids stores both forms, but a manually-built or
       // legacy map may only carry the suffix-less key.
-      realPhoneByIdentifier.get(candidate.replace(/@lid$/i, ''));
+      realPhoneByIdentifier.get(candidate.replace(/@lid$/i, '')) ??
+      (bareDigits ? realPhoneByIdentifier.get(bareDigits) : undefined);
     if (phone) return formatExportPhone(phone);
   }
 

@@ -8,8 +8,9 @@ import {
   ExperienceOption,
 } from './ConfigService';
 
-// Re-export types for convenience
-export {
+// Re-export types for convenience. `export type` is required under
+// isolatedModules (these are types, erased at compile time).
+export type {
   HumanizerConfig,
   CompanyInfo,
   BookingConfig,
