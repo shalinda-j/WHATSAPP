@@ -10,7 +10,7 @@ import { AIService, AIChatMessage } from '../interfaces/AIService';
 import Dataset from '../models/Dataset';
 import { configService } from './ConfigService';
 import { withTimeout } from './withTimeout';
-import { BRAND_NAME_SI, GEMINI_DEFAULT_MODEL } from '../config/brand';
+import { GEMINI_DEFAULT_MODEL } from '../config/brand';
 
 // Hard ceiling on any single Gemini network call. Prevents a hung request
 // from blocking the AILoadBalancer fallback chain indefinitely.
@@ -185,17 +185,10 @@ export async function getChatSession(userId: string): Promise<ChatSession> {
   const exampleHistory = await buildExampleHistory();
   const chat = model.startChat({
     systemInstruction: `${AI_PERSONALITY}\n\n${JOB_KNOWLEDGE_BASE}`,
-    history: [
-      {
-        role: 'model',
-        parts: [
-          {
-            text: BRAND_NAME_SI,
-          },
-        ],
-      },
-      ...exampleHistory,
-    ],
+    // Gemini requires the first history turn to be 'user'. The example
+    // history already starts with a user turn; we must NOT prepend a 'model'
+    // greeting here or the very first sendMessage 400s.
+    history: [...exampleHistory],
   });
   addChatSession(userId, chat);
   return chat;
@@ -382,6 +375,70 @@ export async function analyzeLeadIntent(text: string): Promise<{
 // But other files might be importing them. Let's see...
 // I will not export them. If something breaks, I'll fix the caller.
 
+type GeminiTurn = { role: 'user' | 'model'; parts: { text: string }[] };
+
+/**
+ * Normalise a generic chat-message list into a Gemini-VALID multiturn
+ * payload. The Gemini API rejects a chat history that:
+ *   (a) does not begin with a 'user' turn,
+ *   (b) does not strictly alternate user / model, or
+ *   (c) contains empty parts.
+ * Crucially these 400s only fire once a conversation HAS history — i.e. the
+ * customer's SECOND message — which is exactly the "first reply works, the
+ * next one falls back to the canned template" bug. By sanitising here we
+ * guarantee a valid request regardless of what the app accumulated (seeded
+ * examples, agent history windows starting mid-turn, duplicate user turns).
+ *
+ * Returns null when there is no user turn to send (caller treats as "".)
+ */
+export function buildGeminiPayload(messages: AIChatMessage[]): {
+  systemInstruction?: string;
+  history: GeminiTurn[];
+  sendText: string;
+} | null {
+  const systemInstruction =
+    messages.find((m) => m.role === 'system')?.content?.trim() || undefined;
+
+  // Map to user/model turns, trim, drop empties and stray system turns.
+  const mapped = messages
+    .filter((m) => m.role !== 'system')
+    .map((m) => ({
+      role: (m.role === 'assistant' ? 'model' : 'user') as 'user' | 'model',
+      text: (m.content ?? '').trim(),
+    }))
+    .filter((t) => t.text.length > 0);
+
+  // Merge consecutive same-role turns so the sequence strictly alternates.
+  const merged: { role: 'user' | 'model'; text: string }[] = [];
+  for (const turn of mapped) {
+    const prev = merged[merged.length - 1];
+    if (prev && prev.role === turn.role) {
+      prev.text += '\n' + turn.text;
+    } else {
+      merged.push({ ...turn });
+    }
+  }
+
+  // The final turn is the message we actually send; it must be a user turn.
+  const last = merged[merged.length - 1];
+  if (!last || last.role !== 'user') return null;
+  const sendText = last.text;
+
+  // History = everything before the final user turn. Drop a leading model
+  // turn so it begins with 'user' (merging already guarantees alternation,
+  // so there can be at most one leading model turn).
+  let history = merged.slice(0, -1);
+  if (history.length > 0 && history[0].role === 'model') {
+    history = history.slice(1);
+  }
+
+  return {
+    systemInstruction,
+    history: history.map((t) => ({ role: t.role, parts: [{ text: t.text }] })),
+    sendText,
+  };
+}
+
 export class GeminiService implements AIService {
   name: string;
   private apiKey: string;
@@ -401,51 +458,43 @@ export class GeminiService implements AIService {
 
   async generateResponse(messages: AIChatMessage[]): Promise<string> {
     try {
-      // Extract system prompt
-      const systemMessage = messages.find((m) => m.role === 'system');
-      const systemInstruction = systemMessage
-        ? systemMessage.content
-        : undefined;
-
-      // Convert history (excluding system)
-      const history = messages
-        .filter((m) => m.role !== 'system')
-        .map((m) => ({
-          role: m.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: m.content }],
-        }));
-
-      if (history.length === 0) return '';
-
-      const lastMessage = history.pop(); // Remove last message to send it
-      if (!lastMessage) return '';
-
-      // Get model with dynamic system instruction
-      const aiPersonality = await configService.getAIPersonality();
-      const dynamicKB = await configService.getDynamicKnowledgeBase();
-
       if (!this.apiKey || this.apiKey === 'your_gemini_api_key_here') {
         return '⚠️ Google Gemini API Key is missing. Please configure it in the Admin Panel to enable AI Features.';
       }
 
+      // Sanitise into a Gemini-valid payload (starts with user, alternates,
+      // no empty parts). This is what makes follow-up turns work instead of
+      // 400-ing and collapsing into the canned fallback template.
+      const payload = buildGeminiPayload(messages);
+      if (!payload) return '';
+
+      const aiPersonality = await configService.getAIPersonality();
+      const dynamicKB = await configService.getDynamicKnowledgeBase();
+
       const modelInstance = this.genAI.getGenerativeModel({
         model: this.modelName,
         systemInstruction:
-          systemInstruction || `${aiPersonality}\n\n${dynamicKB}`,
+          payload.systemInstruction || `${aiPersonality}\n\n${dynamicKB}`,
       });
 
       const chat = modelInstance.startChat({
-        history: history as any,
+        history: payload.history as any,
       });
 
       const result = await withTimeout(
-        chat.sendMessage(lastMessage.parts[0].text),
+        chat.sendMessage(payload.sendText),
         TIMEOUT,
         'gemini',
       );
       return result.response.text();
-    } catch (error) {
-      console.error(`GeminiService (${this.modelName}) error:`, error);
+    } catch (error: any) {
+      // Surface the real Gemini error message (model retired, quota, history
+      // shape) so production logs explain WHY a turn fell back, instead of a
+      // silent collapse into the lead-fallback template.
+      console.error(
+        `GeminiService (${this.modelName}) error:`,
+        error?.message || error,
+      );
       throw error;
     }
   }
