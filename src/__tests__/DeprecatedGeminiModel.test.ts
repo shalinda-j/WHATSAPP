@@ -1,4 +1,7 @@
-import { isDeprecatedGeminiModel } from '../services/AIProviderSeeder';
+import {
+  isDeprecatedGeminiModel,
+  isPaidOnlyGeminiModel,
+} from '../services/AIProviderSeeder';
 import { GEMINI_DEFAULT_MODEL } from '../config/brand';
 
 /**
@@ -45,5 +48,42 @@ describe('isDeprecatedGeminiModel', () => {
 
   it('the chosen default model is not itself deprecated', () => {
     expect(isDeprecatedGeminiModel(GEMINI_DEFAULT_MODEL)).toBe(false);
+  });
+});
+
+/**
+ * Guards the SECOND production incident: the DB was pinned to gemini-3.5-flash,
+ * which is paid-only/preview and 429s on every call with a free-tier key —
+ * again collapsing every reply into the canned template. The boot migration
+ * must rewrite paid-only 3.x models to the free-tier default.
+ */
+describe('isPaidOnlyGeminiModel', () => {
+  it.each([
+    'gemini-3.5-flash',
+    'gemini-3.5-pro',
+    'gemini-3.0-flash',
+    'gemini-3-flash',
+    'GEMINI-3.5-FLASH',
+  ])('flags paid-only 3.x model %s', (model) => {
+    expect(isPaidOnlyGeminiModel(model)).toBe(true);
+  });
+
+  it.each([
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+    'gemini-2.5-pro',
+    'gemini-1.5-flash',
+  ])('does not flag free-tier / non-3.x model %s', (model) => {
+    expect(isPaidOnlyGeminiModel(model)).toBe(false);
+  });
+
+  it('treats null/undefined/empty as not paid-only', () => {
+    expect(isPaidOnlyGeminiModel(null)).toBe(false);
+    expect(isPaidOnlyGeminiModel(undefined)).toBe(false);
+    expect(isPaidOnlyGeminiModel('')).toBe(false);
+  });
+
+  it('the free-tier default is not flagged as paid-only', () => {
+    expect(isPaidOnlyGeminiModel(GEMINI_DEFAULT_MODEL)).toBe(false);
   });
 });

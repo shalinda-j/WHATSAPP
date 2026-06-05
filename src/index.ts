@@ -1193,8 +1193,15 @@ onMessage(async (message, sock, sessionId) => {
           console.log('   ⚠️ AutoresearchNLP unavailable, using fallback');
         }
 
-        // Analyze Intent first for metadata
-        intentAnalysis = await analyzeLeadIntent(text);
+        // NOTE: We deliberately do NOT call analyzeLeadIntent() here anymore.
+        // It fired a FULL extra Gemini call on EVERY message purely to stamp
+        // intent/buyingSignal metadata on the saved ChatMessage. On the Gemini
+        // free tier (~10 req/min) that doubled our request rate and was a
+        // primary cause of 429s that collapsed real replies into the canned
+        // fallback template. The metadata is non-essential; it defaults to
+        // 'General'/'None'. Specific booking date/time detection still runs
+        // separately, but only when a booking keyword is present (above).
+        intentAnalysis = null;
 
         // LANGUAGE DETECTION: Primary languages are Sinhala and Singlish
         // (Sinhala written in Latin letters). English replies are only

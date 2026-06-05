@@ -107,6 +107,37 @@ const SERVICE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for AI providers
 const AI_REQUEST_TIMEOUT_MS =
   Number(process.env.AI_REQUEST_TIMEOUT_MS) || 45000;
 
+// How long to skip a provider that returned 429 after retries, so a burst of
+// inbound messages doesn't keep hammering an already rate-limited key (which
+// only deepens the throttle). Other providers are tried first during cooldown.
+const RATE_LIMIT_COOLDOWN_MS =
+  Number(process.env.AI_RATE_LIMIT_COOLDOWN_MS) || 60000;
+const MAX_429_RETRIES = 2;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** True when an error is a provider rate-limit / quota (HTTP 429). */
+export function isRateLimitError(err: any): boolean {
+  const status = err?.status ?? err?.statusCode ?? err?.response?.status;
+  if (status === 429) return true;
+  const msg = String(err?.message ?? err ?? '');
+  return /\b429\b|too many requests|rate.?limit|resource.?exhausted|quota/i.test(
+    msg,
+  );
+}
+
+/**
+ * Extract the server-suggested retry delay from a Gemini 429 body
+ * (`"retryDelay":"12s"`), capped so we never block a customer reply too long.
+ * Falls back to the caller's exponential value when absent.
+ */
+export function parseRetryDelayMs(err: any, fallbackMs: number): number {
+  const msg = String(err?.message ?? '');
+  const m = msg.match(/retryDelay"?\s*[:=]\s*"?(\d+)(?:\.\d+)?\s*s/i);
+  if (m) return Math.min(Number(m[1]) * 1000, 8000);
+  return Math.min(fallbackMs, 8000);
+}
+
 export class AILoadBalancer {
   private services: AIService[] = [];
   private userAssignments: Map<string, number>;
@@ -118,6 +149,10 @@ export class AILoadBalancer {
   // Cache for loaded services
   private lastServiceLoad = 0;
   private serviceLoadPromise: Promise<void> | null = null;
+
+  // Provider name → epoch ms until which it is considered rate-limited and
+  // should be de-prioritised (still used as last resort if nothing else works).
+  private rateLimitedUntil: Map<string, number> = new Map();
 
   // MEMORY LEAK FIX: Add limits and cleanup for caches
   private readonly MAX_HISTORY_CACHE_SIZE = 1000;
@@ -409,6 +444,64 @@ export class AILoadBalancer {
     return history;
   }
 
+  /**
+   * Order providers so any currently in 429 cooldown are tried LAST (but still
+   * tried — better a possibly-throttled reply than the canned template).
+   */
+  private orderByCooldown(services: AIService[]): AIService[] {
+    const now = Date.now();
+    const fresh: AIService[] = [];
+    const cooled: AIService[] = [];
+    for (const s of services) {
+      const until = this.rateLimitedUntil.get(s.constructor.name) ?? 0;
+      (until > now ? cooled : fresh).push(s);
+    }
+    return [...fresh, ...cooled];
+  }
+
+  /**
+   * Call one provider, retrying on 429 with exponential backoff (respecting the
+   * server's retryDelay when present). On persistent 429 the provider is put
+   * into a short cooldown and the error is rethrown so the caller fails over.
+   */
+  private async callProviderWithRetry(
+    service: AIService,
+    messages: AIChatMessage[],
+  ): Promise<string> {
+    let attempt = 0;
+    for (;;) {
+      try {
+        return await withTimeout(
+          service.generateResponse(messages),
+          AI_REQUEST_TIMEOUT_MS,
+          service.constructor.name,
+        );
+      } catch (err) {
+        if (isRateLimitError(err) && attempt < MAX_429_RETRIES) {
+          const wait = parseRetryDelayMs(err, 1000 * Math.pow(2, attempt));
+          console.warn(
+            `   ⏳ ${service.name} rate-limited (429) — backing off ${wait}ms ` +
+              `(retry ${attempt + 1}/${MAX_429_RETRIES})`,
+          );
+          await sleep(wait);
+          attempt++;
+          continue;
+        }
+        if (isRateLimitError(err)) {
+          this.rateLimitedUntil.set(
+            service.constructor.name,
+            Date.now() + RATE_LIMIT_COOLDOWN_MS,
+          );
+          console.warn(
+            `   🚦 ${service.name} still rate-limited after ${MAX_429_RETRIES} retries — ` +
+              `cooling down ${RATE_LIMIT_COOLDOWN_MS / 1000}s and failing over.`,
+          );
+        }
+        throw err;
+      }
+    }
+  }
+
   async sendMessage(userId: string, message: string): Promise<string> {
     // Load services with caching (not on every message)
     await this.loadServices();
@@ -454,9 +547,10 @@ export class AILoadBalancer {
 
     this.totalRequests++;
 
-    // Try services in priority order
-    for (let i = 0; i < this.services.length; i++) {
-      const service = this.services[i];
+    // Try services in priority order, de-prioritising any in 429 cooldown.
+    const ordered = this.orderByCooldown(this.services);
+    for (let i = 0; i < ordered.length; i++) {
+      const service = ordered[i];
 
       try {
         if (i > 0)
@@ -465,11 +559,7 @@ export class AILoadBalancer {
           );
 
         const start = Date.now();
-        const rawResponse = await withTimeout(
-          service.generateResponse(history),
-          AI_REQUEST_TIMEOUT_MS,
-          service.constructor.name,
-        );
+        const rawResponse = await this.callProviderWithRetry(service, history);
         const duration = Date.now() - start;
 
         // Apply WhatsApp style enforcement: fix markdown, cap length,
@@ -594,17 +684,17 @@ export class AILoadBalancer {
                 .includes((options.providerOverride ?? '').toLowerCase()),
           ),
         ]
-      : this.services;
+      : // No explicit provider: prefer providers not in 429 cooldown.
+        this.orderByCooldown(this.services);
 
     let lastError: unknown = null;
     for (const service of ordered) {
       try {
         const start = Date.now();
-        const text = await withTimeout(
-          service.generateResponse(messages),
-          AI_REQUEST_TIMEOUT_MS,
-          service.constructor.name,
-        );
+        // Same 429 retry/backoff + cooldown as the conversational path so a
+        // rate-limited agent call fails over instead of bubbling an error
+        // that collapses the whole turn into the canned template.
+        const text = await this.callProviderWithRetry(service, messages);
         const latencyMs = Date.now() - start;
         const inputLen = messages.reduce((a, m) => a + m.content.length, 0);
         const inputTokens = Math.ceil(inputLen / 4);

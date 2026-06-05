@@ -28,13 +28,40 @@ export function isDeprecatedGeminiModel(
 }
 
 /**
- * Self-heal AI provider configs whose pinned model has been retired by Google.
+ * Gemini model generations that are PAID-ONLY / preview as of 2026-06.
+ * Unlike retired models (which 404), these return HTTP 429 ("Too Many
+ * Requests" with a zero/near-zero quota) on a FREE-TIER API key — which looks
+ * identical to the retired-model failure to the customer: every reply
+ * collapses into the canned lead-fallback template.
  *
- * Without this, a deployment whose Admin Panel still stores e.g.
- * "gemini-1.5-flash" keeps 404-ing on every message even after the code
- * default is bumped — because the DB value overrides the code default. This
- * rewrites any retired Google model to GEMINI_DEFAULT_MODEL on boot, so a
- * redeploy fixes production with no manual admin action.
+ * The free tier only serves the gemini-2.5-* family. The whole 3.x line
+ * (gemini-3.0*, gemini-3.5*, …) requires billing. See
+ * https://ai.google.dev/gemini-api/docs/rate-limits.
+ */
+const PAID_ONLY_GEMINI_MODEL_PATTERNS: RegExp[] = [/^gemini-3(\.\d+)?[-.]/i];
+
+export function isPaidOnlyGeminiModel(
+  model: string | undefined | null,
+): boolean {
+  if (!model) return false;
+  return PAID_ONLY_GEMINI_MODEL_PATTERNS.some((re) => re.test(model.trim()));
+}
+
+/**
+ * Self-heal AI provider configs whose pinned model would fail on this
+ * deployment's API key:
+ *   - RETIRED models (1.5/2.0/pro) → 404 on every call.
+ *   - PAID-ONLY 3.x models on a free-tier key → 429 on every call.
+ *
+ * Both silently collapse the AI chain into the "we'll get back to you
+ * shortly…" template. Because the DB value overrides the code default, a
+ * redeploy alone won't help — this rewrites the stored model to
+ * GEMINI_DEFAULT_MODEL on boot so production fixes itself with no admin action.
+ *
+ * The paid-only rewrite is SKIPPED when the model already equals
+ * GEMINI_DEFAULT_MODEL: that is the explicit escape hatch for a paying
+ * operator who deliberately wants 3.x — they set
+ * `GEMINI_DEFAULT_MODEL=gemini-3.5-flash` and the migration leaves it alone.
  *
  * Idempotent: once rewritten the rows no longer match and are skipped.
  */
@@ -48,12 +75,18 @@ export async function migrateDeprecatedAIModels(): Promise<void> {
     let migrated = 0;
     for (const provider of googleProviders) {
       const current = (provider as any).aiModel as string | undefined;
-      if (isDeprecatedGeminiModel(current)) {
+      const retired = isDeprecatedGeminiModel(current);
+      const paidOnly =
+        isPaidOnlyGeminiModel(current) && current !== GEMINI_DEFAULT_MODEL;
+      if (retired || paidOnly) {
         (provider as any).aiModel = GEMINI_DEFAULT_MODEL;
         await provider.save();
         migrated++;
+        const reason = retired
+          ? 'retired (404)'
+          : 'paid-only/preview — 429 on free-tier keys';
         console.warn(
-          `🔧 Migrated retired Gemini model "${current}" → "${GEMINI_DEFAULT_MODEL}" ` +
+          `🔧 Migrated Gemini model "${current}" → "${GEMINI_DEFAULT_MODEL}" [${reason}] ` +
             `(Config _id=${String((provider as any)._id)}). Set GEMINI_DEFAULT_MODEL to override.`,
         );
       }
@@ -61,11 +94,11 @@ export async function migrateDeprecatedAIModels(): Promise<void> {
 
     if (migrated > 0) {
       console.log(
-        `✅ AI model migration: updated ${migrated} provider(s) off retired Gemini models.`,
+        `✅ AI model migration: updated ${migrated} provider(s) to a supported Gemini model.`,
       );
     }
   } catch (err) {
-    console.error('⚠️ Deprecated AI model migration failed:', err);
+    console.error('⚠️ AI model migration failed:', err);
   }
 }
 
