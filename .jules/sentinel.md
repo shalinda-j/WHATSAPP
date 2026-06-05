@@ -9,3 +9,7 @@
 **Vulnerability:** A simple string comparison (`!==`) was used to validate the `WEBHOOK_SECRET` against the incoming payload secret in the webhook inbound endpoint.
 **Learning:** Simple string comparison can expose the application to timing attacks, where an attacker can theoretically guess the secret character by character by measuring the time it takes for the comparison to fail.
 **Prevention:** Use `crypto.timingSafeEqual` with a constant-time comparison algorithm (such as SHA-256 hashes of the strings) to ensure that comparisons always take the same amount of time, regardless of whether they succeed or fail.
+## 2024-06-05 - Insecure Direct Object Reference (IDOR) via Unscoped Database Queries
+**Vulnerability:** The `Dataset` endpoints allowed users to access, modify, or delete datasets belonging to other tenants because Mongoose query methods like `findById`, `findByIdAndUpdate`, `findByIdAndDelete`, and `findOne` were used without tenant-level scoping constraints.
+**Learning:** Even when a collection contains a `tenantId` field and isolation utilities exist (`withTenantScope`), relying on unscoped ID-based lookups (`req.params.id`) bypasses these protections entirely, opening critical IDOR vulnerabilities.
+**Prevention:** In multi-tenant environments, never use `findById` or similar unscoped methods. Always wrap Mongoose queries with `withTenantScope(req, filter)` and use methods like `findOne`, `findOneAndUpdate`, or `findOneAndDelete` to inherently enforce authorization boundaries.
