@@ -1,5 +1,6 @@
 import { AIService, AIChatMessage } from '../interfaces/AIService';
 import { GeminiService } from './gemini';
+import { withTimeout } from './withTimeout';
 import {
   AI_PERSONALITY,
   JOB_KNOWLEDGE_BASE,
@@ -99,6 +100,12 @@ const defaultConfig = createCompanyConfig('default');
 
 // Cache configuration
 const SERVICE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for AI providers
+
+// Backstop timeout for a single provider call. Each provider service already
+// guards its own network call, but this wrapper ensures a hung provider still
+// triggers failover to the next provider in the chain.
+const AI_REQUEST_TIMEOUT_MS =
+  Number(process.env.AI_REQUEST_TIMEOUT_MS) || 45000;
 
 export class AILoadBalancer {
   private services: AIService[] = [];
@@ -458,7 +465,11 @@ export class AILoadBalancer {
           );
 
         const start = Date.now();
-        const rawResponse = await service.generateResponse(history);
+        const rawResponse = await withTimeout(
+          service.generateResponse(history),
+          AI_REQUEST_TIMEOUT_MS,
+          service.constructor.name,
+        );
         const duration = Date.now() - start;
 
         // Apply WhatsApp style enforcement: fix markdown, cap length,
@@ -589,7 +600,11 @@ export class AILoadBalancer {
     for (const service of ordered) {
       try {
         const start = Date.now();
-        const text = await service.generateResponse(messages);
+        const text = await withTimeout(
+          service.generateResponse(messages),
+          AI_REQUEST_TIMEOUT_MS,
+          service.constructor.name,
+        );
         const latencyMs = Date.now() - start;
         const inputLen = messages.reduce((a, m) => a + m.content.length, 0);
         const inputTokens = Math.ceil(inputLen / 4);

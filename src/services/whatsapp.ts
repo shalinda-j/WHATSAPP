@@ -26,6 +26,7 @@ import {
   extractPhoneFromText,
   rememberLidPhoneMapping,
 } from './LidPhoneMappingService';
+import { BRAND_NAME } from '../config/brand';
 
 // Set FFmpeg path
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
@@ -185,7 +186,7 @@ export class WhatsAppSessionManager {
         auth: authState,
         logger,
         printQRInTerminal: false, // We update DB instead
-        browser: ['Jayalath Global AI', 'Chrome', '120.0.0'],
+        browser: [BRAND_NAME, 'Chrome', '120.0.0'],
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 60000,
         syncFullHistory: false,

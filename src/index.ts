@@ -14,7 +14,10 @@ import {
   disconnectWhatsApp,
 } from './services/whatsapp';
 import { connectToMongoDB } from './services/MongoAuthService';
-import { seedAIProviders } from './services/AIProviderSeeder';
+import {
+  seedAIProviders,
+  migrateDeprecatedAIModels,
+} from './services/AIProviderSeeder';
 import { seedDatasets } from './services/DatasetSeeder';
 import { seedDefaultFormTemplate } from './services/FormTemplateSeeder';
 import {
@@ -31,6 +34,7 @@ import { analyzeLeadIntent } from './services/gemini';
 import { WebhookService } from './services/WebhookService';
 import { configService } from './services/ConfigService';
 import { configurationManager } from './services/ConfigurationManagerService';
+import { DEFAULT_COUNTRY_CODE, COUNTRY_INTERESTS } from './config/brand';
 import {
   handleBookingMessage,
   startBookingFlow,
@@ -116,26 +120,13 @@ type LeadFlowFact = {
   name: string | null;
 };
 
-const COUNTRY_INTERESTS: Array<{ label: string; pattern: RegExp }> = [
-  { label: 'Japan', pattern: /\b(japan|japanese|jp)\b/i },
-  { label: 'Israel', pattern: /\b(israel|isreal)\b/i },
-  { label: 'Singapore', pattern: /\b(singapore|sg)\b/i },
-  { label: 'Europe', pattern: /\b(europe|european)\b/i },
-  { label: 'Korea', pattern: /\b(korea|korean)\b/i },
-  { label: 'Romania', pattern: /\b(romania|romanian)\b/i },
-  {
-    label: 'Training course',
-    pattern: /\b(course|training|welding|machinery|skill)\b/i,
-  },
-];
-
 function extractPhoneFromLeadText(text: string): string | null {
   const candidates = text.match(/(?:\+?\d[\d\s().-]{7,}\d)/g) ?? [];
 
   for (const candidate of candidates) {
     const digits = candidate.replace(/\D/g, '');
     if (digits.length === 10 && digits.startsWith('0')) {
-      return `94${digits.slice(1)}`;
+      return `${DEFAULT_COUNTRY_CODE}${digits.slice(1)}`;
     }
     if (digits.length >= 8 && digits.length <= 15) {
       return digits;
@@ -295,6 +286,9 @@ async function startServer() {
       await connectToMongoDB(process.env.MONGODB_URI);
       // Seed AI providers from .env into the Config collection
       await seedAIProviders();
+      // Self-heal any provider still pinned to a retired Gemini model (404s).
+      // Must run before the first message is handled so the AI chain is live.
+      await migrateDeprecatedAIModels();
       await seedDatasets();
       await seedDefaultFormTemplate();
       // One-shot stamp of realPhone on every legacy ChatMessage that the
@@ -676,6 +670,12 @@ async function scheduleAutoRegistration(
 onMessage(async (message, sock, sessionId) => {
   try {
     const jid = getSenderJid(message);
+    // Guard against an empty/undefined sender JID — we use jid as a Map/Set key
+    // (rate limiting, opt-out, auto-registration) so a blank key would corrupt
+    // that state and address messages to nobody.
+    if (!jid || !jid.trim()) {
+      return;
+    }
     let text = getMessageText(message);
 
     // Debug: Log incoming messages
@@ -1486,18 +1486,28 @@ async function handleCommand(
       break;
 
     case '!stop':
-    case '!unsubscribe':
-      // FIX H2: Persist opt-out to MongoDB so it survives server restarts.
+    case '!unsubscribe': {
+      // FIX H2 + #63: Always record the in-memory opt-out, then DURABLY persist
+      // it to MongoDB BEFORE confirming the unsubscribe. We await the DB write so
+      // the opt-out is saved before we tell the user they're unsubscribed. If the
+      // write fails we still keep the in-memory opt-out, but warn the user that
+      // the unsubscribe may not have fully saved.
       addToOptOut(jid);
-      markContactOptedOut(jid, 'whatsapp', '!stop command').catch((err) => {
+      let optOutPersisted = true;
+      try {
+        await markContactOptedOut(jid, 'whatsapp', '!stop command');
+      } catch (err) {
+        optOutPersisted = false;
         console.error('   ⚠️ Failed to persist opt-out to MongoDB:', err);
-      });
-      await sendMessage(
-        jid,
-        await configurationManager.getStopMessage(),
-        sessionId,
-      );
+      }
+      let stopMessage = await configurationManager.getStopMessage();
+      if (!optOutPersisted) {
+        stopMessage +=
+          '\n\n⚠️ Note: we could not fully save your request right now. Please send STOP again later if you keep receiving messages.';
+      }
+      await sendMessage(jid, stopMessage, sessionId);
       break;
+    }
 
     case '!start':
     case '!subscribe':

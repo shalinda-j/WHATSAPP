@@ -1,3 +1,8 @@
+// Finding #67: node-nlp is intentionally PINNED to 5.0.0-alpha.5 — there is no
+// stable 5.x release, and the local NLP classifier is gated OFF by default
+// (ConfigService.getLocalNLPEnabled() returns false), so this module's
+// classifier is never invoked at runtime. Revisit only if/when a stable
+// node-nlp ships AND the local NLP cache is re-enabled by operator policy.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - node-nlp lacks TypeScript definitions
 import { NlpManager } from 'node-nlp';

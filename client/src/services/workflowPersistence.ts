@@ -1,4 +1,5 @@
 import type { Node, Edge } from 'reactflow';
+import { api } from '../config';
 
 export interface WorkflowData {
   id: string;
@@ -109,23 +110,14 @@ class WorkflowPersistenceService {
     workflow: Omit<WorkflowData, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<WorkflowData> {
     try {
-      const response = await fetch(this.API_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(workflow),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      return await response.json();
+      const response = await api.post<WorkflowData>(
+        this.API_ENDPOINT,
+        workflow,
+      );
+      return response.data;
     } catch (error) {
       console.error('Failed to save workflow to API:', error);
-      // Fallback to localStorage
-      return this.saveToLocalStorage(workflow);
+      throw error;
     }
   }
 
@@ -134,55 +126,33 @@ class WorkflowPersistenceService {
     updates: Partial<WorkflowData>,
   ): Promise<WorkflowData> {
     try {
-      const response = await fetch(`${this.API_ENDPOINT}/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updates),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      return await response.json();
+      const response = await api.put<WorkflowData>(
+        `${this.API_ENDPOINT}/${id}`,
+        updates,
+      );
+      return response.data;
     } catch (error) {
       console.error('Failed to update workflow in API:', error);
-      // Fallback to localStorage
-      return this.updateInLocalStorage(id, updates);
+      throw error;
     }
   }
 
   async getFromAPI(): Promise<WorkflowData[]> {
     try {
-      const response = await fetch(this.API_ENDPOINT);
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      return await response.json();
+      const response = await api.get<WorkflowData[]>(this.API_ENDPOINT);
+      return response.data;
     } catch (error) {
       console.error('Failed to load workflows from API:', error);
-      // Fallback to localStorage
-      return this.getFromLocalStorage();
+      throw error;
     }
   }
 
   async deleteFromAPI(id: string): Promise<void> {
     try {
-      const response = await fetch(`${this.API_ENDPOINT}/${id}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      await api.delete(`${this.API_ENDPOINT}/${id}`);
     } catch (error) {
       console.error('Failed to delete workflow from API:', error);
-      // Fallback to localStorage
-      return this.deleteFromLocalStorage(id);
+      throw error;
     }
   }
 

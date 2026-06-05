@@ -3,6 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { configService } from '../../services/ConfigService';
 import { MARKETING_MANAGER_SYSTEM_PROMPT } from '../../config/prompts/marketing';
 import { authenticateToken } from '../middleware/auth';
+import { GEMINI_DEFAULT_MODEL } from '../../config/brand';
 
 const router = Router();
 
@@ -28,7 +29,7 @@ router.post('/chat', authenticateToken, async (req, res) => {
     const dynamicKB = await configService.getDynamicKnowledgeBase();
     const genAI = new GoogleGenerativeAI(validKey);
     const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
+      model: GEMINI_DEFAULT_MODEL,
       systemInstruction: MARKETING_MANAGER_SYSTEM_PROMPT(config, dynamicKB),
     });
 

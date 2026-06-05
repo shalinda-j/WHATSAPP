@@ -391,9 +391,10 @@ export class CampaignService {
       const slice = Math.max(1, Math.floor(limit / 2));
       const subset = execs.slice(0, slice);
 
-      const variantById = new Map(
-        (campaign.variants ?? []).map((v) => [v.variantId, v]),
-      );
+      // Guard variants before mapping: a campaign with no variants array
+      // (e.g. a partially-written doc) would otherwise throw on .map().
+      const variantList = campaign.variants?.length ? campaign.variants : [];
+      const variantById = new Map(variantList.map((v) => [v.variantId, v]));
       for (const exec of subset) {
         // Single-writer guard: only the worker that successfully moves
         // queued → sending may proceed.
@@ -434,36 +435,53 @@ export class CampaignService {
           );
           continue;
         }
-        const result = await channelRouter.send({
-          channel: exec.channel,
-          tenantId,
-          recipient: exec.recipientExternalId,
-          text: variant.messageBody,
-        });
-        const now = new Date();
-        if (result.ok) {
-          await CampaignExecution.updateOne(
-            { _id: claimed._id },
-            {
-              $set: {
-                status: 'sent',
-                sentAt: now,
-                externalMessageId: result.externalMessageId,
+        // Wrap the send in try/catch: if channelRouter.send throws (network
+        // error, adapter bug) the row must move out of 'sending' to 'failed'
+        // rather than getting stuck in-flight forever.
+        try {
+          const result = await channelRouter.send({
+            channel: exec.channel,
+            tenantId,
+            recipient: exec.recipientExternalId,
+            text: variant.messageBody,
+          });
+          const now = new Date();
+          if (result.ok) {
+            await CampaignExecution.updateOne(
+              { _id: claimed._id },
+              {
+                $set: {
+                  status: 'sent',
+                  sentAt: now,
+                  externalMessageId: result.externalMessageId,
+                },
               },
-            },
-          );
-          await MarketingCampaign.updateOne(
-            { _id: campaign._id },
-            { $inc: { 'stats.sent': 1 } },
-          );
-          sent++;
-        } else {
+            );
+            await MarketingCampaign.updateOne(
+              { _id: campaign._id },
+              { $inc: { 'stats.sent': 1 } },
+            );
+            sent++;
+          } else {
+            await CampaignExecution.updateOne(
+              { _id: claimed._id },
+              {
+                $set: {
+                  status: 'failed',
+                  errorMessage: result.error,
+                },
+              },
+            );
+          }
+        } catch (sendErr) {
+          const msg =
+            sendErr instanceof Error ? sendErr.message : String(sendErr);
           await CampaignExecution.updateOne(
             { _id: claimed._id },
             {
               $set: {
                 status: 'failed',
-                errorMessage: result.error,
+                errorMessage: msg,
               },
             },
           );

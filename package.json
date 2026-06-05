@@ -41,7 +41,11 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run client\"",
     "build:client": "cd client && npm install && npm run build",
     "build": "npm run build:client && tsc",
+    "typecheck": "tsc --noEmit",
+    "typecheck:client": "tsc --noEmit -p client/tsconfig.json",
     "test": "node --max-old-space-size=4096 node_modules/.bin/jest --passWithNoTests --runInBand",
+    "test:file": "node --max-old-space-size=4096 node_modules/.bin/jest --passWithNoTests --runInBand",
+    "verify": "npm run typecheck && npm run test",
     "start": "node dist/index.js"
   },
   "dependencies": {
@@ -69,7 +73,7 @@
     "mongoose": "^9.1.5",
     "multer": "^2.1.1",
     "nanoid": "^5.1.11",
-    "node-nlp": "^5.0.0-alpha.5",
+    "node-nlp": "5.0.0-alpha.5",
     "openai": "^6.17.0",
     "p-queue": "^9.2.0",
     "pdf-parse": "^1.1.1",

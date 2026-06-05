@@ -49,6 +49,9 @@ const BookingSchema = new Schema(
   { timestamps: true },
 );
 
+// Index for status filtering scoped per tenant.
+BookingSchema.index({ tenantId: 1, status: 1 });
+
 const Booking =
   mongoose.models.Booking || (mongoose as any).model('Booking', BookingSchema);
 

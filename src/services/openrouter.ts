@@ -1,6 +1,11 @@
 import OpenAI from 'openai';
 import { AIService, AIChatMessage } from '../interfaces/AIService';
 import { configService } from './ConfigService';
+import { withTimeout } from './withTimeout';
+
+// Hard ceiling on any single OpenRouter network call. Prevents a hung request
+// from blocking the AILoadBalancer fallback chain indefinitely.
+const TIMEOUT = Number(process.env.AI_REQUEST_TIMEOUT_MS) || 45000;
 
 /**
  * OpenRouter AI Service
@@ -66,12 +71,19 @@ export class OpenRouterService implements AIService {
       }
 
       // Call OpenRouter API (using OpenAI SDK)
-      const completion = await this.client.chat.completions.create({
-        messages: formattedMessages,
-        model: this.modelName,
-        temperature: 0.7,
-        max_tokens: 2048,
-      });
+      const completion = await withTimeout(
+        this.client.chat.completions.create(
+          {
+            messages: formattedMessages,
+            model: this.modelName,
+            temperature: 0.7,
+            max_tokens: 2048,
+          },
+          { timeout: TIMEOUT },
+        ),
+        TIMEOUT,
+        'openrouter',
+      );
 
       return completion.choices[0]?.message?.content || '';
     } catch (error: any) {

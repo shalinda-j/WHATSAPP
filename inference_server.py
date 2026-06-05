@@ -17,8 +17,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # Configuration
-MODEL_PATH = Path("ai-research/best_model.pt")
-TOKENIZER_PATH = Path.home() / ".cache" / "autoresearch" / "tokenizer"
+MODEL_PATH = Path(os.environ.get("MODEL_PATH", "ai-research/best_model.pt"))
+TOKENIZER_PATH = Path(os.environ.get(
+    "TOKENIZER_PATH",
+    str(Path.home() / ".cache" / "autoresearch" / "tokenizer")
+))
 DEFAULT_MODEL_DIM = 128
 DEFAULT_VOCAB_SIZE = 10000
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -342,4 +345,5 @@ async def batch_predict(texts: List[str]):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    PORT = int(os.environ.get('INFERENCE_PORT', '8001'))
+    uvicorn.run(app, host="0.0.0.0", port=PORT)

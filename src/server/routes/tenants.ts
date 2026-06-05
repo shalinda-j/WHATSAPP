@@ -58,24 +58,28 @@ router.post('/', async (req: Request, res: Response) => {
   res.status(201).json(tenant);
 });
 
-// Only these fields are editable via PATCH. Previously the handler applied
-// `$set: req.body` verbatim, which let a caller overwrite slug / _id /
-// createdAt or inject invalid enum values for plan / status.
+/**
+ * Explicit allowlist of fields an admin may edit via PATCH. Mirrors the
+ * editable surface of the create schema + Tenant model. Spreading req.body
+ * straight into $set let a caller overwrite arbitrary fields (slug, budget,
+ * ownerAdminId, …) — so we validate and only apply the known subset.
+ */
 const TenantUpdateSchema = z
   .object({
-    name: z.string().min(1).max(120).optional(),
-    plan: z.enum(['free', 'starter', 'growth', 'enterprise']).optional(),
-    status: z.enum(['active', 'suspended', 'archived']).optional(),
-    brand: z
-      .object({
-        industry: z.string().optional(),
-        voice: z.string().optional(),
-        primaryLanguage: z.string().optional(),
-        timezone: z.string().optional(),
-        websiteUrl: z.string().url().optional(),
-      })
-      .optional(),
+    name: z.string().min(1).max(120),
+    plan: z.enum(['free', 'starter', 'growth', 'enterprise']),
+    status: z.enum(['active', 'suspended', 'archived']),
+    brand: z.object({
+      industry: z.string().optional(),
+      voice: z.string().optional(),
+      primaryLanguage: z.string().optional(),
+      timezone: z.string().optional(),
+      websiteUrl: z.string().url().optional(),
+    }),
+    ipAllowlist: z.array(z.string()),
+    sessionTimeoutMinutes: z.number().int().positive(),
   })
+  .partial()
   .strict();
 
 router.patch(

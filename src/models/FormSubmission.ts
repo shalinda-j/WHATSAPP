@@ -45,6 +45,7 @@ const FormSubmissionSchema = new (mongoose as any).Schema({
 // Indexes
 FormSubmissionSchema.index({ formId: 1, submittedAt: -1 });
 FormSubmissionSchema.index({ phoneNumber: 1, status: 1 });
+FormSubmissionSchema.index({ tenantId: 1, submittedAt: -1 });
 
 const FormSubmission =
   mongoose.models.FormSubmission ||

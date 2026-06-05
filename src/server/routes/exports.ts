@@ -65,6 +65,10 @@ export function resolveContactExportPhone(
       realPhoneByIdentifier.get(candidate) ??
       realPhoneByIdentifier.get(candidate.replace(/^\+/, '')) ??
       realPhoneByIdentifier.get(normaliseLidJid(candidate) ?? '') ??
+      // Tolerate mappings keyed by the bare local part (no @lid suffix):
+      // loadPhoneMapForLids stores both forms, but a manually-built or
+      // legacy map may only carry the suffix-less key.
+      realPhoneByIdentifier.get(candidate.replace(/@lid$/i, '')) ??
       (bareDigits ? realPhoneByIdentifier.get(bareDigits) : undefined);
     if (phone) return formatExportPhone(phone);
   }
