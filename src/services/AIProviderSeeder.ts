@@ -1,51 +1,14 @@
 import Config from '../models/Config';
 import { GEMINI_DEFAULT_MODEL } from '../config/brand';
+import {
+  isDeprecatedGeminiModel,
+  isPaidOnlyGeminiModel,
+} from '../config/geminiModels';
 
-/**
- * Gemini model names Google has RETIRED. A request to any of these returns
- * HTTP 404 ("model not found") on every call, which silently collapses the
- * entire AI chain into the lead-fallback template ("we'll get back to you
- * shortly…") for every user. Keep this list current with
- * https://ai.google.dev/gemini-api/docs/deprecations.
- *
- * As of 2026-06: all gemini-1.0*, gemini-1.5*, gemini-2.0* names and the
- * legacy gemini-pro / gemini-pro-vision aliases are shut down.
- */
-const DEPRECATED_GEMINI_MODEL_PATTERNS: RegExp[] = [
-  /^gemini-1\.0/i,
-  /^gemini-1\.5/i,
-  /^gemini-2\.0/i,
-  /^gemini-pro$/i,
-  /^gemini-pro-vision$/i,
-  /^gemini-pro-latest$/i,
-];
-
-export function isDeprecatedGeminiModel(
-  model: string | undefined | null,
-): boolean {
-  if (!model) return false;
-  return DEPRECATED_GEMINI_MODEL_PATTERNS.some((re) => re.test(model.trim()));
-}
-
-/**
- * Gemini model generations that are PAID-ONLY / preview as of 2026-06.
- * Unlike retired models (which 404), these return HTTP 429 ("Too Many
- * Requests" with a zero/near-zero quota) on a FREE-TIER API key — which looks
- * identical to the retired-model failure to the customer: every reply
- * collapses into the canned lead-fallback template.
- *
- * The free tier only serves the gemini-2.5-* family. The whole 3.x line
- * (gemini-3.0*, gemini-3.5*, …) requires billing. See
- * https://ai.google.dev/gemini-api/docs/rate-limits.
- */
-const PAID_ONLY_GEMINI_MODEL_PATTERNS: RegExp[] = [/^gemini-3(\.\d+)?[-.]/i];
-
-export function isPaidOnlyGeminiModel(
-  model: string | undefined | null,
-): boolean {
-  if (!model) return false;
-  return PAID_ONLY_GEMINI_MODEL_PATTERNS.some((re) => re.test(model.trim()));
-}
+// Re-export the pure model-policy helpers so existing importers/tests that
+// reference them from this module keep working. The source of truth (and the
+// runtime coercion used on the hot path) lives in ../config/geminiModels.
+export { isDeprecatedGeminiModel, isPaidOnlyGeminiModel };
 
 /**
  * Self-heal AI provider configs whose pinned model would fail on this

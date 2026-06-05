@@ -11,6 +11,7 @@ import Dataset from '../models/Dataset';
 import { configService } from './ConfigService';
 import { withTimeout } from './withTimeout';
 import { GEMINI_DEFAULT_MODEL } from '../config/brand';
+import { coerceToSupportedGeminiModel } from '../config/geminiModels';
 
 // Hard ceiling on any single Gemini network call. Prevents a hung request
 // from blocking the AILoadBalancer fallback chain indefinitely.
@@ -53,7 +54,17 @@ async function getGeminiModel(modelName = GEMINI_DEFAULT_MODEL) {
     console.error('Error fetching preferred model, falling back to default.');
   }
 
-  return genAI.getGenerativeModel({ model: activeModel });
+  // Runtime guard: a stale DB value (e.g. retired 1.5/2.0 → 404, or paid-only
+  // 3.x → 429 on a free key) must never reach the API. Coerce to a supported
+  // model regardless of what the DB/migration left behind.
+  const safeModel = coerceToSupportedGeminiModel(activeModel);
+  if (safeModel !== activeModel) {
+    console.warn(
+      `⚠️ Coercing unsupported Gemini model "${activeModel}" → "${safeModel}" at call time.`,
+    );
+  }
+
+  return genAI.getGenerativeModel({ model: safeModel });
 }
 
 // Store chat sessions for conversation memory.
@@ -451,7 +462,11 @@ export class GeminiService implements AIService {
     providerType?: string;
   }) {
     this.apiKey = config.apiKey;
-    this.modelName = config.model || GEMINI_DEFAULT_MODEL;
+    // Runtime guard: never instantiate against a retired (404) or paid-only
+    // (429 on free tier) model, even if the DB/config still pins one.
+    this.modelName = coerceToSupportedGeminiModel(
+      config.model || GEMINI_DEFAULT_MODEL,
+    );
     this.name = `Gemini (${this.modelName})`;
     this.genAI = new GoogleGenerativeAI(this.apiKey);
   }
