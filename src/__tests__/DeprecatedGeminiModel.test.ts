@@ -2,6 +2,7 @@ import {
   isDeprecatedGeminiModel,
   isPaidOnlyGeminiModel,
 } from '../services/AIProviderSeeder';
+import { coerceToSupportedGeminiModel } from '../config/geminiModels';
 import { GEMINI_DEFAULT_MODEL } from '../config/brand';
 
 /**
@@ -85,5 +86,38 @@ describe('isPaidOnlyGeminiModel', () => {
 
   it('the free-tier default is not flagged as paid-only', () => {
     expect(isPaidOnlyGeminiModel(GEMINI_DEFAULT_MODEL)).toBe(false);
+  });
+});
+
+/**
+ * Runtime coercion is the belt-and-braces guard: every Gemini call passes its
+ * model through this, so even a stale DB row (gemini-3.5-flash) never reaches
+ * the API and can never 429/404 the whole AI chain into the canned template.
+ */
+describe('coerceToSupportedGeminiModel', () => {
+  it('rewrites a paid-only 3.x model to the free-tier default', () => {
+    expect(coerceToSupportedGeminiModel('gemini-3.5-flash')).toBe(
+      GEMINI_DEFAULT_MODEL,
+    );
+  });
+
+  it('rewrites a retired model to the default', () => {
+    expect(coerceToSupportedGeminiModel('gemini-1.5-flash-latest')).toBe(
+      GEMINI_DEFAULT_MODEL,
+    );
+  });
+
+  it('leaves a supported free-tier model untouched', () => {
+    expect(coerceToSupportedGeminiModel('gemini-2.5-flash-lite')).toBe(
+      'gemini-2.5-flash-lite',
+    );
+    expect(coerceToSupportedGeminiModel('gemini-2.5-pro')).toBe(
+      'gemini-2.5-pro',
+    );
+  });
+
+  it('falls back to the default for empty/null input', () => {
+    expect(coerceToSupportedGeminiModel('')).toBe(GEMINI_DEFAULT_MODEL);
+    expect(coerceToSupportedGeminiModel(null)).toBe(GEMINI_DEFAULT_MODEL);
   });
 });
