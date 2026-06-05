@@ -22,6 +22,37 @@ const BindingsUpdateSchema = z.object({
   agentBindings: z.array(z.string()),
 });
 
+/**
+ * Config blobs can accumulate sensitive values (tokens, secrets, keys) — e.g.
+ * OAuth callbacks persist accessToken/refreshToken onto config in some shapes.
+ * Strip any key matching a known-sensitive name before returning config to the
+ * client. Non-sensitive fields are preserved intact.
+ */
+const SENSITIVE_CONFIG_KEYS = new Set([
+  'webhooksecret',
+  'verifytoken',
+  'appsecret',
+  'apikey',
+  'token',
+  'accesstoken',
+  'secret',
+  'password',
+  'clientsecret',
+  'privatekey',
+]);
+
+function stripSecrets(
+  config: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  if (!config || typeof config !== 'object') return {};
+  const safe: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(config)) {
+    if (SENSITIVE_CONFIG_KEYS.has(key.toLowerCase())) continue;
+    safe[key] = value;
+  }
+  return safe;
+}
+
 router.get('/', async (req: Request, res: Response) => {
   const tenantId = req.tenant?._id;
   const items = await ChannelConnection.find({ tenantId }).sort({
@@ -37,7 +68,7 @@ router.get('/', async (req: Request, res: Response) => {
     lastError: c.lastError,
     lastConnectedAt: c.lastConnectedAt,
     hasCredentials: Object.keys(c.credentials ?? {}).length > 0,
-    config: c.config,
+    config: stripSecrets(c.config as Record<string, unknown> | undefined),
     agentBindings: c.agentBindings ?? [],
   }));
   res.json(safe);

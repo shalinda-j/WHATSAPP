@@ -50,7 +50,9 @@ export class AgentApprovalQueueService {
     } catch {
       /* DB error — use default TTL */
     }
-    const expiresAt = new Date(Date.now() + (params.expiresInMs ?? defaultTtlMs));
+    const expiresAt = new Date(
+      Date.now() + (params.expiresInMs ?? defaultTtlMs),
+    );
     const entry = await AgentApprovalQueue.create({
       executionId: params.executionId,
       traceId: params.traceId,

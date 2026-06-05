@@ -5,6 +5,7 @@ import { aiLoadBalancer } from './AILoadBalancer';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import axios from 'axios';
+import { GEMINI_DEFAULT_MODEL } from '../config/brand';
 
 const CONFIG_KEY = 'call_agent_settings';
 const FALLBACK_PATH = join(process.cwd(), 'data', 'call_agent_settings.json');
@@ -135,7 +136,7 @@ Keep it under 3 sentences. Be friendly and helpful. Do not mention you are an AI
       try {
         console.log('📞 Generating call greeting via Gemini API...');
         const res = await axios.post(
-          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent',
+          `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_DEFAULT_MODEL}:generateContent`,
           {
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: { maxOutputTokens: 200, temperature: 0.8 },

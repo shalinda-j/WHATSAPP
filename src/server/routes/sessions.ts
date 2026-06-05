@@ -53,6 +53,9 @@ router.post('/', async (req, res) => {
     if (!session) {
       session = await Session.create({
         sessionId: newId,
+        // Stamp the owning tenant (finding #66) so sessions are
+        // tenant-attributable; sessionId remains globally unique for now.
+        tenantId: req.tenant?._id,
         sessionName: newName,
         status: 'connecting',
         deleted: false,

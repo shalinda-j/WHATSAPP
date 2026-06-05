@@ -79,6 +79,8 @@ const ChatMessageSchema = new Schema({
 // Indexes for common queries
 ChatMessageSchema.index({ userId: 1, timestamp: -1 });
 ChatMessageSchema.index({ 'metadata.sessionId': 1, timestamp: -1 });
+// Chat-history-by-session query: messages for a user within a session, newest first.
+ChatMessageSchema.index({ userId: 1, 'metadata.sessionId': 1, timestamp: -1 });
 // Sentiment analytics need to scan negative messages by recency. Sparse
 // because most inbound messages stay neutral and we don't want to bloat
 // the index with the neutral majority.

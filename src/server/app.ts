@@ -102,8 +102,19 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Body size limit is env-tunable (default 2mb). The `verify` callback stashes
+// the exact received bytes on req.rawBody so webhook HMAC signatures can be
+// computed over the original payload rather than a re-serialised JSON string.
+const JSON_LIMIT = process.env.JSON_BODY_LIMIT || '2mb';
+app.use(
+  express.json({
+    limit: JSON_LIMIT,
+    verify: (req, _res, buf) => {
+      (req as any).rawBody = buf;
+    },
+  }),
+);
+app.use(express.urlencoded({ extended: true, limit: JSON_LIMIT }));
 
 // Middleware: Check DB Connection with retry
 app.use(async (req, res, next) => {

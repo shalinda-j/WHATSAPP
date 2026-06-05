@@ -15,7 +15,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { randomBytes, createHmac } from 'crypto';
+import { randomBytes, createHmac, createHash } from 'crypto';
 import axios from 'axios';
 import ChannelConnection from '../../models/ChannelConnection';
 import Tenant from '../../models/Tenant';
@@ -136,10 +136,50 @@ interface StatePayload {
   ts: number;
 }
 
-const STATE_SECRET = (): string =>
-  process.env.OAUTH_STATE_SECRET ||
-  process.env.JWT_SECRET ||
-  'dev-only-state-secret';
+let _resolvedStateSecret: string | undefined;
+
+/**
+ * The OAuth state HMAC secret must be distinct from JWT_SECRET: reusing the
+ * JWT secret for an unrelated signing surface widens the blast radius if one
+ * leaks. Require OAUTH_STATE_SECRET in production; in development fall back to
+ * JWT_SECRET with a loud warning. Resolved once and memoized.
+ */
+const STATE_SECRET = (): string => {
+  if (_resolvedStateSecret !== undefined) return _resolvedStateSecret;
+
+  if (process.env.OAUTH_STATE_SECRET) {
+    _resolvedStateSecret = process.env.OAUTH_STATE_SECRET;
+    return _resolvedStateSecret;
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'OAUTH_STATE_SECRET is required in production. Set a distinct secret ' +
+        '(do not reuse JWT_SECRET) to sign OAuth state.',
+    );
+  }
+
+  if (process.env.JWT_SECRET) {
+    console.warn(
+      '⚠️  OAUTH_STATE_SECRET not set — deriving a dedicated dev OAuth state ' +
+        'secret from JWT_SECRET (NOT reusing the raw JWT signing surface). ' +
+        'Set a distinct OAUTH_STATE_SECRET before production.',
+    );
+    // Derive a separate secret so the OAuth state HMAC never uses the raw
+    // JWT_SECRET directly — a leak of one no longer compromises the other.
+    _resolvedStateSecret = createHash('sha256')
+      .update('oauth-state:' + process.env.JWT_SECRET)
+      .digest('hex');
+    return _resolvedStateSecret;
+  }
+
+  console.warn(
+    '⚠️  Neither OAUTH_STATE_SECRET nor JWT_SECRET is set — using an insecure ' +
+      'dev-only OAuth state secret. Do not use this in production.',
+  );
+  _resolvedStateSecret = 'dev-only-state-secret';
+  return _resolvedStateSecret;
+};
 
 const STATE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
 

@@ -2,6 +2,11 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 interface ISession {
   sessionId: string;
+  // Optional owning tenant. Forward-compatible scaffolding for finding #66:
+  // new sessions are stamped with their tenant so a future migration can make
+  // sessionId per-tenant unique. sessionId stays globally unique for now (no
+  // migration required) — see docs/SESSION-MULTITENANCY.md.
+  tenantId?: mongoose.Types.ObjectId;
   sessionName?: string;
   status:
     | 'connecting'
@@ -20,6 +25,7 @@ interface ISession {
 
 const SessionSchema = new Schema<ISession>({
   sessionId: { type: String, required: true, unique: true },
+  tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', index: true },
   sessionName: { type: String },
   status: {
     type: String,

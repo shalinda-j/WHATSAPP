@@ -2,12 +2,39 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
+import { z } from 'zod';
 import Admin from '../../models/Admin';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { strictRateLimit } from '../middleware/rateLimit';
 import { ACTUAL_JWT_SECRET } from '../jwt-secret';
 
 const router = Router();
+
+/**
+ * Password strength is enforced only where a NEW credential is created
+ * (first-admin setup / change-password) — never on login, so existing
+ * users with legacy passwords can still authenticate.
+ */
+const StrongPasswordSchema = z
+  .string()
+  .min(12, 'Password must be at least 12 characters')
+  .regex(/[a-z]/, 'Password must contain a lowercase letter')
+  .regex(/[A-Z]/, 'Password must contain an uppercase letter')
+  .regex(/[0-9]/, 'Password must contain a digit');
+
+const UsernameSchema = z
+  .string()
+  .min(3, 'Username must be at least 3 characters')
+  .max(50, 'Username must be at most 50 characters')
+  .regex(
+    /^[a-zA-Z0-9._-]+$/,
+    'Username may only contain letters, digits, ., _ and -',
+  );
+
+const SetupSchema = z.object({
+  username: UsernameSchema,
+  password: StrongPasswordSchema,
+});
 
 // Check if MongoDB is available
 const isMongoDBAvailable = () => {
@@ -46,7 +73,15 @@ router.post('/setup', strictRateLimit, async (req, res) => {
       return res.status(403).json({ message: 'Setup already completed' });
     }
 
-    const { username, password } = req.body;
+    const parsed = SetupSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: 'Invalid username or password',
+        error: parsed.error.issues.map((i) => i.message).join('; '),
+      });
+    }
+
+    const { username, password } = parsed.data;
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newAdmin = new Admin({

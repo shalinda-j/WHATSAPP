@@ -1,6 +1,7 @@
 import LidPhoneMapping from '../models/LidPhoneMapping';
 import ChatMessage from '../models/ChatMessage';
 import { extractRealPhone, isLidJid } from '../utils/jid';
+import { DEFAULT_COUNTRY_CODE } from '../config/brand';
 
 export type LidPhoneMappingSource =
   | 'message'
@@ -32,17 +33,20 @@ export function normalisePhoneDigits(
 ): string | null {
   if (!value) return null;
   if (isLidJid(String(value).trim().replace(/^\+/, ''))) return null;
-  const fromJid = extractRealPhone(value);
-  if (fromJid) return fromJid;
 
-  const digits = String(value).replace(/\D/g, '');
+  // Prefer JID-aware extraction (strips @suffix and :device parts); fall back
+  // to raw digit stripping for plain phone strings. Either way the result is
+  // run through the local→E.164 normalisation below — extractRealPhone alone
+  // returns un-prefixed local digits, so returning it early (the old bug) left
+  // '0703179882' uncorrected.
+  const digits = extractRealPhone(value) ?? String(value).replace(/\D/g, '');
   if (digits.length < 8 || digits.length > 15) return null;
 
-  // Sri Lanka local mobile format: 0703179882 -> 94703179882.
-  // The app's default market is Sri Lanka, and this keeps manual/in-message
-  // repair ergonomic without treating opaque @lid ids as phones.
-  if (/^0\d{9}$/.test(digits)) return `94${digits.slice(1)}`;
-  if (/^7\d{8}$/.test(digits)) return `94${digits}`;
+  // Default-market local mobile format: 0703179882 -> 94703179882.
+  // The app's default market is Sri Lanka (DEFAULT_COUNTRY_CODE), and this keeps
+  // manual/in-message repair ergonomic without treating opaque @lid ids as phones.
+  if (/^0\d{9}$/.test(digits)) return `${DEFAULT_COUNTRY_CODE}${digits.slice(1)}`;
+  if (/^7\d{8}$/.test(digits)) return `${DEFAULT_COUNTRY_CODE}${digits}`;
   return digits;
 }
 

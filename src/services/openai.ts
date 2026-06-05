@@ -2,6 +2,11 @@ import OpenAI, { toFile } from 'openai';
 import { AIService, AIChatMessage } from '../interfaces/AIService';
 import { AI_PERSONALITY, JOB_KNOWLEDGE_BASE } from '../config/ai-personality';
 import { createCompanyConfig } from '../config/companies';
+import { withTimeout } from './withTimeout';
+
+// Hard ceiling on any single OpenAI network call. Prevents a hung request
+// from blocking the AILoadBalancer fallback chain indefinitely.
+const TIMEOUT = Number(process.env.AI_REQUEST_TIMEOUT_MS) || 45000;
 
 export class OpenAIService implements AIService {
   name: string;
@@ -40,10 +45,17 @@ export class OpenAIService implements AIService {
         });
       }
 
-      const completion = await this.client.chat.completions.create({
-        messages: formattedMessages,
-        model: this.modelName,
-      });
+      const completion = await withTimeout(
+        this.client.chat.completions.create(
+          {
+            messages: formattedMessages,
+            model: this.modelName,
+          },
+          { timeout: TIMEOUT },
+        ),
+        TIMEOUT,
+        'openai',
+      );
 
       return completion.choices[0]?.message?.content || '';
     } catch (error: any) {
@@ -69,10 +81,14 @@ export async function transcribeAudio(
       type: 'audio/ogg',
     });
 
-    const transcription = await openai.audio.transcriptions.create({
-      file: file,
-      model: 'whisper-1',
-    });
+    const transcription = await withTimeout(
+      openai.audio.transcriptions.create({
+        file: file,
+        model: 'whisper-1',
+      }),
+      TIMEOUT,
+      'openai-transcribe',
+    );
 
     return transcription.text;
   } catch (error) {

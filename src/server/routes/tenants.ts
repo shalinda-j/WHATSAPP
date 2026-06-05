@@ -58,12 +58,40 @@ router.post('/', async (req: Request, res: Response) => {
   res.status(201).json(tenant);
 });
 
+/**
+ * Explicit allowlist of fields an admin may edit via PATCH. Mirrors the
+ * editable surface of the create schema + Tenant model. Spreading req.body
+ * straight into $set let a caller overwrite arbitrary fields (slug, budget,
+ * ownerAdminId, …) — so we validate and only apply the known subset.
+ */
+const TenantUpdateSchema = z
+  .object({
+    name: z.string().min(1).max(120),
+    plan: z.enum(['free', 'starter', 'growth', 'enterprise']),
+    status: z.enum(['active', 'suspended', 'archived']),
+    brand: z.object({
+      industry: z.string().optional(),
+      voice: z.string().optional(),
+      primaryLanguage: z.string().optional(),
+      timezone: z.string().optional(),
+      websiteUrl: z.string().url().optional(),
+    }),
+    ipAllowlist: z.array(z.string()),
+    sessionTimeoutMinutes: z.number().int().positive(),
+  })
+  .partial()
+  .strict();
+
 router.patch(
   '/:slug',
   async (req: Request<{ slug: string }>, res: Response) => {
+    const parsed = TenantUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.message });
+    }
     const updated = await Tenant.findOneAndUpdate(
       { slug: req.params.slug },
-      { $set: req.body },
+      { $set: parsed.data },
       { new: true },
     );
     if (!updated) return res.status(404).json({ error: 'not_found' });

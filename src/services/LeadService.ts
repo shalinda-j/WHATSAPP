@@ -569,15 +569,24 @@ async function saveLeadRegistration(
 /**
  * Get lead statistics (for admin dashboard)
  */
-export async function getLeadStats() {
+export async function getLeadStats(tenantId?: string) {
   try {
+    // Scope every count / aggregation / listing to the tenant when a
+    // tenantId is supplied. Without this filter a tenant's dashboard could
+    // surface counts across all tenants. No arg = legacy global behaviour.
+    const tenantFilter: Record<string, unknown> = tenantId ? { tenantId } : {};
+
     const [total, byStatus, byCountry, recent] = await Promise.all([
-      Lead.countDocuments(),
-      Lead.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+      Lead.countDocuments(tenantFilter),
       Lead.aggregate([
+        { $match: tenantFilter },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]),
+      Lead.aggregate([
+        { $match: tenantFilter },
         { $group: { _id: '$interestedCountry', count: { $sum: 1 } } },
       ]),
-      Lead.find().sort({ registeredAt: -1 }).limit(10).lean(),
+      Lead.find(tenantFilter).sort({ registeredAt: -1 }).limit(10).lean(),
     ]);
 
     return {

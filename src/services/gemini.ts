@@ -9,6 +9,12 @@ import { AIService, AIChatMessage } from '../interfaces/AIService';
 
 import Dataset from '../models/Dataset';
 import { configService } from './ConfigService';
+import { withTimeout } from './withTimeout';
+import { BRAND_NAME_SI, GEMINI_DEFAULT_MODEL } from '../config/brand';
+
+// Hard ceiling on any single Gemini network call. Prevents a hung request
+// from blocking the AILoadBalancer fallback chain indefinitely.
+const TIMEOUT = Number(process.env.AI_REQUEST_TIMEOUT_MS) || 45000;
 
 // Initialize Gemini AI (Removed global static init)
 // const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
@@ -17,7 +23,7 @@ import { configService } from './ConfigService';
 /**
  * Helper to get a dynamic model instance with the latest API Key
  */
-async function getGeminiModel(modelName = 'gemini-1.5-flash-latest') {
+async function getGeminiModel(modelName = GEMINI_DEFAULT_MODEL) {
   // First, check the database for an active Google provider config
   const apiKey = await configService.getGoogleProviderKey();
 
@@ -58,7 +64,30 @@ async function getGeminiModel(modelName = 'gemini-1.5-flash-latest') {
 // size), typically a few MB, preventing the unbounded growth that would
 // eventually OOM a long-running production server.
 const MAX_CHAT_SESSIONS = 500;
-const chatSessions: Map<string, ChatSession> = new Map();
+
+// Idle TTL: sessions untouched for longer than this are considered stale and
+// evicted on access. The 500-entry cap remains a hard backstop.
+const SESSION_TTL_MS = Number(process.env.GEMINI_SESSION_TTL_MS) || 1800000;
+
+interface ChatSessionEntry {
+  session: ChatSession;
+  lastAccess: number;
+}
+
+const chatSessions: Map<string, ChatSessionEntry> = new Map();
+
+/**
+ * Drop any session idle longer than SESSION_TTL_MS. Called on access so stale
+ * entries don't linger forever between the FIFO cap evictions.
+ */
+function evictStaleSessions(): void {
+  const now = Date.now();
+  for (const [key, entry] of chatSessions) {
+    if (now - entry.lastAccess > SESSION_TTL_MS) {
+      chatSessions.delete(key);
+    }
+  }
+}
 
 function addChatSession(userId: string, session: ChatSession): void {
   if (chatSessions.size >= MAX_CHAT_SESSIONS) {
@@ -66,7 +95,7 @@ function addChatSession(userId: string, session: ChatSession): void {
     const oldestKey = chatSessions.keys().next().value;
     if (oldestKey !== undefined) chatSessions.delete(oldestKey);
   }
-  chatSessions.set(userId, session);
+  chatSessions.set(userId, { session, lastAccess: Date.now() });
 }
 
 /**
@@ -95,10 +124,14 @@ export async function generateResponse(prompt: string): Promise<string> {
     // Get Dynamic Model
     const model = await getGeminiModel();
 
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      systemInstruction: `${aiPersonality}\n\n${dynamicKB}`,
-    });
+    const result = await withTimeout(
+      model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        systemInstruction: `${aiPersonality}\n\n${dynamicKB}`,
+      }),
+      TIMEOUT,
+      'gemini',
+    );
     return result.response.text();
   } catch (error: any) {
     if (error.message === 'MISSING_API_KEY') {
@@ -117,10 +150,14 @@ export async function generateSinhalaResponse(prompt: string): Promise<string> {
     const dynamicKB = await configService.getDynamicKnowledgeBase();
     const model = await getGeminiModel();
 
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      systemInstruction: `${SINHALA_SYSTEM_PROMPT}\n\n${dynamicKB}`,
-    });
+    const result = await withTimeout(
+      model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        systemInstruction: `${SINHALA_SYSTEM_PROMPT}\n\n${dynamicKB}`,
+      }),
+      TIMEOUT,
+      'gemini',
+    );
     return result.response.text();
   } catch (error: any) {
     if (error.message === 'MISSING_API_KEY') {
@@ -135,26 +172,33 @@ export async function generateSinhalaResponse(prompt: string): Promise<string> {
  * Get or create a chat session for a user (enables conversation memory)
  */
 export async function getChatSession(userId: string): Promise<ChatSession> {
-  if (!chatSessions.has(userId)) {
-    const model = await getGeminiModel();
-    const exampleHistory = await buildExampleHistory();
-    const chat = model.startChat({
-      systemInstruction: `${AI_PERSONALITY}\n\n${JOB_KNOWLEDGE_BASE}`,
-      history: [
-        {
-          role: 'model',
-          parts: [
-            {
-              text: '🙏 ආයුබෝවන්! මම ජයලත් ග්ලොබල් AI - ඔබේ විදේශ රැකියා AI සහායකයා. මම ඔබට උදව් කරන්න සූදානම්!',
-            },
-          ],
-        },
-        ...exampleHistory,
-      ],
-    });
-    addChatSession(userId, chat);
+  // Drop stale (idle) sessions before reading/writing.
+  evictStaleSessions();
+
+  const existing = chatSessions.get(userId);
+  if (existing) {
+    existing.lastAccess = Date.now();
+    return existing.session;
   }
-  return chatSessions.get(userId) as ChatSession;
+
+  const model = await getGeminiModel();
+  const exampleHistory = await buildExampleHistory();
+  const chat = model.startChat({
+    systemInstruction: `${AI_PERSONALITY}\n\n${JOB_KNOWLEDGE_BASE}`,
+    history: [
+      {
+        role: 'model',
+        parts: [
+          {
+            text: BRAND_NAME_SI,
+          },
+        ],
+      },
+      ...exampleHistory,
+    ],
+  });
+  addChatSession(userId, chat);
+  return chat;
 }
 
 /**
@@ -166,7 +210,11 @@ export async function sendMessageWithMemory(
 ): Promise<string> {
   try {
     const chat = await getChatSession(userId);
-    const result = await chat.sendMessage(message);
+    const result = await withTimeout(
+      chat.sendMessage(message),
+      TIMEOUT,
+      'gemini',
+    );
     return result.response.text();
   } catch (error: any) {
     if (error.message === 'MISSING_API_KEY') {
@@ -195,17 +243,21 @@ export async function transcribeAudio(
 ): Promise<string> {
   try {
     const model = await getGeminiModel();
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          mimeType: mimeType,
-          data: audioBase64,
+    const result = await withTimeout(
+      model.generateContent([
+        {
+          inlineData: {
+            mimeType: mimeType,
+            data: audioBase64,
+          },
         },
-      },
-      {
-        text: 'Transcribe this audio message accurately. The audio may be in Sinhala (සිංහල), English, or Tamil (தமிழ்). Return ONLY the transcription text in the original language using appropriate Unicode characters.',
-      },
-    ]);
+        {
+          text: 'Transcribe this audio message accurately. The audio may be in Sinhala (සිංහල), English, or Tamil (தமிழ்). Return ONLY the transcription text in the original language using appropriate Unicode characters.',
+        },
+      ]),
+      TIMEOUT,
+      'gemini-transcribe',
+    );
 
     const transcribed = result.response.text().trim();
     // If Gemini returns meta-commentary instead of transcription, return empty
@@ -236,17 +288,21 @@ export async function extractTextFromImage(
 ): Promise<string> {
   try {
     const model = await getGeminiModel();
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          mimeType: mimeType,
-          data: base64Data,
+    const result = await withTimeout(
+      model.generateContent([
+        {
+          inlineData: {
+            mimeType: mimeType,
+            data: base64Data,
+          },
         },
-      },
-      {
-        text: 'Extract all text from this image. Return ONLY the extracted text. Maintain the original formatting as much as possible. If the text is in Sinhala, use Sinhala Unicode.',
-      },
-    ]);
+        {
+          text: 'Extract all text from this image. Return ONLY the extracted text. Maintain the original formatting as much as possible. If the text is in Sinhala, use Sinhala Unicode.',
+        },
+      ]),
+      TIMEOUT,
+      'gemini-ocr',
+    );
     return result.response.text();
   } catch (error: any) {
     if (error.message === 'MISSING_API_KEY') {
@@ -275,7 +331,8 @@ export async function analyzeLeadIntent(text: string): Promise<{
   try {
     const model = await getGeminiModel();
 
-    const result = await model.generateContent([
+    const result = await withTimeout(
+      model.generateContent([
       {
         text: `You are a Lead Analyzer for a Recruitment Agency. Analyze the user's message.
                 Extract any provided personal details, determine the "Buying Signal", and check for booking requests.
@@ -300,7 +357,10 @@ export async function analyzeLeadIntent(text: string): Promise<{
                     "suggestedAction": "Book Visit" (If signal High & Details present) OR "Ask History" (If details missing & asking price) OR "None"
                 }`,
       },
-    ]);
+      ]),
+      TIMEOUT,
+      'gemini-lead-intent',
+    );
 
     const responseText = result.response
       .text()
@@ -334,7 +394,7 @@ export class GeminiService implements AIService {
     providerType?: string;
   }) {
     this.apiKey = config.apiKey;
-    this.modelName = config.model || 'gemini-1.5-flash-latest';
+    this.modelName = config.model || GEMINI_DEFAULT_MODEL;
     this.name = `Gemini (${this.modelName})`;
     this.genAI = new GoogleGenerativeAI(this.apiKey);
   }
@@ -378,7 +438,11 @@ export class GeminiService implements AIService {
         history: history as any,
       });
 
-      const result = await chat.sendMessage(lastMessage.parts[0].text);
+      const result = await withTimeout(
+        chat.sendMessage(lastMessage.parts[0].text),
+        TIMEOUT,
+        'gemini',
+      );
       return result.response.text();
     } catch (error) {
       console.error(`GeminiService (${this.modelName}) error:`, error);

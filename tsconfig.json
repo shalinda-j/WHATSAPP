@@ -12,6 +12,7 @@
     "baseUrl": "./",
     "incremental": true,
     "resolveJsonModule": true,
+    "isolatedModules": true,
     "allowJs": true,
     "skipLibCheck": true,
     "esModuleInterop": true,

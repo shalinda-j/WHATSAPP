@@ -129,7 +129,10 @@ export function validateEnvironment(): void {
 
     // MONGODB_URI must be a valid connection string format
     if (req.name === 'MONGODB_URI' && value) {
-      if (!value.startsWith('mongodb://') && !value.startsWith('mongodb+srv://')) {
+      if (
+        !value.startsWith('mongodb://') &&
+        !value.startsWith('mongodb+srv://')
+      ) {
         errors.push(
           'CRITICAL: MONGODB_URI must start with mongodb:// or mongodb+srv://',
         );

@@ -40,8 +40,27 @@ router.post('/inbound', async (req, res) => {
 
     console.log(`🪝 Inbound webhook received: ${event}`);
 
-    // Basic Secret Validation (Optional but recommended)
-    // Real implementation should verify signature if high security needed
+    // Secret Validation.
+    // In production WEBHOOK_SECRET is MANDATORY — an unauthenticated inbound
+    // webhook can trigger outbound WhatsApp sends, so a missing secret is a
+    // hard misconfiguration we refuse to serve. In development we keep the
+    // legacy behaviour (skip validation) but warn loudly so the gap is visible.
+    if (!process.env.WEBHOOK_SECRET) {
+      if (process.env.NODE_ENV === 'production') {
+        console.error(
+          '❌ WEBHOOK_SECRET is not set — refusing inbound webhook in production. Set WEBHOOK_SECRET to enable this endpoint.',
+        );
+        return res.status(503).json({
+          error: 'Service Unavailable',
+          message:
+            'Inbound webhook is not configured (missing WEBHOOK_SECRET).',
+        });
+      }
+      console.warn(
+        '⚠️ WEBHOOK_SECRET is not set — inbound webhook secret validation is DISABLED (development only).',
+      );
+    }
+
     // Using crypto.timingSafeEqual to prevent timing attacks when comparing secrets
     if (process.env.WEBHOOK_SECRET) {
       if (!secret || typeof secret !== 'string') {
@@ -251,10 +270,10 @@ async function metaWebhookHandshake(
 // fake messages. When appSecret is absent, verification is skipped so
 // that operators who haven't added the secret yet aren't silently broken.
 //
-// Note: verification uses JSON.stringify(req.body) which is byte-equivalent
-// to the original body only when Express's JSON parser doesn't reformat
-// it. For byte-exact verification in production, configure express.raw()
-// on this route and store the raw buffer (see rawBody middleware pattern).
+// Note: verification is computed over req.rawBody — the exact bytes captured
+// by express.json's verify callback in src/server/app.ts — so the HMAC is
+// byte-equivalent to what Meta signed. It falls back to JSON.stringify(req.body)
+// only if rawBody is unavailable (e.g. a non-JSON parser handled the request).
 async function metaWebhookIngest(
   req: express.Request,
   res: express.Response,
@@ -267,9 +286,8 @@ async function metaWebhookIngest(
     if (!tenant) return res.status(404).json({ error: 'tenant_not_found' });
 
     // ── X-Hub-Signature-256 verification ──────────────────────────────────
-    const ChannelConnection = (
-      await import('../../models/ChannelConnection')
-    ).default;
+    const ChannelConnection = (await import('../../models/ChannelConnection'))
+      .default;
     const conn = await ChannelConnection.findOne({
       tenantId: tenant._id,
       channel,
@@ -277,19 +295,40 @@ async function metaWebhookIngest(
     const appSecret = (conn?.credentials as any)?.appSecret as
       | string
       | undefined;
+    // In production an unsigned Meta webhook is unverifiable — any attacker who
+    // knows the URL could inject fake messages. Refuse rather than silently
+    // skip the HMAC check. In development we still allow it so local testing
+    // works without an app secret configured.
+    if (process.env.NODE_ENV === 'production' && !appSecret) {
+      console.error(
+        `[${channel}] Meta webhook signature not configured (no appSecret stored) — refusing in production.`,
+      );
+      return res
+        .status(503)
+        .json({ error: 'meta_webhook_signature_not_configured' });
+    }
     if (appSecret) {
-      const sigHeader = req.headers['x-hub-signature-256'] as string | undefined;
+      const sigHeader = req.headers['x-hub-signature-256'] as
+        | string
+        | undefined;
       if (!sigHeader) {
         console.warn(`[${channel}] Missing X-Hub-Signature-256 from Meta`);
         return res.status(401).json({ error: 'missing_signature' });
       }
-      const bodyStr =
-        typeof req.body === 'string'
-          ? req.body
-          : JSON.stringify(req.body);
+      // Prefer the exact received bytes captured by express.json's verify
+      // callback (req.rawBody, see src/server/app.ts). HMAC over the raw
+      // buffer is byte-equivalent to what Meta signed; falling back to
+      // JSON.stringify(req.body) only when rawBody is unavailable.
+      const rawBody = (req as any).rawBody as Buffer | undefined;
+      const hmacInput: Buffer | string =
+        rawBody instanceof Buffer
+          ? rawBody
+          : typeof req.body === 'string'
+            ? req.body
+            : JSON.stringify(req.body);
       const expected =
         'sha256=' +
-        crypto.createHmac('sha256', appSecret).update(bodyStr).digest('hex');
+        crypto.createHmac('sha256', appSecret).update(hmacInput).digest('hex');
       // timingSafeEqual prevents timing-based secret extraction attacks
       try {
         const sigBuf = Buffer.from(sigHeader);

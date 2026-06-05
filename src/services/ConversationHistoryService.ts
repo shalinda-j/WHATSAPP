@@ -58,32 +58,21 @@ export class ConversationHistoryService {
         timestamp: new Date(),
       };
 
-      // Use findOneAndUpdate with upsert for atomic operation
-      const result = await ConversationHistory.findOneAndUpdate(
+      // Atomic push + trim in a single update: $slice keeps only the last
+      // MAX_MESSAGES_PER_USER entries after the push, so we never read the
+      // whole array back into JS, mutate it, and save() — which was racy
+      // (two concurrent addMessage calls could clobber each other's trim)
+      // and pulled the full document over the wire on every message.
+      await ConversationHistory.findOneAndUpdate(
         { userId },
         {
-          $push: { messages: message },
+          $push: {
+            messages: { $each: [message], $slice: -MAX_MESSAGES_PER_USER },
+          },
           $set: { lastActivityAt: new Date() },
         },
-        { upsert: true, new: true },
+        { upsert: true },
       );
-
-      // Trim messages if too many
-      if (result && result.messages.length > MAX_MESSAGES_PER_USER) {
-        // Keep system message (if first) + last N-1 messages
-        const systemMessage = result.messages.find(
-          (m: IConversationMessage) => m.role === 'system',
-        );
-        const recentMessages = result.messages
-          .filter((m: IConversationMessage) => m.role !== 'system')
-          .slice(-(MAX_MESSAGES_PER_USER - 1));
-
-        result.messages = systemMessage
-          ? [systemMessage, ...recentMessages]
-          : recentMessages;
-
-        await result.save();
-      }
     } catch (error) {
       console.error('[ConversationHistory] Error adding message:', error);
     }
