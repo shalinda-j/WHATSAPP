@@ -10,6 +10,31 @@ const router = Router();
 router.use(authenticateToken);
 router.use(resolveTenant);
 
+// ⚡ Bolt: Precompiled category regular expressions for performance
+// By extracting keywordsMap out of the request handler and precompiling them
+// into RegExp objects, we eliminate the overhead of recreating arrays and
+// O(M*N) string matching loops on every request.
+const rawKeywordsMap: Record<string, string[]> = {
+  jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
+  register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
+  payment: ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
+  booking: ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
+  location: ['address', 'location', 'where', 'branch', 'office', 'map'],
+  services: ['service', 'what do you do', 'help', 'information', 'details'],
+  hello: ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
+  language: ['sinhala', 'english', 'tamil', 'translate'],
+};
+
+// Compile to case-insensitive regex without word boundaries to match original .includes() behavior
+const CATEGORY_REGEX_MAP: Record<string, RegExp> = {};
+for (const [category, keywords] of Object.entries(rawKeywordsMap)) {
+  // Escape regex specials just in case, then join with OR
+  const pattern = keywords
+    .map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|');
+  CATEGORY_REGEX_MAP[category] = new RegExp(pattern, 'i');
+}
+
 router.get('/', async (req, res) => {
   try {
     // Determine counts for VoiceAgentHub stats
@@ -102,27 +127,19 @@ router.get('/questions', async (req, res) => {
   try {
     const { limit = 20 } = req.query;
 
+    // ⚡ Bolt: Use lean() and select() to minimize memory overhead
     const userMessages = await ChatMessage.find({ role: 'user' })
+      .select('content -_id')
       .sort({ timestamp: -1 })
       .limit(Number(limit))
       .lean();
 
     const questionCounts: Record<string, number> = {};
-    const keywordsMap: Record<string, string[]> = {
-      jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
-      register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
-      payment: ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
-      booking: ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
-      location: ['address', 'location', 'where', 'branch', 'office', 'map'],
-      services: ['service', 'what do you do', 'help', 'information', 'details'],
-      hello: ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
-      language: ['sinhala', 'english', 'tamil', 'translate'],
-    };
 
     for (const msg of userMessages) {
-      const content = msg.content.toLowerCase();
-      for (const [category, keywords] of Object.entries(keywordsMap)) {
-        if (keywords.some((k) => content.includes(k))) {
+      const content = msg.content;
+      for (const [category, regex] of Object.entries(CATEGORY_REGEX_MAP)) {
+        if (regex.test(content)) {
           questionCounts[category] = (questionCounts[category] || 0) + 1;
           break;
         }
