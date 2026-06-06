@@ -337,8 +337,8 @@ export async function analyzeLeadIntent(text: string): Promise<{
 
     const result = await withTimeout(
       model.generateContent([
-      {
-        text: `You are a Lead Analyzer for a Recruitment Agency. Analyze the user's message.
+        {
+          text: `You are a Lead Analyzer for a Recruitment Agency. Analyze the user's message.
                 Extract any provided personal details, determine the "Buying Signal", and check for booking requests.
                 Current Date: ${new Date().toISOString()}
 
@@ -360,7 +360,7 @@ export async function analyzeLeadIntent(text: string): Promise<{
                     "buyingSignal": "High" (Asking Price/Location/Visit/Salary) OR "Medium" (Asking General Info/Courses) OR "Low",
                     "suggestedAction": "Book Visit" (If signal High & Details present) OR "Ask History" (If details missing & asking price) OR "None"
                 }`,
-      },
+        },
       ]),
       TIMEOUT,
       'gemini-lead-intent',
