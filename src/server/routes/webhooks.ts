@@ -549,8 +549,15 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const tid = tenantIdOf(req);
+    const { name, url, events, secret, isActive, category, format } = req.body;
     const webhook = new (Webhook as any)({
-      ...req.body,
+      name,
+      url,
+      events,
+      secret,
+      isActive,
+      category,
+      format,
       ...(tid ? { tenantId: tid } : {}),
     });
     await webhook.save();
@@ -563,9 +570,19 @@ router.post('/', async (req, res) => {
 // Update webhook (tenant-scoped: a tenant can only update its own webhooks)
 router.put('/:id', async (req, res) => {
   try {
+    const { name, url, events, secret, isActive, category, format } = req.body;
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (url !== undefined) updateData.url = url;
+    if (events !== undefined) updateData.events = events;
+    if (secret !== undefined) updateData.secret = secret;
+    if (isActive !== undefined) updateData.isActive = isActive;
+    if (category !== undefined) updateData.category = category;
+    if (format !== undefined) updateData.format = format;
+
     const webhook = await (Webhook as any).findOneAndUpdate(
       withTenantScope(req, { _id: req.params.id }),
-      req.body,
+      { $set: updateData },
       { new: true },
     );
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
