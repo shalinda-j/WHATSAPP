@@ -5,6 +5,7 @@ import { aiLoadBalancer } from '../services/AILoadBalancer';
 import { Contact } from '../models/CRM';
 import KnowledgeEntry from '../models/KnowledgeEntry';
 import { CONTENT_RECOMMENDER_V1_PROMPT } from './prompts/content-recommender-v1';
+import { withOperatorPersona } from './composeSystemPrompt';
 
 const PRODUCT_TOKENS = [
   'how',
@@ -96,8 +97,9 @@ export class ContentRecommenderAgent implements IAgent {
   async execute(ctx: AgentContext): Promise<AgentResult> {
     const start = Date.now();
     const promptVersion = ctx.assignedPrompt?.version ?? 1;
-    const systemPrompt =
-      ctx.assignedPrompt?.systemPrompt ?? CONTENT_RECOMMENDER_V1_PROMPT;
+    const systemPrompt = await withOperatorPersona(
+      ctx.assignedPrompt?.systemPrompt ?? CONTENT_RECOMMENDER_V1_PROMPT,
+    );
 
     // Pull a candidate set of content items the LLM can choose from.
     // Filter by tenant language (default 'si') + active. Cap size so

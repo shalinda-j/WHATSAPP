@@ -173,14 +173,34 @@ export class ConfigService {
     try {
       const dataset = await Dataset.findOne({ key, isActive: true });
       if (dataset) {
-        // Handle both formats: legacy (content is data) and new (content.en is data)
+        // Handle both formats: legacy (content is the raw value) and new
+        // (content is a multi-language map { en, si, ta }).
         let content = dataset.content;
-        if (
-          content &&
-          typeof content === 'object' &&
-          content.en !== undefined
-        ) {
-          content = content.en;
+        const ml = content as Record<string, any> | null;
+        const isMultiLang =
+          ml &&
+          typeof ml === 'object' &&
+          !Array.isArray(ml) &&
+          (typeof ml.en === 'string' ||
+            typeof ml.si === 'string' ||
+            typeof ml.ta === 'string');
+        if (isMultiLang) {
+          // Pick the first NON-EMPTY language (English preferred, then Sinhala,
+          // then Tamil). Previously we only read `content.en`; when the operator
+          // typed a prompt in Sinhala/Tamil and left English blank, this method
+          // returned the raw { en, si, ta } object, which stringifies to
+          // "[object Object]" inside the AI system prompt and silently broke the
+          // configured personality. If every language is empty we treat the row
+          // as unset and fall through to the caller's default below.
+          const picked = [ml.en, ml.si, ml.ta].find(
+            (v) => typeof v === 'string' && v.trim().length > 0,
+          );
+          if (picked === undefined) {
+            this.cache[key] = fallback;
+            this.lastFetch[key] = now;
+            return fallback;
+          }
+          content = picked;
         }
         this.cache[key] = content;
         this.lastFetch[key] = now;
@@ -235,15 +255,6 @@ export class ConfigService {
       console.error('Error fetching Google Provider Key:', error);
       return undefined;
     }
-  }
-
-  public async getLocalNLPEnabled(): Promise<boolean> {
-    // Hard-disabled by operator policy: the shared NLP response cache caused
-    // FAQ-style answers (from an earlier prompt era) to be served to every
-    // customer instead of the live sales/marketing personality. Forced off
-    // so every inbound message reaches the AI Load Balancer and the current
-    // AI_PERSONALITY prompt. Re-enable by restoring the DB lookup below.
-    return false;
   }
 
   /**

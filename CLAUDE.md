@@ -111,7 +111,6 @@ npm run start
 | `FormService`                 | Dynamic multi-field form flows           |
 | `BookingService`              | Appointment scheduling flow              |
 | `LeadService`                 | Lead registration workflow               |
-| `NLPService`                  | Local NLP cache for quick answers        |
 | `VoiceCallAgentService`       | Auto-response to incoming calls          |
 | `WebhookService`              | External webhook triggers                |
 
@@ -197,8 +196,6 @@ Lead Flow? → Handle → Return
 Form Flow? → Handle → Return
     ↓
 Command (!prefix)? → Dispatch → Return
-    ↓
-NLP Cache Check
     ↓
 AI Load Balancer (fallback chain)
     ↓

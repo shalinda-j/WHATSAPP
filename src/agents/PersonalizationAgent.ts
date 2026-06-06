@@ -4,6 +4,7 @@ import { AgentContext, AgentResult, AgentMode } from '../types/agent';
 import { aiLoadBalancer } from '../services/AILoadBalancer';
 import { Contact } from '../models/CRM';
 import { PERSONALIZATION_V1_PROMPT } from './prompts/personalization-v1';
+import { withOperatorPersona } from './composeSystemPrompt';
 
 const GREETING_TOKENS = [
   'hi',
@@ -72,8 +73,9 @@ export class PersonalizationAgent implements IAgent {
   async execute(ctx: AgentContext): Promise<AgentResult> {
     const start = Date.now();
     const promptVersion = ctx.assignedPrompt?.version ?? 1;
-    const systemPrompt =
-      ctx.assignedPrompt?.systemPrompt ?? PERSONALIZATION_V1_PROMPT;
+    const systemPrompt = await withOperatorPersona(
+      ctx.assignedPrompt?.systemPrompt ?? PERSONALIZATION_V1_PROMPT,
+    );
 
     const phone = phoneFromJid(ctx.userId);
     const contact = await Contact.findOne({

@@ -491,19 +491,65 @@ export class CampaignService {
     return { sent };
   }
 
+  /**
+   * Mark the campaign message a recipient replied to as 'replied'. Only
+   * promotes from a delivered-ish state so a late provider status callback
+   * can't downgrade a later state.
+   */
   async recordReply(
-    _tenantId: string,
-    _externalMessageId: string,
+    tenantId: string,
+    externalMessageId: string,
   ): Promise<void> {
-    // Phase 3 — match externalMessageId → CampaignExecution → mark 'replied'.
+    if (!tenantId || !externalMessageId) return;
+    try {
+      await CampaignExecution.findOneAndUpdate(
+        {
+          tenantId,
+          externalMessageId,
+          status: { $in: ['sent', 'delivered', 'read'] },
+        },
+        { $set: { status: 'replied', repliedAt: new Date() } },
+      );
+    } catch (err) {
+      console.error('recordReply failed:', err);
+    }
   }
 
+  /**
+   * Last-touch attribution: when a recipient converts (registered / booked),
+   * credit the most recent campaign message we sent them within a 14-day
+   * window by stamping outcome='converted'. Matches on recipientExternalId
+   * (the phone/JID we actually sent to) — the field that is always populated.
+   */
   async correlateConversion(
-    _tenantId: string,
-    _contactId: string,
+    tenantId: string,
+    recipientExternalId: string,
     _kind: 'lead_converted' | 'booking_created',
+    jid?: string,
   ): Promise<void> {
-    // Phase 3 — last-touch attribution within a 14-day window.
+    if (!tenantId || !recipientExternalId) return;
+    try {
+      const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+      const ids = Array.from(
+        new Set([recipientExternalId, jid].filter(Boolean)),
+      ) as string[];
+      const exec = await CampaignExecution.findOne({
+        tenantId,
+        recipientExternalId: { $in: ids },
+        status: { $in: ['sent', 'delivered', 'read', 'replied'] },
+        outcome: { $ne: 'converted' },
+        createdAt: { $gte: since },
+      }).sort({ createdAt: -1 });
+      if (exec) {
+        exec.outcome = 'converted';
+        await exec.save();
+        console.log(
+          `🎯 [ATTRIBUTION] Campaign ${exec.campaignId} credited with ${_kind} for ${recipientExternalId}`,
+        );
+      }
+    } catch (err) {
+      console.error('correlateConversion failed:', err);
+    }
   }
 
   async pause(tenantId: string, campaignId: string): Promise<void> {

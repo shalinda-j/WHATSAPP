@@ -45,7 +45,6 @@ const TARGET_COLLECTIONS = [
   'datasets',
   'admins',
   'configs',
-  'nlpcaches',
 ] as const;
 
 async function ensureTenant(slug: string): Promise<mongoose.Types.ObjectId> {

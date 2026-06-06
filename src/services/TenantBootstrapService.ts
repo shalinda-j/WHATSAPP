@@ -22,7 +22,6 @@ const LEGACY_COLLECTIONS = [
   'datasets',
   'admins',
   'configs',
-  'nlpcaches',
 ] as const;
 
 export interface BootstrapResult {

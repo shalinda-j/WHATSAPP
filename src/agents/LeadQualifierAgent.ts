@@ -9,6 +9,7 @@ import {
 import { aiLoadBalancer } from '../services/AILoadBalancer';
 import Lead from '../models/Lead';
 import { LEAD_QUALIFIER_V1_PROMPT } from './prompts/lead-qualifier-v1';
+import { withOperatorPersona } from './composeSystemPrompt';
 
 // Heuristic keywords used by canHandle() for cheap routing. Multilingual on
 // purpose — Romanised Sinhala/Tamil terms are how this user base actually
@@ -99,8 +100,9 @@ export class LeadQualifierAgent implements IAgent {
   async execute(ctx: AgentContext): Promise<AgentResult> {
     const start = Date.now();
     const promptVersion = ctx.assignedPrompt?.version ?? 1;
-    const systemPrompt =
-      ctx.assignedPrompt?.systemPrompt ?? LEAD_QUALIFIER_V1_PROMPT;
+    const systemPrompt = await withOperatorPersona(
+      ctx.assignedPrompt?.systemPrompt ?? LEAD_QUALIFIER_V1_PROMPT,
+    );
 
     let raw;
     try {

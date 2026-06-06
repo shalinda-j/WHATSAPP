@@ -4,6 +4,7 @@ import { AgentContext, AgentResult, AgentMode } from '../types/agent';
 import { aiLoadBalancer } from '../services/AILoadBalancer';
 import Lead from '../models/Lead';
 import { DEAL_AGENT_V1_PROMPT } from './prompts/deal-agent-v1';
+import { withOperatorPersona } from './composeSystemPrompt';
 
 const BOOKING_INTENT_TOKENS = [
   'book',
@@ -83,8 +84,9 @@ export class DealAgent implements IAgent {
   async execute(ctx: AgentContext): Promise<AgentResult> {
     const start = Date.now();
     const promptVersion = ctx.assignedPrompt?.version ?? 1;
-    const systemPrompt =
-      ctx.assignedPrompt?.systemPrompt ?? DEAL_AGENT_V1_PROMPT;
+    const systemPrompt = await withOperatorPersona(
+      ctx.assignedPrompt?.systemPrompt ?? DEAL_AGENT_V1_PROMPT,
+    );
 
     const phone = phoneFromJid(ctx.userId);
     const lead = await Lead.findOne({ phoneNumber: phone });

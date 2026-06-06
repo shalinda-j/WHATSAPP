@@ -4,6 +4,7 @@ import { CRMService } from './CRMService';
 import { WebhookService } from './WebhookService';
 import Lead from '../models/Lead';
 import sessionStateService from './SessionStateService';
+import { conversionService } from './ConversionService';
 
 // Extended Lead Data Interface
 interface LeadData {
@@ -487,6 +488,19 @@ async function saveLeadRegistration(
 
     const lead = await Lead.create(leadData);
     console.log('✅ Lead created successfully:', lead._id);
+
+    // CONVERSION: a completed registration IS the user→customer (admission /
+    // student) moment. Record it and credit any recent campaign (fire & forget).
+    conversionService
+      .recordConversion({
+        phoneNumber: session.data.phoneNumber,
+        jid,
+        kind: 'lead_registered',
+        leadId: lead._id,
+        sessionId,
+        source: 'whatsapp',
+      })
+      .catch((err) => console.error('recordConversion(lead) failed:', err));
 
     // Notify any subscribed webhooks that a new lead was captured.
     // Fire-and-forget so a slow/failing webhook never blocks registration.
