@@ -28,6 +28,8 @@ import {
 } from './services/voice';
 import { aiLoadBalancer } from './services/AILoadBalancer';
 import { chatPersonality } from './services/ChatPersonality';
+import { leadScoringService } from './services/LeadScoringService';
+import { messageQuality } from './services/MessageQualityService';
 import { autoresearchNLP, classifyMessage } from './services/autoresearchNLP';
 import { analyzeLeadIntent } from './services/gemini';
 import { WebhookService } from './services/WebhookService';
@@ -895,6 +897,13 @@ onMessage(async (message, sock, sessionId) => {
       autoTagLeadFromMessage(jid.replace(/@.*/, ''), text).catch((err) => {
         console.error('   ⚠️ autoTagLeadFromMessage failed:', err);
       });
+
+      // Always-on lead scoring: every inbound bumps engagement (and intent
+      // when enrolment language appears) so the funnel can rank hot leads.
+      // Fire-and-forget — must never block or break the reply path.
+      leadScoringService
+        .scoreInbound(jid.replace(/@.*/, ''), text)
+        .catch((err) => console.error('   ⚠️ leadScoring failed:', err));
       // WhatsApp push name — store on the message so the chat list can
       // render a human-readable label even when the userId is a Linked-ID
       // (@lid) with no Contact match.
@@ -1279,6 +1288,11 @@ onMessage(async (message, sock, sessionId) => {
         console.log('   ⚠️ Empty response from AI, sent fallback message');
         return;
       }
+
+      // Final outbound polish — guarantee clean, on-brand WhatsApp text for
+      // every customer message (collapse stray markdown, trim, cap length).
+      // Pure-code + fail-safe: never blanks a non-empty reply.
+      response = messageQuality.clean(response);
 
       // [NEW] 2. Save BOT Response to DB
       try {

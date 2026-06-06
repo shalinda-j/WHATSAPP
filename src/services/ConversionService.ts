@@ -14,6 +14,7 @@ import mongoose from 'mongoose';
 import ConversionEvent, { ConversionKind } from '../models/ConversionEvent';
 import Tenant from '../models/Tenant';
 import { campaignService } from './CampaignService';
+import { leadScoringService } from './LeadScoringService';
 
 export interface RecordConversionInput {
   /** Real phone (digits). If absent, derived from `jid`. */
@@ -85,6 +86,11 @@ class ConversionService {
         note: input.note,
       });
       console.log(`💰 [CONVERSION] ${input.kind} captured for ${phoneNumber}`);
+
+      // A conversion is the strongest intent signal — push the lead score.
+      leadScoringService
+        .onConversion(phoneNumber)
+        .catch((err) => console.error('leadScoring.onConversion failed:', err));
 
       // Close the marketing loop: stamp outcome='converted' on the most recent
       // campaign message we sent this person (last-touch, 14-day window).
