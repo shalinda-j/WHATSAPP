@@ -769,6 +769,27 @@ export class AILoadBalancer {
     );
   }
 
+  /**
+   * Force-load providers and report what is actually wired up RIGHT NOW —
+   * provider type, the (already coerced) model, and any active 429 cooldown.
+   * Surfaced on /health so the live deployment can be proven to use a
+   * SUPPORTED model (no gemini-3.x) without sending a real WhatsApp message.
+   */
+  async getLoadedProviderInfo(): Promise<
+    Array<{ provider: string; model: string; rateLimited: boolean }>
+  > {
+    await this.loadServices();
+    const now = Date.now();
+    return this.services.map((s) => {
+      const match = s.name?.match(/\(([^)]+)\)/);
+      return {
+        provider: s.constructor.name,
+        model: match ? match[1] : '',
+        rateLimited: (this.rateLimitedUntil.get(s.constructor.name) ?? 0) > now,
+      };
+    });
+  }
+
   async clearConversation(userId: string) {
     await conversationHistoryService.clearHistory(userId);
     this.historyCache.delete(userId);
