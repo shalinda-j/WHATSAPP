@@ -13,8 +13,24 @@ import {
 } from '../middleware/tenantContext';
 import { validateObjectId } from '../middleware/validation';
 import { extractTextFromImage } from '../../services/gemini';
+import { configurationManager } from '../../services/ConfigurationManagerService';
 
 const router = Router();
+
+/**
+ * Drop the in-memory config caches after any dataset write so operator edits
+ * (AI_PERSONALITY, CONVERSATION_EXAMPLES, etc.) take effect on the next message
+ * instead of after the 60s TTL. Cheap — configs are re-read lazily on next use.
+ * Combined with the per-message system-prompt refresh in AILoadBalancer, this
+ * makes personality changes apply immediately, even to existing chats.
+ */
+function bustConfigCache(): void {
+  try {
+    configurationManager.clearCache();
+  } catch (e) {
+    console.error('Failed to clear config cache after dataset write:', e);
+  }
+}
 
 // Configure multer for memory storage
 const upload = multer({
@@ -231,6 +247,7 @@ router.put('/:id/language/:lang', validateObjectId(), async (req, res) => {
       return res.status(404).json({ message: 'Dataset not found' });
     }
 
+    bustConfigCache();
     res.json(updatedDataset);
   } catch (err: any) {
     console.error('Error updating language content:', err);
@@ -345,6 +362,7 @@ router.post('/', async (req, res) => {
         if (isActive !== undefined) existing.isActive = isActive;
         if (metadata !== undefined) existing.metadata = metadata;
         await existing.save();
+        bustConfigCache();
         return res.json(existing);
       }
     }
@@ -378,6 +396,7 @@ router.post('/', async (req, res) => {
     const newDataset = new Dataset(datasetPayload);
 
     await newDataset.save();
+    bustConfigCache();
     res.json(newDataset);
   } catch (err: any) {
     console.error('Error creating dataset:', {
@@ -470,6 +489,7 @@ router.put('/:id', validateObjectId(), async (req, res) => {
       return res.status(404).json({ error: 'Dataset not found' });
     }
 
+    bustConfigCache();
     res.json(updatedDataset);
   } catch (err: any) {
     console.error('Error updating dataset:', {
@@ -493,6 +513,7 @@ router.delete('/:id', validateObjectId(), async (req, res) => {
     if (!deleted) {
       return res.status(404).json({ error: 'Dataset not found' });
     }
+    bustConfigCache();
     res.json({ message: 'Dataset deleted' });
   } catch (err: any) {
     console.error('Error deleting dataset:', err);

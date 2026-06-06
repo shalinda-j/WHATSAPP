@@ -73,7 +73,6 @@
     "mongoose": "^9.1.5",
     "multer": "^2.1.1",
     "nanoid": "^5.1.11",
-    "node-nlp": "5.0.0-alpha.5",
     "openai": "^6.17.0",
     "p-queue": "^9.2.0",
     "pdf-parse": "^1.1.1",

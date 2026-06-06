@@ -473,17 +473,25 @@ export class AILoadBalancer {
     }
   }
 
-  private async getInitialHistory(): Promise<AIChatMessage[]> {
-    // Get knowledge base from training service (includes learned knowledge)
+  /**
+   * Build the live system-prompt content from current config: the operator's
+   * AI_PERSONALITY (Admin Panel → Datasets → AI_PERSONALITY) plus the dynamic
+   * knowledge base. Read fresh so personality edits apply immediately.
+   */
+  private async buildSystemContent(): Promise<string> {
     const knowledgeBase =
       await knowledgeTrainingService.getKnowledgeBaseForAI();
     const aiPersonality = await configurationManager.getAIPersonality();
+    return `${aiPersonality}\n\n${knowledgeBase}`;
+  }
+
+  private async getInitialHistory(): Promise<AIChatMessage[]> {
     const conversationExamples = await getConversationExamples();
 
     const history: AIChatMessage[] = [
       {
         role: 'system',
-        content: `${aiPersonality}\n\n${knowledgeBase}`,
+        content: await this.buildSystemContent(),
       },
     ];
 
@@ -590,6 +598,18 @@ export class AILoadBalancer {
       }
       // Cache for this request
       this.historyCache.set(userId, history);
+    }
+
+    // Always refresh the system prompt from current config so edits to
+    // AI_PERSONALITY take effect on the very next message — even for
+    // conversations that started before the edit. Previously the system prompt
+    // was captured only on a user's FIRST message and persisted forever, so
+    // personality changes were silently ignored for every existing chat.
+    const freshSystem = await this.buildSystemContent();
+    if (history.length > 0 && history[0].role === 'system') {
+      history[0] = { role: 'system', content: freshSystem };
+    } else {
+      history.unshift({ role: 'system', content: freshSystem });
     }
 
     // Add user message to history

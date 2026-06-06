@@ -28,7 +28,8 @@ import {
 } from './services/voice';
 import { aiLoadBalancer } from './services/AILoadBalancer';
 import { chatPersonality } from './services/ChatPersonality';
-import { nlpService } from './services/NLPService';
+import { leadScoringService } from './services/LeadScoringService';
+import { messageQuality } from './services/MessageQualityService';
 import { autoresearchNLP, classifyMessage } from './services/autoresearchNLP';
 import { analyzeLeadIntent } from './services/gemini';
 import { WebhookService } from './services/WebhookService';
@@ -296,8 +297,6 @@ async function startServer() {
       // rows where realPhone is missing/empty. Runs after seedDatasets
       // so any same-boot migration is already done.
       await backfillRealPhoneOnExistingMessages();
-      // NLP cache disabled by operator policy (see ConfigService.getLocalNLPEnabled).
-      // Skip the model load to save boot time and memory while the cache is dormant.
 
       // CRITICAL: Clean up any old/stuck sessions on startup
       // This prevents old sessions from triggering forms unexpectedly
@@ -898,6 +897,13 @@ onMessage(async (message, sock, sessionId) => {
       autoTagLeadFromMessage(jid.replace(/@.*/, ''), text).catch((err) => {
         console.error('   ⚠️ autoTagLeadFromMessage failed:', err);
       });
+
+      // Always-on lead scoring: every inbound bumps engagement (and intent
+      // when enrolment language appears) so the funnel can rank hot leads.
+      // Fire-and-forget — must never block or break the reply path.
+      leadScoringService
+        .scoreInbound(jid.replace(/@.*/, ''), text)
+        .catch((err) => console.error('   ⚠️ leadScoring failed:', err));
       // WhatsApp push name — store on the message so the chat list can
       // render a human-readable label even when the userId is a Linked-ID
       // (@lid) with no Contact match.
@@ -1148,7 +1154,6 @@ onMessage(async (message, sock, sessionId) => {
       // Get AI response (Using Load Balancer)
       let response: string | undefined;
       let intentAnalysis: any = null;
-      let answeredViaNLP = false;
       let autoresearchIntent: string | null = null;
       const responseLanguage = 'si'; // Default to Sinhala - accessible outside try block
 
@@ -1237,18 +1242,9 @@ onMessage(async (message, sock, sessionId) => {
           }
         }
 
-        // 4. Local NLP Interception
-        const isLocalNLPEnabled = await configService.getLocalNLPEnabled();
-        if (isLocalNLPEnabled) {
-          const nlpCacheResponse = await nlpService.processMessage(text);
-          if (nlpCacheResponse) {
-            response = nlpCacheResponse;
-            answeredViaNLP = true;
-            console.log('   ✅ Answered via Local NLP Cache');
-          }
-        }
-
-        // 5. Fallback to AI Load Balancer if NLP doesn't know the answer
+        // 4. AI Load Balancer (fallback chain). The Local NLP response cache
+        // was permanently removed — every inbound message now reaches the AI
+        // chain and the current AI_PERSONALITY prompt.
         if (!response) {
           response = await aiLoadBalancer.sendMessage(jid, finalPrompt);
 
@@ -1267,13 +1263,6 @@ onMessage(async (message, sock, sessionId) => {
             console.warn(
               '⚠️ All AI providers and fallback templates failed — sending hardcoded safe reply',
             );
-          }
-
-          // Learn from AI response dynamically (Fire & Forget)
-          if (isLocalNLPEnabled && response && response.trim() !== '') {
-            nlpService.learnFromAI(text, response).catch((err) => {
-              console.error('Failed to learn from AI:', err);
-            });
           }
         }
 
@@ -1299,6 +1288,11 @@ onMessage(async (message, sock, sessionId) => {
         console.log('   ⚠️ Empty response from AI, sent fallback message');
         return;
       }
+
+      // Final outbound polish — guarantee clean, on-brand WhatsApp text for
+      // every customer message (collapse stray markdown, trim, cap length).
+      // Pure-code + fail-safe: never blanks a non-empty reply.
+      response = messageQuality.clean(response);
 
       // [NEW] 2. Save BOT Response to DB
       try {

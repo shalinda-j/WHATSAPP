@@ -63,6 +63,23 @@ const LeadSchema = new (mongoose as any).Schema({
   },
   notes: { type: String },
 
+  // Conversion scoring — multi-axis heuristic maintained by LeadScoringService
+  // so the funnel can prioritise hot, ready-to-enrol leads. Legacy leads
+  // default to a cold zero score and are scored on their next inbound message.
+  score: {
+    fit: { type: Number, default: 0 },
+    intent: { type: Number, default: 0 },
+    engagement: { type: Number, default: 0 },
+    compound: { type: Number, default: 0, index: true },
+    tier: {
+      type: String,
+      enum: ['hot', 'warm', 'cold'],
+      default: 'cold',
+      index: true,
+    },
+    lastScoredAt: { type: Date },
+  },
+
   // CRM Integration
   crmContactId: { type: mongoose.Schema.Types.ObjectId, ref: 'Contact' },
 

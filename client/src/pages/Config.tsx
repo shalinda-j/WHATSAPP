@@ -363,21 +363,6 @@ export default function Config() {
       const res = await api.get('/api/config');
       if (Array.isArray(res.data)) {
         setConfigs(res.data);
-
-        // Ensure LOCAL_NLP_ENABLED exists in DB
-        const hasLocalNLP = res.data.find((c) => c.key === 'LOCAL_NLP_ENABLED');
-        if (!hasLocalNLP) {
-          await api.post('/api/config', {
-            key: 'LOCAL_NLP_ENABLED',
-            value: 'false',
-            description:
-              'Enables Auto-Learning Local NLP Caching to save API Tokens.',
-            isProvider: false,
-          });
-          // Re-fetch after creating
-          const refetch = await api.get('/api/config');
-          setConfigs(refetch.data);
-        }
       } else {
         console.error('Expected array but got:', res.data);
         setConfigs([]);
@@ -476,22 +461,6 @@ export default function Config() {
     } catch (err: unknown) {
       console.error('Failed to save config:', err);
       alert('Error saving: ' + getErrorMessage(err));
-    }
-  };
-
-  const toggleLocalNLP = async () => {
-    const nlpConfig = configs.find((c) => c.key === 'LOCAL_NLP_ENABLED');
-    if (nlpConfig) {
-      const newValue = nlpConfig.value === 'true' ? 'false' : 'true';
-      try {
-        await api.put(`/api/config/${nlpConfig._id}`, {
-          ...nlpConfig,
-          value: newValue,
-        });
-        fetchConfigs();
-      } catch {
-        alert('Error updating Local NLP config');
-      }
     }
   };
 
@@ -1429,62 +1398,6 @@ export default function Config() {
                 </div>
               );
             })}
-
-            {/* Local NLP Cache Card */}
-            {(() => {
-              const nlpConfig = configs.find(
-                (c) => c.key === 'LOCAL_NLP_ENABLED',
-              );
-              const isNLPActive = nlpConfig?.value === 'true';
-              return (
-                <div className="bg-gray-50 rounded-2xl shadow border border-gray-200 overflow-hidden">
-                  <div className="px-5 py-4 bg-gray-100 flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`p-2 rounded-xl ${
-                          isNLPActive
-                            ? 'bg-purple-100 text-purple-600'
-                            : 'bg-gray-200 text-gray-500'
-                        }`}
-                      >
-                        <Bot className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-gray-800">
-                          Local NLP Cache
-                        </h3>
-                        {isNLPActive && (
-                          <span className="text-xs text-purple-600 font-medium">
-                            Active & Learning
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        className="sr-only peer"
-                        checked={isNLPActive}
-                        onChange={toggleLocalNLP}
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600" />
-                    </label>
-                  </div>
-                  <div className="px-5 py-4">
-                    <p className="text-sm text-gray-600">
-                      Learns from AI responses and caches repetitive queries
-                      locally — avoids unnecessary API calls and saves tokens.
-                    </p>
-                    {isNLPActive && (
-                      <div className="mt-3 flex items-center gap-2 text-xs text-purple-700 bg-purple-50 px-3 py-2 rounded-lg">
-                        <Activity className="h-3.5 w-3.5" />
-                        Tokens saved by NLP cache are NOT counted in usage above
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
 
             {aiConfigs.length === 0 && (
               <div className="col-span-2 text-center py-16 bg-white rounded-2xl border border-dashed border-gray-300">

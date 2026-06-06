@@ -20,6 +20,7 @@ import {
   Building2,
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
+import ConversionsCard from '../components/ConversionsCard';
 
 interface AIProvider {
   _id: string;
@@ -340,6 +341,9 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Conversion funnel — user → customer (registrations, visits, fees) */}
+      <ConversionsCard />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Connection Status Card */}

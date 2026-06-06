@@ -10,6 +10,7 @@ import { WebhookService } from './WebhookService';
 import sessionStateService from './SessionStateService';
 import Booking from '../models/Booking';
 import { agentReflectionService } from './AgentReflectionService';
+import { conversionService } from './ConversionService';
 
 // Define the stages of the booking conversation
 export enum BookingInitState {
@@ -366,6 +367,19 @@ async function finalizeBooking(
       agentReflectionService
         .correlateBookingOutcome(jid, booking._id, 'created')
         .catch((err) => console.error('correlateBookingOutcome failed:', err));
+
+      // CONVERSION: a confirmed campus-visit booking is a customer-conversion
+      // moment on the path to enrolment. Record + attribute (fire & forget).
+      conversionService
+        .recordConversion({
+          phoneNumber: callerPhone,
+          jid,
+          kind: 'booking_created',
+          bookingId: booking._id,
+          sessionId,
+          source: 'whatsapp',
+        })
+        .catch((err) => console.error('recordConversion(booking) failed:', err));
     } catch (err) {
       console.error('Failed to save booking to DB:', err);
     }
