@@ -318,6 +318,24 @@ app.get('/health', async (req, res) => {
           active: a.isActive,
         })),
       };
+
+      // AI provider readiness — proves the live deployment loaded SUPPORTED
+      // models (e.g. gemini-2.5-flash, not the paid-only gemini-3.x that 429s
+      // and collapses every reply into the canned template). Lets the deploy
+      // be verified from outside without sending a real WhatsApp message.
+      try {
+        const { aiLoadBalancer } = await import('../services/AILoadBalancer');
+        const providers = await aiLoadBalancer.getLoadedProviderInfo();
+        health.ai = {
+          providerCount: providers.length,
+          providers,
+          usesUnsupportedModel: providers.some((p) =>
+            /^gemini-(1\.0|1\.5|2\.0|3)/i.test(p.model),
+          ),
+        };
+      } catch (aiErr: any) {
+        health.ai = { error: aiErr?.message ?? 'ai diagnostics threw' };
+      }
     } catch (e: any) {
       health.diagnosticsError = e?.message ?? 'health diagnostics threw';
     }
