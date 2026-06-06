@@ -347,15 +347,65 @@ export class AILoadBalancer {
         }
       }
 
-      if (this.services.length === 0) {
-        // Fallback to env if no DB config
-        const envKey = process.env.GEMINI_API_KEY;
-        if (envKey) {
-          this.services.push(new GeminiService({ apiKey: envKey }));
-          console.log(
-            '⚠️ No active DB providers. Using env GEMINI_API_KEY backup.',
-          );
-        }
+      // Supplement DB providers with any provider keys present in the
+      // environment that aren't already configured. Without this, a deployment
+      // whose Gemini quota is exhausted (free tier = 250/day) had NOTHING to
+      // fail over to — every reply collapsed into the canned template — even
+      // when a perfectly good GROQ_API_KEY sat in the env. Groq is priority 1,
+      // so when present it becomes primary and the bot mostly bypasses the
+      // Gemini quota entirely.
+      const isRealKey = (k?: string | null) =>
+        !!k && k.trim().length > 0 && !/^your_.*_here$/i.test(k.trim());
+      const loadedTypes = new Set(this.services.map((s) => s.constructor.name));
+
+      const envProviders: Array<{
+        type: string;
+        key?: string;
+        make: () => AIService;
+      }> = [
+        {
+          type: 'GroqService',
+          key: process.env.GROQ_API_KEY,
+          make: () =>
+            new GroqService({
+              apiKey: process.env.GROQ_API_KEY as string,
+              // The library default (mixtral-8x7b-32768) is decommissioned;
+              // pin a current Groq model, overridable via GROQ_MODEL.
+              model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+            }),
+        },
+        {
+          type: 'GeminiService',
+          key: process.env.GEMINI_API_KEY,
+          make: () =>
+            new GeminiService({ apiKey: process.env.GEMINI_API_KEY as string }),
+        },
+        {
+          type: 'OpenRouterService',
+          key: process.env.OPENROUTER_API_KEY,
+          make: () =>
+            new OpenRouterService({
+              apiKey: process.env.OPENROUTER_API_KEY as string,
+              model: process.env.OPENROUTER_MODEL || undefined,
+            }),
+        },
+        {
+          type: 'OpenAIService',
+          key: process.env.OPENAI_API_KEY,
+          make: () =>
+            new OpenAIService({
+              apiKey: process.env.OPENAI_API_KEY as string,
+              model: process.env.OPENAI_MODEL || undefined,
+            }),
+        },
+      ];
+
+      for (const ep of envProviders) {
+        if (loadedTypes.has(ep.type)) continue; // already loaded from DB
+        if (!isRealKey(ep.key)) continue;
+        this.services.push(ep.make());
+        loadedTypes.add(ep.type);
+        console.log(`➕ Added ${ep.type} from environment key (failover).`);
       }
 
       // Sort by Priority (Cost/Speed) — official APIs first, session-based last (fallback only)
