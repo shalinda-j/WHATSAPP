@@ -178,7 +178,35 @@ interface LeadRegistration {
     | 'rejected';
   notes?: string;
   registeredAt: Date;
+  score?: {
+    fit: number;
+    intent: number;
+    engagement: number;
+    compound: number;
+    tier: 'hot' | 'warm' | 'cold';
+  };
 }
+
+const leadTierConfig: Record<
+  'hot' | 'warm' | 'cold',
+  { label: string; color: string; dot: string }
+> = {
+  hot: {
+    label: 'Hot',
+    color: 'bg-red-50 text-red-700 border-red-200',
+    dot: 'bg-red-500',
+  },
+  warm: {
+    label: 'Warm',
+    color: 'bg-amber-50 text-amber-700 border-amber-200',
+    dot: 'bg-amber-500',
+  },
+  cold: {
+    label: 'Cold',
+    color: 'bg-gray-100 text-gray-500 border-gray-200',
+    dot: 'bg-gray-400',
+  },
+};
 
 const leadStatusConfig = {
   new: {
@@ -416,6 +444,24 @@ export default function CRM() {
     message: string;
     type: 'success' | 'error' | 'info';
   } | null>(null);
+  const [registrationTierFilter, setRegistrationTierFilter] = useState('');
+  const [sortByScore, setSortByScore] = useState(false);
+
+  // Client-side tier filter + score sort over the loaded registrations page.
+  const getDisplayedRegistrations = (): LeadRegistration[] => {
+    let list = registrations;
+    if (registrationTierFilter) {
+      list = list.filter(
+        (l) => (l.score?.tier || 'cold') === registrationTierFilter,
+      );
+    }
+    if (sortByScore) {
+      list = [...list].sort(
+        (a, b) => (b.score?.compound || 0) - (a.score?.compound || 0),
+      );
+    }
+    return list;
+  };
 
   // Fetch functions
   const fetchDashboard = async () => {
@@ -1980,14 +2026,40 @@ export default function CRM() {
                 </option>
               ))}
             </select>
+            <select
+              value={registrationTierFilter}
+              onChange={(e) => setRegistrationTierFilter(e.target.value)}
+              className="px-4 py-2 bg-gray-50 border-transparent focus:bg-white focus:ring-2 focus:ring-indigo-500 rounded-xl outline-none"
+            >
+              <option value="">Score: All</option>
+              <option value="hot">🔴 Hot</option>
+              <option value="warm">🟡 Warm</option>
+              <option value="cold">⚪ Cold</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => setSortByScore((v) => !v)}
+              className={`px-4 py-2 rounded-xl font-medium border transition ${
+                sortByScore
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-gray-50 text-gray-600 border-transparent hover:bg-gray-100'
+              }`}
+              title="Sort the current page by lead score (hottest first)"
+            >
+              Hottest first
+            </button>
             {(registrationSearch ||
               registrationStatusFilter ||
-              registrationJobFilter) && (
+              registrationJobFilter ||
+              registrationTierFilter ||
+              sortByScore) && (
               <button
                 onClick={() => {
                   setRegistrationSearch('');
                   setRegistrationStatusFilter('');
                   setRegistrationJobFilter('');
+                  setRegistrationTierFilter('');
+                  setSortByScore(false);
                   setRegistrationsPage(1);
                 }}
                 className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl"
@@ -2021,6 +2093,9 @@ export default function CRM() {
                   Job / Country
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">
+                  Score
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">
                   CV
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">
@@ -2038,23 +2113,23 @@ export default function CRM() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-6 py-12 text-center text-gray-400"
                   >
                     Loading...
                   </td>
                 </tr>
-              ) : registrations.length === 0 ? (
+              ) : getDisplayedRegistrations().length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-6 py-12 text-center text-gray-400"
                   >
                     No registrations found
                   </td>
                 </tr>
               ) : (
-                registrations.map((lead) => (
+                getDisplayedRegistrations().map((lead) => (
                   <tr key={lead._id} className="hover:bg-gray-50 transition">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -2097,6 +2172,28 @@ export default function CRM() {
                           {lead.interestedCountry}
                         </p>
                       )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {(() => {
+                        const tier = (lead.score?.tier || 'cold') as
+                          | 'hot'
+                          | 'warm'
+                          | 'cold';
+                        const cfg = leadTierConfig[tier];
+                        return (
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${cfg.color}`}
+                          >
+                            <span
+                              className={`h-2 w-2 rounded-full ${cfg.dot}`}
+                            />
+                            {cfg.label}
+                            <span className="opacity-60">
+                              {lead.score?.compound ?? 0}
+                            </span>
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4">
                       {lead.cvUrl ? (
