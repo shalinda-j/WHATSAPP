@@ -6,7 +6,7 @@ import Lead from '../../models/Lead';
 import { authenticateToken } from '../middleware/auth';
 import { strictRateLimit } from '../middleware/rateLimit';
 import { validateObjectId } from '../middleware/validation';
-import { resolveTenant } from '../middleware/tenantContext';
+import { resolveTenant, withTenantScope } from '../middleware/tenantContext';
 import pdf from 'pdf-parse';
 import ChatMessage from '../../models/ChatMessage';
 import { configurationManager } from '../../services/ConfigurationManagerService';
@@ -299,7 +299,9 @@ router.get('/export', async (req, res) => {
 
 router.get('/:id', validateObjectId(), async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
+    const lead = await Lead.findOne(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!lead) {
       return res.status(404).json({ error: 'Lead not found' });
     }
@@ -311,7 +313,9 @@ router.get('/:id', validateObjectId(), async (req, res) => {
 
 router.get('/:id/messages', validateObjectId(), async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
+    const lead = await Lead.findOne(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!lead) {
       return res.status(404).json({ error: 'Lead not found' });
     }
@@ -439,13 +443,49 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', validateObjectId(), async (req, res) => {
   try {
-    const previous = await Lead.findById(req.params.id);
+    const previous = await Lead.findOne(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!previous) {
       return res.status(404).json({ error: 'Lead not found' });
     }
-    const lead = await Lead.findByIdAndUpdate(
-      req.params.id,
-      { ...req.body, updatedAt: new Date() },
+
+    const {
+      fullName,
+      phoneNumber,
+      email,
+      address,
+      age,
+      interestedCountry,
+      experienceYears,
+      jobVacancyType,
+      status,
+      notes,
+      source,
+      tags,
+    } = req.body;
+
+    const updateData: any = {};
+    if (fullName !== undefined) updateData.fullName = fullName;
+    if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
+    if (email !== undefined) updateData.email = email;
+    if (address !== undefined) updateData.address = address;
+    if (age !== undefined) updateData.age = age;
+    if (interestedCountry !== undefined)
+      updateData.interestedCountry = interestedCountry;
+    if (experienceYears !== undefined)
+      updateData.experienceYears = experienceYears;
+    if (jobVacancyType !== undefined)
+      updateData.jobVacancyType = jobVacancyType;
+    if (status !== undefined) updateData.status = status;
+    if (notes !== undefined) updateData.notes = notes;
+    if (source !== undefined) updateData.source = source;
+    if (tags !== undefined) updateData.tags = tags;
+    updateData.updatedAt = new Date();
+
+    const lead = await Lead.findOneAndUpdate(
+      withTenantScope(req, { _id: req.params.id }),
+      { $set: updateData },
       { new: true },
     );
 
@@ -472,7 +512,9 @@ router.put('/:id', validateObjectId(), async (req, res) => {
 
 router.delete('/:id', validateObjectId(), async (req, res) => {
   try {
-    const lead = await Lead.findByIdAndDelete(req.params.id);
+    const lead = await Lead.findOneAndDelete(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!lead) {
       return res.status(404).json({ error: 'Lead not found' });
     }
@@ -496,7 +538,9 @@ router.post(
   upload.single('file'),
   async (req, res) => {
     try {
-      const lead = await Lead.findById(req.params.id);
+      const lead = await Lead.findOne(
+        withTenantScope(req, { _id: req.params.id }),
+      );
       if (!lead) {
         return res.status(404).json({ error: 'Lead not found' });
       }
@@ -542,7 +586,9 @@ router.post(
 
 router.get('/:id/qualifications/:qualIndex/download', async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
+    const lead = await Lead.findOne(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!lead) {
       return res.status(404).json({ error: 'Lead not found' });
     }
