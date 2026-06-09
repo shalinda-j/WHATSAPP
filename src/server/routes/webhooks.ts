@@ -172,7 +172,17 @@ router.post('/telegram/:tenantSlug', webhookRateLimit, async (req, res) => {
       const got = req.headers['x-telegram-bot-api-secret-token'] as
         | string
         | undefined;
-      if (!got || got !== expectedSecret) {
+      if (!got || typeof got !== 'string') {
+        return res.status(401).json({ error: 'bad_secret' });
+      }
+
+      const expectedHash = crypto
+        .createHash('sha256')
+        .update(expectedSecret)
+        .digest();
+      const providedHash = crypto.createHash('sha256').update(got).digest();
+
+      if (!crypto.timingSafeEqual(expectedHash, providedHash)) {
         return res.status(401).json({ error: 'bad_secret' });
       }
     }
