@@ -301,7 +301,13 @@ export class SegmentationService {
       ];
     }
 
-    const contacts = await Contact.find(contactFilter).limit(10_000);
+    // Performance: Skip Mongoose hydration and fetch only needed routing fields.
+    // This reduces memory overhead for large bulk lists up to 10k contacts.
+    const contacts = await Contact.find(contactFilter)
+      .limit(10_000)
+      .select('_id whatsappNumber whatsappId phone email')
+      .lean();
+
     return contacts.map((c: any) => ({
       contactId: String(c._id),
       handles: {

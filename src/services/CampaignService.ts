@@ -285,7 +285,11 @@ export class CampaignService {
       const ids = materialised.map(
         (r) => new mongoose.Types.ObjectId(r.contactId),
       );
-      contacts = await Contact.find({ _id: { $in: ids } });
+      // Performance: Skip Mongoose hydration and fetch only needed routing fields.
+      // This is vital when processing bulk campaigns up to 10k contacts.
+      contacts = await Contact.find({ _id: { $in: ids } })
+        .select('_id whatsappNumber whatsappId phone email')
+        .lean();
     } else {
       const channelHandleQuery: Record<string, any>[] = [];
       if (channels.includes('whatsapp')) {
@@ -304,8 +308,10 @@ export class CampaignService {
       // build a Segment (paginated, async-friendly) instead. Without this
       // cap a misconfigured query could load the entire contact table
       // into memory in one go.
+      // Performance: Select only needed fields to minimize memory overhead.
       contacts = await Contact.find({ $or: channelHandleQuery })
         .limit(10_000)
+        .select('_id whatsappNumber whatsappId phone email')
         .lean();
     }
 
