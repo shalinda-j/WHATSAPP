@@ -379,7 +379,9 @@ async function finalizeBooking(
           sessionId,
           source: 'whatsapp',
         })
-        .catch((err) => console.error('recordConversion(booking) failed:', err));
+        .catch((err) =>
+          console.error('recordConversion(booking) failed:', err),
+        );
     } catch (err) {
       console.error('Failed to save booking to DB:', err);
     }
