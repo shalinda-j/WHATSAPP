@@ -82,7 +82,11 @@ const CampaignExecutionSchema = new Schema(
 CampaignExecutionSchema.index({ campaignId: 1, status: 1 });
 CampaignExecutionSchema.index({ tenantId: 1, createdAt: -1 });
 // Last-touch attribution looks up recent sends to a recipient (phone/JID).
-CampaignExecutionSchema.index({ tenantId: 1, recipientExternalId: 1, createdAt: -1 });
+CampaignExecutionSchema.index({
+  tenantId: 1,
+  recipientExternalId: 1,
+  createdAt: -1,
+});
 // recordReply() matches the campaign message a reply belongs to.
 CampaignExecutionSchema.index({ tenantId: 1, externalMessageId: 1 });
 

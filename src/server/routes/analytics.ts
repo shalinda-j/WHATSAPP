@@ -3,7 +3,7 @@ import ChatMessage from '../../models/ChatMessage';
 import Lead from '../../models/Lead';
 import Booking from '../../models/Booking';
 import { authenticateToken } from '../middleware/auth';
-import { resolveTenant } from '../middleware/tenantContext';
+import { resolveTenant, withTenantScope } from '../middleware/tenantContext';
 
 const router = Router();
 
@@ -379,8 +379,8 @@ router.post('/bookings', async (req, res) => {
 router.patch('/bookings/:id', async (req, res) => {
   try {
     const { status, notes, type, time, location } = req.body;
-    const booking = await Booking.findByIdAndUpdate(
-      req.params.id,
+    const booking = await Booking.findOneAndUpdate(
+      withTenantScope(req, { _id: req.params.id }),
       {
         ...(status && { status }),
         ...(notes !== undefined && { notes }),
@@ -402,7 +402,12 @@ router.patch('/bookings/:id', async (req, res) => {
 
 router.delete('/bookings/:id', async (req, res) => {
   try {
-    await Booking.findByIdAndDelete(req.params.id);
+    const booking = await Booking.findOneAndDelete(
+      withTenantScope(req, { _id: req.params.id }),
+    );
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

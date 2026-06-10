@@ -15,7 +15,10 @@ const m = (role: AIChatMessage['role'], content: string): AIChatMessage => ({
 
 describe('buildGeminiPayload', () => {
   it('pulls the system message out as systemInstruction', () => {
-    const p = buildGeminiPayload([m('system', 'You are a bot'), m('user', 'hi')]);
+    const p = buildGeminiPayload([
+      m('system', 'You are a bot'),
+      m('user', 'hi'),
+    ]);
     expect(p?.systemInstruction).toBe('You are a bot');
     expect(p?.history).toEqual([]);
     expect(p?.sendText).toBe('hi');
@@ -71,7 +74,9 @@ describe('buildGeminiPayload', () => {
   });
 
   it('returns null when there is no user turn to send', () => {
-    expect(buildGeminiPayload([m('system', 's'), m('assistant', 'a')])).toBeNull();
+    expect(
+      buildGeminiPayload([m('system', 's'), m('assistant', 'a')]),
+    ).toBeNull();
     expect(buildGeminiPayload([])).toBeNull();
   });
 });
