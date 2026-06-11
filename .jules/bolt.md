@@ -7,3 +7,8 @@
 
 **Learning:** When using Mongoose to fetch read-only queries, not using `.lean()` adds unnecessary overhead since documents are hydrated as Mongoose objects. In performance-sensitive routes where we only need plain objects for serialization or simple reading, this overhead is noticeable, especially for analytics endpoints which fetch large volumes of chat messages or datasets.
 **Action:** Always append `.lean()` to Mongoose read-only queries (e.g., `ChatMessage.find().lean()`) to bypass document hydration and improve performance.
+
+## 2024-05-19 - Precompile RegExp vs Array.some() + includes()
+
+**Learning:** In request handlers like `GET /questions` in `src/server/routes/analytics.ts`, iterating over a message string with `msg.content.toLowerCase()` and checking an array of keyword strings with `.some(k => content.includes(k))` inside a nested loop results in O(M*N) complexity. It also forces string memory allocations for `.toLowerCase()` on every request. Recreating the keyword mapping object on every request compounds the overhead.
+**Action:** Extract static keyword categorizations out of the request handler to module scope. Precompile the target keywords into case-insensitive `RegExp` objects (e.g., `/job|work/i`). Use `regex.test(content)` instead. Also remember not to automatically wrap with word boundaries `\b` unless explicitly needed, to avoid altering match logic from substring to whole word matching.
