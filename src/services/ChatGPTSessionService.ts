@@ -2,7 +2,11 @@ import axios from 'axios';
 import { randomUUID } from 'crypto';
 import { AIService, AIChatMessage } from '../interfaces/AIService';
 
-const CHATGPT_BASE = 'https://chat.openai.com';
+// OpenAI migrated ChatGPT from chat.openai.com to chatgpt.com. The session
+// cookie (__Secure-next-auth.session-token) is now issued for the chatgpt.com
+// domain, so validation MUST hit chatgpt.com — hitting the old host redirects
+// and can drop/mismatch the cookie, which surfaced as a false "expired" error.
+const CHATGPT_BASE = 'https://chatgpt.com';
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
@@ -73,28 +77,61 @@ export class ChatGPTSessionService implements AIService {
         headers: {
           ...COMMON_HEADERS,
           Accept: 'application/json',
+          Referer: `${CHATGPT_BASE}/`,
+          Origin: CHATGPT_BASE,
           Cookie: `__Secure-next-auth.session-token=${sessionToken}`,
         },
         timeout: 15000,
+        maxRedirects: 5,
         validateStatus: () => true,
       });
 
       if (res.status === 401 || res.status === 403) {
         throw new SessionExpiredError();
       }
+
+      // Cloudflare / bot challenge: the endpoint returns 200 with an HTML
+      // body instead of JSON. Detect it so the operator gets a useful message
+      // instead of a confusing "No accessToken" expiry error.
+      const isHtml =
+        typeof res.data === 'string' &&
+        /<\s*html|cf-browser-verification|just a moment/i.test(res.data);
+      if (isHtml || res.status === 503) {
+        throw new Error(
+          'ChatGPT blocked the request with a Cloudflare/bot challenge (HTTP ' +
+            `${res.status}). Server IPs are often blocked — this unofficial ` +
+            'method may not work from a hosted server. Prefer an official ' +
+            'API-key provider (Gemini / OpenAI / Groq) or a Custom endpoint.',
+        );
+      }
+
       if (res.status !== 200 || !res.data) {
         throw new Error(`Validation failed (HTTP ${res.status})`);
       }
-      if (!res.data.accessToken) {
+
+      // The body should be a JSON object. Some proxies hand back a string.
+      const body =
+        typeof res.data === 'string'
+          ? (() => {
+              try {
+                return JSON.parse(res.data);
+              } catch {
+                return {};
+              }
+            })()
+          : res.data;
+
+      // An empty {} means logged-out (cookie expired/invalid).
+      if (!body.accessToken) {
         throw new SessionExpiredError(
-          'No accessToken returned — cookie likely expired',
+          'No accessToken returned — cookie is expired or for the wrong domain (use chatgpt.com).',
         );
       }
 
       return {
-        accessToken: res.data.accessToken,
-        email: res.data.user?.email,
-        expires: res.data.expires,
+        accessToken: body.accessToken,
+        email: body.user?.email,
+        expires: body.expires,
       };
     } catch (err: any) {
       if (err instanceof SessionExpiredError) throw err;
