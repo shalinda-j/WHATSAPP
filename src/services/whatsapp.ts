@@ -609,6 +609,20 @@ export class WhatsAppSessionManager {
   }
 
   /**
+   * List the session IDs that currently have a live socket, with
+   * fully-connected sessions first so callers that need "any working
+   * session" pick the healthiest one.
+   */
+  getActiveSessionIds(): string[] {
+    const ids = Array.from(this.sessions.keys());
+    return ids.sort((a, b) => {
+      const aConnected = this.connectionStates.get(a) === 'connected' ? 0 : 1;
+      const bConnected = this.connectionStates.get(b) === 'connected' ? 0 : 1;
+      return aConnected - bConnected;
+    });
+  }
+
+  /**
    * Get the connection state of a specific session
    */
   getConnectionState(
@@ -1057,6 +1071,20 @@ export function getSocket(sessionId = 'default'): WASocket | undefined {
   return manager.getSocket(sessionId);
 }
 
+/**
+ * Resolve a usable session ID: the requested one if it has a live socket,
+ * otherwise the first active session (connected ones first). Returns null
+ * when no session is up at all. Lets admin-panel send paths work in
+ * multi-device deployments where the 'default' session doesn't exist.
+ */
+export function resolveActiveSessionId(
+  preferred = 'default',
+): string | null {
+  if (manager.getSocket(preferred)) return preferred;
+  const active = manager.getActiveSessionIds();
+  return active.length > 0 ? active[0] : null;
+}
+
 // Helpers
 export function getMessageText(message: proto.IWebMessageInfo): string {
   const msg = message.message;
@@ -1065,6 +1093,8 @@ export function getMessageText(message: proto.IWebMessageInfo): string {
     msg.conversation ||
     msg.extendedTextMessage?.text ||
     msg.imageMessage?.caption ||
+    msg.videoMessage?.caption ||
+    msg.documentMessage?.caption ||
     ''
   );
 }

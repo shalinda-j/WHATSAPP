@@ -309,8 +309,11 @@ router.get('/bookings', async (req, res) => {
     if (year && month) {
       const y = parseInt(year, 10);
       const m = parseInt(month, 10) - 1; // 0-indexed
-      const start = new Date(y, m, 1);
-      const end = new Date(y, m + 1, 0, 23, 59, 59, 999);
+      // UTC bounds: booking dates are stored as UTC instants, so building
+      // the range in the server's local timezone would clip bookings at
+      // month edges whenever the server isn't running UTC.
+      const start = new Date(Date.UTC(y, m, 1));
+      const end = new Date(Date.UTC(y, m + 1, 0, 23, 59, 59, 999));
       query.date = { $gte: start, $lte: end };
     }
 
@@ -349,10 +352,21 @@ router.post('/bookings', async (req, res) => {
         .json({ error: 'clientName, clientPhone, and date are required' });
     }
 
-    const dateObj = new Date(date);
+    // Anchor the calendar day in UTC. Parsing 'YYYY-MM-DD' with new Date()
+    // then setHours() bakes the SERVER's timezone into the stored instant,
+    // which shifts the booking onto the wrong day when the admin's browser
+    // is in a different timezone. UTC on both ends keeps the day stable.
+    const [yy, mm, dd] = String(date)
+      .split('T')[0]
+      .split('-')
+      .map((v: string) => parseInt(v, 10));
+    if (!yy || !mm || !dd) {
+      return res.status(400).json({ error: 'Invalid date format' });
+    }
+    const dateObj = new Date(Date.UTC(yy, mm - 1, dd));
     if (time) {
-      const [h, m] = time.split(':').map(Number);
-      dateObj.setHours(h, m, 0, 0);
+      const [h, m] = String(time).split(':').map(Number);
+      dateObj.setUTCHours(h || 0, m || 0, 0, 0);
     }
 
     const booking = await Booking.create({

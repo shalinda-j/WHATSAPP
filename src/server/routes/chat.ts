@@ -3,7 +3,7 @@ import ChatMessage from '../../models/ChatMessage';
 import Session from '../../models/Session';
 import { Contact } from '../../models/CRM';
 import LidPhoneMapping from '../../models/LidPhoneMapping';
-import { sendMessage, getSocket } from '../../services/whatsapp';
+import { sendMessage, resolveActiveSessionId } from '../../services/whatsapp';
 import { getIO } from '../socket';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { resolveTenant } from '../middleware/tenantContext';
@@ -293,10 +293,16 @@ router.post('/send', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'userId and message are required' });
     }
 
-    // Check if WhatsApp is connected
-    const socket = getSocket(sessionId);
-    if (!socket) {
-      return res.status(503).json({ error: 'WhatsApp session not connected' });
+    // Resolve a live session: honour the requested one when it has a socket,
+    // otherwise fall back to any active session. Multi-device deployments
+    // often have no session literally named 'default', and pages like the
+    // Follow-Up Manager don't know which device owns the conversation —
+    // without this fallback every send from them 503s.
+    const activeSessionId = resolveActiveSessionId(sessionId);
+    if (!activeSessionId) {
+      return res
+        .status(503)
+        .json({ error: 'No WhatsApp session is connected' });
     }
 
     // Mark all user messages as read (admin is viewing this chat)
@@ -306,7 +312,7 @@ router.post('/send', async (req: Request, res: Response) => {
     );
 
     // Send message via WhatsApp
-    const sent = await sendMessage(userId, message, sessionId);
+    const sent = await sendMessage(userId, message, activeSessionId);
 
     if (!sent) {
       return res.status(500).json({ error: 'Failed to send WhatsApp message' });
@@ -321,7 +327,7 @@ router.post('/send', async (req: Request, res: Response) => {
       timestamp: new Date(),
       read: true, // Admin's messages are always read
       metadata: {
-        sessionId,
+        sessionId: activeSessionId,
         source: 'admin_panel',
       },
     });

@@ -3,7 +3,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 export interface IChatMessage {
   userId: string;
   role: 'user' | 'assistant' | 'system';
-  type: 'text' | 'voice' | 'image' | 'document';
+  type: 'text' | 'voice' | 'image' | 'video' | 'document' | 'sticker';
   content: string;
   mediaUrl?: string;
   timestamp: Date;
@@ -45,7 +45,7 @@ const ChatMessageSchema = new Schema({
   role: { type: String, enum: ['user', 'assistant', 'system'], required: true },
   type: {
     type: String,
-    enum: ['text', 'voice', 'image', 'document'],
+    enum: ['text', 'voice', 'image', 'video', 'document', 'sticker'],
     default: 'text',
   },
   content: { type: String, required: true },

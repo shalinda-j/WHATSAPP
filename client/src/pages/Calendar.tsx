@@ -92,13 +92,17 @@ export default function Calendar() {
     try {
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth() + 1;
-      const res = await api
-        .get(`/api/analytics/bookings?year=${year}&month=${month}`)
-        .catch(() => ({ data: { bookings: [] } }));
+      const res = await api.get(
+        `/api/analytics/bookings?year=${year}&month=${month}`,
+      );
       const data = res.data?.bookings || res.data || [];
       setBookings(Array.isArray(data) ? data : []);
-    } catch {
+    } catch (err: unknown) {
       setBookings([]);
+      const detail =
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error || 'Failed to load bookings — check your connection';
+      setMessage({ type: 'error', text: detail });
     } finally {
       setLoading(false);
     }
@@ -133,12 +137,15 @@ export default function Calendar() {
     if (!day) return [];
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
+    // Compare in UTC: booking dates are stored as UTC instants anchored to
+    // the intended calendar day. Local getters would shift evening bookings
+    // onto the previous/next day depending on the browser's timezone.
     return bookings.filter((b) => {
       const d = new Date(b.date);
       return (
-        d.getFullYear() === year &&
-        d.getMonth() === month &&
-        d.getDate() === day
+        d.getUTCFullYear() === year &&
+        d.getUTCMonth() === month &&
+        d.getUTCDate() === day
       );
     });
   };
@@ -182,8 +189,11 @@ export default function Calendar() {
         notes: '',
       });
       fetchBookings();
-    } catch {
-      setMessage({ type: 'error', text: 'Failed to create booking' });
+    } catch (err: unknown) {
+      const detail =
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error || 'Failed to create booking';
+      setMessage({ type: 'error', text: detail });
     } finally {
       setSaving(false);
     }
@@ -208,8 +218,13 @@ export default function Calendar() {
   };
 
   const days = getDaysInMonth();
+  // Include everything from the start of today — comparing against `today`
+  // (which carries the page-load time) hid this morning's bookings.
+  const startOfToday = new Date(new Date().setHours(0, 0, 0, 0));
   const upcomingBookings = bookings
-    .filter((b) => new Date(b.date) >= today && b.status !== 'cancelled')
+    .filter(
+      (b) => new Date(b.date) >= startOfToday && b.status !== 'cancelled',
+    )
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .slice(0, 5);
 
@@ -521,6 +536,7 @@ export default function Calendar() {
                       {new Date(b.date).toLocaleDateString('en-US', {
                         month: 'short',
                         day: 'numeric',
+                        timeZone: 'UTC',
                       })}
                       {b.time && ` · ${b.time}`}
                     </p>
@@ -590,6 +606,7 @@ export default function Calendar() {
                         year: 'numeric',
                         month: 'long',
                         day: 'numeric',
+                        timeZone: 'UTC',
                       },
                     )}
                     {selectedBooking.time && ` · ${selectedBooking.time}`}
