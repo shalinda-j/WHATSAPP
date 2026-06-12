@@ -122,8 +122,12 @@ export default function FollowUp() {
       const res = await api.get('/api/crm/contacts?limit=200');
       const data = res.data?.contacts || res.data || [];
       setContacts(Array.isArray(data) ? data : []);
-    } catch {
+    } catch (err: unknown) {
       setContacts([]);
+      const detail =
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error || 'Failed to load contacts — check your connection';
+      setMessage({ type: 'error', text: detail });
     } finally {
       setLoading(false);
     }
@@ -185,16 +189,23 @@ export default function FollowUp() {
         source: 'manual',
       });
       fetchContacts();
-    } catch {
-      setMessage({ type: 'error', text: 'Failed to add contact' });
+    } catch (err: unknown) {
+      const detail =
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error || 'Failed to add contact';
+      setMessage({ type: 'error', text: detail });
     } finally {
       setSaving(false);
     }
   };
 
-  const handleUpdateStatus = async (id: string, status: string) => {
+  const handleUpdateStatus = async (
+    id: string,
+    status: string,
+    extra: Record<string, unknown> = {},
+  ) => {
     try {
-      await api.patch(`/api/crm/contacts/${id}`, { status });
+      await api.patch(`/api/crm/contacts/${id}`, { status, ...extra });
       setContacts((prev) =>
         prev.map((c) =>
           c._id === id
@@ -255,20 +266,31 @@ export default function FollowUp() {
     try {
       const firstName = (contact.name || 'there').split(' ')[0];
       const msg = `Hi ${firstName}! 👋 Just checking in from our team. We would love to help you take the next step — would you like to arrange a quick free visit to see your options? Just reply and we'll set it up. 🌟`;
+      // Build a valid WhatsApp JID: whatsappId is stored as plain digits
+      // (it aliases whatsappNumber), so only reuse it verbatim when it
+      // already looks like a JID; otherwise strip to digits and append
+      // the @s.whatsapp.net suffix.
+      const rawId = contact.whatsappId || contact.phone;
+      const jid = rawId.includes('@')
+        ? rawId
+        : `${rawId.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
       await api.post('/api/chat/send', {
-        userId:
-          contact.whatsappId ||
-          `${contact.phone.replace('+', '')}@s.whatsapp.net`,
+        userId: jid,
         message: msg,
       });
       setMessage({
         type: 'success',
         text: `Message sent to ${contact.name || 'Unknown'}`,
       });
-      // Mark as contacted
-      handleUpdateStatus(contact._id, 'contacted');
-    } catch {
-      setMessage({ type: 'error', text: 'Failed to send WhatsApp message' });
+      // Mark as contacted + record when we last reached out
+      handleUpdateStatus(contact._id, 'contacted', {
+        lastContact: new Date().toISOString(),
+      });
+    } catch (err: unknown) {
+      const detail =
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error || 'Failed to send WhatsApp message';
+      setMessage({ type: 'error', text: detail });
     } finally {
       setSendingWA(null);
     }

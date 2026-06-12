@@ -318,6 +318,42 @@ export async function extractTextFromImage(
 }
 
 /**
+ * Describe arbitrary media (image, video, PDF/document, sticker) using
+ * Gemini's multimodal input. The instruction controls what the model
+ * returns — callers tailor it per media kind. Returns '' when the API key
+ * is missing so callers can degrade gracefully.
+ */
+export async function describeMediaContent(
+  base64Data: string,
+  mimeType: string,
+  instruction: string,
+): Promise<string> {
+  try {
+    const model = await getGeminiModel();
+    const result = await withTimeout(
+      model.generateContent([
+        {
+          inlineData: {
+            mimeType: mimeType,
+            data: base64Data,
+          },
+        },
+        { text: instruction },
+      ]),
+      TIMEOUT,
+      'gemini-media',
+    );
+    return result.response.text().trim();
+  } catch (error: any) {
+    if (error.message === 'MISSING_API_KEY') {
+      return '';
+    }
+    console.error('Media description error:', error.message || error);
+    throw error;
+  }
+}
+
+/**
  * Analyze the user's message for lead qualification data and intent
  */
 export async function analyzeLeadIntent(text: string): Promise<{

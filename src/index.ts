@@ -27,6 +27,11 @@ import {
   detectLanguage,
 } from './services/voice';
 import { aiLoadBalancer } from './services/AILoadBalancer';
+import {
+  detectIncomingMedia,
+  analyzeIncomingMedia,
+  buildMediaPromptText,
+} from './services/mediaUnderstanding';
 import { chatPersonality } from './services/ChatPersonality';
 import { leadScoringService } from './services/LeadScoringService';
 import { messageQuality } from './services/MessageQualityService';
@@ -682,7 +687,9 @@ onMessage(async (message, sock, sessionId) => {
 
     // De-dup check — skip only an exact-duplicate resend, never a distinct
     // follow-up message (those carry real customer intent and must be handled).
-    if (isRateLimited(jid, text)) {
+    // Captionless media has empty text, so key on the message ID there —
+    // otherwise two photos in a row would falsely dedupe as "same message".
+    if (isRateLimited(jid, text || message.key?.id || '')) {
       console.log('   ⚡ Skipping exact-duplicate message');
       return;
     }
@@ -793,9 +800,12 @@ onMessage(async (message, sock, sessionId) => {
     };
 
     const audioMsg = getAudioMessage(message.message);
+    // Non-audio media (image / video / document / sticker) — detected here so
+    // the empty-text guard below doesn't drop captionless attachments.
+    const incomingMedia = audioMsg ? null : detectIncomingMedia(message);
 
-    // Ignore empty messages (unless it's a voice message)
-    if ((!text || text.trim() === '') && !audioMsg) {
+    // Ignore empty messages (unless it's a voice or media message)
+    if ((!text || text.trim() === '') && !audioMsg && !incomingMedia) {
       console.log('   (Ignoring empty message)');
       return;
     }
@@ -831,7 +841,8 @@ onMessage(async (message, sock, sessionId) => {
       return;
     }
 
-    let messageType: 'text' | 'voice' = 'text';
+    let messageType: 'text' | 'voice' | 'image' | 'video' | 'document' | 'sticker' =
+      'text';
     let detectedVoiceLanguage: string | null = null;
 
     // Helper to extract audio message from various wrappers
@@ -880,6 +891,32 @@ onMessage(async (message, sock, sessionId) => {
       } else {
         console.error('   ❌ Failed to download audio');
         return;
+      }
+    }
+
+    // Check for image / video / document / sticker — download + Gemini
+    // multimodal analysis so the agent can READ what the customer sent
+    // (photos of certificates, CVs as PDFs, screenshots, voice-over videos)
+    // instead of silently ignoring it. The analysis becomes part of `text`,
+    // so every downstream consumer — flows, agents, AI load balancer,
+    // conversation history — works unchanged.
+    if (incomingMedia) {
+      console.log(
+        `   🖼️ ${incomingMedia.kind} message detected! Downloading + analyzing...`,
+      );
+      const analysis = await analyzeIncomingMedia(message, incomingMedia);
+      if (analysis) {
+        messageType = analysis.kind;
+        text = buildMediaPromptText(analysis);
+        if (analysis.description) {
+          console.log(
+            `   📝 ${analysis.kind} analysis: "${analysis.description.substring(0, 80)}..."`,
+          );
+        } else {
+          console.warn(
+            `   ⚠️ ${analysis.kind} could not be analyzed — replying with graceful acknowledgement`,
+          );
+        }
       }
     }
 

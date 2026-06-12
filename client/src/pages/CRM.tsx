@@ -718,6 +718,18 @@ export default function CRM() {
     registrationJobFilter,
   ]);
 
+  /**
+   * Pull the backend's actual error message out of an axios failure so the
+   * operator sees WHY an action failed (validation, auth, not-found) instead
+   * of a generic "Failed" that looks like a dead button.
+   */
+  const apiErrorText = (err: unknown, fallback: string): string => {
+    const data = (
+      err as { response?: { data?: { error?: string; message?: string } } }
+    )?.response?.data;
+    return data?.error || data?.message || fallback;
+  };
+
   // Contact handlers
   const handleSaveContact = async () => {
     try {
@@ -746,8 +758,8 @@ export default function CRM() {
       resetContactForm();
       fetchContacts();
       fetchDashboard();
-    } catch {
-      alert('Failed to save contact');
+    } catch (err) {
+      alert(apiErrorText(err, 'Failed to save contact'));
     }
   };
 
@@ -757,8 +769,8 @@ export default function CRM() {
       await api.delete(`/api/crm/contacts/${id}`);
       fetchContacts();
       fetchDashboard();
-    } catch {
-      alert('Failed to delete contact');
+    } catch (err) {
+      alert(apiErrorText(err, 'Failed to delete contact'));
     }
   };
 
@@ -802,8 +814,8 @@ export default function CRM() {
       fetchDeals();
       fetchDealsKanban();
       fetchDashboard();
-    } catch {
-      alert('Failed to save deal');
+    } catch (err) {
+      alert(apiErrorText(err, 'Failed to save deal'));
     }
   };
 
@@ -814,8 +826,8 @@ export default function CRM() {
       fetchDeals();
       fetchDealsKanban();
       fetchDashboard();
-    } catch {
-      alert('Failed to delete deal');
+    } catch (err) {
+      alert(apiErrorText(err, 'Failed to delete deal'));
     }
   };
 
@@ -897,8 +909,8 @@ export default function CRM() {
       resetActivityForm();
       fetchActivities();
       fetchDashboard();
-    } catch {
-      alert('Failed to save activity');
+    } catch (err) {
+      alert(apiErrorText(err, 'Failed to save activity'));
     }
   };
 
@@ -908,8 +920,8 @@ export default function CRM() {
       await api.delete(`/api/crm/activities/${id}`);
       fetchActivities();
       fetchDashboard();
-    } catch {
-      alert('Failed to delete activity');
+    } catch (err) {
+      alert(apiErrorText(err, 'Failed to delete activity'));
     }
   };
 
@@ -918,8 +930,8 @@ export default function CRM() {
       await api.put(`/api/crm/activities/${id}`, { status: 'completed' });
       fetchActivities();
       fetchDashboard();
-    } catch {
-      alert('Failed to complete activity');
+    } catch (err) {
+      alert(apiErrorText(err, 'Failed to complete activity'));
     }
   };
 
