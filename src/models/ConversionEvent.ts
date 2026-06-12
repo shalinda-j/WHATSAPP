@@ -11,10 +11,7 @@ import mongoose, { Schema, Document } from 'mongoose';
  *                      honest conversion label, set from the admin panel until
  *                      an automated payment hook exists.
  */
-export type ConversionKind =
-  | 'lead_registered'
-  | 'booking_created'
-  | 'fee_paid';
+export type ConversionKind = 'lead_registered' | 'booking_created' | 'fee_paid';
 
 export interface IConversionEvent extends Document {
   tenantId?: mongoose.Types.ObjectId;

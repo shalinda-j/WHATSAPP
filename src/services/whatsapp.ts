@@ -1077,9 +1077,7 @@ export function getSocket(sessionId = 'default'): WASocket | undefined {
  * when no session is up at all. Lets admin-panel send paths work in
  * multi-device deployments where the 'default' session doesn't exist.
  */
-export function resolveActiveSessionId(
-  preferred = 'default',
-): string | null {
+export function resolveActiveSessionId(preferred = 'default'): string | null {
   if (manager.getSocket(preferred)) return preferred;
   const active = manager.getActiveSessionIds();
   return active.length > 0 ? active[0] : null;

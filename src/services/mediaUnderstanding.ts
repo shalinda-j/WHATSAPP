@@ -92,7 +92,8 @@ export function detectIncomingMedia(
   }
 
   const doc =
-    msg.documentMessage ?? msg.documentWithCaptionMessage?.message?.documentMessage;
+    msg.documentMessage ??
+    msg.documentWithCaptionMessage?.message?.documentMessage;
   if (doc) {
     return {
       kind: 'document',
