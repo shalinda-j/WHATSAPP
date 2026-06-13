@@ -1,4 +1,7 @@
-import { isRateLimitError, parseRetryDelayMs } from '../services/AILoadBalancer';
+import {
+  isRateLimitError,
+  parseRetryDelayMs,
+} from '../services/AILoadBalancer';
 
 /**
  * Guards the 429 handling that keeps a rate-limited provider from collapsing
