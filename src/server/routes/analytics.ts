@@ -7,6 +7,21 @@ import { resolveTenant } from '../middleware/tenantContext';
 
 const router = Router();
 
+// ⚡ Bolt: Precompile keywords into RegExp objects at module scope.
+// This prevents recreating arrays and performing nested String.includes() on every request,
+// which causes O(M*N) CPU bottleneck and unnecessary GC overhead.
+// Note: We deliberately avoid word boundaries (\b) to preserve the original substring matching logic.
+const KEYWORDS_REGEX_MAP: Record<string, RegExp> = {
+  jobs: /(job|work|employment|vacancy|hire|recruit|jobs)/i,
+  register: /(register|apply|sign up|join|cv|registration)/i,
+  payment: /(payment|pay|salary|wage|bank|account)/i,
+  booking: /(book|visit|appointment|schedule|meeting|time)/i,
+  location: /(address|location|where|branch|office|map)/i,
+  services: /(service|what do you do|help|information|details)/i,
+  hello: /(hello|hi|hey|good morning|good afternoon)/i,
+  language: /(sinhala|english|tamil|translate)/i,
+};
+
 router.use(authenticateToken);
 router.use(resolveTenant);
 
@@ -102,27 +117,20 @@ router.get('/questions', async (req, res) => {
   try {
     const { limit = 20 } = req.query;
 
+    // ⚡ Bolt: Use .select('content -_id') to retrieve only the required fields,
+    // reducing memory footprint and processing overhead.
     const userMessages = await ChatMessage.find({ role: 'user' })
+      .select('content -_id')
       .sort({ timestamp: -1 })
       .limit(Number(limit))
       .lean();
 
     const questionCounts: Record<string, number> = {};
-    const keywordsMap: Record<string, string[]> = {
-      jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
-      register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
-      payment: ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
-      booking: ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
-      location: ['address', 'location', 'where', 'branch', 'office', 'map'],
-      services: ['service', 'what do you do', 'help', 'information', 'details'],
-      hello: ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
-      language: ['sinhala', 'english', 'tamil', 'translate'],
-    };
 
     for (const msg of userMessages) {
-      const content = msg.content.toLowerCase();
-      for (const [category, keywords] of Object.entries(keywordsMap)) {
-        if (keywords.some((k) => content.includes(k))) {
+      const content = msg.content; // Regex handles case-insensitivity
+      for (const [category, regex] of Object.entries(KEYWORDS_REGEX_MAP)) {
+        if (regex.test(content)) {
           questionCounts[category] = (questionCounts[category] || 0) + 1;
           break;
         }

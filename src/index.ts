@@ -841,8 +841,13 @@ onMessage(async (message, sock, sessionId) => {
       return;
     }
 
-    let messageType: 'text' | 'voice' | 'image' | 'video' | 'document' | 'sticker' =
-      'text';
+    let messageType:
+      | 'text'
+      | 'voice'
+      | 'image'
+      | 'video'
+      | 'document'
+      | 'sticker' = 'text';
     let detectedVoiceLanguage: string | null = null;
 
     // Helper to extract audio message from various wrappers
