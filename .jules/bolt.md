@@ -7,3 +7,8 @@
 
 **Learning:** When using Mongoose to fetch read-only queries, not using `.lean()` adds unnecessary overhead since documents are hydrated as Mongoose objects. In performance-sensitive routes where we only need plain objects for serialization or simple reading, this overhead is noticeable, especially for analytics endpoints which fetch large volumes of chat messages or datasets.
 **Action:** Always append `.lean()` to Mongoose read-only queries (e.g., `ChatMessage.find().lean()`) to bypass document hydration and improve performance.
+
+## 2024-06-14 - Precompile RegExp vs Array.some for string inclusions
+
+**Learning:** In performance-sensitive loops, using `Array.some()` with `String.includes()` against a newly created or locally scoped array causes unnecessary garbage collection overhead and O(M*N) CPU bottlenecks.
+**Action:** Precompile static keywords into `RegExp` objects at the module scope. In the request loop, use `regex.test(string)`. Ensure you avoid inadvertently wrapping patterns in word boundaries (e.g., `\b`) if the original logic relied on simple substring matching, as this could cause functional regressions.
