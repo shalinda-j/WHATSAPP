@@ -5,6 +5,32 @@ import Booking from '../../models/Booking';
 import { authenticateToken } from '../middleware/auth';
 import { resolveTenant } from '../middleware/tenantContext';
 
+// ⚡ Bolt: Precompile keyword regex patterns at module scope
+// This avoids recreating arrays and converting them to strings on every request,
+// solving the O(M*N) nested loop array.some(includes) bottleneck in the /questions route.
+const KEYWORDS_MAP: Record<string, string[]> = {
+  jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
+  register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
+  payment: ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
+  booking: ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
+  location: ['address', 'location', 'where', 'branch', 'office', 'map'],
+  services: ['service', 'what do you do', 'help', 'information', 'details'],
+  hello: ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
+  language: ['sinhala', 'english', 'tamil', 'translate'],
+};
+
+// Use substring matching instead of word boundaries to preserve existing functionality exactly
+const PRECOMPILED_CATEGORIES = Object.entries(KEYWORDS_MAP).map(
+  ([category, keywords]) => ({
+    category,
+    // Escape regex specials just in case, and join with OR
+    regex: new RegExp(
+      keywords.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
+      'i',
+    ),
+  }),
+);
+
 const router = Router();
 
 router.use(authenticateToken);
@@ -102,27 +128,22 @@ router.get('/questions', async (req, res) => {
   try {
     const { limit = 20 } = req.query;
 
+    // ⚡ Bolt: apply `.select('content -_id')` to fetch only the required fields
+    // This reduces memory overhead by not loading irrelevant fields
     const userMessages = await ChatMessage.find({ role: 'user' })
+      .select('content -_id')
       .sort({ timestamp: -1 })
       .limit(Number(limit))
       .lean();
 
     const questionCounts: Record<string, number> = {};
-    const keywordsMap: Record<string, string[]> = {
-      jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
-      register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
-      payment: ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
-      booking: ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
-      location: ['address', 'location', 'where', 'branch', 'office', 'map'],
-      services: ['service', 'what do you do', 'help', 'information', 'details'],
-      hello: ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
-      language: ['sinhala', 'english', 'tamil', 'translate'],
-    };
 
     for (const msg of userMessages) {
-      const content = msg.content.toLowerCase();
-      for (const [category, keywords] of Object.entries(keywordsMap)) {
-        if (keywords.some((k) => content.includes(k))) {
+      if (!msg.content) continue;
+
+      // We don't need to lowercase because the regex has the 'i' flag
+      for (const { category, regex } of PRECOMPILED_CATEGORIES) {
+        if (regex.test(msg.content)) {
           questionCounts[category] = (questionCounts[category] || 0) + 1;
           break;
         }
