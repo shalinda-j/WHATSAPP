@@ -98,6 +98,22 @@ router.get('/overview', async (req, res) => {
   }
 });
 
+// ⚡ Bolt: Precompile keyword arrays into RegExp objects at the module scope
+// to avoid recreating arrays and executing nested Array.some() with
+// String.includes() inside the loop. This changes an O(M*N) CPU bottleneck
+// into an optimized O(1) regex test. We do not use word boundaries (\b) to
+// match the previous substring behavior.
+const precompiledKeywords: Record<string, RegExp> = {
+  jobs: /job|work|employment|vacancy|hire|recruit|jobs/i,
+  register: /register|apply|sign up|join|cv|registration/i,
+  payment: /payment|pay|salary|wage|bank|account/i,
+  booking: /book|visit|appointment|schedule|meeting|time/i,
+  location: /address|location|where|branch|office|map/i,
+  services: /service|what do you do|help|information|details/i,
+  hello: /hello|hi|hey|good morning|good afternoon/i,
+  language: /sinhala|english|tamil|translate/i,
+};
+
 router.get('/questions', async (req, res) => {
   try {
     const { limit = 20 } = req.query;
@@ -108,21 +124,10 @@ router.get('/questions', async (req, res) => {
       .lean();
 
     const questionCounts: Record<string, number> = {};
-    const keywordsMap: Record<string, string[]> = {
-      jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
-      register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
-      payment: ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
-      booking: ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
-      location: ['address', 'location', 'where', 'branch', 'office', 'map'],
-      services: ['service', 'what do you do', 'help', 'information', 'details'],
-      hello: ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
-      language: ['sinhala', 'english', 'tamil', 'translate'],
-    };
 
     for (const msg of userMessages) {
-      const content = msg.content.toLowerCase();
-      for (const [category, keywords] of Object.entries(keywordsMap)) {
-        if (keywords.some((k) => content.includes(k))) {
+      for (const [category, regex] of Object.entries(precompiledKeywords)) {
+        if (regex.test(msg.content)) {
           questionCounts[category] = (questionCounts[category] || 0) + 1;
           break;
         }
