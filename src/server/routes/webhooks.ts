@@ -591,9 +591,15 @@ router.delete('/:id', async (req, res) => {
 // Test webhook (tenant-scoped: can only test your own tenant's webhooks)
 router.post('/:id/test', async (req, res) => {
   try {
-    const webhook = await (Webhook as any).findOne(
-      withTenantScope(req, { _id: req.params.id }),
-    );
+    // ⚡ Bolt Performance Optimization:
+    // Using .lean() for read-only query bypasses Mongoose document hydration.
+    // 💡 What: Appended .lean() to Webhook.findOne()
+    // 🎯 Why: Avoids heavy Mongoose Document instantiation for a simple lookup
+    // 📊 Impact: Faster endpoint execution for the webhook test utility
+    // 🔬 Measurement: Observe lower memory overhead when triggering test webhooks
+    const webhook = await (Webhook as any)
+      .findOne(withTenantScope(req, { _id: req.params.id }))
+      .lean();
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
 
     // This is a bit of a hack to use the private sendPayload method by exposing a test mechanism

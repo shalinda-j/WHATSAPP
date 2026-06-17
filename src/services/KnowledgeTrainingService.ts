@@ -74,6 +74,12 @@ export class KnowledgeTrainingService {
    */
   async searchKnowledge(query: string, limit = 5): Promise<IKnowledgeEntry[]> {
     try {
+      // ⚡ Bolt Performance Optimization:
+      // Using .lean() for read-only queries bypasses Mongoose document hydration.
+      // 💡 What: Appended .lean() to KnowledgeEntry.find()
+      // 🎯 Why: We only need plain data objects to return to the LLM agent, not full Mongoose instances
+      // 📊 Impact: Reduces memory footprint during high-volume RAG queries
+      // 🔬 Measurement: Observe lower memory usage and faster knowledge retrieval
       // Use text search if available
       const results = await KnowledgeEntry.find(
         { isActive: true },
@@ -81,7 +87,8 @@ export class KnowledgeTrainingService {
       )
         .find({ $text: { $search: query } })
         .sort({ score: { $meta: 'textScore' } })
-        .limit(limit);
+        .limit(limit)
+        .lean();
 
       // Update usage count
       if (results.length > 0) {
@@ -93,6 +100,12 @@ export class KnowledgeTrainingService {
 
       return results;
     } catch (error) {
+      // ⚡ Bolt Performance Optimization:
+      // Using .lean() for read-only query bypasses Mongoose document hydration.
+      // 💡 What: Appended .lean() to KnowledgeEntry.find() in the regex fallback
+      // 🎯 Why: Avoids heavy Mongoose Document instantiation for read-only results
+      // 📊 Impact: Faster fallback search execution and lower memory usage
+      // 🔬 Measurement: Observe lower memory footprint during search fallbacks
       // Fallback to regex search if text index not available
       console.log('[KnowledgeTraining] Using fallback regex search');
       const regexResults = await KnowledgeEntry.find({
@@ -101,7 +114,9 @@ export class KnowledgeTrainingService {
           { question: { $regex: query, $options: 'i' } },
           { tags: { $in: [new RegExp(query, 'i')] } },
         ],
-      }).limit(limit);
+      })
+        .limit(limit)
+        .lean();
 
       return regexResults;
     }
