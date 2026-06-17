@@ -93,20 +93,28 @@ export class WebhookService {
     webhook?: any,
   ) {
     try {
+      // ⚡ Bolt Performance Optimization:
+      // Using .lean() for read-only query bypasses Mongoose document hydration.
+      // 💡 What: Appended .lean() to Webhook.find()
+      // 🎯 Why: Avoids heavy Mongoose Document instantiation for a simple data fetch
+      // 📊 Impact: Significantly reduces memory footprint and CPU processing per webhook trigger
+      // 🔬 Measurement: Observe lower memory usage and faster execution during heavy webhook loads
       // Find active webhooks subscribed to this event (or all events with *).
       // Exclude 'ops' category — those receive only ops alerts, not business events.
-      const webhooks = await (Webhook as any).find({
-        isActive: true,
-        $and: [
-          { $or: [{ events: event }, { events: '*' }] },
-          {
-            $or: [
-              { category: { $ne: 'ops' } },
-              { category: { $exists: false } },
-            ],
-          },
-        ],
-      });
+      const webhooks = await (Webhook as any)
+        .find({
+          isActive: true,
+          $and: [
+            { $or: [{ events: event }, { events: '*' }] },
+            {
+              $or: [
+                { category: { $ne: 'ops' } },
+                { category: { $exists: false } },
+              ],
+            },
+          ],
+        })
+        .lean();
 
       if (webhooks.length === 0) return;
 
@@ -132,10 +140,18 @@ export class WebhookService {
    */
   public static async triggerOpsAlert(alert: OpsAlertInput): Promise<void> {
     try {
-      const webhooks = (await (Webhook as any).find({
-        isActive: true,
-        category: 'ops',
-      })) as IWebhook[];
+      // ⚡ Bolt Performance Optimization:
+      // Using .lean() for read-only query bypasses Mongoose document hydration.
+      // 💡 What: Appended .lean() to Webhook.find()
+      // 🎯 Why: Avoids heavy Mongoose Document instantiation for a simple data fetch
+      // 📊 Impact: Reduces memory overhead when fetching ops webhooks
+      // 🔬 Measurement: Observe lower memory usage and faster execution during alerts
+      const webhooks = (await (Webhook as any)
+        .find({
+          isActive: true,
+          category: 'ops',
+        })
+        .lean()) as IWebhook[];
 
       if (webhooks.length === 0) return;
 
