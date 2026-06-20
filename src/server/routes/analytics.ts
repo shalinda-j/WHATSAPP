@@ -10,6 +10,30 @@ const router = Router();
 router.use(authenticateToken);
 router.use(resolveTenant);
 
+// ⚡ Bolt: Precompile keywords into RegExp objects at the module scope
+// This avoids recreating arrays and using nested Array.some() with String.includes()
+// inside the request loop, which introduces an O(M*N) CPU bottleneck and unnecessary GC overhead.
+// We avoid word boundaries (\b) to preserve the original exact substring matching behaviour.
+const keywordsMap: Record<string, string[]> = {
+  jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
+  register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
+  payment: ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
+  booking: ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
+  location: ['address', 'location', 'where', 'branch', 'office', 'map'],
+  services: ['service', 'what do you do', 'help', 'information', 'details'],
+  hello: ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
+  language: ['sinhala', 'english', 'tamil', 'translate'],
+};
+
+const PRECOMPILED_KEYWORDS: Record<string, RegExp> = {};
+for (const [category, keywords] of Object.entries(keywordsMap)) {
+  // Escape keywords just in case, though these are static strings
+  const escapedKeywords = keywords.map((k) =>
+    k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+  );
+  PRECOMPILED_KEYWORDS[category] = new RegExp(escapedKeywords.join('|'), 'i');
+}
+
 router.get('/', async (req, res) => {
   try {
     // Determine counts for VoiceAgentHub stats
@@ -102,27 +126,19 @@ router.get('/questions', async (req, res) => {
   try {
     const { limit = 20 } = req.query;
 
+    // ⚡ Bolt: Use lean() and precise selection to minimize memory footprint
+    // We select only 'content' as it's the only field needed to match keywords.
     const userMessages = await ChatMessage.find({ role: 'user' })
+      .select('content -_id')
       .sort({ timestamp: -1 })
       .limit(Number(limit))
       .lean();
 
     const questionCounts: Record<string, number> = {};
-    const keywordsMap: Record<string, string[]> = {
-      jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
-      register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
-      payment: ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
-      booking: ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
-      location: ['address', 'location', 'where', 'branch', 'office', 'map'],
-      services: ['service', 'what do you do', 'help', 'information', 'details'],
-      hello: ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
-      language: ['sinhala', 'english', 'tamil', 'translate'],
-    };
 
     for (const msg of userMessages) {
-      const content = msg.content.toLowerCase();
-      for (const [category, keywords] of Object.entries(keywordsMap)) {
-        if (keywords.some((k) => content.includes(k))) {
+      for (const [category, regex] of Object.entries(PRECOMPILED_KEYWORDS)) {
+        if (regex.test(msg.content)) {
           questionCounts[category] = (questionCounts[category] || 0) + 1;
           break;
         }
