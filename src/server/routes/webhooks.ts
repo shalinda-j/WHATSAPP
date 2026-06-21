@@ -549,8 +549,20 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const tid = tenantIdOf(req);
+    // SECURITY FIX: Prevent mass assignment by extracting only allowed fields
+    const { name, url, events, secret, isActive, category, format } = req.body || {};
+
+    const webhookData: Record<string, any> = {};
+    if (name !== undefined) webhookData.name = name;
+    if (url !== undefined) webhookData.url = url;
+    if (events !== undefined) webhookData.events = events;
+    if (secret !== undefined) webhookData.secret = secret;
+    if (isActive !== undefined) webhookData.isActive = isActive;
+    if (category !== undefined) webhookData.category = category;
+    if (format !== undefined) webhookData.format = format;
+
     const webhook = new (Webhook as any)({
-      ...req.body,
+      ...webhookData,
       ...(tid ? { tenantId: tid } : {}),
     });
     await webhook.save();
@@ -563,9 +575,21 @@ router.post('/', async (req, res) => {
 // Update webhook (tenant-scoped: a tenant can only update its own webhooks)
 router.put('/:id', async (req, res) => {
   try {
+    // SECURITY FIX: Prevent mass assignment by extracting only allowed fields
+    const { name, url, events, secret, isActive, category, format } = req.body || {};
+
+    const updateData: Record<string, any> = {};
+    if (name !== undefined) updateData.name = name;
+    if (url !== undefined) updateData.url = url;
+    if (events !== undefined) updateData.events = events;
+    if (secret !== undefined) updateData.secret = secret;
+    if (isActive !== undefined) updateData.isActive = isActive;
+    if (category !== undefined) updateData.category = category;
+    if (format !== undefined) updateData.format = format;
+
     const webhook = await (Webhook as any).findOneAndUpdate(
       withTenantScope(req, { _id: req.params.id }),
-      req.body,
+      updateData,
       { new: true },
     );
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
