@@ -172,7 +172,17 @@ router.post('/telegram/:tenantSlug', webhookRateLimit, async (req, res) => {
       const got = req.headers['x-telegram-bot-api-secret-token'] as
         | string
         | undefined;
-      if (!got || got !== expectedSecret) {
+      if (!got) {
+        return res.status(401).json({ error: 'bad_secret' });
+      }
+
+      const expectedHash = crypto
+        .createHash('sha256')
+        .update(expectedSecret)
+        .digest();
+      const providedHash = crypto.createHash('sha256').update(got).digest();
+
+      if (!crypto.timingSafeEqual(expectedHash, providedHash)) {
         return res.status(401).json({ error: 'bad_secret' });
       }
     }
@@ -248,8 +258,17 @@ async function metaWebhookHandshake(
       channel,
     });
     const expected = (conn?.config as any)?.verifyToken as string | undefined;
-    if (!expected || token !== expected)
+
+    if (!expected || !token || typeof token !== 'string') {
       return res.status(403).send('forbidden');
+    }
+
+    const expectedHash = crypto.createHash('sha256').update(expected).digest();
+    const providedHash = crypto.createHash('sha256').update(token).digest();
+
+    if (!crypto.timingSafeEqual(expectedHash, providedHash)) {
+      return res.status(403).send('forbidden');
+    }
 
     return res.status(200).send(String(challenge ?? ''));
   } catch (err: any) {
@@ -564,8 +583,14 @@ router.get('/whatsapp-calling', metaEventRateLimit, async (req, res) => {
   const { liveCallSettings } =
     await import('../../services/LiveCallSettingsService');
   const expected = await liveCallSettings.getWebhookVerifyToken();
-  if (mode === 'subscribe' && expected && token === expected) {
-    return res.status(200).send(String(challenge ?? ''));
+
+  if (mode === 'subscribe' && expected && token && typeof token === 'string') {
+    const expectedHash = crypto.createHash('sha256').update(expected).digest();
+    const providedHash = crypto.createHash('sha256').update(token).digest();
+
+    if (crypto.timingSafeEqual(expectedHash, providedHash)) {
+      return res.status(200).send(String(challenge ?? ''));
+    }
   }
   return res.status(403).send('forbidden');
 });
