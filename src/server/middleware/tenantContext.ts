@@ -67,13 +67,44 @@ export async function resolveTenant(
 ): Promise<void> {
   try {
     const headerSlug = (req.headers['x-tenant-slug'] as string) || '';
-    const userTenantId = (req as any).user?.tenantId;
+    const userTenantId = (req as any).user?.tenantId as string | undefined;
+    const userRole = (req as any).user?.role as string | undefined;
+
+    // A super-admin is any authenticated user WITHOUT a tenant binding in
+    // their token (legacy single-admin / default deployments), or one whose
+    // role is explicitly 'super_admin'. Super-admins may switch tenants via
+    // the X-Tenant-Slug header (a convenience switch). Non-super-admins are
+    // locked to their own tenant — the header becomes an AUTHORIZED switch,
+    // never an unauthenticated selector.
+    const isSuperAdmin = !userTenantId || userRole === 'super_admin';
 
     let tenant: ITenant | null = null;
-    if (headerSlug) {
-      tenant = await Tenant.findOne({ slug: headerSlug });
-    } else if (userTenantId) {
-      tenant = await Tenant.findById(userTenantId);
+    if (isSuperAdmin) {
+      // Honor the header as before for super-admins; otherwise default.
+      if (headerSlug) {
+        tenant = await Tenant.findOne({ slug: headerSlug });
+      }
+    } else {
+      // Non-super-admin: resolve to their OWN tenant from the JWT.
+      const ownTenant = await Tenant.findById(userTenantId);
+
+      if (headerSlug) {
+        // If the request explicitly asks for a slug, only allow it when it
+        // resolves to the user's own tenant. A header pointing at a DIFFERENT
+        // tenant is a privilege-escalation attempt → 403.
+        const requested = await Tenant.findOne({ slug: headerSlug });
+        if (
+          requested &&
+          ownTenant &&
+          String(requested._id) !== String(ownTenant._id)
+        ) {
+          _res.status(403).json({ error: 'tenant_forbidden' });
+          return;
+        }
+      }
+
+      // Force the user's own tenant regardless of any header value.
+      tenant = ownTenant;
     }
 
     if (!tenant) {

@@ -10,7 +10,12 @@ import AgentPromptVersion from '../models/AgentPromptVersion';
 import { Contact } from '../models/CRM';
 import { aiLoadBalancer } from './AILoadBalancer';
 import { channelRouter } from '../channels';
-import { isQuietHoursActive, tenantQuietHours } from './quietHours';
+import {
+  isQuietHoursActive,
+  tenantQuietHours,
+  hourInZone,
+  isHourInWindow,
+} from './quietHours';
 import { isPhoneOptedOut } from './optOut';
 import { Channel } from '../types/agent';
 import { CAMPAIGN_GENERATOR_V1_PROMPT } from '../agents/prompts/campaign-generator-v1';
@@ -99,6 +104,7 @@ export function weightedPickVariantId(
 
 export function isInQuietHours(
   campaign: Pick<IMarketingCampaign, 'quietHours'>,
+  timezone?: string,
   now: Date = new Date(),
 ): boolean {
   const qh = campaign.quietHours;
@@ -109,12 +115,8 @@ export function isInQuietHours(
   ) {
     return false;
   }
-  const hour = now.getHours();
-  if (qh.startHour <= qh.endHour) {
-    return hour >= qh.startHour && hour < qh.endHour;
-  }
-  // Wraps midnight.
-  return hour >= qh.startHour || hour < qh.endHour;
+  const hour = hourInZone(now, timezone);
+  return isHourInWindow(hour, qh.startHour, qh.endHour);
 }
 
 export class CampaignService {
@@ -259,6 +261,9 @@ export class CampaignService {
       tenantId: opts.tenantId,
     });
     if (!campaign) throw new Error('campaign_not_found');
+    // Already-running guard: a second launch of a live campaign would queue a
+    // fresh set of executions and double-send. Refuse it (mapped to HTTP 409).
+    if (campaign.status === 'running') throw new Error('already_running');
     if (!campaign.variants || campaign.variants.length === 0) {
       throw new Error('no_variants');
     }
@@ -285,7 +290,14 @@ export class CampaignService {
       const ids = materialised.map(
         (r) => new mongoose.Types.ObjectId(r.contactId),
       );
-      contacts = await Contact.find({ _id: { $in: ids } });
+      contacts = await Contact.find({
+        _id: { $in: ids },
+        $or: [
+          { tenantId: opts.tenantId },
+          { tenantId: { $exists: false } },
+          { tenantId: null },
+        ],
+      });
     } else {
       const channelHandleQuery: Record<string, any>[] = [];
       if (channels.includes('whatsapp')) {
@@ -304,14 +316,43 @@ export class CampaignService {
       // build a Segment (paginated, async-friendly) instead. Without this
       // cap a misconfigured query could load the entire contact table
       // into memory in one go.
-      contacts = await Contact.find({ $or: channelHandleQuery })
+      contacts = await Contact.find({
+        $and: [
+          {
+            $or: [
+              { tenantId: opts.tenantId },
+              { tenantId: { $exists: false } },
+              { tenantId: null },
+            ],
+          },
+          { $or: channelHandleQuery },
+        ],
+      })
         .limit(10_000)
         .lean();
     }
 
+    // Execution dedup: on an intentional relaunch (e.g. after a pause), skip
+    // any (contact × channel) that already has a live (non-failed) execution
+    // for this campaign so we never queue a duplicate send. 'failed' rows are
+    // eligible for retry; everything else (queued/sending/sent/delivered/
+    // read/replied/bounced) is treated as already-handled.
+    const liveExecs = await CampaignExecution.find(
+      {
+        tenantId: campaign.tenantId,
+        campaignId: campaign._id,
+        status: { $ne: 'failed' },
+      },
+      { contactId: 1, channel: 1 },
+    ).lean();
+    const liveKeys = new Set<string>(
+      liveExecs.map((e: any) => `${String(e.contactId)}::${e.channel}`),
+    );
+
     const docs: any[] = [];
     for (const contact of contacts) {
       for (const channel of channels) {
+        if (liveKeys.has(`${String(contact._id)}::${channel}`)) continue;
         const recipient = pickRecipientHandle(contact, channel);
         if (!recipient) continue;
         const variantId = weightedPickVariantId(campaign.variants ?? []);
@@ -383,7 +424,7 @@ export class CampaignService {
         tenantId,
       });
       if (!campaign || campaign.status !== 'running') continue;
-      if (isInQuietHours(campaign)) continue;
+      if (isInQuietHours(campaign, tenant?.brand?.timezone)) continue;
 
       const limit = Math.max(1, campaign.rateLimitPerMinute ?? 30);
       // Convert per-minute limit to a per-tick cap; the loop runs roughly
@@ -502,14 +543,26 @@ export class CampaignService {
   ): Promise<void> {
     if (!tenantId || !externalMessageId) return;
     try {
-      await CampaignExecution.findOneAndUpdate(
+      // findOneAndUpdate returns the PRE-update doc (mongoose default). A
+      // non-null result means we actually transitioned a delivered-ish
+      // execution to 'replied', so bump the campaign aggregate exactly once
+      // (the in-place status set never incremented stats.replied before, so
+      // the dashboard showed 0 forever).
+      const prev = await CampaignExecution.findOneAndUpdate(
         {
           tenantId,
           externalMessageId,
           status: { $in: ['sent', 'delivered', 'read'] },
         },
         { $set: { status: 'replied', repliedAt: new Date() } },
+        { new: false },
       );
+      if (prev) {
+        await MarketingCampaign.updateOne(
+          { _id: prev.campaignId, tenantId },
+          { $inc: { 'stats.replied': 1 } },
+        );
+      }
     } catch (err) {
       console.error('recordReply failed:', err);
     }
@@ -530,8 +583,24 @@ export class CampaignService {
     if (!tenantId || !recipientExternalId) return;
     try {
       const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+      // Executions store recipientExternalId as the canonical JID
+      // `<digits>@s.whatsapp.net`. Callers pass either bare digits
+      // (ConversionService.derivePhone) or a device-suffixed / @lid JID —
+      // neither equals the stored value, so attribution silently missed.
+      // Normalize to bare digits and rebuild the canonical JID so the match
+      // is exact (also fixes the fee_paid path that passes no jid).
+      const digits =
+        extractRealPhone(jid || '') ||
+        extractRealPhone(`${recipientExternalId}@s.whatsapp.net`) ||
+        recipientExternalId.replace(/\D/g, '');
       const ids = Array.from(
-        new Set([recipientExternalId, jid].filter(Boolean)),
+        new Set(
+          [
+            digits ? `${digits}@s.whatsapp.net` : '',
+            recipientExternalId,
+            jid,
+          ].filter(Boolean),
+        ),
       ) as string[];
       const exec = await CampaignExecution.findOne({
         tenantId,
@@ -543,6 +612,12 @@ export class CampaignService {
       if (exec) {
         exec.outcome = 'converted';
         await exec.save();
+        // Bump the campaign aggregate so the dashboard's converted count is
+        // real (previously only the execution row was flipped).
+        await MarketingCampaign.updateOne(
+          { _id: exec.campaignId, tenantId },
+          { $inc: { 'stats.converted': 1 } },
+        );
         console.log(
           `🎯 [ATTRIBUTION] Campaign ${exec.campaignId} credited with ${_kind} for ${recipientExternalId}`,
         );

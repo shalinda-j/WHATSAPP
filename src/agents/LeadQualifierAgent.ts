@@ -155,11 +155,26 @@ export class LeadQualifierAgent implements IAgent {
     // applied on top whether the record is new or pre-existing.
     const sideEffects: AgentResult['sideEffects'] = [];
     const phone = extractPhoneFromJid(ctx.userId);
+    const tenantId =
+      typeof ctx.metadata?.tenantId === 'string' ? ctx.metadata.tenantId : null;
 
     // Ensure a Lead row exists for this phone (upsert = create-if-missing).
     // $setOnInsert fields only apply when the document is newly created.
+    // Scope the lookup to this tenant (legacy-tolerant) and stamp tenantId on
+    // insert so newly-created leads are OWNED — otherwise they have no tenantId
+    // and become invisible to the tenant-scoped follow-up scan.
+    const leadFilter: Record<string, unknown> = tenantId
+      ? {
+          phoneNumber: phone,
+          $or: [
+            { tenantId },
+            { tenantId: { $exists: false } },
+            { tenantId: null },
+          ],
+        }
+      : { phoneNumber: phone };
     const lead = await Lead.findOneAndUpdate(
-      { phoneNumber: phone },
+      leadFilter,
       {
         $setOnInsert: {
           fullName: `WhatsApp Enquiry (${phone})`,
@@ -167,6 +182,7 @@ export class LeadQualifierAgent implements IAgent {
           jobVacancyType: 'Pending Registration',
           source: 'whatsapp',
           status: 'new',
+          ...(tenantId ? { tenantId } : {}),
         },
       },
       { upsert: true, new: true },

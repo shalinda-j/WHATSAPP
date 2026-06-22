@@ -9,6 +9,7 @@ import { configurationManager } from './ConfigurationManagerService';
 import { WebhookService } from './WebhookService';
 import sessionStateService from './SessionStateService';
 import Booking from '../models/Booking';
+import Session from '../models/Session';
 import { agentReflectionService } from './AgentReflectionService';
 import { conversionService } from './ConversionService';
 
@@ -306,6 +307,45 @@ async function finalizeBooking(
   // Extract phone number from jid
   const callerPhone = jid.replace('@s.whatsapp.net', '').replace('@c.us', '');
 
+  // Double-booking guard (layer B): refuse if the exact date+hour already has a
+  // confirmed/pending booking. Availability already subtracts booked slots, but
+  // this closes the race where two users confirm the same slot near-simultaneously.
+  try {
+    const dayStart = new Date(appointmentDate);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(appointmentDate);
+    dayEnd.setHours(23, 59, 59, 999);
+    const targetHour = appointmentDate.getHours();
+    const targetTimeStr = format(appointmentDate, 'HH:mm');
+
+    const sameDay = await Booking.find({
+      date: { $gte: dayStart, $lte: dayEnd },
+      status: { $in: ['confirmed', 'pending'] },
+    })
+      .select('date time')
+      .lean();
+
+    const conflict = sameDay.some((b: any) => {
+      if (typeof b.time === 'string' && /^\d{1,2}:\d{2}/.test(b.time)) {
+        return b.time === targetTimeStr || parseInt(b.time.split(':')[0], 10) === targetHour;
+      }
+      return b.date ? new Date(b.date).getHours() === targetHour : false;
+    });
+
+    if (conflict) {
+      await sendMessage(
+        jid,
+        `⚠️ Sorry, that time slot was just booked by someone else. Please reply *!visit* to pick another time.`,
+        sessionId,
+      );
+      await sessionStateService.deleteSession(jid, 'booking');
+      return;
+    }
+  } catch (guardErr) {
+    // Fail open on guard errors so a transient DB issue doesn't block bookings.
+    console.error('Double-booking guard check failed:', guardErr);
+  }
+
   await sendMessage(jid, `✅ *Confirming your appointment...*`, sessionId);
 
   try {
@@ -317,6 +357,8 @@ async function finalizeBooking(
       appointmentDate,
       eventTitle,
       fullDescription,
+      undefined,
+      eventDuration,
     );
 
     // 2. Generate ICS file (Backup/Personal Calendar)
@@ -332,6 +374,12 @@ async function finalizeBooking(
     // 3. Save booking to MongoDB
     const timeStr24 = format(appointmentDate, 'HH:mm');
     try {
+      // Multi-tenant isolation: stamp the bot-created booking with the tenant
+      // that owns this WhatsApp session, mirroring the admin POST /bookings
+      // stamping. Optional — legacy/single-tenant sessions have no tenantId.
+      const sess = await Session.findOne({ sessionId })
+        .select('tenantId')
+        .lean();
       const booking = await Booking.create({
         clientName: callerName || callerPhone,
         clientPhone: callerPhone,
@@ -344,6 +392,7 @@ async function finalizeBooking(
         sessionId,
         location: campusLocation,
         gcalLink: gcalLink || undefined,
+        tenantId: sess?.tenantId,
       });
 
       // Notify any subscribed webhooks that a booking was confirmed.
@@ -445,8 +494,13 @@ export async function handleSpecificDateRequest(
 
     if (availableSlots.includes(requestedSlot)) {
       // Success! Book it.
-      const appointmentTime = new Date(date);
-      appointmentTime.setHours(hours, minutes, 0, 0);
+      // Parse the AI-supplied date as UTC then apply the time in UTC so the
+      // stored hour matches the slot the user picked (mirrors the admin
+      // POST /bookings convention). Parsing as local then setHours could
+      // shift the day/hour across timezones.
+      const [yy, mm, dd] = dateStr.split('-').map(Number);
+      const appointmentTime = new Date(Date.UTC(yy, mm - 1, dd));
+      appointmentTime.setUTCHours(hours, minutes || 0, 0, 0);
 
       await finalizeBooking(jid, appointmentTime, sessionId);
       return true;

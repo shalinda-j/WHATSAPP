@@ -2,6 +2,11 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IChatMessage {
   userId: string;
+  /**
+   * Owning tenant. Optional so existing/legacy writes keep compiling; stamped
+   * at ingest points so chat-derived exports/analytics can scope by tenant.
+   */
+  tenantId?: mongoose.Types.ObjectId;
   role: 'user' | 'assistant' | 'system';
   type: 'text' | 'voice' | 'image' | 'video' | 'document' | 'sticker';
   content: string;
@@ -42,6 +47,9 @@ export type IChatMessageDocument = IChatMessage & Document;
 
 const ChatMessageSchema = new Schema({
   userId: { type: String, required: true, index: true },
+  // Owning tenant. Optional (no required) so existing writes keep working;
+  // indexed so the tenant-scoped exports/analytics aggregations stay fast.
+  tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', index: true },
   role: { type: String, enum: ['user', 'assistant', 'system'], required: true },
   type: {
     type: String,

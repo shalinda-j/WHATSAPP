@@ -173,10 +173,21 @@ export class CRMService {
   /**
    * Update a contact
    */
-  static async updateContact(id: string, data: any) {
-    return Contact.findByIdAndUpdate(
-      id,
-      { ...data, updatedAt: new Date() },
+  static async updateContact(id: string, data: any, tenantId?: string) {
+    // SECURITY: strip any client-supplied tenantId so a caller can't
+    // re-stamp this row into another tenant.
+    const { tenantId: _ignore, ...safeData } = data ?? {};
+    const query: Record<string, unknown> = { _id: id };
+    if (tenantId) {
+      query.$or = [
+        { tenantId },
+        { tenantId: { $exists: false } },
+        { tenantId: null },
+      ];
+    }
+    return Contact.findOneAndUpdate(
+      query,
+      { ...safeData, updatedAt: new Date() },
       { new: true },
     );
   }
@@ -184,12 +195,28 @@ export class CRMService {
   /**
    * Delete a contact
    */
-  static async deleteContact(id: string) {
-    // Also delete related activities
-    await Activity.deleteMany({ contact: id });
-    // Update deals to remove contact reference
-    await Deal.updateMany({ contact: id }, { $unset: { contact: 1 } });
-    return Contact.findByIdAndDelete(id);
+  static async deleteContact(id: string, tenantId?: string) {
+    const tenantClause = tenantId
+      ? {
+          $or: [
+            { tenantId },
+            { tenantId: { $exists: false } },
+            { tenantId: null },
+          ],
+        }
+      : {};
+    // Resolve the tenant-scoped contact first so we never touch another
+    // tenant's related rows when the id belongs to a different tenant.
+    const contact = await Contact.findOneAndDelete({ _id: id, ...tenantClause });
+    if (!contact) return null;
+    // Cascade only after confirming ownership: delete related activities and
+    // unset the contact reference on this tenant's deals.
+    await Activity.deleteMany({ contact: id, ...tenantClause });
+    await Deal.updateMany(
+      { contact: id, ...tenantClause },
+      { $unset: { contact: 1 } },
+    );
+    return contact;
   }
 
   /**
@@ -359,23 +386,47 @@ export class CRMService {
   /**
    * Update a deal
    */
-  static async updateDeal(id: string, data: any) {
-    const updateData: any = { ...data, updatedAt: new Date() };
+  static async updateDeal(id: string, data: any, tenantId?: string) {
+    // SECURITY: strip any client-supplied tenantId so a caller can't
+    // re-stamp this row into another tenant.
+    const { tenantId: _ignore, ...safeData } = data ?? {};
+    const updateData: any = { ...safeData, updatedAt: new Date() };
 
     // Set actual close date if won/lost
     if (data.stage === 'won' || data.stage === 'lost') {
       updateData.actualCloseDate = new Date();
     }
 
-    return Deal.findByIdAndUpdate(id, updateData, { new: true });
+    const query: Record<string, unknown> = { _id: id };
+    if (tenantId) {
+      query.$or = [
+        { tenantId },
+        { tenantId: { $exists: false } },
+        { tenantId: null },
+      ];
+    }
+    return Deal.findOneAndUpdate(query, updateData, { new: true });
   }
 
   /**
    * Delete a deal
    */
-  static async deleteDeal(id: string) {
-    await Activity.deleteMany({ deal: id });
-    return Deal.findByIdAndDelete(id);
+  static async deleteDeal(id: string, tenantId?: string) {
+    const tenantClause = tenantId
+      ? {
+          $or: [
+            { tenantId },
+            { tenantId: { $exists: false } },
+            { tenantId: null },
+          ],
+        }
+      : {};
+    // Resolve the tenant-scoped deal first so cascading deletes never touch
+    // another tenant's activities.
+    const deal = await Deal.findOneAndDelete({ _id: id, ...tenantClause });
+    if (!deal) return null;
+    await Activity.deleteMany({ deal: id, ...tenantClause });
+    return deal;
   }
 
   /**
@@ -488,8 +539,16 @@ export class CRMService {
   /**
    * Get a single activity
    */
-  static async getActivityById(id: string) {
-    return Activity.findById(id)
+  static async getActivityById(id: string, tenantId?: string) {
+    const query: Record<string, unknown> = { _id: id };
+    if (tenantId) {
+      query.$or = [
+        { tenantId },
+        { tenantId: { $exists: false } },
+        { tenantId: null },
+      ];
+    }
+    return Activity.findOne(query)
       .populate('contact', 'firstName lastName email phone')
       .populate('deal', 'title value stage')
       .populate('owner', 'username email');
@@ -510,22 +569,41 @@ export class CRMService {
   /**
    * Update an activity
    */
-  static async updateActivity(id: string, data: any) {
-    const updateData: any = { ...data, updatedAt: new Date() };
+  static async updateActivity(id: string, data: any, tenantId?: string) {
+    // SECURITY: strip any client-supplied tenantId so a caller can't
+    // re-stamp this row into another tenant.
+    const { tenantId: _ignore, ...safeData } = data ?? {};
+    const updateData: any = { ...safeData, updatedAt: new Date() };
 
     // Set completed date if status is completed
     if (data.status === 'completed' && !data.completedAt) {
       updateData.completedAt = new Date();
     }
 
-    return Activity.findByIdAndUpdate(id, updateData, { new: true });
+    const query: Record<string, unknown> = { _id: id };
+    if (tenantId) {
+      query.$or = [
+        { tenantId },
+        { tenantId: { $exists: false } },
+        { tenantId: null },
+      ];
+    }
+    return Activity.findOneAndUpdate(query, updateData, { new: true });
   }
 
   /**
    * Delete an activity
    */
-  static async deleteActivity(id: string) {
-    return Activity.findByIdAndDelete(id);
+  static async deleteActivity(id: string, tenantId?: string) {
+    const query: Record<string, unknown> = { _id: id };
+    if (tenantId) {
+      query.$or = [
+        { tenantId },
+        { tenantId: { $exists: false } },
+        { tenantId: null },
+      ];
+    }
+    return Activity.findOneAndDelete(query);
   }
 
   /**
@@ -632,31 +710,50 @@ export class CRMService {
   /**
    * Global search across contacts, deals, and activities
    */
-  static async globalSearch(query: string) {
+  static async globalSearch(query: string, tenantId?: string) {
     // SECURITY: escape user input before constructing the regex. Raw
     // user-controlled strings in `new RegExp(...)` would allow regex
     // injection (e.g. catastrophic backtracking, denial-of-service via
     // `(a+)+$`-style patterns).
     const searchRegex = new RegExp(escapeRegex(query), 'i');
 
+    // Tenant scope: AND the tenant clause into each search so results never
+    // leak across tenants. Legacy rows without a tenantId stay visible.
+    const tenantClause = buildTenantFilter(tenantId);
+
     const [contacts, deals, activities] = await Promise.all([
-      Contact.find({
-        $or: [
-          { name: searchRegex },
-          { firstName: searchRegex },
-          { lastName: searchRegex },
-          { email: searchRegex },
-          { company: searchRegex },
-        ],
-      }).limit(10),
-      Deal.find({
-        $or: [{ title: searchRegex }, { description: searchRegex }],
-      })
+      Contact.find(
+        combineQuery(
+          {
+            $or: [
+              { name: searchRegex },
+              { firstName: searchRegex },
+              { lastName: searchRegex },
+              { email: searchRegex },
+              { company: searchRegex },
+            ],
+          },
+          tenantClause,
+        ),
+      ).limit(10),
+      Deal.find(
+        combineQuery(
+          {
+            $or: [{ title: searchRegex }, { description: searchRegex }],
+          },
+          tenantClause,
+        ),
+      )
         .limit(10)
         .populate('contact', 'firstName lastName'),
-      Activity.find({
-        $or: [{ title: searchRegex }, { description: searchRegex }],
-      })
+      Activity.find(
+        combineQuery(
+          {
+            $or: [{ title: searchRegex }, { description: searchRegex }],
+          },
+          tenantClause,
+        ),
+      )
         .limit(10)
         .populate('contact', 'firstName lastName'),
     ]);

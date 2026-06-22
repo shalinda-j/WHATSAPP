@@ -332,7 +332,12 @@ async function startServer() {
           const channelHistory = await conversationHistoryService
             .getHistory(msg.externalUserId)
             .then((h) =>
-              h.slice(-10).map((m) => ({
+              // Drop persisted system entries (personality/KB anchor written by
+              // AILoadBalancer) — agents expect only genuine user/assistant turns.
+              h
+                .filter((m) => m.role !== 'system')
+                .slice(-10)
+                .map((m) => ({
                 role: m.role as 'user' | 'assistant' | 'system',
                 content: m.content,
               })),
@@ -357,7 +362,14 @@ async function startServer() {
             await channelRouter.send({
               channel: msg.channel,
               tenantId: msg.tenantId,
-              recipient: msg.externalThreadId ?? msg.externalUserId,
+              // Meta (Instagram/Facebook) replies must go to the customer's
+              // PSID/IGSID (externalUserId), NOT the page/thread id — otherwise
+              // the bot replies to the business account itself. Telegram and
+              // others keep using their thread/chat id.
+              recipient:
+                msg.channel === 'instagram' || msg.channel === 'facebook'
+                  ? msg.externalUserId
+                  : (msg.externalThreadId ?? msg.externalUserId),
               text: outcome.outbound,
             });
           }
@@ -375,7 +387,35 @@ async function startServer() {
       const { ensureDefaultTenantAndMigrate } =
         await import('./services/TenantBootstrapService');
       const { tenant: defaultTenant } = await ensureDefaultTenantAndMigrate();
+      defaultTenantId = String(defaultTenant._id);
       await channelRouter.startAll(String(defaultTenant._id));
+
+      // Start channel adapters for EVERY tenant that has active/pending
+      // channel connections — not just the default. Without this, non-default
+      // tenants lose Telegram inbound (long-poll) after every restart and even
+      // webhook-mode replies fail because send() never loaded their token. One
+      // try/catch per tenant so one tenant's failure can't block the rest.
+      try {
+        const ChannelConnection = (await import('./models/ChannelConnection'))
+          .default;
+        const tenantIds: unknown[] = await ChannelConnection.distinct(
+          'tenantId',
+          { status: { $in: ['active', 'pending'] } },
+        );
+        for (const tid of tenantIds) {
+          if (!tid || String(tid) === String(defaultTenant._id)) continue;
+          try {
+            await channelRouter.startAll(String(tid));
+          } catch (e) {
+            console.error(
+              `channelRouter.startAll failed for tenant ${String(tid)}:`,
+              e,
+            );
+          }
+        }
+      } catch (e) {
+        console.error('Multi-tenant channel autostart failed:', e);
+      }
 
       // Boot the periodic campaign sender. Idempotent — only one timer
       // per process, automatically unref'd so it never blocks shutdown.
@@ -507,6 +547,12 @@ startServer();
 
 // Track last message time per user for auto-registration trigger
 const lastMessageTime = new Map<string, number>();
+
+// The resolved default tenant _id, cached at boot. Threaded into the agent
+// orchestrator (metadata.tenantId) on the WhatsApp path so per-tenant skill
+// injection, RAG retrieval, and lead tenant-stamping actually engage — they
+// were dead before because the WhatsApp path never supplied a tenantId.
+let defaultTenantId: string | null = null;
 const AUTO_REG_DELAY_MS = 10 * 1000; // 10 seconds after last message
 const AUTO_REG_CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // Cleanup every hour
 const AUTO_REG_ENTRY_MAX_AGE_MS = 24 * 60 * 60 * 1000; // Remove entries older than 24 hours
@@ -685,23 +731,30 @@ onMessage(async (message, sock, sessionId) => {
     // Debug: Log incoming messages
     console.log(`📩 Message: "${text.substring(0, 50)}..." from ${jid}`);
 
+    // Ignore the bot's own echoes FIRST — before the dedup map is touched —
+    // so a fromMe echo can never populate lastMessageMap and shadow a
+    // customer's later identical reply.
+    if (isFromMe(message)) {
+      console.log('   (Ignoring own message)');
+      return;
+    }
+
     // De-dup check — skip only an exact-duplicate resend, never a distinct
     // follow-up message (those carry real customer intent and must be handled).
-    // Captionless media has empty text, so key on the message ID there —
-    // otherwise two photos in a row would falsely dedupe as "same message".
-    if (isRateLimited(jid, text || message.key?.id || '')) {
+    // For ANY media message, key on the unique message id, not the text —
+    // otherwise two distinct photos sharing a caption (or two captionless
+    // photos) would falsely dedupe as the "same message".
+    const isMediaMsg = !!detectIncomingMedia(message);
+    const dedupKey = isMediaMsg
+      ? message.key?.id || ''
+      : text || message.key?.id || '';
+    if (isRateLimited(jid, dedupKey)) {
       console.log('   ⚡ Skipping exact-duplicate message');
       return;
     }
 
     // Update last message time for auto-registration
     lastMessageTime.set(jid, Date.now());
-
-    // Ignore messages from self
-    if (isFromMe(message)) {
-      console.log('   (Ignoring own message)');
-      return;
-    }
 
     // Auto-register new users in CRM (fire and forget - don't block message processing)
     const pushName =
@@ -803,6 +856,11 @@ onMessage(async (message, sock, sessionId) => {
     // Non-audio media (image / video / document / sticker) — detected here so
     // the empty-text guard below doesn't drop captionless attachments.
     const incomingMedia = audioMsg ? null : detectIncomingMedia(message);
+    // The customer's OWN caption on a media message, captured before `text`
+    // gets overwritten with the synthetic (English) analysis note — used for
+    // language detection so we don't reply in English to a Sinhala/Tamil
+    // customer who simply attached a photo.
+    let mediaCaption = '';
 
     // Ignore empty messages (unless it's a voice or media message)
     if ((!text || text.trim() === '') && !audioMsg && !incomingMedia) {
@@ -907,6 +965,7 @@ onMessage(async (message, sock, sessionId) => {
       const analysis = await analyzeIncomingMedia(message, incomingMedia);
       if (analysis) {
         messageType = analysis.kind;
+        mediaCaption = (text || '').trim();
         text = buildMediaPromptText(analysis);
         if (analysis.description) {
           console.log(
@@ -957,6 +1016,8 @@ onMessage(async (message, sock, sessionId) => {
         role: 'user',
         type: messageType,
         content: text,
+        // Stamp the tenant so chat-derived exports/analytics scope correctly.
+        tenantId: defaultTenantId || undefined,
         read: false, // User messages start as unread by admin
         metadata: {
           sessionId,
@@ -1066,10 +1127,15 @@ onMessage(async (message, sock, sessionId) => {
       const agentHistory = await conversationHistoryService
         .getHistory(jid)
         .then((h) =>
-          h.slice(-10).map((m) => ({
-            role: m.role as 'user' | 'assistant' | 'system',
-            content: m.content,
-          })),
+          // Drop persisted system entries (personality/KB anchor written by
+          // AILoadBalancer) — agents expect only genuine user/assistant turns.
+          h
+            .filter((m) => m.role !== 'system')
+            .slice(-10)
+            .map((m) => ({
+              role: m.role as 'user' | 'assistant' | 'system',
+              content: m.content,
+            })),
         )
         .catch(
           () =>
@@ -1096,7 +1162,13 @@ onMessage(async (message, sock, sessionId) => {
         language: detectedAgentLanguage,
         inputMessage: text,
         conversationHistory: agentHistory,
-        metadata: { intent },
+        metadata: {
+          intent,
+          // Supply the tenant so the orchestrator's skill-injection, RAG
+          // retrieval, and the LeadQualifier lead tenant-stamping engage on the
+          // WhatsApp path (previously omitted → all three were dead here).
+          ...(defaultTenantId ? { tenantId: defaultTenantId } : {}),
+        },
       });
       // FIX M1: Guard against null/undefined outcome before accessing properties.
       if (agentOutcome && agentOutcome.handled) {
@@ -1192,7 +1264,6 @@ onMessage(async (message, sock, sessionId) => {
       let response: string | undefined;
       let intentAnalysis: any = null;
       let autoresearchIntent: string | null = null;
-      const responseLanguage = 'si'; // Default to Sinhala - accessible outside try block
 
       try {
         // Autoresearch NLP Intent Classification (fast, under 200ms)
@@ -1252,9 +1323,14 @@ onMessage(async (message, sock, sessionId) => {
         // previously misclassified Singlish as English and caused the bot
         // to reply in English to Sinhala-speaking customers).
         let finalPrompt = text;
-        const hasSinhalaChars = /[\u0D80-\u0DFF]/.test(text);
-        const hasTamilChars = /[\u0B80-\u0BFF]/.test(text);
-        const isRealEnglish = isEnglishText(text);
+        // For media messages, detect language from the customer's OWN caption,
+        // NOT the synthetic English analysis note now held in `text` (which
+        // would force English replies to Sinhala/Tamil customers). Captionless
+        // media has no caption \u2192 falls through to the Sinhala/Singlish default.
+        const langSource = incomingMedia ? mediaCaption : text;
+        const hasSinhalaChars = /[\u0D80-\u0DFF]/.test(langSource);
+        const hasTamilChars = /[\u0B80-\u0BFF]/.test(langSource);
+        const isRealEnglish = isEnglishText(langSource);
         if (isVoiceMessage) {
           if (hasSinhalaChars) {
             finalPrompt += `\n\n(SYSTEM: මෙය VOICE පණිවිඩයකි. සිංහල භාෂාවෙන් කෙටිව, ස්වාභාවිකව ප්‍රතිඋත්තර දෙන්න.)`;
@@ -1283,7 +1359,11 @@ onMessage(async (message, sock, sessionId) => {
         // was permanently removed — every inbound message now reaches the AI
         // chain and the current AI_PERSONALITY prompt.
         if (!response) {
-          response = await aiLoadBalancer.sendMessage(jid, finalPrompt);
+          response = await aiLoadBalancer.sendMessage(
+            jid,
+            finalPrompt,
+            defaultTenantId || undefined,
+          );
 
           // FIX C2: Handle "no services configured" error string from balancer
           if (!response || /no ai services are configured/i.test(response)) {
@@ -1338,6 +1418,8 @@ onMessage(async (message, sock, sessionId) => {
           role: 'assistant',
           type: 'text',
           content: response,
+          // Stamp the tenant so chat-derived exports/analytics scope correctly.
+          tenantId: defaultTenantId || undefined,
           read: true, // Bot messages are always considered "read" (from system)
           metadata: {
             sessionId,
@@ -1380,13 +1462,16 @@ onMessage(async (message, sock, sessionId) => {
           responseMode === 'voice-and-text'
         ) {
           try {
+            // Synthesize in the language the AI actually replied in — not a
+            // hardcoded 'si'. Forcing Sinhala TTS made English/Tamil replies
+            // read with a Sinhala voice (garbled audio); since the default
+            // mode is voice-and-text, this hit every non-Sinhala voice user.
+            // detectLanguage on the reply text is the most reliable signal.
+            const voiceLang = detectLanguage(response).lang || 'si';
             console.log(
-              `   🗣️ Generating voice response in language: ${responseLanguage}...`,
+              `   🗣️ Generating voice response in language: ${voiceLang}...`,
             );
-            const audioResponse = await generateSpeech(
-              response,
-              responseLanguage,
-            );
+            const audioResponse = await generateSpeech(response, voiceLang);
             const voiceSent = await sendVoiceMessage(
               jid,
               audioResponse,

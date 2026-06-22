@@ -11,6 +11,7 @@ import {
   normaliseLidJid,
 } from '../../services/LidPhoneMappingService';
 import Session from '../../models/Session';
+import { withTenantScope } from '../middleware/tenantContext';
 
 const router = express.Router();
 
@@ -181,10 +182,10 @@ router.get('/contacts.csv', async (req: Request, res: Response) => {
     if (identifiers.length > 0) {
       const resolved = (await ChatMessage.aggregate([
         {
-          $match: {
+          $match: withTenantScope(req, {
             userId: { $in: identifiers },
             'metadata.realPhone': { $exists: true, $ne: '' },
-          },
+          }),
         },
         { $sort: { timestamp: -1 } },
         {
@@ -406,7 +407,7 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
     };
 
     const agg = (await ChatMessage.aggregate([
-      { $match: match },
+      { $match: withTenantScope(req, match) },
       { $sort: { timestamp: -1 } },
       {
         $group: {
@@ -674,7 +675,7 @@ router.get('/phones.csv', async (req: Request, res: Response) => {
     //    aggregation shape as /chat-numbers.csv but reduced to phone.
     if (!onlySource || onlySource === 'chat') {
       const chatAgg = (await ChatMessage.aggregate([
-        { $match: { role: 'user' } },
+        { $match: withTenantScope(req, { role: 'user' }) },
         { $sort: { timestamp: -1 } },
         {
           $group: {

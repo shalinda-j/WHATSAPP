@@ -135,10 +135,15 @@ router.put(
         isDefault,
       } = req.body;
 
-      // If setting as default, unset other defaults
+      // If setting as default, unset other defaults — scoped to THIS tenant
+      // only, otherwise one tenant's default could clobber another's.
+      const tid = tenantIdOf(req);
       if (isDefault) {
         await FormTemplate.updateMany(
-          { _id: { $ne: req.params.id } },
+          {
+            _id: { $ne: req.params.id },
+            ...(tid ? { tenantId: tid } : {}),
+          },
           { isDefault: false },
         );
       }
@@ -197,7 +202,13 @@ router.post(
   validateObjectId(),
   async (req, res) => {
     try {
-      await FormTemplate.updateMany({}, { isDefault: false });
+      // Scope the clear-defaults to THIS tenant only, otherwise setting a
+      // default for one tenant would clear every other tenant's default too.
+      const tid = tenantIdOf(req);
+      await FormTemplate.updateMany(
+        tid ? { tenantId: tid } : {},
+        { isDefault: false },
+      );
       const template = await FormTemplate.findByIdAndUpdate(
         req.params.id,
         { isDefault: true, updatedAt: new Date() },
@@ -271,8 +282,9 @@ router.get(
         query.phoneNumber = { $regex: escapedSearch, $options: 'i' };
       }
 
-      const total = await FormSubmission.countDocuments(query);
-      const submissions = await FormSubmission.find(query)
+      const scopedQuery = withTenantScope(req, query);
+      const total = await FormSubmission.countDocuments(scopedQuery);
+      const submissions = await FormSubmission.find(scopedQuery)
         .sort({ submittedAt: -1 })
         .skip((Number(page) - 1) * Number(limit))
         .limit(Number(limit))
@@ -297,89 +309,11 @@ router.get(
   },
 );
 
-// Get single submission
-router.get(
-  '/submissions/:id',
-  authenticateToken,
-  resolveTenant,
-  validateObjectId(),
-  async (req, res) => {
-    try {
-      const submission = await FormSubmission.findById(req.params.id)
-        .populate('formId', 'name fields')
-        .lean();
-
-      if (!submission) {
-        return res.status(404).json({ error: 'Submission not found' });
-      }
-
-      // Convert Map to object
-      res.json({
-        ...submission,
-        data:
-          submission.data instanceof Map
-            ? Object.fromEntries(submission.data)
-            : submission.data,
-      });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  },
-);
-
-// Create submission (from WhatsApp bot - no auth)
-// SECURITY FIX: Add rate limiting to prevent abuse
-router.post('/submissions', standardRateLimit, async (req, res) => {
-  try {
-    const { formId, phoneNumber, whatsappJid, data } = req.body;
-
-    const submission = new FormSubmission({
-      formId,
-      phoneNumber,
-      whatsappJid,
-      data,
-      status: 'new',
-    });
-
-    await submission.save();
-    res.status(201).json({ success: true, submissionId: submission._id });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Update submission status
-router.put(
-  '/submissions/:id/status',
-  authenticateToken,
-  resolveTenant,
-  validateObjectId(),
-  async (req, res) => {
-    try {
-      const { status, notes } = req.body;
-
-      const submission = await FormSubmission.findByIdAndUpdate(
-        req.params.id,
-        {
-          status,
-          notes,
-          reviewedAt: status !== 'new' ? new Date() : undefined,
-          updatedAt: new Date(),
-        },
-        { new: true },
-      );
-
-      if (!submission) {
-        return res.status(404).json({ error: 'Submission not found' });
-      }
-      res.json(submission);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  },
-);
-
 // Export submissions to CSV
+// NOTE: must be registered BEFORE the '/submissions/:id' param route below —
+// Express matches in registration order, and a '/submissions/:id' declared
+// first captures the literal path "/submissions/export" as id="export",
+// which validateObjectId() then rejects with HTTP 400 (export never runs).
 router.get(
   '/submissions/export',
   authenticateToken,
@@ -391,7 +325,7 @@ router.get(
       const query: any = {};
       if (formId) query.formId = formId;
 
-      const submissions = await FormSubmission.find(query)
+      const submissions = await FormSubmission.find(withTenantScope(req, query))
         .sort({ submittedAt: -1 })
         .populate('formId', 'name fields')
         .lean();
@@ -440,6 +374,122 @@ router.get(
   },
 );
 
+// Get single submission
+router.get(
+  '/submissions/:id',
+  authenticateToken,
+  resolveTenant,
+  validateObjectId(),
+  async (req, res) => {
+    try {
+      const submission = await FormSubmission.findById(req.params.id)
+        .populate('formId', 'name fields')
+        .lean();
+
+      if (!submission) {
+        return res.status(404).json({ error: 'Submission not found' });
+      }
+
+      // Tenant isolation: a submission belonging to another tenant must be
+      // indistinguishable from a missing one (no cross-tenant existence
+      // oracle). Legacy rows with null/undefined tenantId stay accessible.
+      const reqTid = tenantIdOf(req);
+      if (
+        reqTid &&
+        (submission as any).tenantId &&
+        String((submission as any).tenantId) !== String(reqTid)
+      ) {
+        return res.status(404).json({ error: 'Submission not found' });
+      }
+
+      // Convert Map to object
+      res.json({
+        ...submission,
+        data:
+          submission.data instanceof Map
+            ? Object.fromEntries(submission.data)
+            : submission.data,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  },
+);
+
+// Create submission (from WhatsApp bot - no auth)
+// SECURITY FIX: Add rate limiting to prevent abuse
+router.post('/submissions', standardRateLimit, async (req, res) => {
+  try {
+    const { formId, phoneNumber, whatsappJid, data } = req.body;
+
+    // Inherit the tenant of the form template so bot/public submissions are
+    // attributed to the right tenant (this route has no resolved tenant).
+    const tpl = await FormTemplate.findById(formId).select('tenantId').lean();
+
+    const submission = new FormSubmission({
+      formId,
+      phoneNumber,
+      whatsappJid,
+      data,
+      status: 'new',
+      ...((tpl as any)?.tenantId
+        ? { tenantId: (tpl as any).tenantId }
+        : {}),
+    });
+
+    await submission.save();
+    res.status(201).json({ success: true, submissionId: submission._id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update submission status
+router.put(
+  '/submissions/:id/status',
+  authenticateToken,
+  resolveTenant,
+  validateObjectId(),
+  async (req, res) => {
+    try {
+      const { status, notes } = req.body;
+
+      // Tenant-scope the by-id mutation so an operator can't flip the status
+      // of another tenant's submission. Legacy null/undefined rows stay
+      // editable; a cross-tenant id 404s indistinguishably from a missing one.
+      const tid = tenantIdOf(req);
+      const filter: any = tid
+        ? {
+            _id: req.params.id,
+            $or: [
+              { tenantId: tid },
+              { tenantId: { $exists: false } },
+              { tenantId: null },
+            ],
+          }
+        : { _id: req.params.id };
+
+      const submission = await FormSubmission.findOneAndUpdate(
+        filter,
+        {
+          status,
+          notes,
+          reviewedAt: status !== 'new' ? new Date() : undefined,
+          updatedAt: new Date(),
+        },
+        { new: true },
+      );
+
+      if (!submission) {
+        return res.status(404).json({ error: 'Submission not found' });
+      }
+      res.json(submission);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  },
+);
+
 // ============================================
 // STATISTICS
 // ============================================
@@ -452,10 +502,11 @@ router.get('/stats', authenticateToken, resolveTenant, async (req, res) => {
       totalSubmissions,
       submissionsByStatus,
     ] = await Promise.all([
-      FormTemplate.countDocuments(),
-      FormTemplate.countDocuments({ isActive: true }),
-      FormSubmission.countDocuments(),
+      FormTemplate.countDocuments(withTenantScope(req, {})),
+      FormTemplate.countDocuments(withTenantScope(req, { isActive: true })),
+      FormSubmission.countDocuments(withTenantScope(req, {})),
       FormSubmission.aggregate([
+        { $match: withTenantScope(req, {}) },
         { $group: { _id: '$status', count: { $sum: 1 } } },
       ]),
     ]);

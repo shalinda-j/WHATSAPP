@@ -104,10 +104,28 @@ export class ContentRecommenderAgent implements IAgent {
     // Pull a candidate set of content items the LLM can choose from.
     // Filter by tenant language (default 'si') + active. Cap size so
     // the prompt context stays under tokens.
-    const entries = await KnowledgeEntry.find({
+    const tenantId = (ctx.metadata as any)?.tenantId as string | undefined;
+    const knowledgeFilter: any = {
       isActive: true,
       $or: [{ language: ctx.language }, { language: 'all' }],
-    }).limit(30);
+    };
+    // Scope to the tenant when known, tolerating legacy rows that predate the
+    // tenantId field. The language match already uses $or, so combine both via
+    // $and to avoid overwriting it.
+    if (tenantId) {
+      knowledgeFilter.$and = [
+        { $or: knowledgeFilter.$or },
+        {
+          $or: [
+            { tenantId },
+            { tenantId: { $exists: false } },
+            { tenantId: null },
+          ],
+        },
+      ];
+      delete knowledgeFilter.$or;
+    }
+    const entries = await KnowledgeEntry.find(knowledgeFilter).limit(30);
 
     if (entries.length === 0) {
       return this.silent(promptVersion, start, 'no_content_available');

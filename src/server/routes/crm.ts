@@ -85,7 +85,10 @@ router.get('/search', async (req, res) => {
     if (q.length > 500) {
       return res.status(400).json({ error: 'Search query too long' });
     }
-    const results = await CRMService.globalSearch(q);
+    const results = await CRMService.globalSearch(
+      q,
+      req.tenant?._id ? String(req.tenant._id) : undefined,
+    );
     res.json(results);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -187,6 +190,7 @@ router.put('/contacts/:id', validateObjectId(), async (req, res) => {
     const contact = await CRMService.updateContact(
       req.params.id as string,
       req.body,
+      req.tenant?._id ? String(req.tenant._id) : undefined,
     );
     if (!contact) {
       return res.status(404).json({ error: 'Contact not found' });
@@ -217,6 +221,7 @@ router.patch('/contacts/:id', validateObjectId(), async (req, res) => {
     const contact = await CRMService.updateContact(
       req.params.id as string,
       req.body,
+      req.tenant?._id ? String(req.tenant._id) : undefined,
     );
     if (!contact) {
       return res.status(404).json({ error: 'Contact not found' });
@@ -237,7 +242,16 @@ router.post(
         return res.status(400).json({ error: 'Valid phone is required' });
       }
 
-      const contact = await Contact.findById(req.params.id);
+      const tenantId = req.tenant?._id ? String(req.tenant._id) : null;
+      const contactQuery: Record<string, unknown> = { _id: req.params.id };
+      if (tenantId) {
+        contactQuery.$or = [
+          { tenantId },
+          { tenantId: { $exists: false } },
+          { tenantId: null },
+        ];
+      }
+      const contact = await Contact.findOne(contactQuery);
       if (!contact) {
         return res.status(404).json({ error: 'Contact not found' });
       }
@@ -272,7 +286,10 @@ router.post(
 
 router.delete('/contacts/:id', validateObjectId(), async (req, res) => {
   try {
-    const result = await CRMService.deleteContact(req.params.id as string);
+    const result = await CRMService.deleteContact(
+      req.params.id as string,
+      req.tenant?._id ? String(req.tenant._id) : undefined,
+    );
     if (!result) {
       return res.status(404).json({ error: 'Contact not found' });
     }
@@ -367,7 +384,11 @@ router.post('/deals', async (req, res) => {
 
 router.put('/deals/:id', validateObjectId(), async (req, res) => {
   try {
-    const deal = await CRMService.updateDeal(req.params.id as string, req.body);
+    const deal = await CRMService.updateDeal(
+      req.params.id as string,
+      req.body,
+      req.tenant?._id ? String(req.tenant._id) : undefined,
+    );
     if (!deal) {
       return res.status(404).json({ error: 'Deal not found' });
     }
@@ -379,7 +400,10 @@ router.put('/deals/:id', validateObjectId(), async (req, res) => {
 
 router.delete('/deals/:id', validateObjectId(), async (req, res) => {
   try {
-    const result = await CRMService.deleteDeal(req.params.id as string);
+    const result = await CRMService.deleteDeal(
+      req.params.id as string,
+      req.tenant?._id ? String(req.tenant._id) : undefined,
+    );
     if (!result) {
       return res.status(404).json({ error: 'Deal not found' });
     }
@@ -443,7 +467,10 @@ router.get('/activities/upcoming', async (req, res) => {
 
 router.get('/activities/:id', validateObjectId(), async (req, res) => {
   try {
-    const activity = await CRMService.getActivityById(req.params.id as string);
+    const activity = await CRMService.getActivityById(
+      req.params.id as string,
+      req.tenant?._id ? String(req.tenant._id) : undefined,
+    );
     if (!activity) {
       return res.status(404).json({ error: 'Activity not found' });
     }
@@ -474,6 +501,7 @@ router.put('/activities/:id', validateObjectId(), async (req, res) => {
     const activity = await CRMService.updateActivity(
       req.params.id as string,
       req.body,
+      req.tenant?._id ? String(req.tenant._id) : undefined,
     );
     if (!activity) {
       return res.status(404).json({ error: 'Activity not found' });
@@ -486,7 +514,10 @@ router.put('/activities/:id', validateObjectId(), async (req, res) => {
 
 router.delete('/activities/:id', validateObjectId(), async (req, res) => {
   try {
-    const result = await CRMService.deleteActivity(req.params.id as string);
+    const result = await CRMService.deleteActivity(
+      req.params.id as string,
+      req.tenant?._id ? String(req.tenant._id) : undefined,
+    );
     if (!result) {
       return res.status(404).json({ error: 'Activity not found' });
     }
@@ -736,7 +767,18 @@ router.get('/registrations/export', async (req, res) => {
 // Get single registration
 router.get('/registrations/:id', async (req, res) => {
   try {
-    const registration = await Lead.findById(req.params.id).lean();
+    // Tenant scope (IDOR fix): only surface this tenant's lead, plus legacy
+    // leads with no tenantId. Mirrors DELETE /registrations/:id below.
+    const tenantId = req.tenant?._id ? String(req.tenant._id) : null;
+    const query: Record<string, unknown> = { _id: req.params.id };
+    if (tenantId) {
+      query.$or = [
+        { tenantId },
+        { tenantId: { $exists: false } },
+        { tenantId: null },
+      ];
+    }
+    const registration = await Lead.findOne(query).lean();
     if (!registration) {
       return res.status(404).json({ error: 'Registration not found' });
     }
@@ -750,8 +792,18 @@ router.get('/registrations/:id', async (req, res) => {
 router.put('/registrations/:id/status', async (req, res) => {
   try {
     const { status, notes } = req.body;
-    const registration = await Lead.findByIdAndUpdate(
-      req.params.id,
+    // Tenant scope (IDOR fix): only update this tenant's lead + legacy leads.
+    const tenantId = req.tenant?._id ? String(req.tenant._id) : null;
+    const query: Record<string, unknown> = { _id: req.params.id };
+    if (tenantId) {
+      query.$or = [
+        { tenantId },
+        { tenantId: { $exists: false } },
+        { tenantId: null },
+      ];
+    }
+    const registration = await Lead.findOneAndUpdate(
+      query,
       { status, notes, updatedAt: new Date() },
       { new: true },
     );
@@ -771,7 +823,17 @@ router.post('/registrations/:id/cv', upload.single('cv'), async (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const registration = await Lead.findById(req.params.id);
+    // Tenant scope (IDOR fix): only attach CVs to this tenant's lead.
+    const tenantId = req.tenant?._id ? String(req.tenant._id) : null;
+    const query: Record<string, unknown> = { _id: req.params.id };
+    if (tenantId) {
+      query.$or = [
+        { tenantId },
+        { tenantId: { $exists: false } },
+        { tenantId: null },
+      ];
+    }
+    const registration = await Lead.findOne(query);
     if (!registration) {
       // Delete uploaded file if registration not found
       fs.unlinkSync(req.file.path);
@@ -798,7 +860,17 @@ router.post('/registrations/:id/cv', upload.single('cv'), async (req, res) => {
 // Delete CV
 router.delete('/registrations/:id/cv', async (req, res) => {
   try {
-    const registration = await Lead.findById(req.params.id);
+    // Tenant scope (IDOR fix): only remove CVs from this tenant's lead.
+    const tenantId = req.tenant?._id ? String(req.tenant._id) : null;
+    const query: Record<string, unknown> = { _id: req.params.id };
+    if (tenantId) {
+      query.$or = [
+        { tenantId },
+        { tenantId: { $exists: false } },
+        { tenantId: null },
+      ];
+    }
+    const registration = await Lead.findOne(query);
     if (!registration) {
       return res.status(404).json({ error: 'Registration not found' });
     }

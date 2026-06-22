@@ -86,6 +86,26 @@ export class AgentRegistry {
   }
 
   /**
+   * Resolve a specific agent by name, bypassing canHandle() scoring. Used for
+   * cron/operator-forced dispatch (e.g. the follow-up scheduler) where the
+   * caller already knows which agent must run. Still respects the operator's
+   * config: a disabled or inactive agent is never force-run, so this returns
+   * null in those cases and the orchestrator falls through to 'no_handler'.
+   */
+  async getForced(name: string): Promise<{
+    agent: IAgent;
+    config: IAgentConfig;
+    confidence: number;
+  } | null> {
+    await this.ensureConfigsLoaded();
+    const entry = this.agents.get(name);
+    if (!entry || !entry.config) return null;
+    const config = entry.config;
+    if (!config.isActive || config.mode === 'disabled') return null;
+    return { agent: entry.instance, config, confidence: 1 };
+  }
+
+  /**
    * Returns the best candidate agent for the given context, or null if no
    * agent meets its configured confidence threshold. Runs canHandle() on
    * every active agent in parallel; ties broken by registration order.

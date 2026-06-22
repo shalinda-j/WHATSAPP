@@ -39,17 +39,27 @@ export class KnowledgeTrainingService {
   /**
    * Get knowledge base as formatted text for AI context
    */
-  async getKnowledgeBaseForAI(category?: string): Promise<string> {
+  async getKnowledgeBaseForAI(
+    category?: string,
+    tenantId?: string,
+  ): Promise<string> {
     try {
       await this.refreshCacheIfNeeded();
 
-      let entries = await KnowledgeEntry.find({ isActive: true })
+      const filter: any = { isActive: true };
+      if (category) filter.category = category;
+      // Scope to the tenant when provided, tolerating legacy rows that predate
+      // the tenantId field (null / missing) so single-tenant data still loads.
+      if (tenantId) {
+        filter.$or = [
+          { tenantId },
+          { tenantId: { $exists: false } },
+          { tenantId: null },
+        ];
+      }
+      const entries = await KnowledgeEntry.find(filter)
         .sort({ usageCount: -1, confidence: -1 })
         .limit(100);
-
-      if (category) {
-        entries = entries.filter((e) => e.category === category);
-      }
 
       if (entries.length === 0) {
         // Fallback to dataset knowledge base
@@ -72,11 +82,25 @@ export class KnowledgeTrainingService {
   /**
    * Search for relevant knowledge entries
    */
-  async searchKnowledge(query: string, limit = 5): Promise<IKnowledgeEntry[]> {
+  async searchKnowledge(
+    query: string,
+    limit = 5,
+    tenantId?: string,
+  ): Promise<IKnowledgeEntry[]> {
+    // Legacy-tolerant tenant clause, AND-ed into the queries below when scoped.
+    const tenantClause: any = tenantId
+      ? {
+          $or: [
+            { tenantId },
+            { tenantId: { $exists: false } },
+            { tenantId: null },
+          ],
+        }
+      : {};
     try {
       // Use text search if available
       const results = await KnowledgeEntry.find(
-        { isActive: true },
+        { isActive: true, ...tenantClause },
         { score: { $meta: 'textScore' } },
       )
         .find({ $text: { $search: query } })
@@ -95,13 +119,20 @@ export class KnowledgeTrainingService {
     } catch (error) {
       // Fallback to regex search if text index not available
       console.log('[KnowledgeTraining] Using fallback regex search');
-      const regexResults = await KnowledgeEntry.find({
+      const regexFilter: any = {
         isActive: true,
         $or: [
           { question: { $regex: query, $options: 'i' } },
           { tags: { $in: [new RegExp(query, 'i')] } },
         ],
-      }).limit(limit);
+      };
+      // This query already uses $or for the match; combine with the tenant
+      // $or via $and so the two don't overwrite each other.
+      if (tenantId) {
+        regexFilter.$and = [{ $or: regexFilter.$or }, tenantClause];
+        delete regexFilter.$or;
+      }
+      const regexResults = await KnowledgeEntry.find(regexFilter).limit(limit);
 
       return regexResults;
     }
@@ -116,6 +147,7 @@ export class KnowledgeTrainingService {
     category = 'general',
     tags: string[] = [],
     language: 'en' | 'si' | 'ta' | 'hi' | 'all' = 'all',
+    tenantId?: string,
   ): Promise<IKnowledgeEntry> {
     const entry = await KnowledgeEntry.create({
       question,
@@ -127,6 +159,9 @@ export class KnowledgeTrainingService {
       usageCount: 0,
       isActive: true,
       language,
+      // Only stamp tenantId when provided so legacy single-tenant callers
+      // keep creating un-scoped (global) entries.
+      ...(tenantId ? { tenantId } : {}),
     });
 
     console.log(
@@ -146,6 +181,7 @@ export class KnowledgeTrainingService {
     userMessage: string,
     aiResponse: string,
     confidence = 1.0,
+    tenantId?: string,
   ): Promise<boolean> {
     try {
       // Reset daily counter
@@ -167,12 +203,21 @@ export class KnowledgeTrainingService {
         return false;
       }
 
-      // Check if similar question already exists
-      const existing = await KnowledgeEntry.findOne({
+      // Check if similar question already exists (scoped to tenant when
+      // provided, tolerating legacy rows without a tenantId).
+      const existingFilter: any = {
         question: {
           $regex: new RegExp(`^${userMessage.substring(0, 50)}`, 'i'),
         },
-      });
+      };
+      if (tenantId) {
+        existingFilter.$or = [
+          { tenantId },
+          { tenantId: { $exists: false } },
+          { tenantId: null },
+        ];
+      }
+      const existing = await KnowledgeEntry.findOne(existingFilter);
 
       if (existing) {
         // Update existing entry confidence
@@ -196,6 +241,9 @@ export class KnowledgeTrainingService {
         usageCount: 1,
         isActive: true,
         language,
+        // Stamp tenantId only when provided so legacy un-scoped learning
+        // continues to create global entries.
+        ...(tenantId ? { tenantId } : {}),
       });
 
       this.autoLearnCount++;
@@ -224,7 +272,14 @@ export class KnowledgeTrainingService {
       }
 
       let importCount = 0;
-      const content = dataset.content;
+      const raw = dataset.content;
+      // Datasets store content as a multi-language { en, si, ta } wrapper.
+      // Unwrap it before inspecting the format so the branches below operate
+      // on the actual array / string payload rather than the container object.
+      const content =
+        raw && typeof raw === 'object' && !Array.isArray(raw)
+          ? (raw.en ?? raw.si ?? raw.ta)
+          : raw;
 
       // Handle different content formats
       if (Array.isArray(content)) {

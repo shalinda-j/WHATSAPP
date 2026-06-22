@@ -1080,15 +1080,42 @@ export function getSocket(sessionId = 'default'): WASocket | undefined {
 export function resolveActiveSessionId(
   preferred = 'default',
 ): string | null {
-  if (manager.getSocket(preferred)) return preferred;
+  // Prefer the requested session only when it's actually connected — a stale
+  // socket that's mid-reconnect would otherwise be picked and the send would
+  // silently fail.
+  if (
+    manager.getSocket(preferred) &&
+    manager.getConnectionState(preferred) === 'connected'
+  ) {
+    return preferred;
+  }
   const active = manager.getActiveSessionIds();
+  // Next best: any session whose socket is fully connected.
+  const connected = active.find(
+    (id) => manager.getConnectionState(id) === 'connected',
+  );
+  if (connected) return connected;
+  // Last resort: fall back to the first active (possibly connecting) session
+  // so admin send paths still have something to try when nothing is connected.
   return active.length > 0 ? active[0] : null;
 }
 
 // Helpers
 export function getMessageText(message: proto.IWebMessageInfo): string {
-  const msg = message.message;
-  if (!msg) return '';
+  const raw = message.message;
+  if (!raw) return '';
+  // Unwrap disappearing-messages (ephemeral) and view-once wrappers. Baileys
+  // delivers their real payload nested one level down; without this unwrap,
+  // every TEXT message from a contact with "disappearing messages" enabled
+  // (a common Business setting) reads as '' and gets dropped by the empty-
+  // message guard. Mirrors the unwrap in mediaUnderstanding.ts. Falls back to
+  // the raw message so normal (un-wrapped) messages are unchanged.
+  const msg: NonNullable<proto.IWebMessageInfo['message']> =
+    raw.ephemeralMessage?.message ??
+    raw.viewOnceMessage?.message ??
+    raw.viewOnceMessageV2?.message ??
+    raw.viewOnceMessageV2Extension?.message ??
+    raw;
   return (
     msg.conversation ||
     msg.extendedTextMessage?.text ||
@@ -1108,10 +1135,49 @@ export function getSenderJid(message: proto.IWebMessageInfo): string {
 }
 
 export async function getConnectionStatus() {
-  const session = await Session.findOne({ sessionId: 'default' });
+  // Derive status from the live session manager rather than hardcoding the
+  // 'default' session — multi-device deployments and any non-'default' session
+  // were previously reported as disconnected even while connected.
+  const ids = manager.getActiveSessionIds();
+  const anyConnected = ids.some(
+    (id) => manager.getConnectionState(id) === 'connected',
+  );
+  const anyConnecting = ids.some(
+    (id) => manager.getConnectionState(id) === 'connecting',
+  );
+
+  // Prefer a QR from a session that's currently waiting to be scanned, so the
+  // admin panel can render it without falling back to the DB poll.
+  let qr: string | null = null;
+
+  let status: string;
+  if (anyConnected) {
+    status = 'connected';
+  } else if (anyConnecting) {
+    status = 'connecting';
+  } else {
+    // Nothing live in memory — fall back to the persisted Session row's status
+    // (e.g. right after boot before sockets re-establish).
+    const session = await Session.findOne({ sessionId: 'default' });
+    status = session?.status || 'disconnected';
+    qr = session?.qr || null;
+  }
+
+  // If a live session is broadcasting a QR (scan_qr) and we don't already have
+  // one, surface it from the DB so the panel shows the freshest code.
+  if (!qr) {
+    const qrSessionId = ids.find(
+      (id) => manager.getConnectionState(id) === 'connecting',
+    );
+    if (qrSessionId) {
+      const qrSession = await Session.findOne({ sessionId: qrSessionId });
+      qr = qrSession?.qr || null;
+    }
+  }
+
   return {
-    status: session?.status || 'disconnected',
-    qr: session?.qr || null,
+    status,
+    qr,
     activeSessions: manager.getActiveSessionsCount(),
   };
 }

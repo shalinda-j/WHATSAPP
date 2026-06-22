@@ -90,10 +90,13 @@ router.post('/', async (req: Request, res: Response) => {
   });
 
   // Kick the adapter for this tenant so the new credentials take effect
-  // without a server restart. Fire-and-forget — the adapter records its
-  // own status/error onto the ChannelConnection row.
+  // without a server restart. Tear down any existing session first so the
+  // adapter rebuilds from the latest ChannelConnection instead of reusing
+  // stale creds. Fire-and-forget — the adapter records its own status/error
+  // onto the ChannelConnection row.
   const adapter = channelRouter.get(parsed.data.channel);
   if (adapter) {
+    await adapter.stop(String(tenantId)).catch(() => {});
     adapter.start(String(tenantId)).catch((err) => {
       console.error(`adapter.start for ${parsed.data.channel} failed:`, err);
     });

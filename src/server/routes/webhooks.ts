@@ -288,10 +288,15 @@ async function metaWebhookIngest(
     // ── X-Hub-Signature-256 verification ──────────────────────────────────
     const ChannelConnection = (await import('../../models/ChannelConnection'))
       .default;
+    // NOTE: do NOT use .lean() here — the `credentials` field is stored
+    // encrypted and only the Mongoose getter (decryptCredentials) returns the
+    // plaintext appSecret. A lean() query returns the raw ciphertext, which
+    // would make every HMAC comparison fail. Reading from a hydrated document
+    // fires the getter so conn.credentials.appSecret is the real secret.
     const conn = await ChannelConnection.findOne({
       tenantId: tenant._id,
       channel,
-    }).lean();
+    });
     const appSecret = (conn?.credentials as any)?.appSecret as
       | string
       | undefined;
@@ -381,8 +386,77 @@ router.post('/facebook/:tenantSlug', metaEventRateLimit, (req, res) =>
 // 'click' / 'spamreport' / 'dropped' / 'deferred'), and a timestamp.
 router.post('/sendgrid', metaEventRateLimit, async (req, res) => {
   try {
+    // ── SendGrid Event Webhook signature verification ─────────────────────
+    // SendGrid signs each POST with an ECDSA signature (the "Signed Event
+    // Webhook" feature). The signature header is the base64 ECDSA signature
+    // of `timestamp + rawBody`, verifiable against the operator's configured
+    // public key (process.env.SENDGRID_WEBHOOK_PUBLIC_KEY, base64 DER/PEM).
+    // Without this, anyone who knows the URL can forge delivery/bounce events
+    // and corrupt campaign stats. Mirrors the Meta block: refuse in production
+    // when unconfigured, warn-and-allow in development.
+    const publicKey = process.env.SENDGRID_WEBHOOK_PUBLIC_KEY;
+    if (process.env.NODE_ENV === 'production' && !publicKey) {
+      console.error(
+        '[sendgrid] Event Webhook signature not configured (no SENDGRID_WEBHOOK_PUBLIC_KEY) — refusing in production.',
+      );
+      return res
+        .status(503)
+        .json({ error: 'sendgrid_webhook_signature_not_configured' });
+    }
+    if (publicKey) {
+      const signature = req.headers[
+        'x-twilio-email-event-webhook-signature'
+      ] as string | undefined;
+      const timestamp = req.headers[
+        'x-twilio-email-event-webhook-timestamp'
+      ] as string | undefined;
+      if (!signature || !timestamp) {
+        console.warn(
+          '[sendgrid] Missing signature/timestamp headers — rejecting',
+        );
+        return res.status(401).json({ error: 'missing_signature' });
+      }
+      // Verify over the exact received bytes captured by express.json's verify
+      // callback (req.rawBody, see src/server/app.ts). SendGrid signs
+      // `timestamp + rawBody`; falling back to JSON.stringify(req.body) only
+      // when rawBody is unavailable.
+      const rawBody = (req as any).rawBody as Buffer | undefined;
+      const bodyStr =
+        rawBody instanceof Buffer
+          ? rawBody.toString('utf8')
+          : typeof req.body === 'string'
+            ? req.body
+            : JSON.stringify(req.body);
+      let verified = false;
+      try {
+        // Public key may be supplied as raw base64 DER (SendGrid console) or
+        // as a full PEM block. Wrap raw base64 into a SPKI PEM if needed.
+        const keyPem = publicKey.includes('BEGIN')
+          ? publicKey
+          : `-----BEGIN PUBLIC KEY-----\n${publicKey}\n-----END PUBLIC KEY-----`;
+        const verifier = crypto.createVerify('sha256');
+        verifier.update(timestamp + bodyStr);
+        verifier.end();
+        verified = verifier.verify(keyPem, Buffer.from(signature, 'base64'));
+      } catch (err) {
+        console.warn('[sendgrid] Signature verification threw:', err);
+        verified = false;
+      }
+      if (!verified) {
+        console.warn('[sendgrid] Invalid Event Webhook signature — rejecting');
+        return res.status(403).json({ error: 'invalid_signature' });
+      }
+    } else {
+      console.warn(
+        '[sendgrid] SENDGRID_WEBHOOK_PUBLIC_KEY not set — signature verification DISABLED (development only).',
+      );
+    }
+    // ── end signature verification ────────────────────────────────────────
+
     const events = Array.isArray(req.body) ? req.body : [];
     const CampaignExecution = (await import('../../models/CampaignExecution'))
+      .default;
+    const MarketingCampaign = (await import('../../models/MarketingCampaign'))
       .default;
 
     for (const ev of events) {
@@ -397,19 +471,32 @@ router.post('/sendgrid', metaEventRateLimit, async (req, res) => {
       const now = new Date(
         ev.timestamp ? Number(ev.timestamp) * 1000 : Date.now(),
       );
+      // Which MarketingCampaign.stats.* counter (if any) a first-time
+      // transition into this status should increment.
+      let statsField: 'delivered' | 'read' | 'bounced' | undefined;
+      // The status value this event transitions the execution into, used to
+      // detect a REAL transition (only $inc the campaign stat when the prior
+      // status differed, so a repeat SendGrid event never double-counts).
+      let newStatus: string | undefined;
       switch (ev.event) {
         case 'delivered':
           update.status = 'delivered';
           update.deliveredAt = now;
+          newStatus = 'delivered';
+          statsField = 'delivered';
           break;
         case 'open':
           update.status = 'read';
           update.readAt = now;
+          newStatus = 'read';
+          statsField = 'read';
           break;
         case 'bounce':
         case 'dropped':
           update.status = 'bounced';
           update.errorMessage = `sendgrid:${ev.event}:${ev.reason ?? 'no_reason'}`;
+          newStatus = 'bounced';
+          statsField = 'bounced';
           break;
         case 'spamreport':
           update.outcome = 'opt_out';
@@ -421,10 +508,32 @@ router.post('/sendgrid', metaEventRateLimit, async (req, res) => {
       }
 
       try {
-        await CampaignExecution.updateOne(
+        // findOneAndUpdate with {new:false} returns the PRE-update document so
+        // we can compare its prior status against the new one. Only a genuine
+        // first-time transition into delivered/read/bounced bumps the campaign
+        // aggregate — repeat events (SendGrid retries, duplicate batches) hit
+        // the same status and are skipped, preventing double-counting.
+        const prev = await CampaignExecution.findOneAndUpdate(
           { externalMessageId: { $regex: `^${base}` } },
           { $set: update },
+          { new: false },
         );
+        if (
+          prev &&
+          statsField &&
+          newStatus &&
+          prev.status !== newStatus &&
+          prev.campaignId
+        ) {
+          try {
+            await MarketingCampaign.updateOne(
+              { _id: prev.campaignId, tenantId: prev.tenantId },
+              { $inc: { [`stats.${statsField}`]: 1 } },
+            );
+          } catch (statErr) {
+            console.error('sendgrid webhook stats $inc failed:', statErr);
+          }
+        }
       } catch (err) {
         console.error('sendgrid webhook updateOne failed:', err);
       }

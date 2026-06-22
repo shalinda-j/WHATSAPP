@@ -4,6 +4,7 @@ import { generateSpeech } from './voice';
 import ChatMessage from '../models/ChatMessage';
 import CallLog from '../models/CallLog';
 import { agentOrchestrator } from './AgentOrchestrator';
+import { voiceCallAgent } from './VoiceCallAgentService';
 import Tenant from '../models/Tenant';
 
 /**
@@ -63,20 +64,42 @@ class CallAssistantService {
       await rejectCall(callId, from);
       console.log(`📞 Rejected call from ${from} on session ${sessionId}`);
 
-      // Step 2: Detect caller's likely language from previous messages
-      const language = await this.detectUserLanguage(from);
+      // Step 2: Load the admin-configured Call Agent settings (Voice Agent
+      // Hub). Previously the operator's greeting/personality/language had NO
+      // effect because the runtime call path used only this service, while the
+      // admin UI wrote to VoiceCallAgentService. We now read those settings
+      // here so the configured fields actually shape the reply. (We do NOT
+      // gate the auto-reply itself on the UI toggle — its default is "off",
+      // and silencing a currently-working call reply on deploy would be a
+      // regression; CALL_ASSISTANT_ENABLED=false remains the hard kill-switch.)
+      const agentEnabled = await voiceCallAgent.isCallAgentEnabled();
+      const agentSettings = voiceCallAgent.getSettings();
+      const configuredLang = agentSettings.language;
+
+      // Prefer the operator's configured primary language when the agent is
+      // enabled and it's one we can synthesize; else detect from past messages.
+      const language: 'si' | 'en' | 'ta' =
+        agentEnabled &&
+        (configuredLang === 'si' ||
+          configuredLang === 'en' ||
+          configuredLang === 'ta')
+          ? configuredLang
+          : await this.detectUserLanguage(from);
 
       // Step 3: Generate reply.
       // First try the agent orchestrator so the reply is dataset-driven,
       // RAG-augmented, and trained per agent. This is what makes the voice
       // agent "self-improving" — operators add training examples on the
       // Agent Training panel and the next call automatically benefits.
+      // When the operator set a personality/greeting, those are threaded in.
       // Falls back to the static multilingual template if the orchestrator
       // produces no outbound (no active agent, all agents disabled, etc).
       const responseMessage = await this.generateSmartReply({
         from,
         sessionId,
         language,
+        personality: agentEnabled ? agentSettings.personality : '',
+        greetingFallback: agentEnabled ? agentSettings.greeting : '',
       });
 
       // Step 4: Send text response
@@ -107,11 +130,17 @@ class CallAssistantService {
       // CallLog row so the Call Logs UI can show this call with the
       // actual reply text, not just a "rejected" stub.
       try {
+        // Stamp the default tenant so chat-derived exports/analytics scope
+        // this row correctly. The WhatsApp call path has no tenant header,
+        // so we resolve the single-tenant default (auto-created by
+        // resolveTenant for single-tenant deployments).
+        const defaultTenant = await Tenant.findOne({ slug: 'default' });
         await ChatMessage.create({
           userId: from,
           role: 'assistant',
           type: 'text',
           content: `[CALL REJECTED] ${responseMessage}`,
+          tenantId: defaultTenant?._id,
           metadata: { sessionId, intent: 'Call Auto-Reply' },
         });
       } catch (dbErr) {
@@ -148,8 +177,15 @@ class CallAssistantService {
     from: string;
     sessionId: string;
     language: 'si' | 'en' | 'ta';
+    personality?: string;
+    greetingFallback?: string;
   }): Promise<string> {
-    const fallback = this.getCallResponseMessage(opts.language);
+    // The operator's custom greeting (Voice Agent Hub) takes precedence over
+    // the generic hardcoded template as the static fallback when set.
+    const fallback =
+      opts.greetingFallback && opts.greetingFallback.trim()
+        ? opts.greetingFallback.trim()
+        : this.getCallResponseMessage(opts.language);
     try {
       // Resolve a tenantId so the orchestrator can pull tenant-scoped
       // training examples via RAG. For the WhatsApp call path we don't
@@ -158,13 +194,19 @@ class CallAssistantService {
       const defaultTenant = await Tenant.findOne({ slug: 'default' });
       const tenantId = defaultTenant ? String(defaultTenant._id) : '';
 
+      // When the operator configured a persona, prepend it so the reply
+      // adopts their brand voice instead of a generic one.
+      const personalityPreamble =
+        opts.personality && opts.personality.trim()
+          ? `Adopt this persona for your reply: ${opts.personality.trim()}\n`
+          : '';
+
       const outcome = await agentOrchestrator.handle({
         sessionId: opts.sessionId,
         userId: opts.from,
         channel: 'whatsapp',
         language: opts.language,
-        inputMessage:
-          '[VOICE_CALL_ATTEMPT] The user attempted a live voice call.',
+        inputMessage: `${personalityPreamble}[VOICE_CALL_ATTEMPT] The user attempted a live voice call.`,
         conversationHistory: [],
         traceId: randomUUID(),
         metadata: {

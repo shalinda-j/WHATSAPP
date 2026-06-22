@@ -87,6 +87,7 @@ const PROVIDER_INFO = {
     bgColor: 'bg-green-50',
     borderColor: 'border-green-500',
     textColor: 'text-green-600',
+    ringColor: 'ring-green-400',
     buttonColor: 'bg-green-600 hover:bg-green-700',
     requiresApiKey: false,
     requiresGoogleApiKey: false,
@@ -104,6 +105,7 @@ const PROVIDER_INFO = {
     bgColor: 'bg-sky-50',
     borderColor: 'border-sky-500',
     textColor: 'text-sky-600',
+    ringColor: 'ring-sky-400',
     buttonColor: 'bg-sky-600 hover:bg-sky-700',
     requiresApiKey: false,
     requiresGoogleApiKey: true,
@@ -123,6 +125,7 @@ const PROVIDER_INFO = {
     bgColor: 'bg-indigo-50',
     borderColor: 'border-indigo-500',
     textColor: 'text-indigo-600',
+    ringColor: 'ring-indigo-400',
     buttonColor: 'bg-indigo-600 hover:bg-indigo-700',
     requiresApiKey: false,
     requiresGoogleApiKey: false,
@@ -151,6 +154,7 @@ const PROVIDER_INFO = {
     bgColor: 'bg-blue-50',
     borderColor: 'border-blue-500',
     textColor: 'text-blue-600',
+    ringColor: 'ring-blue-400',
     buttonColor: 'bg-blue-600 hover:bg-blue-700',
     requiresApiKey: true,
     requiresGoogleApiKey: false,
@@ -171,6 +175,7 @@ const PROVIDER_INFO = {
     bgColor: 'bg-purple-50',
     borderColor: 'border-purple-500',
     textColor: 'text-purple-600',
+    ringColor: 'ring-purple-400',
     buttonColor: 'bg-purple-600 hover:bg-purple-700',
     requiresApiKey: true,
     requiresGoogleApiKey: false,
@@ -1249,7 +1254,7 @@ export default function VoiceAgentHub() {
                     <div
                       className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center border-4 border-white shadow-md ring-2 transition-all ${
                         isVoiceActive
-                          ? `ring-${activeProviderInfo?.color || 'green'}-400 ${
+                          ? `${activeProviderInfo?.ringColor || 'ring-green-400'} ${
                               activeProviderInfo?.bgColor || 'bg-green-100'
                             }`
                           : 'ring-gray-300 bg-gray-100'

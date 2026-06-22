@@ -89,8 +89,8 @@ describe('isInQuietHours', () => {
     const campaign = { quietHours: { startHour: 9, endHour: 17 } } as any;
     const noon = new Date('2026-05-15T12:00:00');
     const seven = new Date('2026-05-15T07:00:00');
-    expect(isInQuietHours(campaign, noon)).toBe(true);
-    expect(isInQuietHours(campaign, seven)).toBe(false);
+    expect(isInQuietHours(campaign, undefined, noon)).toBe(true);
+    expect(isInQuietHours(campaign, undefined, seven)).toBe(false);
   });
 
   it('handles wrap-midnight windows correctly (22:00 - 08:00)', () => {
@@ -98,21 +98,23 @@ describe('isInQuietHours', () => {
     const eleven = new Date('2026-05-15T23:00:00');
     const six = new Date('2026-05-15T06:00:00');
     const noon = new Date('2026-05-15T12:00:00');
-    expect(isInQuietHours(campaign, eleven)).toBe(true);
-    expect(isInQuietHours(campaign, six)).toBe(true);
-    expect(isInQuietHours(campaign, noon)).toBe(false);
+    expect(isInQuietHours(campaign, undefined, eleven)).toBe(true);
+    expect(isInQuietHours(campaign, undefined, six)).toBe(true);
+    expect(isInQuietHours(campaign, undefined, noon)).toBe(false);
   });
 
   it('returns false when start/end fields are missing or malformed', () => {
     expect(
       isInQuietHours(
         { quietHours: { startHour: 9 } } as any,
+        undefined,
         new Date('2026-05-15T12:00:00'),
       ),
     ).toBe(false);
     expect(
       isInQuietHours(
         { quietHours: { startHour: '9', endHour: '17' } } as any,
+        undefined,
         new Date('2026-05-15T12:00:00'),
       ),
     ).toBe(false);

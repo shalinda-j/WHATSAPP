@@ -5,7 +5,10 @@ import { ACTUAL_JWT_SECRET } from '../jwt-secret';
 export interface JwtPayload {
   id: string;
   username: string;
-  role: string;
+  role?: string;
+  // Optional tenant binding carried in the signed token. Absent for legacy /
+  // super-admin tokens (those admins may switch tenants via X-Tenant-Slug).
+  tenantId?: string;
 }
 
 export interface AuthRequest extends Request {

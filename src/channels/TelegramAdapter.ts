@@ -17,6 +17,10 @@ interface TelegramConnectionState {
   http: AxiosInstance;
   botToken: string;
   offset: number;
+  /** ChannelConnection _id so we can persist the long-poll offset back. */
+  connectionId: unknown;
+  /** Last offset value flushed to the DB, to skip redundant writes. */
+  persistedOffset: number;
   aborter: AbortController;
   loopPromise: Promise<void>;
 }
@@ -83,11 +87,18 @@ export class TelegramAdapter implements IChannelAdapter {
       return;
     }
 
+    // Seed the in-memory offset from the persisted value so a crash/redeploy
+    // does not re-deliver updates we already processed.
+    const savedOffset = Number((conn.config as any)?.telegramOffset);
+    const seededOffset = Number.isFinite(savedOffset) && savedOffset > 0 ? savedOffset : 0;
+
     const aborter = new AbortController();
     const state: TelegramConnectionState = {
       http,
       botToken,
-      offset: 0,
+      offset: seededOffset,
+      connectionId: conn._id,
+      persistedOffset: seededOffset,
       aborter,
       loopPromise: Promise.resolve(),
     };
@@ -114,6 +125,8 @@ export class TelegramAdapter implements IChannelAdapter {
     } catch {
       /* swallow — loop already logged */
     }
+    // Flush the final offset so a clean shutdown does not lose progress.
+    await this.persistOffset(state);
   }
 
   async send(msg: OutboundMessage): Promise<ChannelSendResult> {
@@ -176,7 +189,9 @@ export class TelegramAdapter implements IChannelAdapter {
           params: {
             offset: state.offset,
             timeout: POLL_TIMEOUT_SEC,
-            allowed_updates: ['message'],
+            // axios serializes a JS array as repeated query params, which the
+            // Telegram API ignores; send the documented JSON-string form.
+            allowed_updates: JSON.stringify(['message']),
           },
           signal,
         });
@@ -188,6 +203,11 @@ export class TelegramAdapter implements IChannelAdapter {
         for (const update of updates) {
           state.offset = Math.max(state.offset, update.update_id + 1);
           await this.dispatchInbound(tenantId, update);
+        }
+        // Best-effort flush after each non-empty batch so a crash/redeploy
+        // does not re-deliver updates we already handed off to handlers.
+        if (updates.length > 0) {
+          await this.persistOffset(state);
         }
       } catch (err: any) {
         if (signal.aborted) return;
@@ -223,6 +243,29 @@ export class TelegramAdapter implements IChannelAdapter {
       } catch (err) {
         console.error('TelegramAdapter: inbound handler threw:', err);
       }
+    }
+  }
+
+  /**
+   * Best-effort persistence of the long-poll offset to the ChannelConnection
+   * config. Skips the write when nothing advanced, and never throws — a failed
+   * flush just means at-most a small re-delivery window on the next restart.
+   */
+  private async persistOffset(state: TelegramConnectionState): Promise<void> {
+    if (!state.connectionId) return;
+    if (state.offset <= state.persistedOffset) return;
+    const toPersist = state.offset;
+    try {
+      await ChannelConnection.updateOne(
+        { _id: state.connectionId as any },
+        { $set: { 'config.telegramOffset': toPersist } },
+      );
+      state.persistedOffset = toPersist;
+    } catch (err: any) {
+      console.error(
+        'TelegramAdapter: failed to persist telegramOffset:',
+        err?.message ?? err,
+      );
     }
   }
 }

@@ -21,6 +21,9 @@ export interface FormField {
   required: boolean;
   order: number;
   options?: string[]; // For select/multiselect
+  // Optional dynamic option source for select/multiselect fields. When set,
+  // options are pulled from Datasets at runtime instead of the static list.
+  dataSource?: 'JOB_TYPES' | 'COUNTRIES' | 'EXPERIENCE_LEVELS';
   validation?: {
     minLength?: number;
     maxLength?: number;
@@ -69,6 +72,10 @@ const FormFieldSchema = new mongoose.Schema(
     required: { type: Boolean, default: false },
     order: { type: Number, default: 0 },
     options: [{ type: String }],
+    dataSource: {
+      type: String,
+      enum: ['JOB_TYPES', 'COUNTRIES', 'EXPERIENCE_LEVELS'],
+    },
     validation: {
       minLength: { type: Number },
       maxLength: { type: Number },

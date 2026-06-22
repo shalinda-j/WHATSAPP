@@ -77,8 +77,21 @@ async function tick(tenantId: string): Promise<{
     // another tenant's leads into this tenant's follow-up dispatch (a
     // cross-tenant message leak), so every selection must be filtered by
     // tenantId.
+    // Legacy-tolerant tenant scope. Bot-created leads (LeadService /
+    // LeadQualifierAgent) historically were NOT stamped with tenantId, so a
+    // strict { tenantId } filter found ZERO existing leads and the follow-up
+    // feature silently did nothing even once the agent was reachable. Match
+    // this tenant's leads AND legacy un-tenanted rows — the same
+    // legacy-tolerant clause used across the rest of the codebase. (New leads
+    // are now stamped at creation; this keeps existing rows reachable without
+    // a manual backfill. Single-tenant deployments resolve to the default
+    // tenant so there is no cross-tenant concern here.)
     const dormantLeads = await Lead.find({
-      tenantId,
+      $or: [
+        { tenantId },
+        { tenantId: { $exists: false } },
+        { tenantId: null },
+      ],
       status: { $in: ['new', 'reviewed', 'contacted'] },
       updatedAt: { $lt: threshold },
     })

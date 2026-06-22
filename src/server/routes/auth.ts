@@ -123,7 +123,14 @@ router.post('/login', strictRateLimit, async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: admin._id, username: admin.username, role: admin.role },
+      {
+        id: admin._id,
+        username: admin.username,
+        role: admin.role,
+        // Bind the token to the admin's tenant when one is set. Omitted for
+        // legacy / super-admins so they keep full tenant-switching rights.
+        ...(admin.tenantId ? { tenantId: String(admin.tenantId) } : {}),
+      },
       ACTUAL_JWT_SECRET,
       { expiresIn: '24h' },
     );

@@ -51,14 +51,20 @@ const PROMPTS: Record<IncomingMediaKind, string> = {
 };
 
 const unwrap = (msg: any): any => {
-  if (!msg) return null;
-  return (
-    msg.ephemeralMessage?.message ??
-    msg.viewOnceMessage?.message ??
-    msg.viewOnceMessageV2?.message ??
-    msg.viewOnceMessageV2Extension?.message ??
-    msg
-  );
+  // Iteratively peel nested wrappers (e.g. a view-once INSIDE an ephemeral
+  // envelope) until we reach the real content. A single-level unwrap missed
+  // those combinations and dropped the media. Bounded loop guards any cycle.
+  let cur = msg;
+  for (let i = 0; i < 5 && cur; i++) {
+    const inner =
+      cur.ephemeralMessage?.message ??
+      cur.viewOnceMessage?.message ??
+      cur.viewOnceMessageV2?.message ??
+      cur.viewOnceMessageV2Extension?.message;
+    if (!inner) break;
+    cur = inner;
+  }
+  return cur || null;
 };
 
 /**

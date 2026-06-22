@@ -163,7 +163,7 @@ export default function ChatInterface() {
   const openExportModal = () => {
     setExportSession(sessionFilter);
     setExportMonth(new Date().toISOString().slice(0, 7));
-    setExportIncludeUnresolved(true);
+    setExportIncludeUnresolved(false);
     setShowExportModal(true);
   };
 

@@ -206,6 +206,17 @@ export class SegmentationService {
     });
     if (!segment) return 0;
 
+    // Legacy-tolerant tenant clause: matches this tenant plus pre-migration
+    // rows where tenantId is missing/null, so single-tenant deployments and
+    // un-backfilled data keep working.
+    const tenantClause = {
+      $or: [
+        { tenantId: new mongoose.Types.ObjectId(tenantId) },
+        { tenantId: { $exists: false } },
+        { tenantId: null },
+      ],
+    };
+
     const allRules: SegmentRule[] = (segment.rules ?? []) as SegmentRule[];
     const orGroups: SegmentRule[][] | undefined = segment.or as
       | SegmentRule[][]
@@ -218,13 +229,15 @@ export class SegmentationService {
       scope: 'lead',
     });
 
-    const contactFilter: Record<string, unknown> = {
+    let contactFilter: Record<string, unknown> = {
       ...contactCompile.filter,
     };
 
     // If any lead-scoped rules exist, intersect contacts by phoneNumber.
     if (Object.keys(leadCompile.filter).length > 0) {
-      const phones = await Lead.distinct('phoneNumber', leadCompile.filter);
+      const phones = await Lead.distinct('phoneNumber', {
+        $and: [leadCompile.filter, tenantClause],
+      });
       const phoneStrings = phones
         .filter((p: unknown): p is string => typeof p === 'string')
         .map((p: string) => p.replace(/\D/g, ''))
@@ -238,16 +251,27 @@ export class SegmentationService {
         );
         return 0;
       }
-      const existing = (contactFilter.$or as unknown[]) ?? [];
-      contactFilter.$or = [
-        ...existing,
-        { phone: { $in: phoneRegexes } },
-        { whatsappNumber: { $in: phoneRegexes } },
-        { whatsappId: { $in: phoneRegexes } },
-      ];
+      // AND the entire compiled contact filter (which may itself carry an $or
+      // from contact OR-groups) with the lead-phone handle-OR, instead of
+      // mutating contactFilter.$or — otherwise a contact OR-group is clobbered
+      // by the phone OR and the intersection silently widens.
+      contactFilter = {
+        $and: [
+          contactCompile.filter,
+          {
+            $or: [
+              { phone: { $in: phoneRegexes } },
+              { whatsappNumber: { $in: phoneRegexes } },
+              { whatsappId: { $in: phoneRegexes } },
+            ],
+          },
+        ],
+      };
     }
 
-    const count = await Contact.countDocuments(contactFilter);
+    const count = await Contact.countDocuments({
+      $and: [contactFilter, tenantClause],
+    });
     await ContactSegment.updateOne(
       { _id: segmentId, tenantId },
       { $set: { memberCount: count, lastComputedAt: new Date() } },
@@ -271,6 +295,17 @@ export class SegmentationService {
     });
     if (!segment) return [];
 
+    // Legacy-tolerant tenant clause: matches this tenant plus pre-migration
+    // rows where tenantId is missing/null, so single-tenant deployments and
+    // un-backfilled data keep working.
+    const tenantClause = {
+      $or: [
+        { tenantId: new mongoose.Types.ObjectId(tenantId) },
+        { tenantId: { $exists: false } },
+        { tenantId: null },
+      ],
+    };
+
     const allRules = (segment.rules ?? []) as SegmentRule[];
     const orGroups = segment.or as SegmentRule[][] | undefined;
 
@@ -281,27 +316,40 @@ export class SegmentationService {
       scope: 'lead',
     });
 
-    const contactFilter: Record<string, unknown> = {
+    let contactFilter: Record<string, unknown> = {
       ...contactCompile.filter,
     };
     if (Object.keys(leadCompile.filter).length > 0) {
-      const phones = await Lead.distinct('phoneNumber', leadCompile.filter);
+      const phones = await Lead.distinct('phoneNumber', {
+        $and: [leadCompile.filter, tenantClause],
+      });
       const phoneStrings = phones
         .filter((p: unknown): p is string => typeof p === 'string')
         .map((p: string) => p.replace(/\D/g, ''))
         .filter((p: string) => p.length > 0);
       if (phoneStrings.length === 0) return [];
       const phoneRegexes = phoneStrings.map((p: string) => new RegExp(`${p}$`));
-      const existing = (contactFilter.$or as unknown[]) ?? [];
-      contactFilter.$or = [
-        ...existing,
-        { phone: { $in: phoneRegexes } },
-        { whatsappNumber: { $in: phoneRegexes } },
-        { whatsappId: { $in: phoneRegexes } },
-      ];
+      // AND the entire compiled contact filter (which may itself carry an $or
+      // from contact OR-groups) with the lead-phone handle-OR, instead of
+      // mutating contactFilter.$or — otherwise a contact OR-group is clobbered
+      // by the phone OR and the materialised set silently widens.
+      contactFilter = {
+        $and: [
+          contactCompile.filter,
+          {
+            $or: [
+              { phone: { $in: phoneRegexes } },
+              { whatsappNumber: { $in: phoneRegexes } },
+              { whatsappId: { $in: phoneRegexes } },
+            ],
+          },
+        ],
+      };
     }
 
-    const contacts = await Contact.find(contactFilter).limit(10_000);
+    const contacts = await Contact.find({
+      $and: [contactFilter, tenantClause],
+    }).limit(10_000);
     return contacts.map((c: any) => ({
       contactId: String(c._id),
       handles: {

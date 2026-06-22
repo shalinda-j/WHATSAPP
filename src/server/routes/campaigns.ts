@@ -38,12 +38,29 @@ router.post(
   '/:id/launch',
   async (req: Request<{ id: string }>, res: Response) => {
     const tenantId = String(req.tenant?._id);
-    const result = await campaignService.launch({
-      tenantId,
-      campaignId: req.params.id,
-      runNow: true,
-    });
-    res.json(result);
+    try {
+      const result = await campaignService.launch({
+        tenantId,
+        campaignId: req.params.id,
+        runNow: true,
+      });
+      res.json(result);
+    } catch (err) {
+      // launch() throws domain errors (no_variants, no_channels,
+      // segment_empty, no_routable_channel, campaign_not_found, already_running)
+      // — surface them as a clean {error} body so the admin UI can tell the
+      // operator why the launch was refused instead of showing a generic 500.
+      const msg = err instanceof Error ? err.message : String(err);
+      // already_running is a conflict (the campaign is already live), not a bad
+      // request — map it to 409 so the UI can show "already running" distinctly.
+      const status =
+        msg === 'campaign_not_found'
+          ? 404
+          : msg === 'already_running'
+            ? 409
+            : 400;
+      res.status(status).json({ error: msg });
+    }
   },
 );
 

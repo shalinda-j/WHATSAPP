@@ -3,7 +3,7 @@ import ChatMessage from '../../models/ChatMessage';
 import Lead from '../../models/Lead';
 import Booking from '../../models/Booking';
 import { authenticateToken } from '../middleware/auth';
-import { resolveTenant } from '../middleware/tenantContext';
+import { resolveTenant, withTenantScope } from '../middleware/tenantContext';
 
 const router = Router();
 
@@ -14,14 +14,16 @@ router.get('/', async (req, res) => {
   try {
     // Determine counts for VoiceAgentHub stats
     const [totalVoiceNotes, totalCallsRejected] = await Promise.all([
-      ChatMessage.countDocuments({ type: 'voice' }),
+      ChatMessage.countDocuments(withTenantScope(req, { type: 'voice' })),
       // Our rejection data is not explicitly stored in ChatMessage differently, but
       // let's look for known rejections or just use a default placeholder or query
       // Alternatively, assuming text messages warning about calls
-      ChatMessage.countDocuments({
-        role: 'assistant',
-        content: { $regex: /voice message/i },
-      }),
+      ChatMessage.countDocuments(
+        withTenantScope(req, {
+          role: 'assistant',
+          content: { $regex: /voice message/i },
+        }),
+      ),
     ]);
 
     res.json({
@@ -56,25 +58,38 @@ router.get('/overview', async (req, res) => {
       userMessages,
       totalCallsRejected,
     ] = await Promise.all([
-      ChatMessage.countDocuments(),
-      ChatMessage.countDocuments({ timestamp: { $gte: today } }),
-      ChatMessage.countDocuments({ timestamp: { $gte: weekAgo } }),
-      ChatMessage.countDocuments({ timestamp: { $gte: monthAgo } }),
-      ChatMessage.distinct('userId'),
-      ChatMessage.countDocuments({ type: 'voice' }),
-      ChatMessage.countDocuments({ type: 'text' }),
-      ChatMessage.countDocuments({ role: 'assistant' }),
-      ChatMessage.countDocuments({ role: 'user' }),
+      ChatMessage.countDocuments(withTenantScope(req, {})),
+      ChatMessage.countDocuments(
+        withTenantScope(req, { timestamp: { $gte: today } }),
+      ),
+      ChatMessage.countDocuments(
+        withTenantScope(req, { timestamp: { $gte: weekAgo } }),
+      ),
+      ChatMessage.countDocuments(
+        withTenantScope(req, { timestamp: { $gte: monthAgo } }),
+      ),
+      // distinct('userId') can't take the legacy-tolerant $or clause, so we
+      // run an aggregate with a tenant-scoped $match stage instead.
+      ChatMessage.aggregate([
+        { $match: withTenantScope(req, {}) },
+        { $group: { _id: '$userId' } },
+      ]),
+      ChatMessage.countDocuments(withTenantScope(req, { type: 'voice' })),
+      ChatMessage.countDocuments(withTenantScope(req, { type: 'text' })),
+      ChatMessage.countDocuments(withTenantScope(req, { role: 'assistant' })),
+      ChatMessage.countDocuments(withTenantScope(req, { role: 'user' })),
       // Count messages that mention call rejection (bot telling user to send voice note instead)
-      ChatMessage.countDocuments({
-        role: 'assistant',
-        $or: [
-          { content: { $regex: /voice note/i } },
-          { content: { $regex: /voice message/i } },
-          { content: { $regex: /cannot.*call/i } },
-          { content: { $regex: /send a voice/i } },
-        ],
-      }),
+      ChatMessage.countDocuments(
+        withTenantScope(req, {
+          role: 'assistant',
+          $or: [
+            { content: { $regex: /voice note/i } },
+            { content: { $regex: /voice message/i } },
+            { content: { $regex: /cannot.*call/i } },
+            { content: { $regex: /send a voice/i } },
+          ],
+        }),
+      ),
     ]);
 
     const userCount = uniqueUsers.length;
@@ -102,7 +117,9 @@ router.get('/questions', async (req, res) => {
   try {
     const { limit = 20 } = req.query;
 
-    const userMessages = await ChatMessage.find({ role: 'user' })
+    const userMessages = await ChatMessage.find(
+      withTenantScope(req, { role: 'user' }),
+    )
       .sort({ timestamp: -1 })
       .limit(Number(limit))
       .lean();
@@ -154,10 +171,10 @@ router.get('/trends', async (req, res) => {
 
     const messagesByDay = await ChatMessage.aggregate([
       {
-        $match: {
+        $match: withTenantScope(req, {
           timestamp: { $gte: startDate },
           role: 'user',
-        },
+        }),
       },
       {
         $group: {
@@ -236,11 +253,31 @@ router.get('/leads', async (req, res) => {
     const weekAgo = new Date(today);
     weekAgo.setDate(weekAgo.getDate() - 7);
 
+    // Tenant scope: only this tenant's leads (plus legacy rows with no
+    // tenantId, so single-tenant / pre-migration data still counts).
+    const tid = (req as any).tenant?._id;
+    const tenantScope: Record<string, any> = tid
+      ? {
+          $or: [
+            { tenantId: tid },
+            { tenantId: { $exists: false } },
+            { tenantId: null },
+          ],
+        }
+      : {};
+
     const [totalLeads, weekLeads, byStatus, byJobType] = await Promise.all([
-      Lead.countDocuments(),
-      Lead.countDocuments({ registeredAt: { $gte: weekAgo } }),
-      Lead.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+      Lead.countDocuments(tenantScope),
+      Lead.countDocuments({
+        ...tenantScope,
+        registeredAt: { $gte: weekAgo },
+      }),
       Lead.aggregate([
+        { $match: tenantScope },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]),
+      Lead.aggregate([
+        { $match: tenantScope },
         { $group: { _id: '$jobVacancyType', count: { $sum: 1 } } },
       ]),
     ]);
@@ -271,7 +308,9 @@ router.get('/top-questions', async (req, res) => {
     // ⚡ Bolt: Use lean() and precise selection to minimize memory footprint
     // Instead of instantiating full Mongoose documents which are memory heavy,
     // we use lean() to get pure JS objects and only select the needed 'content' field.
-    const userMessages = await ChatMessage.find({ role: 'user', type: 'text' })
+    const userMessages = await ChatMessage.find(
+      withTenantScope(req, { role: 'user', type: 'text' }),
+    )
       .select('content -_id')
       .sort({ timestamp: -1 })
       .limit(Number(limit) * 2)
@@ -393,8 +432,19 @@ router.post('/bookings', async (req, res) => {
 router.patch('/bookings/:id', async (req, res) => {
   try {
     const { status, notes, type, time, location } = req.body;
-    const booking = await Booking.findByIdAndUpdate(
-      req.params.id,
+    const tid = (req as any).tenant?._id;
+    const scope: Record<string, any> = tid
+      ? {
+          _id: req.params.id,
+          $or: [
+            { tenantId: tid },
+            { tenantId: { $exists: false } },
+            { tenantId: null },
+          ],
+        }
+      : { _id: req.params.id };
+    const booking = await Booking.findOneAndUpdate(
+      scope,
       {
         ...(status && { status }),
         ...(notes !== undefined && { notes }),
@@ -416,7 +466,21 @@ router.patch('/bookings/:id', async (req, res) => {
 
 router.delete('/bookings/:id', async (req, res) => {
   try {
-    await Booking.findByIdAndDelete(req.params.id);
+    const tid = (req as any).tenant?._id;
+    const scope: Record<string, any> = tid
+      ? {
+          _id: req.params.id,
+          $or: [
+            { tenantId: tid },
+            { tenantId: { $exists: false } },
+            { tenantId: null },
+          ],
+        }
+      : { _id: req.params.id };
+    const deleted = await Booking.findOneAndDelete(scope);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -430,7 +494,9 @@ router.get('/recent-replies', async (req, res) => {
     const { limit = 10 } = req.query;
 
     // Fetch the absolute newest messages where the bot has replied
-    const recentReplies = await ChatMessage.find({ role: 'assistant' })
+    const recentReplies = await ChatMessage.find(
+      withTenantScope(req, { role: 'assistant' }),
+    )
       .sort({ timestamp: -1 })
       .limit(Number(limit))
       .lean();

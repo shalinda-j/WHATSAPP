@@ -161,6 +161,17 @@ app.use(async (req, res, next) => {
   next();
 });
 
+// Audit middleware: records every mutating API call (POST/PUT/PATCH/DELETE)
+// to the AuditEvent collection. Hooked via res.on('finish') so it adds zero
+// blocking latency and never rejects a legitimate call even if Mongo writes
+// fail. Sensitive request-body fields are redacted before persistence.
+// MUST be registered BEFORE the API route mounts: route handlers terminate
+// the request (res.json/res.send) and never call next(), so a post-routes
+// registration never executes. Running it here attaches the res.on('finish')
+// hook before each handler runs, while still capturing the final statusCode,
+// tenant and user once auth/resolveTenant/handler have populated them.
+app.use(auditLog);
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/webhooks', webhookRouter); // Webhooks manage their own security
@@ -201,12 +212,6 @@ app.use('/api/marketing-insights', marketingInsightsRouter);
 app.use('/api/audit', authenticateToken, resolveTenant, auditRouter);
 app.use('/api/sla', authenticateToken, slaRouter);
 app.use('/api/export', authenticateToken, resolveTenant, exportsRouter);
-
-// Audit middleware: records every mutating API call (POST/PUT/PATCH/DELETE)
-// to the AuditEvent collection. Hooked via res.on('finish') so it adds zero
-// blocking latency and never rejects a legitimate call even if Mongo writes
-// fail. Sensitive request-body fields are redacted before persistence.
-app.use(auditLog);
 
 // Public forms endpoint (for bot)
 app.use('/api/forms/default', async (req, res, next) => {

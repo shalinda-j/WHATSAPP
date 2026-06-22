@@ -6,7 +6,7 @@ import Lead from '../../models/Lead';
 import { authenticateToken } from '../middleware/auth';
 import { strictRateLimit } from '../middleware/rateLimit';
 import { validateObjectId } from '../middleware/validation';
-import { resolveTenant } from '../middleware/tenantContext';
+import { resolveTenant, withTenantScope } from '../middleware/tenantContext';
 import pdf from 'pdf-parse';
 import ChatMessage from '../../models/ChatMessage';
 import { configurationManager } from '../../services/ConfigurationManagerService';
@@ -299,7 +299,12 @@ router.get('/export', async (req, res) => {
 
 router.get('/:id', validateObjectId(), async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
+    // Tenant-scoped by-id read. withTenantScope falls back to the plain
+    // { _id } filter when no tenant is resolved (single-tenant/public),
+    // so a cross-tenant id is indistinguishable from a missing one (404).
+    const lead = await Lead.findOne(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!lead) {
       return res.status(404).json({ error: 'Lead not found' });
     }
@@ -311,7 +316,9 @@ router.get('/:id', validateObjectId(), async (req, res) => {
 
 router.get('/:id/messages', validateObjectId(), async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
+    const lead = await Lead.findOne(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!lead) {
       return res.status(404).json({ error: 'Lead not found' });
     }
@@ -439,13 +446,17 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', validateObjectId(), async (req, res) => {
   try {
-    const previous = await Lead.findById(req.params.id);
+    const query = withTenantScope(req, { _id: req.params.id });
+    const previous = await Lead.findOne(query);
     if (!previous) {
       return res.status(404).json({ error: 'Lead not found' });
     }
-    const lead = await Lead.findByIdAndUpdate(
-      req.params.id,
-      { ...req.body, updatedAt: new Date() },
+    // Strip any client-supplied tenantId so a caller can't re-stamp this
+    // lead into another tenant via the update body.
+    const { tenantId: _ignoredTenantId, ...updateBody } = req.body || {};
+    const lead = await Lead.findOneAndUpdate(
+      query,
+      { ...updateBody, updatedAt: new Date() },
       { new: true },
     );
 
@@ -472,7 +483,9 @@ router.put('/:id', validateObjectId(), async (req, res) => {
 
 router.delete('/:id', validateObjectId(), async (req, res) => {
   try {
-    const lead = await Lead.findByIdAndDelete(req.params.id);
+    const lead = await Lead.findOneAndDelete(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!lead) {
       return res.status(404).json({ error: 'Lead not found' });
     }
@@ -496,7 +509,9 @@ router.post(
   upload.single('file'),
   async (req, res) => {
     try {
-      const lead = await Lead.findById(req.params.id);
+      const lead = await Lead.findOne(
+        withTenantScope(req, { _id: req.params.id }),
+      );
       if (!lead) {
         return res.status(404).json({ error: 'Lead not found' });
       }
@@ -542,7 +557,9 @@ router.post(
 
 router.get('/:id/qualifications/:qualIndex/download', async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
+    const lead = await Lead.findOne(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!lead) {
       return res.status(404).json({ error: 'Lead not found' });
     }

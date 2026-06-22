@@ -266,59 +266,53 @@ export class AILoadBalancer {
           continue;
         }
         if (conf.apiKey) {
+          // Construct the provider for this Config row, then stamp the Config
+          // _id on it so usage tracking can attribute spend to the EXACT
+          // provider row (matters for custom/session providers that share a
+          // providerType/model and would otherwise be mis-attributed).
+          const confId = String((conf as any)._id);
+          let svc: AIService | null = null;
           if (conf.providerType === 'google') {
-            this.services.push(
-              new GeminiService({
-                apiKey: conf.apiKey,
-                model: conf.aiModel,
-                providerType: 'google',
-              }),
-            );
+            svc = new GeminiService({
+              apiKey: conf.apiKey,
+              model: conf.aiModel,
+              providerType: 'google',
+            });
           } else if (conf.providerType === 'openai') {
-            this.services.push(
-              new OpenAIService({
-                apiKey: conf.apiKey,
-                model: conf.aiModel,
-                providerType: 'openai',
-              }),
-            );
+            svc = new OpenAIService({
+              apiKey: conf.apiKey,
+              model: conf.aiModel,
+              providerType: 'openai',
+            });
           } else if (conf.providerType === 'groq') {
-            this.services.push(
-              new GroqService({
-                apiKey: conf.apiKey,
-                model: conf.aiModel,
-                providerType: 'groq',
-              }),
-            );
+            svc = new GroqService({
+              apiKey: conf.apiKey,
+              model: conf.aiModel,
+              providerType: 'groq',
+            });
           } else if (conf.providerType === 'openrouter') {
-            this.services.push(
-              new OpenRouterService({
-                apiKey: conf.apiKey,
-                model: conf.aiModel,
-                providerType: 'openrouter',
-              }),
-            );
+            svc = new OpenRouterService({
+              apiKey: conf.apiKey,
+              model: conf.aiModel,
+              providerType: 'openrouter',
+            });
           } else if (conf.providerType === 'openai-session') {
             // Unofficial ChatGPT session-based provider (fallback only)
-            this.services.push(
-              new ChatGPTSessionService({
-                sessionToken: conf.apiKey,
-                model: conf.aiModel,
-                configId: String((conf as any)._id),
-                providerType: 'openai-session',
-              }),
-            );
+            svc = new ChatGPTSessionService({
+              sessionToken: conf.apiKey,
+              model: conf.aiModel,
+              configId: confId,
+              providerType: 'openai-session',
+            });
           } else if (conf.providerType === 'claude-session') {
             // Unofficial Claude session-based provider (fallback only)
-            this.services.push(
-              new ClaudeSessionService({
-                sessionKey: conf.apiKey,
-                organizationId: conf.value || undefined,
-                model: conf.aiModel,
-                configId: String((conf as any)._id),
-                providerType: 'claude-session',
-              }),
-            );
+            svc = new ClaudeSessionService({
+              sessionKey: conf.apiKey,
+              organizationId: conf.value || undefined,
+              model: conf.aiModel,
+              configId: confId,
+              providerType: 'claude-session',
+            });
           } else if (
             conf.providerType === 'custom' ||
             conf.providerType === 'local'
@@ -333,17 +327,23 @@ export class AILoadBalancer {
                   `no Base URL configured. Set it in Admin Panel > Configuration.`,
               );
             } else {
-              this.services.push(
-                new CustomAIService({
-                  apiKey: conf.apiKey,
-                  baseUrl,
-                  model: conf.aiModel,
-                  providerType: conf.providerType,
-                }),
-              );
+              svc = new CustomAIService({
+                apiKey: conf.apiKey,
+                baseUrl,
+                model: conf.aiModel,
+                providerType: conf.providerType,
+                configId: confId,
+              });
             }
           }
           // Add other providers here (e.g. Anthropic)
+
+          if (svc) {
+            // Stamp the Config _id on EVERY constructed service so trackUsage()
+            // can $inc usageUsed on the precise provider row.
+            (svc as any).configId = confId;
+            this.services.push(svc);
+          }
         }
       }
 
@@ -442,12 +442,42 @@ export class AILoadBalancer {
     await this.loadServices();
   }
 
+  /**
+   * Attribute token spend to the provider's Config row.
+   *
+   * Prefers the exact Config _id stamped on the service in _doLoadServices
+   * (set for EVERY provider, including custom/session ones that share a
+   * providerType+model and were previously mis-attributed or no-op'd). Falls
+   * back to the legacy providerType+model heuristic only when no configId is
+   * available (e.g. env-supplied failover providers that have no DB row).
+   *
+   * Accepts either the AIService object (preferred) or a bare provider name
+   * string (legacy callers).
+   */
   private async trackUsage(
-    providerName: string,
+    service: AIService | string,
     inputTokens: number,
     outputTokens: number,
   ) {
     try {
+      const configId =
+        typeof service === 'string'
+          ? undefined
+          : ((service as any).configId as string | undefined);
+
+      // Preferred path: exact provider row by _id.
+      if (configId) {
+        await Config.updateOne(
+          { _id: configId },
+          { $inc: { usageUsed: inputTokens + outputTokens } },
+        );
+        return;
+      }
+
+      // Fallback heuristic: derive provider type + model from the name.
+      const providerName =
+        typeof service === 'string' ? service : service.name;
+
       // Extract model name from "Gemini (gemini-1.5-flash)" -> "gemini-1.5-flash"
       const modelMatch = providerName.match(/\((.*?)\)/);
       const modelName = modelMatch ? modelMatch[1] : '';
@@ -478,20 +508,22 @@ export class AILoadBalancer {
    * AI_PERSONALITY (Admin Panel → Datasets → AI_PERSONALITY) plus the dynamic
    * knowledge base. Read fresh so personality edits apply immediately.
    */
-  private async buildSystemContent(): Promise<string> {
-    const knowledgeBase =
-      await knowledgeTrainingService.getKnowledgeBaseForAI();
+  private async buildSystemContent(tenantId?: string): Promise<string> {
+    const knowledgeBase = await knowledgeTrainingService.getKnowledgeBaseForAI(
+      undefined,
+      tenantId,
+    );
     const aiPersonality = await configurationManager.getAIPersonality();
     return `${aiPersonality}\n\n${knowledgeBase}`;
   }
 
-  private async getInitialHistory(): Promise<AIChatMessage[]> {
+  private async getInitialHistory(tenantId?: string): Promise<AIChatMessage[]> {
     const conversationExamples = await getConversationExamples();
 
     const history: AIChatMessage[] = [
       {
         role: 'system',
-        content: await this.buildSystemContent(),
+        content: await this.buildSystemContent(tenantId),
       },
     ];
 
@@ -560,7 +592,11 @@ export class AILoadBalancer {
     }
   }
 
-  async sendMessage(userId: string, message: string): Promise<string> {
+  async sendMessage(
+    userId: string,
+    message: string,
+    tenantId?: string,
+  ): Promise<string> {
     // Load services with caching (not on every message)
     await this.loadServices();
 
@@ -585,11 +621,18 @@ export class AILoadBalancer {
           content: m.content,
         }));
       } else {
-        // Initialize with system prompt and examples
-        history = await this.getInitialHistory();
+        // Initialize with system prompt and examples for THIS request only.
+        history = await this.getInitialHistory(tenantId);
+        // Persist ONLY the system anchor — never the synthetic few-shot
+        // example turns. Those must stay in-memory for the AI's few-shot
+        // priming, but persisting them pollutes the shared ConversationHistory
+        // collection that the agent path reads (it expects genuine user/
+        // assistant turns). The system prompt is also rebuilt fresh on every
+        // request below, so the persisted copy is just an anchor.
+        const seed = history.filter((h) => h.role === 'system');
         await conversationHistoryService.setInitialHistory(
           userId,
-          history.map((h) => ({
+          seed.map((h) => ({
             role: h.role,
             content: h.content,
             timestamp: new Date(),
@@ -605,7 +648,7 @@ export class AILoadBalancer {
     // conversations that started before the edit. Previously the system prompt
     // was captured only on a user's FIRST message and persisted forever, so
     // personality changes were silently ignored for every existing chat.
-    const freshSystem = await this.buildSystemContent();
+    const freshSystem = await this.buildSystemContent(tenantId);
     if (history.length > 0 && history[0].role === 'system') {
       history[0] = { role: 'system', content: freshSystem };
     } else {
@@ -637,6 +680,18 @@ export class AILoadBalancer {
         // soft request; this post-processor is the non-negotiable gate.
         const response = enforceWhatsAppStyle(rawResponse);
 
+        // Guard against an empty/whitespace reply. Providers can return ''
+        // without throwing, which would otherwise short-circuit the failover
+        // loop AND poison history/cache with a blank assistant turn. Skip to
+        // the next provider; if all yield empty the loop throws below and
+        // index.ts falls back to its own template chain.
+        if (!response || !response.trim()) {
+          console.warn(
+            `   ⚠️ ${service.name} returned an empty reply — failing over`,
+          );
+          continue;
+        }
+
         // Add assistant response to history
         history.push({ role: 'assistant', content: response });
 
@@ -656,14 +711,30 @@ export class AILoadBalancer {
         // Only learn if response is substantial (> 50 chars)
         if (response.length > 50 && message.length > 10) {
           knowledgeTrainingService
-            .learnFromConversation(message, response, 0.7)
+            .learnFromConversation(message, response, 0.7, tenantId)
             .catch((err) => {
               // Silent fail - learning is optional
             });
         }
 
+        // Cap the warm in-memory history to mirror the DB's 50-message cap
+        // (ConversationHistoryService trims to -50). A warm cache entry is
+        // never reloaded from the trimmed DB, so without this it grows
+        // unbounded per user — inflating token cost and eventually overflowing
+        // the provider context window. Preserve the leading system turn.
+        // (Cache the trimmed copy; usage tracking below still uses the full
+        // `history` that was actually sent to the provider.)
+        const MAX_TURNS = 48;
+        const trimmedHistory =
+          history.length > MAX_TURNS + 1
+            ? [
+                ...(history[0]?.role === 'system' ? [history[0]] : []),
+                ...history.slice(-MAX_TURNS),
+              ]
+            : history;
+
         // Update cache
-        this.historyCache.set(userId, history);
+        this.historyCache.set(userId, trimmedHistory);
 
         // TRACK USAGE
         // Estimate: 4 chars = 1 token
@@ -675,8 +746,9 @@ export class AILoadBalancer {
         const inputTokens = Math.ceil(inputLen / 4);
         const outputTokens = Math.ceil(outputLen / 4);
 
-        // Fire and forget usage tracking
-        this.trackUsage(service.name, inputTokens, outputTokens);
+        // Fire and forget usage tracking (pass the service so trackUsage can
+        // attribute spend to the exact Config row via its configId).
+        this.trackUsage(service, inputTokens, outputTokens);
 
         return response;
       } catch (error: any) {
@@ -769,7 +841,7 @@ export class AILoadBalancer {
         const inputLen = messages.reduce((a, m) => a + m.content.length, 0);
         const inputTokens = Math.ceil(inputLen / 4);
         const outputTokens = Math.ceil(text.length / 4);
-        this.trackUsage(service.name, inputTokens, outputTokens);
+        this.trackUsage(service, inputTokens, outputTokens);
         return {
           text,
           provider: service.name,

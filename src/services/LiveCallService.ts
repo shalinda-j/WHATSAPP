@@ -100,9 +100,34 @@ interface ResolvedSettings {
 }
 
 /**
- * Map our high-level CallTtsModel onto the language hint generateSpeech already
- * understands, and (when the global provider is on `auto`) nudge the requested
- * engine via the env switch generateSpeech reads. This keeps the TTS model a
+ * Map our high-level CallTtsModel onto the voice-provider name that
+ * generateSpeech's waterfall understands. Returns undefined for `auto` (and
+ * anything unmapped) so generateSpeech keeps its Admin-Panel-configured order.
+ */
+function callTtsModelToVoiceProvider(
+  ttsModel: CallTtsModel,
+): string | undefined {
+  switch (ttsModel) {
+    case 'gemini':
+      return 'gemini-tts';
+    case 'openai':
+      return 'openai';
+    case 'elevenlabs':
+      return 'elevenlabs';
+    case 'google':
+      return 'google-free';
+    case 'auto':
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Map our high-level CallTtsModel onto a concrete voice-provider name and pass
+ * it straight to generateSpeech so the requested engine LEADS the waterfall for
+ * this synthesis. `auto` passes no preference, deferring to the Admin Panel
+ * Voice config. generateSpeech still falls back safely if the requested engine
+ * is unavailable for the target language. This keeps the TTS model a
  * first-class, configurable knob for calls without forking the voice waterfall.
  */
 export async function synthesizeCallSpeech(
@@ -110,22 +135,8 @@ export async function synthesizeCallSpeech(
   language: string,
   ttsModel: CallTtsModel = 'auto',
 ): Promise<Buffer> {
-  // `auto` → use whatever the Admin Panel Voice config selected.
-  // A concrete model → expose it to generateSpeech via env so the waterfall
-  // prefers it for this synthesis. generateSpeech still falls back safely if
-  // the requested engine is unavailable for the target language.
-  const previous = process.env.PREFERRED_TTS_PROVIDER;
-  try {
-    if (ttsModel !== 'auto') {
-      process.env.PREFERRED_TTS_PROVIDER = ttsModel;
-    }
-    return await generateSpeech(text, language);
-  } finally {
-    if (ttsModel !== 'auto') {
-      if (previous === undefined) delete process.env.PREFERRED_TTS_PROVIDER;
-      else process.env.PREFERRED_TTS_PROVIDER = previous;
-    }
-  }
+  const preferredProvider = callTtsModelToVoiceProvider(ttsModel);
+  return generateSpeech(text, language, preferredProvider);
 }
 
 /**

@@ -216,6 +216,24 @@ export class ConfigService {
     return fallback;
   }
 
+  /**
+   * Array configs (CONVERSATION_EXAMPLES, JOB_TYPES, BOOKING_KEYWORDS,
+   * COUNTRIES, EXPERIENCE_LEVELS) are stored by the config routes as a
+   * multi-language wrapper `{ en: [...] }`, but get()'s isMultiLang unwrap
+   * only fires for STRING values — so an array config comes back as the
+   * wrapper object and every downstream `Array.isArray(...)` check silently
+   * fails, discarding the operator's data and falling back to defaults.
+   * This normalizes either shape (raw array, or `{ en: [...] }`) to a plain
+   * array, returning null when neither holds usable data.
+   */
+  private unwrapEnArray(value: any): any[] | null {
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === 'object' && Array.isArray(value.en)) {
+      return value.en;
+    }
+    return null;
+  }
+
   public async getRegistrationConfig() {
     return this.get('REGISTRATION_CONFIG', defaultConfig.links.registration);
   }
@@ -272,12 +290,11 @@ export class ConfigService {
    * Configure via Admin Panel > Datasets > CONVERSATION_EXAMPLES
    */
   public async getConversationExamples(): Promise<ConversationExample[]> {
-    const examples = await this.get(
-      'CONVERSATION_EXAMPLES',
-      DEFAULT_CONVERSATION_EXAMPLES,
+    const examples = this.unwrapEnArray(
+      await this.get('CONVERSATION_EXAMPLES', DEFAULT_CONVERSATION_EXAMPLES),
     );
     // Validate it's an array
-    if (Array.isArray(examples) && examples.length > 0) {
+    if (examples && examples.length > 0) {
       return examples;
     }
     return DEFAULT_CONVERSATION_EXAMPLES;
@@ -288,9 +305,11 @@ export class ConfigService {
    * Configure via Admin Panel > Datasets > JOB_TYPES
    */
   public async getJobTypes(): Promise<string[]> {
-    const jobTypes = await this.get('JOB_TYPES', DEFAULT_JOB_TYPES);
+    const jobTypes = this.unwrapEnArray(
+      await this.get('JOB_TYPES', DEFAULT_JOB_TYPES),
+    );
     // Validate it's an array with content
-    if (Array.isArray(jobTypes) && jobTypes.length > 0) {
+    if (jobTypes && jobTypes.length > 0) {
       return jobTypes;
     }
     console.warn(
@@ -304,12 +323,11 @@ export class ConfigService {
    * Configure via Admin Panel > Datasets > BOOKING_KEYWORDS
    */
   public async getBookingKeywords(): Promise<string[]> {
-    const keywords = await this.get(
-      'BOOKING_KEYWORDS',
-      DEFAULT_BOOKING_KEYWORDS,
+    const keywords = this.unwrapEnArray(
+      await this.get('BOOKING_KEYWORDS', DEFAULT_BOOKING_KEYWORDS),
     );
     // Validate it's an array with content
-    if (Array.isArray(keywords) && keywords.length > 0) {
+    if (keywords && keywords.length > 0) {
       return keywords;
     }
     console.warn(
@@ -456,8 +474,10 @@ export class ConfigService {
    * Configure via Admin Panel > Datasets > COUNTRIES
    */
   public async getCountries(): Promise<CountryOption[]> {
-    const countries = await this.get('COUNTRIES', DEFAULT_COUNTRIES);
-    if (Array.isArray(countries) && countries.length > 0) {
+    const countries = this.unwrapEnArray(
+      await this.get('COUNTRIES', DEFAULT_COUNTRIES),
+    );
+    if (countries && countries.length > 0) {
       return countries;
     }
     return DEFAULT_COUNTRIES;
@@ -468,11 +488,10 @@ export class ConfigService {
    * Configure via Admin Panel > Datasets > EXPERIENCE_LEVELS
    */
   public async getExperienceLevels(): Promise<ExperienceOption[]> {
-    const levels = await this.get(
-      'EXPERIENCE_LEVELS',
-      DEFAULT_EXPERIENCE_LEVELS,
+    const levels = this.unwrapEnArray(
+      await this.get('EXPERIENCE_LEVELS', DEFAULT_EXPERIENCE_LEVELS),
     );
-    if (Array.isArray(levels) && levels.length > 0) {
+    if (levels && levels.length > 0) {
       return levels;
     }
     return DEFAULT_EXPERIENCE_LEVELS;

@@ -26,7 +26,7 @@ export class FormService {
    * Get dynamic options for a field from Datasets
    */
   static async getDynamicOptions(field: FormField): Promise<string[]> {
-    const dataSource = (field as any)._dataSource;
+    const dataSource = field.dataSource;
 
     if (!dataSource) {
       return field.options || [];
@@ -437,11 +437,43 @@ export class FormService {
       case 'multiselect': {
         // Get dynamic options from datasets
         const options = await this.getDynamicOptions(field);
-        // Split by comma or space
-        const values = trimmedAnswer.split(/[,\s]+/).filter(Boolean);
-        const invalidValues = values.filter(
-          (v) => options.length > 0 && !options.includes(v),
-        );
+        // Split on COMMA only so options containing spaces (e.g. country
+        // names) survive. Trim each token and drop empties.
+        const rawValues = trimmedAnswer
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+        const normalize = (s: string) => s.trim().toLowerCase();
+        const resolved: string[] = [];
+        const invalidValues: string[] = [];
+
+        for (const token of rawValues) {
+          // Numeric index (1-based), mirroring the select case
+          const idx = parseInt(token, 10);
+          if (!isNaN(idx) && idx > 0 && idx <= options.length) {
+            resolved.push(options[idx - 1]);
+            continue;
+          }
+          // Exact match
+          if (options.includes(token)) {
+            resolved.push(token);
+            continue;
+          }
+          // Case-insensitive / normalized match
+          const match = options.find((o) => normalize(o) === normalize(token));
+          if (match) {
+            resolved.push(match);
+            continue;
+          }
+          // No configured options: accept token as-is
+          if (options.length === 0) {
+            resolved.push(token);
+            continue;
+          }
+          invalidValues.push(token);
+        }
+
         if (invalidValues.length > 0) {
           return {
             valid: false,
@@ -450,7 +482,7 @@ export class FormService {
             )}. Options: ${options.join(', ')}`,
           };
         }
-        return { valid: true, value: values };
+        return { valid: true, value: resolved };
       }
 
       case 'date':
@@ -482,12 +514,30 @@ export class FormService {
     whatsappJid: string,
   ): Promise<{ success: boolean; submissionId?: string }> {
     try {
+      // Inherit the tenant of the form template so bot submissions are
+      // attributed to the correct tenant (resolved internally; signature
+      // unchanged so existing callers stay intact).
+      const tpl = await FormTemplate.findById(formId).select('tenantId').lean();
+
+      // Normalize the stored phoneNumber to bare digits so submissions are
+      // not polluted with the full WhatsApp JID (e.g. "9477...@s.whatsapp.net")
+      // and phone-based reconciliation works. The raw JID is preserved in
+      // whatsappJid. Falls back to the (already-normalized) phoneNumber when
+      // no separate JID is available.
+      const rawJid = whatsappJid || phoneNumber;
+      const normalizedPhone = (phoneNumber || '')
+        .split('@')[0]
+        .replace(/\D/g, '');
+
       const submission = new FormSubmission({
         formId,
-        phoneNumber,
-        whatsappJid,
+        phoneNumber: normalizedPhone,
+        whatsappJid: rawJid,
         data,
         status: 'new',
+        ...((tpl as any)?.tenantId
+          ? { tenantId: (tpl as any).tenantId }
+          : {}),
       });
 
       await submission.save();
@@ -526,8 +576,10 @@ export class FormService {
     } else if (field.type === 'select' && (!options || options.length === 0)) {
       prompt += `\n⚠️ Options not configured. Please contact support.`;
     } else if (field.type === 'multiselect' && options.length > 0) {
-      prompt += `\nOptions: ${options.join(', ')}`;
-      prompt += `\n(You can select multiple, separated by commas)`;
+      prompt += `\nOptions: ${options
+        .map((o, i) => `${i + 1}. ${o}`)
+        .join('\n')}`;
+      prompt += `\n(Select multiple by separating with commas — use the numbers or names, e.g. "1, 3")`;
     }
 
     if (field.placeholder) {
@@ -565,10 +617,15 @@ export class FormService {
       return false;
     }
 
-    // Check if user has already submitted a form recently
+    // Check if user has already submitted a form recently. Match on the same
+    // normalized digits that submitForm now stores so dedup still works even
+    // when callers pass the full WhatsApp JID here.
+    const normalizedPhone = (phoneNumber || '')
+      .split('@')[0]
+      .replace(/\D/g, '');
     const FormSubmission = (await import('../models/FormSubmission')).default;
     const recentSubmission = await FormSubmission.findOne({
-      phoneNumber,
+      phoneNumber: normalizedPhone,
       submittedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Last 24 hours
     });
 

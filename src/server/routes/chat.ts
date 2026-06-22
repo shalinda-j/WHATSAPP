@@ -6,7 +6,11 @@ import LidPhoneMapping from '../../models/LidPhoneMapping';
 import { sendMessage, resolveActiveSessionId } from '../../services/whatsapp';
 import { getIO } from '../socket';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
-import { resolveTenant } from '../middleware/tenantContext';
+import {
+  resolveTenant,
+  withTenantScope,
+  tenantIdOf,
+} from '../middleware/tenantContext';
 import { extractRealPhone, fallbackJidLabel, isLidJid } from '../../utils/jid';
 import {
   normaliseLidJid,
@@ -36,10 +40,13 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
 
     const baseMatch: Record<string, unknown> = {};
     if (sessionId) baseMatch['metadata.sessionId'] = sessionId;
+    const scopedMatch = withTenantScope(req, baseMatch);
+    const hasMatchStage =
+      Boolean(sessionId) || Object.keys(scopedMatch).length > 0;
 
     // Aggregate to get unique users with their last message
     const conversations = await ChatMessage.aggregate([
-      ...(sessionId ? [{ $match: baseMatch }] : []),
+      ...(hasMatchStage ? [{ $match: scopedMatch }] : []),
       {
         $sort: { timestamp: -1 },
       },
@@ -61,11 +68,11 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
     // Get unread counts (messages from user that haven't been read by admin)
     const unreadCounts = await ChatMessage.aggregate([
       {
-        $match: {
+        $match: withTenantScope(req, {
           role: 'user',
           read: { $ne: true },
           ...(sessionId ? { 'metadata.sessionId': sessionId } : {}),
-        },
+        }),
       },
       {
         $group: {
@@ -116,10 +123,10 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
     if (unresolvedLidUserIds.length > 0) {
       const backfill = (await ChatMessage.aggregate([
         {
-          $match: {
+          $match: withTenantScope(req, {
             userId: { $in: unresolvedLidUserIds },
             'metadata.realPhone': { $exists: true, $ne: '' },
-          },
+          }),
         },
         {
           $group: {
@@ -269,7 +276,7 @@ router.get('/messages/:userId', async (req: Request, res: Response) => {
       query['metadata.sessionId'] = sessionId;
     }
 
-    const messages = await ChatMessage.find(query)
+    const messages = await ChatMessage.find(withTenantScope(req, query))
       .sort({ timestamp: 1 })
       .limit(Number(limit))
       .lean();
@@ -307,7 +314,7 @@ router.post('/send', async (req: Request, res: Response) => {
 
     // Mark all user messages as read (admin is viewing this chat)
     await ChatMessage.updateMany(
-      { userId, role: 'user', read: false },
+      withTenantScope(req, { userId, role: 'user', read: false }),
       { $set: { read: true } },
     );
 
@@ -326,6 +333,7 @@ router.post('/send', async (req: Request, res: Response) => {
       content: message,
       timestamp: new Date(),
       read: true, // Admin's messages are always read
+      tenantId: tenantIdOf(req),
       metadata: {
         sessionId: activeSessionId,
         source: 'admin_panel',
@@ -388,7 +396,11 @@ router.post('/mark-read/:userId', async (req: Request, res: Response) => {
 
     // Mark all user messages as read
     const result = await ChatMessage.updateMany(
-      { userId: decodedUserId, role: 'user', read: false },
+      withTenantScope(req, {
+        userId: decodedUserId,
+        role: 'user',
+        read: false,
+      }),
       { $set: { read: true } },
     );
 
@@ -470,7 +482,7 @@ router.post('/lid/map', async (req: AuthRequest, res: Response) => {
     // Stamp realPhone on every ChatMessage for this LID so the chat list
     // resolves on the next refresh without waiting for new traffic.
     const stamped = await ChatMessage.updateMany(
-      { userId: lidJid },
+      withTenantScope(req, { userId: lidJid }),
       { $set: { 'metadata.realPhone': phoneInfo.phone } },
     );
 

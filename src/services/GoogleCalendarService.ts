@@ -1,6 +1,7 @@
 import { google } from 'googleapis';
 import { resolve } from 'path';
 import { existsSync } from 'fs';
+import Booking from '../models/Booking';
 
 // Constants
 const CREDENTIALS_PATH = resolve(__dirname, '../../google-credentials.json'); // Expected in project root
@@ -25,6 +26,44 @@ function getAuthClient() {
 }
 
 /**
+ * Hours that already have a confirmed/pending booking in our own DB for the
+ * given calendar day. Prevents double-booking even when Google Calendar is in
+ * mock mode (no credentials) or the event was created only in MongoDB.
+ */
+async function getBookedHoursFromDb(date: Date): Promise<Set<number>> {
+  const booked = new Set<number>();
+  try {
+    const dayStart = new Date(date);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(date);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    const bookings = await Booking.find({
+      date: { $gte: dayStart, $lte: dayEnd },
+      status: { $in: ['confirmed', 'pending'] },
+    })
+      .select('date time')
+      .lean();
+
+    for (const b of bookings) {
+      let hour: number | undefined;
+      if (typeof b.time === 'string' && /^\d{1,2}:\d{2}/.test(b.time)) {
+        hour = parseInt(b.time.split(':')[0], 10);
+      } else if (b.date) {
+        hour = new Date(b.date).getHours();
+      }
+      if (typeof hour === 'number' && !isNaN(hour)) {
+        booked.add(hour);
+      }
+    }
+  } catch (err) {
+    // On DB error, fail open (don't block bookings) but log it.
+    console.error('❌ Failed to load booked hours from DB:', err);
+  }
+  return booked;
+}
+
+/**
  * Get available slots for a given date
  * (This is a simplified logic: checks specific slots against busy times)
  */
@@ -33,8 +72,13 @@ export async function getRealAvailability(date: Date): Promise<number[]> {
 
   // Default slots if auth is missing (Mock Mode)
   const defaultSlots = [8, 9, 10, 11, 13, 14, 15];
+
+  // Always subtract slots already taken by our own confirmed/pending bookings
+  // so we never offer a slot that's already booked (double-booking guard).
+  const dbBooked = await getBookedHoursFromDb(date);
+
   if (!auth) {
-    return defaultSlots;
+    return defaultSlots.filter((slot) => !dbBooked.has(slot));
   }
 
   try {
@@ -56,7 +100,7 @@ export async function getRealAvailability(date: Date): Promise<number[]> {
     });
 
     const events = response.data.items || [];
-    const busyHours = new Set<number>();
+    const busyHours = new Set<number>(dbBooked);
 
     // Mark hours as busy if there's an event
     events.forEach((event) => {
@@ -71,7 +115,8 @@ export async function getRealAvailability(date: Date): Promise<number[]> {
     return defaultSlots.filter((slot) => !busyHours.has(slot));
   } catch (error) {
     console.error('❌ Failed to fetch calendar events:', error);
-    return defaultSlots; // Fallback to defaults on error
+    // Even on calendar error, still honour our own DB bookings.
+    return defaultSlots.filter((slot) => !dbBooked.has(slot));
   }
 }
 
@@ -83,6 +128,7 @@ export async function createGoogleCalendarEvent(
   title: string,
   description: string,
   attendeeEmail?: string,
+  durationHours: number = 1,
 ): Promise<string | null> {
   const auth = getAuthClient();
   if (!auth) return null;
@@ -90,8 +136,8 @@ export async function createGoogleCalendarEvent(
   try {
     const calendar = google.calendar({ version: 'v3', auth });
 
-    const end = new Date(start);
-    end.setHours(start.getHours() + 1); // 1 hour duration
+    // Event end = start + configured duration (defaults to 1 hour).
+    const end = new Date(start.getTime() + durationHours * 3600_000);
 
     const event = {
       summary: title,

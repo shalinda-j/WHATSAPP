@@ -30,6 +30,7 @@ interface FormField {
   required: boolean;
   order: number;
   options?: string[];
+  dataSource?: string;
   validation?: {
     minLength?: number;
     maxLength?: number;
@@ -578,6 +579,31 @@ export default function FormBuilder() {
                             className="w-full border rounded px-2 py-1 text-sm"
                             placeholder="Option 1, Option 2, Option 3"
                           />
+                          <div className="mt-2">
+                            <label className="block text-xs text-gray-500 mb-1">
+                              Data source (optional)
+                            </label>
+                            <select
+                              value={field.dataSource || ''}
+                              onChange={(e) =>
+                                updateField(index, {
+                                  dataSource: e.target.value,
+                                })
+                              }
+                              className="w-full border rounded px-2 py-1 text-sm"
+                            >
+                              <option value="">Manual options (above)</option>
+                              <option value="JOB_TYPES">Job types</option>
+                              <option value="COUNTRIES">Countries</option>
+                              <option value="EXPERIENCE_LEVELS">
+                                Experience levels
+                              </option>
+                            </select>
+                            <p className="mt-1 text-[11px] text-gray-400">
+                              When set, options are loaded from your Datasets and
+                              override the manual list above.
+                            </p>
+                          </div>
                         </div>
                       )}
                     </div>

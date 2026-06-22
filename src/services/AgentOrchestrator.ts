@@ -46,7 +46,18 @@ export class AgentOrchestrator {
     const traceId = rawCtx.traceId ?? randomUUID();
     const ctx = AgentContextSchema.parse({ ...rawCtx, traceId });
 
-    const candidate = await agentRegistry.findBestAgent(ctx);
+    // A caller (cron/operator) can force a specific agent via
+    // metadata.forceAgent — e.g. the follow-up scheduler, whose agent's
+    // canHandle() deliberately returns 0 so it never triggers on inbound.
+    // Forced resolution bypasses canHandle() scoring but still honours the
+    // agent's config (a disabled/inactive agent yields null → 'no_handler').
+    const forced =
+      typeof ctx.metadata?.forceAgent === 'string'
+        ? ctx.metadata.forceAgent
+        : null;
+    const candidate = forced
+      ? await agentRegistry.getForced(forced)
+      : await agentRegistry.findBestAgent(ctx);
     if (!candidate) {
       return {
         handled: false,
@@ -159,9 +170,12 @@ export class AgentOrchestrator {
         });
         if (retrieved.length > 0) {
           const block = agentRAGService.formatForPrompt(retrieved);
+          // Compose onto the already-accumulated prompt (which may include the
+          // skill-injection block above) — NOT the original `assigned`, which
+          // would overwrite and silently drop the injected skills.
           augmentedPrompt = {
-            ...assigned,
-            systemPrompt: `${assigned.systemPrompt}\n\n${block}`,
+            ...augmentedPrompt,
+            systemPrompt: `${augmentedPrompt.systemPrompt}\n\n${block}`,
           };
         }
       } catch (err) {

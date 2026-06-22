@@ -164,6 +164,24 @@ export default function Campaigns() {
     }
   };
 
+  // Launch flips a draft/scheduled campaign to 'running' and queues its
+  // executions; without this a created campaign sits in 'draft' forever and
+  // tickSender never picks it up. Surface backend domain errors
+  // (no_variants / no_channels / segment_empty / no_routable_channel) so the
+  // operator knows why a launch was refused.
+  const launch = async (c: CampaignRow) => {
+    try {
+      await api.post(`/api/campaigns/${c._id}/launch`);
+      await load();
+    } catch (err) {
+      const ax = err as { response?: { data?: { error?: string } } };
+      alert(
+        ax.response?.data?.error ||
+          (err instanceof Error ? err.message : 'Failed to launch'),
+      );
+    }
+  };
+
   const openGenerate = (c: CampaignRow) => {
     setGenerateFor(c);
     setAudience('');
@@ -326,6 +344,14 @@ export default function Campaigns() {
                       >
                         <Sparkles className="h-3.5 w-3.5" /> Generate
                       </button>
+                      {(c.status === 'draft' || c.status === 'scheduled') && (
+                        <button
+                          onClick={() => launch(c)}
+                          className="inline-flex items-center gap-1 text-xs text-green-600 hover:text-green-800"
+                        >
+                          <Play className="h-3.5 w-3.5" /> Launch
+                        </button>
+                      )}
                       {(c.status === 'running' || c.status === 'paused') && (
                         <button
                           onClick={() => togglePause(c)}

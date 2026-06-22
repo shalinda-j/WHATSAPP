@@ -17,6 +17,8 @@ import { configService } from './ConfigService';
  */
 export class CustomAIService implements AIService {
   name: string;
+  /** Config _id this service was constructed from, for accurate usage tracking. */
+  configId?: string;
   private client: OpenAI;
   private modelName: string;
 
@@ -25,12 +27,14 @@ export class CustomAIService implements AIService {
     baseUrl: string;
     model?: string;
     providerType?: string;
+    configId?: string;
   }) {
     if (!config.baseUrl) {
       throw new Error(
         'CustomAIService requires a baseUrl (the OpenAI-compatible endpoint).',
       );
     }
+    this.configId = config.configId;
     this.modelName = config.model || 'gpt-3.5-turbo';
     // Show the host so multiple custom providers are distinguishable in logs.
     let host = config.baseUrl;

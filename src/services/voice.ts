@@ -719,6 +719,7 @@ async function fetchGoogleFreeSegment(
 export async function generateSpeech(
   text: string,
   targetLanguage?: string,
+  preferredProvider?: string,
 ): Promise<Buffer> {
   // Load voice config (DB-resilient)
   let config: import('../models/VoiceConfig').IVoiceConfig | null = null;
@@ -735,7 +736,13 @@ export async function generateSpeech(
   }
 
   const lang = targetLanguage || detectLanguage(text).lang;
-  const primaryProvider = config?.provider || 'google-free';
+  // When a per-call/per-request provider is supplied it LEADS the waterfall
+  // (tried first), then we fall back to the normal configured order. Omitting
+  // it preserves the previous behaviour exactly.
+  const primaryProvider =
+    (preferredProvider && preferredProvider.trim()) ||
+    config?.provider ||
+    'google-free';
   const googleApiKey =
     config?.googleApiKey || process.env.GOOGLE_TTS_API_KEY || '';
   const apiKey = config?.apiKey || process.env.OPENAI_API_KEY || '';
