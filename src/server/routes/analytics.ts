@@ -7,6 +7,18 @@ import { resolveTenant, withTenantScope } from '../middleware/tenantContext';
 
 const router = Router();
 
+// ⚡ Bolt: Precompile category regexes at module level to avoid recreation and string iteration in loops
+const KEYWORD_REGEXES: Record<string, RegExp> = {
+  jobs: /job|work|employment|vacancy|hire|recruit|jobs/i,
+  register: /register|apply|sign up|join|cv|registration/i,
+  payment: /payment|pay|salary|wage|bank|account/i,
+  booking: /book|visit|appointment|schedule|meeting|time/i,
+  location: /address|location|where|branch|office|map/i,
+  services: /service|what do you do|help|information|details/i,
+  hello: /hello|hi|hey|good morning|good afternoon/i,
+  language: /sinhala|english|tamil|translate/i,
+};
+
 router.use(authenticateToken);
 router.use(resolveTenant);
 
@@ -117,29 +129,23 @@ router.get('/questions', async (req, res) => {
   try {
     const { limit = 20 } = req.query;
 
+    // ⚡ Bolt: Use .select('content -_id') to fetch only the required field
     const userMessages = await ChatMessage.find(
       withTenantScope(req, { role: 'user' }),
     )
+      .select('content -_id')
       .sort({ timestamp: -1 })
       .limit(Number(limit))
       .lean();
 
     const questionCounts: Record<string, number> = {};
-    const keywordsMap: Record<string, string[]> = {
-      jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
-      register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
-      payment: ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
-      booking: ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
-      location: ['address', 'location', 'where', 'branch', 'office', 'map'],
-      services: ['service', 'what do you do', 'help', 'information', 'details'],
-      hello: ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
-      language: ['sinhala', 'english', 'tamil', 'translate'],
-    };
 
     for (const msg of userMessages) {
-      const content = msg.content.toLowerCase();
-      for (const [category, keywords] of Object.entries(keywordsMap)) {
-        if (keywords.some((k) => content.includes(k))) {
+      if (!msg.content) continue;
+
+      for (const [category, regex] of Object.entries(KEYWORD_REGEXES)) {
+        // ⚡ Bolt: regex.test is faster than iterating string arrays and calling includes
+        if (regex.test(msg.content)) {
           questionCounts[category] = (questionCounts[category] || 0) + 1;
           break;
         }
@@ -494,9 +500,11 @@ router.get('/recent-replies', async (req, res) => {
     const { limit = 10 } = req.query;
 
     // Fetch the absolute newest messages where the bot has replied
+    // ⚡ Bolt: Select only necessary fields to reduce memory footprint
     const recentReplies = await ChatMessage.find(
       withTenantScope(req, { role: 'assistant' }),
     )
+      .select('_id content type timestamp metadata')
       .sort({ timestamp: -1 })
       .limit(Number(limit))
       .lean();
