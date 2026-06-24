@@ -9,10 +9,15 @@ import path from 'path';
 
 export const createCompanyConfig = (id: string): CompanyConfig => {
   // 1. Check for dynamic config file
-  const STORAGE_DIR = path.join(__dirname, 'data');
-  const dynamicPath = path.join(STORAGE_DIR, `${id}.json`);
+  const STORAGE_DIR = path.resolve(__dirname, 'data');
+  const dynamicPath = path.resolve(STORAGE_DIR, `${id}.json`);
 
-  if (fs.existsSync(dynamicPath)) {
+  // SECURITY FIX: Prevent path traversal by ensuring the resolved path is inside the STORAGE_DIR
+  const inside =
+    dynamicPath === STORAGE_DIR ||
+    dynamicPath.startsWith(STORAGE_DIR + path.sep);
+
+  if (inside && fs.existsSync(dynamicPath)) {
     try {
       const content = fs.readFileSync(dynamicPath, 'utf8');
       const config = JSON.parse(content) as CompanyConfig;
