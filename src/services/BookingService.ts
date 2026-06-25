@@ -327,7 +327,10 @@ async function finalizeBooking(
 
     const conflict = sameDay.some((b: any) => {
       if (typeof b.time === 'string' && /^\d{1,2}:\d{2}/.test(b.time)) {
-        return b.time === targetTimeStr || parseInt(b.time.split(':')[0], 10) === targetHour;
+        return (
+          b.time === targetTimeStr ||
+          parseInt(b.time.split(':')[0], 10) === targetHour
+        );
       }
       return b.date ? new Date(b.date).getHours() === targetHour : false;
     });
@@ -428,7 +431,9 @@ async function finalizeBooking(
           sessionId,
           source: 'whatsapp',
         })
-        .catch((err) => console.error('recordConversion(booking) failed:', err));
+        .catch((err) =>
+          console.error('recordConversion(booking) failed:', err),
+        );
     } catch (err) {
       console.error('Failed to save booking to DB:', err);
     }

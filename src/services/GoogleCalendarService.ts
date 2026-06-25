@@ -128,7 +128,7 @@ export async function createGoogleCalendarEvent(
   title: string,
   description: string,
   attendeeEmail?: string,
-  durationHours: number = 1,
+  durationHours = 1,
 ): Promise<string | null> {
   const auth = getAuthClient();
   if (!auth) return null;
