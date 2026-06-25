@@ -658,8 +658,25 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const tid = tenantIdOf(req);
+    // Prevent mass assignment: explicitly select allowed fields
+    const allowedFields = [
+      'name',
+      'url',
+      'events',
+      'secret',
+      'isActive',
+      'category',
+      'format',
+    ];
+    const safeData: any = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        safeData[field] = req.body[field];
+      }
+    }
+
     const webhook = new (Webhook as any)({
-      ...req.body,
+      ...safeData,
       ...(tid ? { tenantId: tid } : {}),
     });
     await webhook.save();
@@ -672,9 +689,26 @@ router.post('/', async (req, res) => {
 // Update webhook (tenant-scoped: a tenant can only update its own webhooks)
 router.put('/:id', async (req, res) => {
   try {
+    // Prevent mass assignment: explicitly select allowed fields
+    const allowedFields = [
+      'name',
+      'url',
+      'events',
+      'secret',
+      'isActive',
+      'category',
+      'format',
+    ];
+    const updateData: any = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updateData[field] = req.body[field];
+      }
+    }
+
     const webhook = await (Webhook as any).findOneAndUpdate(
       withTenantScope(req, { _id: req.params.id }),
-      req.body,
+      updateData,
       { new: true },
     );
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
