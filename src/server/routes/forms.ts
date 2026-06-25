@@ -205,10 +205,9 @@ router.post(
       // Scope the clear-defaults to THIS tenant only, otherwise setting a
       // default for one tenant would clear every other tenant's default too.
       const tid = tenantIdOf(req);
-      await FormTemplate.updateMany(
-        tid ? { tenantId: tid } : {},
-        { isDefault: false },
-      );
+      await FormTemplate.updateMany(tid ? { tenantId: tid } : {}, {
+        isDefault: false,
+      });
       const template = await FormTemplate.findByIdAndUpdate(
         req.params.id,
         { isDefault: true, updatedAt: new Date() },
@@ -432,9 +431,7 @@ router.post('/submissions', standardRateLimit, async (req, res) => {
       whatsappJid,
       data,
       status: 'new',
-      ...((tpl as any)?.tenantId
-        ? { tenantId: (tpl as any).tenantId }
-        : {}),
+      ...((tpl as any)?.tenantId ? { tenantId: (tpl as any).tenantId } : {}),
     });
 
     await submission.save();

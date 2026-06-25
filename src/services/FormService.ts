@@ -535,9 +535,7 @@ export class FormService {
         whatsappJid: rawJid,
         data,
         status: 'new',
-        ...((tpl as any)?.tenantId
-          ? { tenantId: (tpl as any).tenantId }
-          : {}),
+        ...((tpl as any)?.tenantId ? { tenantId: (tpl as any).tenantId } : {}),
       });
 
       await submission.save();

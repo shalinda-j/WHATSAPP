@@ -87,11 +87,7 @@ async function tick(tenantId: string): Promise<{
     // a manual backfill. Single-tenant deployments resolve to the default
     // tenant so there is no cross-tenant concern here.)
     const dormantLeads = await Lead.find({
-      $or: [
-        { tenantId },
-        { tenantId: { $exists: false } },
-        { tenantId: null },
-      ],
+      $or: [{ tenantId }, { tenantId: { $exists: false } }, { tenantId: null }],
       status: { $in: ['new', 'reviewed', 'contacted'] },
       updatedAt: { $lt: threshold },
     })

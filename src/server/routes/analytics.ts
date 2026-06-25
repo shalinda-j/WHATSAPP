@@ -10,6 +10,30 @@ const router = Router();
 router.use(authenticateToken);
 router.use(resolveTenant);
 
+// ⚡ Bolt: Precompile regexes for /questions categorization to avoid O(M*N) CPU bottleneck
+// and unnecessary garbage collection overhead during the request loop. We intentionally
+// avoid word boundaries to preserve the original substring matching logic.
+const QUESTION_KEYWORDS = {
+  jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
+  register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
+  payment: ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
+  booking: ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
+  location: ['address', 'location', 'where', 'branch', 'office', 'map'],
+  services: ['service', 'what do you do', 'help', 'information', 'details'],
+  hello: ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
+  language: ['sinhala', 'english', 'tamil', 'translate'],
+};
+
+const COMPILED_KEYWORDS = Object.entries(QUESTION_KEYWORDS).map(
+  ([category, words]) => ({
+    category,
+    regex: new RegExp(
+      words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
+      'i',
+    ),
+  }),
+);
+
 router.get('/', async (req, res) => {
   try {
     // Determine counts for VoiceAgentHub stats
@@ -117,29 +141,22 @@ router.get('/questions', async (req, res) => {
   try {
     const { limit = 20 } = req.query;
 
+    // ⚡ Bolt: Use .lean() with .select() to minimize memory footprint
+    // Only 'content' is used, avoiding hydration of unnecessary Mongoose document fields
     const userMessages = await ChatMessage.find(
       withTenantScope(req, { role: 'user' }),
     )
+      .select('content -_id')
       .sort({ timestamp: -1 })
       .limit(Number(limit))
       .lean();
 
     const questionCounts: Record<string, number> = {};
-    const keywordsMap: Record<string, string[]> = {
-      jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
-      register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
-      payment: ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
-      booking: ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
-      location: ['address', 'location', 'where', 'branch', 'office', 'map'],
-      services: ['service', 'what do you do', 'help', 'information', 'details'],
-      hello: ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
-      language: ['sinhala', 'english', 'tamil', 'translate'],
-    };
 
     for (const msg of userMessages) {
-      const content = msg.content.toLowerCase();
-      for (const [category, keywords] of Object.entries(keywordsMap)) {
-        if (keywords.some((k) => content.includes(k))) {
+      const content = msg.content;
+      for (const { category, regex } of COMPILED_KEYWORDS) {
+        if (regex.test(content)) {
           questionCounts[category] = (questionCounts[category] || 0) + 1;
           break;
         }
