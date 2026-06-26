@@ -14,6 +14,7 @@ import {
   RefreshCw,
   MapPin,
   Video,
+  Download,
 } from 'lucide-react';
 
 interface Booking {
@@ -105,6 +106,34 @@ export default function Calendar() {
       setMessage({ type: 'error', text: detail });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Tenant-scoped CSV export of bookings for the month the calendar is
+  // currently showing. Mirrors the CRM "Export CSV" blob → click → revoke
+  // mechanism; the axios `api` instance injects the Bearer token from
+  // localStorage so auth matches the rest of the admin panel.
+  const handleDownloadCsv = async () => {
+    try {
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth() + 1; // 1-12 per the export contract
+      const res = await api.get(
+        `/api/export/bookings.csv?year=${year}&month=${month}`,
+        { responseType: 'blob' },
+      );
+      const url = window.URL.createObjectURL(
+        new Blob([res.data], { type: 'text/csv;charset=utf-8;' }),
+      );
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `bookings-${year}-${String(month).padStart(2, '0')}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setMessage({ type: 'success', text: 'Bookings CSV downloaded' });
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to export bookings CSV' });
     }
   };
 
@@ -249,6 +278,14 @@ export default function Calendar() {
             className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            onClick={handleDownloadCsv}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 font-medium text-sm shadow-sm"
+            title="Download this month's bookings as CSV"
+          >
+            <Download className="h-4 w-4" />
+            Download CSV
           </button>
           <button
             onClick={() => setShowNewBooking(true)}

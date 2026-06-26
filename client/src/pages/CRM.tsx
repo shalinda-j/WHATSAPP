@@ -335,8 +335,9 @@ export default function CRM() {
 
   // Contacts state
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [, setContactsTotal] = useState(0);
-  const [contactsPage] = useState(1);
+  const [contactsTotal, setContactsTotal] = useState(0);
+  const [contactsPage, setContactsPage] = useState(1);
+  const [contactsTotalPages, setContactsTotalPages] = useState(1);
   const [contactSearch, setContactSearch] = useState('');
   const debouncedContactSearch = useDebounce(contactSearch, 300);
   const [contactTypeFilter] = useState('');
@@ -507,6 +508,7 @@ export default function CRM() {
       const res = await api.get(`/api/crm/contacts?${params}`);
       setContacts(res.data.contacts);
       setContactsTotal(res.data.total);
+      setContactsTotalPages(res.data.totalPages);
     } catch (err) {
       console.error('Failed to fetch contacts', err);
     } finally {
@@ -1318,7 +1320,10 @@ export default function CRM() {
               type="text"
               placeholder="Search contacts..."
               value={contactSearch}
-              onChange={(e) => setContactSearch(e.target.value)}
+              onChange={(e) => {
+                setContactSearch(e.target.value);
+                setContactsPage(1);
+              }}
               className="pl-12 pr-4 py-3 w-full md:w-80 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
@@ -1484,6 +1489,33 @@ export default function CRM() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {contactsTotalPages > 1 && (
+          <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-t">
+            <p className="text-sm text-gray-500">
+              Page {contactsPage} of {contactsTotalPages} ({contactsTotal} total)
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setContactsPage((p) => Math.max(1, p - 1))}
+                disabled={contactsPage === 1}
+                className="p-2 bg-white rounded-lg border disabled:opacity-30 hover:border-indigo-500"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() =>
+                  setContactsPage((p) => Math.min(contactsTotalPages, p + 1))
+                }
+                disabled={contactsPage === contactsTotalPages}
+                className="p-2 bg-white rounded-lg border disabled:opacity-30 hover:border-indigo-500"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

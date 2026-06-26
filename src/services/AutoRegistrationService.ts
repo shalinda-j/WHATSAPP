@@ -33,6 +33,16 @@ export class AutoRegistrationService {
     // Already checked this session (in-memory cache)
     if (this.registeredNumbers.has(userId)) return false;
 
+    // If the DB connection is not ready, skip WITHOUT marking this userId as
+    // done so it is retried once Mongo reconnects (otherwise a transient
+    // disconnect would permanently drop the contact for this process).
+    if (mongoose.connection.readyState !== 1) {
+      console.warn(
+        '⚠️ Auto-registration skipped: MongoDB not connected (will retry on next message)',
+      );
+      return false;
+    }
+
     try {
       const Contact = getContact();
       if (!Contact) {
@@ -117,10 +127,21 @@ export class AutoRegistrationService {
       );
       return isFirstMessage; // Return true only for truly new users (to send welcome msg)
     } catch (err: any) {
-      if (!err?.message?.includes('duplicate') && err?.code !== 11000) {
-        console.error('⚠️ Auto-registration error:', err?.message || err);
+      // A duplicate-key error means the contact was already saved (e.g. a race
+      // with another inbound message, or it exists across a restart). That is a
+      // success for our purposes, so mark it done and skip retrying.
+      const isDuplicate =
+        err?.code === 11000 ||
+        Boolean(err?.message?.toLowerCase?.().includes('duplicate'));
+      if (isDuplicate) {
+        this.registeredNumbers.add(userId);
+        return false;
       }
-      this.registeredNumbers.add(userId);
+
+      // Any other (transient/real) error: do NOT mark this userId as done, so
+      // the next inbound message retries the save. Still swallow the error here
+      // (this is a fire-and-forget call) and log it for visibility.
+      console.error('⚠️ Auto-registration error:', err?.message || err);
       return false;
     }
   }

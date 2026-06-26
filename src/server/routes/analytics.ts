@@ -358,9 +358,13 @@ router.get('/bookings', async (req, res) => {
 
     // Tenant scope: only this tenant's bookings (plus legacy rows with no
     // tenantId, so single-tenant / pre-migration data still shows up).
-    const tenantId = (req as any).tenant?._id;
+    const tenantId = req.tenant?._id;
     if (tenantId) {
-      query.$or = [{ tenantId }, { tenantId: { $exists: false } }];
+      query.$or = [
+        { tenantId },
+        { tenantId: { $exists: false } },
+        { tenantId: null },
+      ];
     }
 
     const bookings = await Booking.find(query).sort({ date: 1 }).lean();
@@ -420,7 +424,7 @@ router.post('/bookings', async (req, res) => {
       sessionId,
       location,
       status: 'confirmed',
-      tenantId: (req as any).tenant?._id,
+      tenantId: req.tenant?._id,
     });
 
     res.status(201).json(booking);
@@ -432,7 +436,7 @@ router.post('/bookings', async (req, res) => {
 router.patch('/bookings/:id', async (req, res) => {
   try {
     const { status, notes, type, time, location } = req.body;
-    const tid = (req as any).tenant?._id;
+    const tid = req.tenant?._id;
     const scope: Record<string, any> = tid
       ? {
           _id: req.params.id,
@@ -466,7 +470,7 @@ router.patch('/bookings/:id', async (req, res) => {
 
 router.delete('/bookings/:id', async (req, res) => {
   try {
-    const tid = (req as any).tenant?._id;
+    const tid = req.tenant?._id;
     const scope: Record<string, any> = tid
       ? {
           _id: req.params.id,

@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Lead from '../../models/Lead';
 import { Contact } from '../../models/CRM';
 import CampaignExecution from '../../models/CampaignExecution';
+import Booking from '../../models/Booking';
 import ChatMessage from '../../models/ChatMessage';
 import { toCsv, csvDownloadHeaders } from '../utils/csv';
 import { extractRealPhone, isLidJid } from '../../utils/jid';
@@ -798,6 +799,177 @@ router.get('/phones.csv', async (req: Request, res: Response) => {
     res.set(csvDownloadHeaders(filename)).send(csv);
   } catch (err: any) {
     console.error('export phones.csv failed:', err);
+    res.status(500).json({ error: err?.message ?? 'export_failed' });
+  }
+});
+
+/**
+ * GET /api/export/followups.csv
+ *
+ * Every Contact with a scheduled follow-up (nextFollowUp set), tenant-scoped
+ * the same way /contacts.csv is, sorted by the soonest follow-up first so the
+ * operator works the sheet top-to-bottom. Optional ?status=<contact status>
+ * narrows to a single CRM status.
+ *
+ * Columns: Name, Phone, Status, Priority, Next Follow-up, Last Contact, Notes
+ * Phone reuses the same real-number resolution as /contacts.csv (metadata
+ * realPhone + LID→phone mapping) so LID contacts still export a dialable
+ * number.
+ */
+router.get('/followups.csv', async (req: Request, res: Response) => {
+  try {
+    const tenant = (req as any).tenant;
+    const filter: Record<string, unknown> = {
+      nextFollowUp: { $exists: true, $ne: null },
+    };
+    if (tenant?._id) {
+      filter.$or = [
+        { tenantId: new mongoose.Types.ObjectId(String(tenant._id)) },
+        { tenantId: { $exists: false } },
+      ];
+    }
+    if (req.query.status) filter.status = String(req.query.status);
+
+    const rows = (await (Contact as any)
+      .find(filter)
+      .sort({ nextFollowUp: 1 })
+      .limit(MAX_EXPORT_ROWS)
+      .lean()) as any[];
+
+    // Resolve real phones the same way /contacts.csv does so LID contacts
+    // still export a dialable number.
+    const identifierSet = new Set<string>();
+    for (const row of rows) {
+      for (const id of contactIdentifierCandidates(row)) identifierSet.add(id);
+    }
+    const identifiers = Array.from(identifierSet);
+    const realPhoneByIdentifier = new Map<string, string>();
+    const sessionId =
+      typeof req.query.sessionId === 'string' && req.query.sessionId !== 'all'
+        ? req.query.sessionId
+        : undefined;
+    if (identifiers.length > 0) {
+      const resolved = (await ChatMessage.aggregate([
+        {
+          $match: withTenantScope(req, {
+            userId: { $in: identifiers },
+            'metadata.realPhone': { $exists: true, $ne: '' },
+          }),
+        },
+        { $sort: { timestamp: -1 } },
+        {
+          $group: {
+            _id: '$userId',
+            realPhone: { $first: '$metadata.realPhone' },
+          },
+        },
+      ])) as Array<{ _id: string; realPhone: string }>;
+      for (const row of resolved) {
+        if (row.realPhone) realPhoneByIdentifier.set(row._id, row.realPhone);
+      }
+
+      const mappedPhones = await loadPhoneMapForLids(identifiers, sessionId);
+      for (const [lid, phone] of mappedPhones) {
+        realPhoneByIdentifier.set(lid, phone);
+      }
+    }
+
+    const flat = rows.map((r: any) => ({
+      Name: r.name ?? '',
+      Phone:
+        resolveContactExportPhone(r, realPhoneByIdentifier) ||
+        r.phone ||
+        r.whatsappNumber ||
+        '',
+      Status: r.status ?? '',
+      Priority: r.priority ?? '',
+      'Next Follow-up': r.nextFollowUp ?? '',
+      'Last Contact': r.lastContact ?? '',
+      Notes: r.notes ?? '',
+    }));
+
+    const csv = toCsv(flat, [
+      'Name',
+      'Phone',
+      'Status',
+      'Priority',
+      'Next Follow-up',
+      'Last Contact',
+      'Notes',
+    ]);
+    res.set(csvDownloadHeaders('followups.csv')).send(csv);
+  } catch (err: any) {
+    console.error('export followups.csv failed:', err);
+    res.status(500).json({ error: err?.message ?? 'export_failed' });
+  }
+});
+
+/**
+ * GET /api/export/bookings.csv
+ *
+ * Every Booking, tenant-scoped like the other exports. Optional
+ * ?year=YYYY&month=MM (month 1-12) restricts to bookings whose date falls in
+ * that calendar month (UTC). Sorted by date ascending.
+ *
+ * Columns: Name, Phone, Date, Time, Type, Status, Notes
+ */
+router.get('/bookings.csv', async (req: Request, res: Response) => {
+  try {
+    const tenant = (req as any).tenant;
+    const filter: Record<string, unknown> = {};
+    if (tenant?._id) {
+      filter.$or = [
+        { tenantId: new mongoose.Types.ObjectId(String(tenant._id)) },
+        { tenantId: { $exists: false } },
+      ];
+    }
+
+    const year = Number(req.query.year);
+    const month = Number(req.query.month);
+    if (
+      Number.isInteger(year) &&
+      Number.isInteger(month) &&
+      month >= 1 &&
+      month <= 12
+    ) {
+      filter.date = {
+        $gte: new Date(Date.UTC(year, month - 1, 1)),
+        $lt: new Date(Date.UTC(year, month, 1)),
+      };
+    }
+
+    const rows = (await Booking.find(filter)
+      .sort({ date: 1 })
+      .limit(MAX_EXPORT_ROWS)
+      .lean()) as any[];
+
+    const flat = rows.map((r: any) => ({
+      Name: r.clientName ?? '',
+      Phone: r.clientPhone ?? '',
+      Date:
+        r.date instanceof Date
+          ? r.date.toISOString().slice(0, 10)
+          : r.date
+            ? new Date(r.date).toISOString().slice(0, 10)
+            : '',
+      Time: r.time ?? '',
+      Type: r.type ?? '',
+      Status: r.status ?? '',
+      Notes: r.notes ?? '',
+    }));
+
+    const csv = toCsv(flat, [
+      'Name',
+      'Phone',
+      'Date',
+      'Time',
+      'Type',
+      'Status',
+      'Notes',
+    ]);
+    res.set(csvDownloadHeaders('bookings.csv')).send(csv);
+  } catch (err: any) {
+    console.error('export bookings.csv failed:', err);
     res.status(500).json({ error: err?.message ?? 'export_failed' });
   }
 });

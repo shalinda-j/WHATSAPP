@@ -16,6 +16,8 @@ import {
   ChevronDown,
   Star,
   Archive,
+  Download,
+  Info,
 } from 'lucide-react';
 
 interface FollowUpContact {
@@ -130,6 +132,40 @@ export default function FollowUp() {
       setMessage({ type: 'error', text: detail });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Tenant-scoped CSV export hitting GET /api/export/followups.csv. Mirrors
+  // the CRM "Export CSV" handler (api blob -> temporary <a> -> revoke); the
+  // shared `api` instance attaches the Bearer token from localStorage and
+  // applies the same 401/403 handling every other request on this page uses.
+  const handleExportCSV = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (statusFilter && statusFilter !== 'all') {
+        params.append('status', statusFilter);
+      }
+      const qs = params.toString();
+      const res = await api.get(
+        `/api/export/followups.csv${qs ? `?${qs}` : ''}`,
+        { responseType: 'blob' },
+      );
+      const url = window.URL.createObjectURL(
+        new Blob([res.data], { type: 'text/csv;charset=utf-8;' }),
+      );
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'followups.csv');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setMessage({ type: 'success', text: 'Export downloaded' });
+    } catch (err: unknown) {
+      const detail =
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error || 'Failed to export CSV';
+      setMessage({ type: 'error', text: detail });
     }
   };
 
@@ -344,6 +380,14 @@ export default function FollowUp() {
             className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 font-medium text-sm shadow-sm"
+            title="Download follow-ups as CSV"
+          >
+            <Download className="h-4 w-4" />
+            Export CSV
           </button>
           <button
             onClick={() => setShowAdd(true)}
@@ -631,6 +675,15 @@ export default function FollowUp() {
                   <p className="text-xs font-medium text-gray-700 mb-2">
                     Schedule Follow-up
                   </p>
+                  <div className="flex items-start gap-2 mb-2 p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
+                    <Info className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                    <p className="text-[11px] leading-snug">
+                      Scheduled dates are saved here. Automatic follow-up
+                      messages only send when the Follow-up agent is enabled
+                      (Agents &rarr; Follow-up &rarr; Autonomous or Approval).
+                      The manual &ldquo;Send WhatsApp&rdquo; button always works.
+                    </p>
+                  </div>
                   <input
                     type="date"
                     value={followUpDate}
