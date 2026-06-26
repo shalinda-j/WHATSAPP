@@ -14,7 +14,12 @@ const router = express.Router();
 router.get('/user/:userId', async (req: Request, res: Response) => {
   try {
     const slaMs = Number(req.query.slaMs) || DEFAULT_SLA_MS;
-    const snap = await computeUserSla(String(req.params.userId), slaMs);
+    const tenantId = req.tenant?._id ? String(req.tenant._id) : undefined;
+    const snap = await computeUserSla(
+      String(req.params.userId),
+      slaMs,
+      tenantId,
+    );
     res.json({ success: true, snapshot: snap, slaMs });
   } catch (err: any) {
     console.error('sla user route failed:', err);
@@ -34,7 +39,8 @@ router.post('/bulk', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'too_many_ids', limit: 200 });
     }
     const slaMs = Number(req.body?.slaMs) || DEFAULT_SLA_MS;
-    const map = await computeBulkSla(ids.map(String), slaMs);
+    const tenantId = req.tenant?._id ? String(req.tenant._id) : undefined;
+    const map = await computeBulkSla(ids.map(String), slaMs, tenantId);
     res.json({
       success: true,
       slaMs,

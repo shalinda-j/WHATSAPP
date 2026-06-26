@@ -15,6 +15,27 @@ export interface AuthRequest extends Request {
   user?: JwtPayload;
 }
 
+/**
+ * Canonical super-admin role + a tolerant matcher.
+ *
+ * Historically the super-admin identity was written one way and read two
+ * others: the bootstrap admin was created as 'superadmin', the tenant-route
+ * gate checked 'super-admin', and the tenant resolver checked 'super_admin'.
+ * None matched, so the super-admin was locked out of /api/tenants with a 403.
+ * New admins are created with SUPER_ADMIN_ROLE; isSuperAdminRole() accepts
+ * every legacy spelling so admins already stored in the database keep working
+ * without a migration.
+ */
+export const SUPER_ADMIN_ROLE = 'super_admin';
+const SUPER_ADMIN_ALIASES = new Set([
+  'super_admin',
+  'super-admin',
+  'superadmin',
+]);
+export function isSuperAdminRole(role?: string | null): boolean {
+  return typeof role === 'string' && SUPER_ADMIN_ALIASES.has(role);
+}
+
 export const authenticateToken = (
   req: AuthRequest,
   res: Response,

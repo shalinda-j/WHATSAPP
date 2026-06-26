@@ -2,7 +2,13 @@ import { Router } from 'express';
 import multer from 'multer';
 import { bulkSenderService } from '../../services/BulkSenderService';
 import { authenticateToken } from '../middleware/auth';
+import { resolveTenant } from '../middleware/tenantContext';
 import { strictRateLimit } from '../middleware/rateLimit';
+import { isPhoneOptedOut } from '../../services/optOut';
+import {
+  isQuietHoursActive,
+  tenantQuietHours,
+} from '../../services/quietHours';
 
 const router = Router();
 const upload = multer({
@@ -12,6 +18,8 @@ const upload = multer({
 
 // All bulk routes require authentication
 router.use(authenticateToken);
+// Resolve the active tenant so /send can honour tenant-wide quiet hours.
+router.use(resolveTenant);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/bulk/send
@@ -69,16 +77,59 @@ router.post(
         total: recipientList.length,
         success: 0,
         failed: 0,
+        skipped: 0,
         errors: [] as { number: string; error: string }[],
       };
       const delayMs = (Number(delay) || 5) * 1000;
       const sid = sessionId || 'default';
+
+      // Compliance gate: tenant-wide quiet hours block the ENTIRE batch,
+      // mirroring CampaignService.tickSender which returns { sent: 0 } while
+      // the tenant's quiet-hours window is active. Refuse up-front rather than
+      // messaging recipients during their muted window. req.tenant is resolved
+      // by the resolveTenant middleware registered above.
+      if (isQuietHoursActive(tenantQuietHours(req.tenant))) {
+        write({
+          type: 'done',
+          total: result.total,
+          success: 0,
+          failed: 0,
+          skipped: result.total,
+          errors: [],
+          quietHours: true,
+          message:
+            'Quiet hours are active for this tenant — bulk send was blocked.',
+        });
+        return res.end();
+      }
 
       for (let i = 0; i < recipientList.length; i++) {
         const number = recipientList[i];
         const jid = number.includes('@') ? number : `${number}@s.whatsapp.net`;
 
         try {
+          // Compliance gate: never deliver to a contact who replied
+          // STOP/UNSUBSCRIBE. isPhoneOptedOut normalises to bare digits, so the
+          // raw recipient (digits or JID) resolves to the same identity that
+          // CampaignService.tickSender checks before each send. A skipped
+          // recipient does NOT consume the inter-send delay because we
+          // `continue` before the setTimeout at the bottom of the loop — no
+          // message left the socket. Running this inside the existing try means
+          // a transient lookup error is counted as a per-recipient failure
+          // rather than aborting the whole batch.
+          if (await isPhoneOptedOut(number)) {
+            result.skipped++;
+            write({
+              type: 'progress',
+              current: i + 1,
+              total: result.total,
+              number,
+              status: 'skipped',
+              reason: 'opted_out',
+            });
+            continue;
+          }
+
           if (req.file) {
             let type: 'image' | 'document' | 'audio' | 'video' = 'document';
             if (req.file.mimetype.startsWith('image/')) type = 'image';

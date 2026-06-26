@@ -23,15 +23,19 @@ interface ProgressLine {
   current: number;
   total: number;
   number: string;
-  status: 'ok' | 'error';
+  status: 'ok' | 'error' | 'skipped';
   error?: string;
+  reason?: string;
 }
 interface DoneLine {
   type: 'done';
   total: number;
   success: number;
   failed: number;
+  skipped?: number;
   errors: { number: string; error: string }[];
+  quietHours?: boolean;
+  message?: string;
 }
 type StreamLine = ProgressLine | DoneLine | { type: 'error'; error: string };
 
@@ -292,12 +296,25 @@ const BulkSender = () => {
             } else if (parsed.type === 'done') {
               setDone(parsed);
               setProgress(null);
-              setStatusMsg({
-                type: parsed.failed === 0 ? 'success' : 'info',
-                msg: `Completed! ✅ ${parsed.success} sent${
-                  parsed.failed > 0 ? `, ❌ ${parsed.failed} failed` : ''
-                }`,
-              });
+              if (parsed.quietHours) {
+                setStatusMsg({
+                  type: 'info',
+                  msg:
+                    parsed.message ||
+                    'Quiet hours are active for this tenant — bulk send was blocked.',
+                });
+              } else {
+                setStatusMsg({
+                  type: parsed.failed === 0 ? 'success' : 'info',
+                  msg: `Completed! ✅ ${parsed.success} sent${
+                    parsed.failed > 0 ? `, ❌ ${parsed.failed} failed` : ''
+                  }${
+                    parsed.skipped
+                      ? `, ⏭️ ${parsed.skipped} skipped (opted-out)`
+                      : ''
+                  }`,
+                });
+              }
             } else if (parsed.type === 'error') {
               setStatusMsg({ type: 'error', msg: parsed.error });
             }
@@ -758,11 +775,17 @@ const BulkSender = () => {
                   <div
                     key={i}
                     className={`flex items-start gap-2 px-3 py-1.5 rounded-lg ${
-                      line.status === 'ok' ? 'bg-green-50' : 'bg-red-50'
+                      line.status === 'ok'
+                        ? 'bg-green-50'
+                        : line.status === 'skipped'
+                          ? 'bg-amber-50'
+                          : 'bg-red-50'
                     }`}
                   >
                     {line.status === 'ok' ? (
                       <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0 mt-0.5" />
+                    ) : line.status === 'skipped' ? (
+                      <Info className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
                     ) : (
                       <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0 mt-0.5" />
                     )}
@@ -771,11 +794,16 @@ const BulkSender = () => {
                     </span>
                     <span
                       className={
-                        line.status === 'ok' ? 'text-green-700' : 'text-red-700'
+                        line.status === 'ok'
+                          ? 'text-green-700'
+                          : line.status === 'skipped'
+                            ? 'text-amber-700'
+                            : 'text-red-700'
                       }
                     >
                       {line.number}
                       {line.status === 'error' && ` — ${line.error}`}
+                      {line.status === 'skipped' && ' — skipped (opted-out)'}
                     </span>
                   </div>
                 ))}

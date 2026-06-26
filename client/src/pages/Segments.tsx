@@ -19,17 +19,22 @@ interface SegmentRow {
   createdAt: string;
 }
 
-// Fields the rule builder + AI translator are allowed to target. Kept in sync
-// with the backend allowlist so the UI never offers a field the server drops.
+// Fields the manual rule builder can target. Every entry MUST be scope-prefixed
+// with `lead.` or `contact.` AND resolve to a real field on that collection:
+// SegmentRuleCompiler.stripScopePrefix silently drops any field without a
+// recognised scope prefix, and Mongo matches nothing for a field that doesn't
+// exist on the schema. The four previously-unprefixed entries (tags,
+// lifecycleStage, lastContactedAt, createdAt) were being dropped by the
+// compiler, producing empty / over-broad segments.
 const RULE_FIELDS = [
   'lead.status',
   'lead.interestedCountry',
   'lead.jobVacancyType',
   'lead.experienceYears',
-  'tags',
-  'lifecycleStage',
-  'lastContactedAt',
-  'createdAt',
+  'contact.tags',
+  'contact.status',
+  'contact.lastContactedAt',
+  'contact.createdAt',
 ];
 
 const OPERATORS = [

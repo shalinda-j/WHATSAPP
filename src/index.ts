@@ -303,12 +303,18 @@ async function startServer() {
       // so any same-boot migration is already done.
       await backfillRealPhoneOnExistingMessages();
 
-      // CRITICAL: Clean up any old/stuck sessions on startup
-      // This prevents old sessions from triggering forms unexpectedly
+      // Clean up ONLY expired sessions on startup. In-progress booking/lead/
+      // form flows (expiresAt still in the future) MUST survive a restart —
+      // wiping them defeats the whole point of SessionStateService persistence.
+      // The TTL index on expiresAt (expireAfterSeconds: 0) handles ongoing
+      // staleness automatically; this just clears anything already past TTL so
+      // a stale row can't briefly resurface before Mongo's TTL sweep runs.
       const SessionState = (await import('./models/SessionState')).default;
-      const result = await SessionState.deleteMany({});
+      const result = await SessionState.deleteMany({
+        expiresAt: { $lt: new Date() },
+      });
       console.log(
-        `🧹 Cleaned up ${result.deletedCount} old sessions on startup`,
+        `🧹 Cleaned up ${result.deletedCount} expired sessions on startup`,
       );
 
       // Start monthly usage reset scheduler
@@ -417,11 +423,33 @@ async function startServer() {
         console.error('Multi-tenant channel autostart failed:', e);
       }
 
-      // Boot the periodic campaign sender. Idempotent — only one timer
-      // per process, automatically unref'd so it never blocks shutdown.
+      // Boot the periodic campaign sender for EVERY active tenant — not just
+      // the default. Without this, non-default tenants' CampaignExecution rows
+      // stay 'queued' forever because tickSender is never scheduled for them.
+      // startCampaignSender is idempotent per tenantId (it no-ops when a timer
+      // already exists), so starting the default here AND again in the loop
+      // below cannot double-start. One try/catch per tenant so one tenant's
+      // failure can't block the rest. Mirrors the channelRouter.startAll loop.
       const { startCampaignSender } =
         await import('./services/CampaignService');
       startCampaignSender(String(defaultTenant._id));
+      try {
+        const Tenant = (await import('./models/Tenant')).default;
+        const activeTenants = await Tenant.find({ status: 'active' })
+          .select('_id')
+          .lean();
+        for (const t of activeTenants) {
+          const tid = String((t as any)._id);
+          if (!tid || tid === String(defaultTenant._id)) continue;
+          try {
+            startCampaignSender(tid);
+          } catch (e) {
+            console.error(`startCampaignSender failed for tenant ${tid}:`, e);
+          }
+        }
+      } catch (e) {
+        console.error('Multi-tenant campaign sender autostart failed:', e);
+      }
 
       // Boot the follow-up scheduler so FollowUpAgent fires on cron
       // against dormant leads (>= 5 days since last update).
@@ -835,7 +863,13 @@ onMessage(async (message, sock, sessionId) => {
       }
     }
     autoRegistrationService
-      .checkAndRegister(jid, pushName, sessionId, inboundRealPhone)
+      .checkAndRegister(
+        jid,
+        pushName,
+        sessionId,
+        inboundRealPhone,
+        defaultTenantId || undefined,
+      )
       .catch((err) => {
         console.error('   ⚠️ Auto-registration check error:', err);
       });

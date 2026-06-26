@@ -4,7 +4,11 @@ import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import { z } from 'zod';
 import Admin from '../../models/Admin';
-import { authenticateToken, AuthRequest } from '../middleware/auth';
+import {
+  authenticateToken,
+  AuthRequest,
+  SUPER_ADMIN_ROLE,
+} from '../middleware/auth';
 import { strictRateLimit } from '../middleware/rateLimit';
 import { ACTUAL_JWT_SECRET } from '../jwt-secret';
 
@@ -87,7 +91,7 @@ router.post('/setup', strictRateLimit, async (req, res) => {
     const newAdmin = new Admin({
       username,
       passwordHash: hashedPassword,
-      role: 'superadmin',
+      role: SUPER_ADMIN_ROLE,
     });
 
     await newAdmin.save();

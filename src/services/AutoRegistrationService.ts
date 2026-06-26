@@ -28,6 +28,7 @@ export class AutoRegistrationService {
     pushName?: string,
     sessionId?: string,
     realPhone?: string,
+    tenantId?: string,
   ): Promise<boolean> {
     // Already checked this session (in-memory cache)
     if (this.registeredNumbers.has(userId)) return false;
@@ -95,6 +96,13 @@ export class AutoRegistrationService {
         createdAt: new Date(),
         updatedAt: new Date(),
       };
+      // Stamp the owning tenant so soft ($or null/missing) tenant scoping in the
+      // CRM list endpoints does NOT leak this contact to every tenant. Only set
+      // when a tenant id was resolved (Mongoose casts the string to ObjectId);
+      // when absent the doc still falls back to the legacy unscoped behaviour.
+      if (tenantId) {
+        contactData.tenantId = tenantId;
+      }
       if (phone) {
         contactData.phone = `+${phone}`;
         contactData.whatsappNumber = phone;

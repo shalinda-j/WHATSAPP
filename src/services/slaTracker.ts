@@ -1,4 +1,31 @@
+import mongoose from 'mongoose';
 import ChatMessage from '../models/ChatMessage';
+
+/**
+ * Build a query clause that scopes ChatMessage reads to a single tenant
+ * while still surfacing legacy rows written before the tenantId field
+ * existed (tenantId missing/null). Returns `{}` when no tenantId is
+ * supplied so admin/migration callers keep their global view. Mirrors the
+ * withTenantScope / buildTenantFilter pattern used elsewhere in the app.
+ *
+ * ChatMessage.tenantId is an ObjectId, so we coerce the incoming string to
+ * an ObjectId — required for aggregation $match, which (unlike find) does
+ * not auto-cast.
+ */
+function tenantScope(tenantId?: string): Record<string, unknown> {
+  if (!tenantId) return {};
+  let scoped: mongoose.Types.ObjectId | string = tenantId;
+  if (mongoose.Types.ObjectId.isValid(tenantId)) {
+    scoped = new mongoose.Types.ObjectId(tenantId);
+  }
+  return {
+    $or: [
+      { tenantId: scoped },
+      { tenantId: { $exists: false } },
+      { tenantId: null },
+    ],
+  };
+}
 
 /**
  * Default SLA target: an inbound user message should get a reply within
@@ -26,10 +53,13 @@ export interface SlaSnapshot {
 export async function computeUserSla(
   userId: string,
   slaMs: number = DEFAULT_SLA_MS,
+  tenantId?: string,
 ): Promise<SlaSnapshot> {
+  const scope = tenantScope(tenantId);
   const lastUserMsg = await ChatMessage.findOne({
     userId,
     role: 'user',
+    ...scope,
   })
     .sort({ timestamp: -1 })
     .select({ timestamp: 1 })
@@ -48,6 +78,7 @@ export async function computeUserSla(
     userId,
     role: 'assistant',
     timestamp: { $gt: lastUserMsg.timestamp },
+    ...scope,
   })
     .sort({ timestamp: 1 })
     .select({ timestamp: 1 })
@@ -83,15 +114,18 @@ export async function computeUserSla(
 export async function computeBulkSla(
   userIds: string[],
   slaMs: number = DEFAULT_SLA_MS,
+  tenantId?: string,
 ): Promise<Map<string, SlaSnapshot>> {
   const out = new Map<string, SlaSnapshot>();
   if (userIds.length === 0) return out;
+
+  const scope = tenantScope(tenantId);
 
   // For each user, find last user message + first assistant message after it.
   // Two aggregations are simpler (and within the index) than a single
   // $lookup self-join. Both queries are bounded by userIds.length × 1 doc.
   const lastUserAgg = await ChatMessage.aggregate([
-    { $match: { userId: { $in: userIds }, role: 'user' } },
+    { $match: { userId: { $in: userIds }, role: 'user', ...scope } },
     { $sort: { timestamp: -1 } },
     {
       $group: {
@@ -123,6 +157,7 @@ export async function computeBulkSla(
       userId,
       role: 'assistant',
       timestamp: { $gt: lastUserAt },
+      ...scope,
     })
       .sort({ timestamp: 1 })
       .select({ timestamp: 1 })

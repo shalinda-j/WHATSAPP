@@ -200,7 +200,123 @@ async function tick(tenantId: string): Promise<{
       }
     }
 
-    return { scanned: dormantLeads.length, fired };
+    // ── Operator-scheduled follow-ups (Contact.nextFollowUp) ───────────
+    // The FollowUp admin UI writes Contact.nextFollowUp via
+    // PATCH /api/crm/contacts/:id. Those operator-set dates previously fired
+    // NOTHING: the dormant-lead selection above keys off Lead.updatedAt and
+    // never reads Contact.nextFollowUp. Select contacts whose follow-up is
+    // now due and run them through the SAME orchestrator + channelRouter
+    // path the dormant-lead branch uses, reusing this tick's existing guards
+    // (the follow_up agent-enabled gate and the tenant-wide quiet-hours
+    // short-circuit, both checked at the top). Keeping a single consistent
+    // gate means enabling the follow_up agent is still required before any
+    // operator reminder auto-sends — which avoids a surprise blast of every
+    // overdue reminder the moment this code ships.
+    const now = new Date();
+    const dueContacts = await Contact.find({
+      $or: [{ tenantId }, { tenantId: { $exists: false } }, { tenantId: null }],
+      // Missing field never matches $lte; $ne:null also drops any rows that
+      // explicitly stored null. Only genuinely-due dates are selected.
+      nextFollowUp: { $ne: null, $lte: now },
+      // Mirror the dormant-lead opt-out guard at the query level too.
+      optedOut: { $ne: true },
+    })
+      .sort({ nextFollowUp: 1 })
+      .limit(DEFAULT_BATCH_SIZE);
+
+    let contactsFired = 0;
+    for (const contact of dueContacts) {
+      const phone =
+        contact.phone || contact.whatsappNumber || contact.whatsappId || '';
+
+      // No phone → we can never deliver. Skip WITHOUT clearing or dispatching
+      // so we never burn an LLM call and the operator still sees it pending.
+      if (!phone) {
+        continue;
+      }
+
+      // Per-phone opt-out check (channel-agnostic STOP list), same as the
+      // dormant-lead loop. Clear the due date so an opted-out contact is not
+      // re-scanned on every subsequent tick.
+      if (await isPhoneOptedOut(phone)) {
+        await Contact.updateOne(
+          { _id: contact._id },
+          { $unset: { nextFollowUp: '' }, $set: { updatedAt: new Date() } },
+        );
+        continue;
+      }
+
+      const lastTouch =
+        (contact.lastContact as Date | undefined) ??
+        (contact.lastContactedAt as Date | undefined) ??
+        null;
+      const daysSinceLastInteraction = lastTouch
+        ? Math.floor(
+            (Date.now() - new Date(lastTouch).getTime()) /
+              (24 * 60 * 60 * 1000),
+          )
+        : 0;
+
+      try {
+        const outcome = await agentOrchestrator.handle({
+          sessionId: tenantId,
+          userId: `${phone.replace(/\D/g, '')}@s.whatsapp.net`,
+          channel: 'whatsapp',
+          language: 'si',
+          inputMessage: '', // cron-driven — no inbound text
+          conversationHistory: [],
+          metadata: {
+            kind: 'follow_up_cron',
+            // No backing Lead for an operator-scheduled reminder — the
+            // FollowUpAgent already tolerates a null lead.
+            lead: null,
+            contact: contact.toObject(),
+            contactId: String(contact._id),
+            daysSinceLastInteraction,
+            forceAgent: 'follow_up',
+          },
+        });
+
+        const sent =
+          cfg.mode === 'autonomous' && outcome.handled && !!outcome.outbound;
+        if (sent) {
+          await channelRouter.send({
+            channel: 'whatsapp',
+            tenantId,
+            recipient: `${phone.replace(/\D/g, '')}@s.whatsapp.net`,
+            text: outcome.outbound as string,
+          });
+          contactsFired++;
+        }
+
+        // Clear the operator-set date once the reminder has been processed
+        // (sent in autonomous mode, or queued for operator review in approval
+        // mode) so the same reminder cannot re-fire / re-queue on every
+        // subsequent 5-min tick. The operator schedules a fresh date for the
+        // next touch. lastContact is stamped only when we actually sent.
+        const set: Record<string, unknown> = { updatedAt: new Date() };
+        if (sent) {
+          set.lastContact = new Date();
+        }
+        await Contact.updateOne(
+          { _id: contact._id },
+          { $unset: { nextFollowUp: '' }, $set: set },
+        );
+      } catch (err) {
+        // Leave nextFollowUp intact on a dispatch failure so a transient LLM
+        // / send error retries on the next tick instead of silently dropping
+        // the operator's reminder.
+        console.error(
+          `FollowUpScheduler: contact follow-up failed for ${contact._id}:`,
+          err,
+        );
+      }
+    }
+
+    return {
+      scanned: dormantLeads.length + dueContacts.length,
+      fired: fired + contactsFired,
+    };
   } finally {
     isTicking = false;
   }

@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import Tenant, { ITenant } from '../../models/Tenant';
 import { clientIpFromRequest, isIpAllowed } from '../../services/ipAllowlist';
-import { AuthRequest } from './auth';
+import { AuthRequest, isSuperAdminRole } from './auth';
 
 declare module 'express-serve-static-core' {
   interface Request {
@@ -76,7 +76,7 @@ export async function resolveTenant(
     // the X-Tenant-Slug header (a convenience switch). Non-super-admins are
     // locked to their own tenant — the header becomes an AUTHORIZED switch,
     // never an unauthenticated selector.
-    const isSuperAdmin = !userTenantId || userRole === 'super_admin';
+    const isSuperAdmin = !userTenantId || isSuperAdminRole(userRole);
 
     let tenant: ITenant | null = null;
     if (isSuperAdmin) {

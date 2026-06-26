@@ -1,6 +1,10 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { authenticateToken, AuthRequest } from '../middleware/auth';
+import {
+  authenticateToken,
+  AuthRequest,
+  isSuperAdminRole,
+} from '../middleware/auth';
 import Tenant from '../../models/Tenant';
 
 const router = Router();
@@ -13,7 +17,7 @@ router.use(authenticateToken);
  */
 function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
   const role = req.user?.role;
-  if (role !== 'admin' && role !== 'super-admin') {
+  if (role !== 'admin' && !isSuperAdminRole(role)) {
     return res.status(403).json({ error: 'admin_role_required' });
   }
   next();
