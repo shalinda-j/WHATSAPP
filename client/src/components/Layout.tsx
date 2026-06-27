@@ -29,6 +29,7 @@ import {
   Building2,
   Wand2,
   ShieldAlert,
+  Headphones,
 } from 'lucide-react';
 
 interface NavItem {
@@ -62,6 +63,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { to: '/crm', icon: Briefcase, label: 'CRM' },
       { to: '/follow-up', icon: UserCheck, label: 'Follow-up Manager' },
+      { to: '/consulting-assistant', icon: Headphones, label: 'Consulting Assistant AI' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
     ],
   },

@@ -2,6 +2,7 @@ import FormTemplate, { FormField } from '../models/FormTemplate';
 import FormSubmission from '../models/FormSubmission';
 import sessionStateService from './SessionStateService';
 import { configurationManager } from './ConfigurationManagerService';
+import { WebhookService } from './WebhookService';
 
 interface UserFormState {
   formId: string;
@@ -517,7 +518,9 @@ export class FormService {
       // Inherit the tenant of the form template so bot submissions are
       // attributed to the correct tenant (resolved internally; signature
       // unchanged so existing callers stay intact).
-      const tpl = await FormTemplate.findById(formId).select('tenantId').lean();
+      const tpl = await FormTemplate.findById(formId)
+        .select('tenantId name')
+        .lean();
 
       // Normalize the stored phoneNumber to bare digits so submissions are
       // not polluted with the full WhatsApp JID (e.g. "9477...@s.whatsapp.net")
@@ -542,6 +545,21 @@ export class FormService {
 
       await submission.save();
       console.log(`✅ [FormService] Form submitted for ${phoneNumber}`);
+
+      // Notify any subscribed webhooks that a form was submitted.
+      // Fire-and-forget so a slow/failing webhook never blocks submission
+      // (mirrors LeadService/BookingService idiom). Never throws.
+      WebhookService.triggerWebhook('form.submitted', {
+        submissionId: String(submission._id),
+        formId: String(formId),
+        templateName: (tpl as any)?.name || '',
+        data,
+        phone: normalizedPhone,
+        tenantId: (tpl as any)?.tenantId
+          ? String((tpl as any).tenantId)
+          : undefined,
+        timestamp: new Date().toISOString(),
+      }).catch(() => {});
 
       return {
         success: true,

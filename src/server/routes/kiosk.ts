@@ -26,12 +26,25 @@ import jwt from 'jsonwebtoken';
 import { ACTUAL_JWT_SECRET } from '../jwt-secret';
 import { standardRateLimit } from '../middleware/rateLimit';
 import { kioskInviteService } from '../../services/KioskInviteService';
-import { aiLoadBalancer } from '../../services/AILoadBalancer';
+import {
+  aiLoadBalancer,
+  PROVIDER_TYPE_TO_OVERRIDE,
+} from '../../services/AILoadBalancer';
 import {
   transcribeAudioWithLanguage,
   generateSpeech,
 } from '../../services/voice';
-import { analyzeLeadIntent } from '../../services/gemini';
+import {
+  analyzeLeadIntent,
+  extractEnrollmentFields,
+  EnrollmentExtract,
+} from '../../services/gemini';
+import { FormService } from '../../services/FormService';
+import { WebhookService } from '../../services/WebhookService';
+import { CRMService } from '../../services/CRMService';
+import Config from '../../models/Config';
+import FormTemplate from '../../models/FormTemplate';
+import KioskInvite, { IKioskCollected } from '../../models/KioskInvite';
 
 const router = Router();
 
@@ -186,6 +199,159 @@ function appendSinhalaInstruction(userText: string): string {
   return `${userText}\n\n(SYSTEM: පරිශීලකයා Singlish (සිංහල + ඉංග්‍රීසි අකුරු) හෝ සිංහල භාවිතා කරයි. සිංහල භාෂාවෙන් කෙටිව, ස්වාභාවිකව ප්‍රතිඋත්තර දෙන්න. පරිශීලකයා Singlish ලිවුවොත් එම ශෛලියට ගැලපීමට Singlish භාවිතා කරන්න. ඉංග්‍රීසි පමණක් භාවිතා නොකරන්න.)`;
 }
 
+// ── Resolve the operator-configured kiosk provider override ──────────────────
+// KIOSK_AI_PROVIDER stores a DB providerType (e.g. "google"/"openai"). We map it
+// through PROVIDER_TYPE_TO_OVERRIDE to the class-name substring the load-balancer
+// reorder matches (google -> "gemini"). Returns null when unset/unknown so the
+// load balancer behaves exactly as today (normal cooldown ordering). Never
+// throws — a misconfigured/absent Config row just yields no override.
+async function resolveKioskProviderOverride(): Promise<string | null> {
+  try {
+    const cfg = await Config.findOne({ key: 'KIOSK_AI_PROVIDER' }).lean();
+    const raw = String((cfg as any)?.value ?? '')
+      .trim()
+      .toLowerCase();
+    if (!raw) return null;
+    return PROVIDER_TYPE_TO_OVERRIDE[raw] || raw || null;
+  } catch {
+    return null;
+  }
+}
+
+// ── collected-state helpers ─────────────────────────────────────────────────
+// `completed` flips true only once every REQUIRED leaf is present AND payment
+// is confirmed paid (payment.paid === true). Optional leaves (email/address/
+// level/reference) never gate completion.
+function computeCompleted(c?: IKioskCollected | null): boolean {
+  const p = c?.personal || {};
+  const co = c?.course || {};
+  const pay = c?.payment || {};
+  return !!(
+    p.fullName &&
+    p.mobile &&
+    p.nic &&
+    co.program &&
+    pay.paid === true &&
+    pay.amount &&
+    pay.method
+  );
+}
+
+// Deep-merge a partial extract onto the running collected state in JS (so we can
+// recompute `completed` from the merged result). Only non-null / non-empty
+// leaves overwrite — the extractor returns ONLY newly-mentioned fields, so a
+// missing key never clobbers a previously-captured sibling.
+function mergeCollected(
+  base: IKioskCollected | undefined | null,
+  extract: EnrollmentExtract | null,
+): IKioskCollected {
+  const out: IKioskCollected = {
+    personal: { ...(base?.personal || {}) },
+    course: { ...(base?.course || {}) },
+    payment: { ...(base?.payment || {}) },
+  };
+  if (!extract || typeof extract !== 'object') return out;
+  for (const sec of ['personal', 'course', 'payment'] as const) {
+    const obj = (extract as any)[sec];
+    if (!obj || typeof obj !== 'object') continue;
+    for (const [k, v] of Object.entries(obj)) {
+      if (v === null || v === undefined) continue;
+      if (typeof v === 'string' && v.trim() === '') continue;
+      (out as any)[sec][k] = v;
+    }
+  }
+  return out;
+}
+
+// Build dotted `$set` paths (e.g. "collected.personal.fullName") from ONLY the
+// newly-mentioned extract leaves so a partial Mongo update deep-merges without
+// disturbing untouched siblings.
+function buildCollectedDottedSet(
+  extract: EnrollmentExtract | null,
+): Record<string, any> {
+  const set: Record<string, any> = {};
+  if (!extract || typeof extract !== 'object') return set;
+  for (const sec of ['personal', 'course', 'payment'] as const) {
+    const obj = (extract as any)[sec];
+    if (!obj || typeof obj !== 'object') continue;
+    for (const [k, v] of Object.entries(obj)) {
+      if (v === null || v === undefined) continue;
+      if (typeof v === 'string' && v.trim() === '') continue;
+      set[`collected.${sec}.${k}`] = v;
+    }
+  }
+  return set;
+}
+
+// Map merged collected -> Contact update. fullName->name, mobile->phone, all
+// other captured leaves -> customFields (Map<String>) via dotted paths so we
+// merge rather than clobber existing customFields. Values stringified because
+// the Contact.customFields schema is a Map of String.
+function buildContactUpdate(c: IKioskCollected): Record<string, any> {
+  const p = c.personal || {};
+  const co = c.course || {};
+  const pay = c.payment || {};
+  const data: Record<string, any> = {};
+  if (p.fullName) data.name = p.fullName;
+  if (p.mobile) data.phone = p.mobile;
+  if (p.nic) data['customFields.nic'] = String(p.nic);
+  if (p.email) data['customFields.email'] = String(p.email);
+  if (p.address) data['customFields.address'] = String(p.address);
+  if (co.program) data['customFields.course'] = String(co.program);
+  if (co.level) data['customFields.level'] = String(co.level);
+  if (pay.paid !== undefined)
+    data['customFields.paymentPaid'] = String(pay.paid);
+  if (pay.amount) data['customFields.paymentAmount'] = String(pay.amount);
+  if (pay.method) data['customFields.paymentMethod'] = String(pay.method);
+  if (pay.reference)
+    data['customFields.paymentReference'] = String(pay.reference);
+  return data;
+}
+
+// Build the collected-state-aware Sinhala consult directive: the agent knows
+// exactly what is captured + what is still missing, asks ONE missing required
+// field at a time, repeats back each captured value to confirm, reads courses/
+// fees ONLY from the dataset KB, and announces completion once personal+course+
+// payment(paid) are confirmed.
+function buildConsultModelInput(
+  userText: string,
+  collected: IKioskCollected,
+): string {
+  const p = collected.personal || {};
+  const co = collected.course || {};
+  const pay = collected.payment || {};
+  const req: Array<[string, any]> = [
+    ['සම්පූර්ණ නම (full name)', p.fullName],
+    ['ජංගම දුරකථන අංකය (mobile)', p.mobile],
+    ['ජා.හැ. අංකය (NIC)', p.nic],
+    ['පාඨමාලාව (course/program)', co.program],
+    ['ගෙවීම ගෙවා ඇත්ද (payment paid)', pay.paid === true ? 'ඔව්' : undefined],
+    ['ගෙවූ මුදල (amount)', pay.amount],
+    ['ගෙවීම් ක්‍රමය (method)', pay.method],
+  ];
+  const captured = req
+    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+    .map(([label, v]) => `${label}=${v}`);
+  const missing = req
+    .filter(([, v]) => v === undefined || v === null || v === '')
+    .map(([label]) => label);
+
+  const stateBlock =
+    `(SYSTEM ලියාපදිංචි උපදෙස්: ඔබ ශාඛාවේ ලියාපදිංචි සහයකයෙකි. ` +
+    `මෙතෙක් තහවුරු වූ තොරතුරු: ${
+      captured.length ? captured.join(', ') : 'කිසිවක් නැත'
+    }. ` +
+    `තවම අවශ්‍ය අනිවාර්ය තොරතුරු: ${
+      missing.length ? missing.join(', ') : 'සියල්ල සම්පූර්ණයි'
+    }. ` +
+    `නීති: (1) එක් වරකට අවශ්‍ය ලැයිස්තුවේ පළමු අයිතමය පමණක් අසන්න — එක් ප්‍රශ්නයක් පමණයි. ` +
+    `(2) පරිශීලකයා දෙන සෑම අගයක්ම නැවත කියවා "${'මෙය හරිද?'}" ලෙස තහවුරු කරගන්න. ` +
+    `(3) පාඨමාලා, මට්ටම් සහ ගාස්තු පිළිබඳ විස්තර දැනුම් පදනමෙන් (dataset knowledge base) පමණක් ලබා දෙන්න — කිසිවක් මනක්කල්පිත නොකරන්න. ` +
+    `(4) නම, ජංගම අංකය, NIC, පාඨමාලාව, සහ ගෙවීම (ගෙවා ඇත) යන සියල්ල තහවුරු වූ පසු ලියාපදිංචිය සම්පූර්ණ බව පැහැදිලිව දන්වා ගෙවීම තහවුරු කරන ලෙස ඉල්ලන්න.)`;
+
+  return `${appendSinhalaInstruction(userText)}\n\n${stateBlock}`;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // POST /session — redeem a 4-digit code → short-lived kiosk JWT
 // Body: { code }
@@ -234,8 +400,11 @@ router.post('/session', async (req: Request, res: Response) => {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // POST /consult — audio (multipart "audio") OR JSON { text }
-//   STT → Sinhala-forced AI reply → Gemini TTS → base64 + auto-convert
-// 200: { transcript, reply, audioBase64, mime, converted }
+//   STT → collected-state-aware Sinhala AI reply (operator-selected provider)
+//   → Gemini TTS → base64 → per-turn enrollment-field extraction (deep $set
+//   merge into KioskInvite.collected + mirror to the CRM Contact) → conservative
+//   payment-gated auto-convert.
+// 200: { transcript, reply, audioBase64, mime, converted, collected, completed }
 // 500: { error }
 // ═══════════════════════════════════════════════════════════════════════════
 router.post(
@@ -272,14 +441,31 @@ router.post(
         return;
       }
 
-      // ── 2. Sinhala-forced reply via the SAME thread (personality + KB) ────
-      const modelInput = appendSinhalaInstruction(transcript);
+      // ── 2. Current collected state (informs the consult instruction) ──────
+      // Every DB read here is wrapped so a transient Mongo hiccup never breaks
+      // the consult turn — we simply fall back to an empty collected state.
+      let invite: any = null;
+      try {
+        invite = await KioskInvite.findById(kiosk.inviteId).lean();
+      } catch (err: any) {
+        console.warn('⚠️ /consult invite load failed:', err?.message || err);
+      }
+      const currentCollected: IKioskCollected =
+        (invite?.collected as IKioskCollected) || {};
+
+      // ── 3. Collected-state-aware Sinhala reply via the SAME thread ────────
+      // (personality + KB + history). Provider is the operator-configured
+      // KIOSK_AI_PROVIDER mapped through PROVIDER_TYPE_TO_OVERRIDE (null = no
+      // override → unchanged load-balancer behaviour).
+      const modelInput = buildConsultModelInput(transcript, currentCollected);
+      const providerOverride = await resolveKioskProviderOverride();
       let reply = '';
       try {
         reply = await aiLoadBalancer.sendMessage(
           jid,
           modelInput,
           kiosk.tenantId,
+          providerOverride,
         );
       } catch (err: any) {
         console.warn('⚠️ /consult AI reply failed:', err?.message || err);
@@ -289,7 +475,7 @@ router.post(
         reply = 'සමාවන්න, මට මේ මොහොතේ පිළිතුරු දීමට නොහැකි විය. නැවත උත්සාහ කරන්න.';
       }
 
-      // ── 3. Gemini TTS → base64 (+ magic-byte mime). Never fatal. ──────────
+      // ── 4. Gemini TTS → base64 (+ magic-byte mime). Never fatal. ──────────
       let audioBase64 = '';
       let mime = 'audio/mpeg';
       try {
@@ -302,17 +488,92 @@ router.post(
         console.warn('⚠️ /consult TTS failed:', err?.message || err);
       }
 
-      // ── 4. Conservative + idempotent AI auto-convert ──────────────────────
-      let converted = false;
+      // ── 5. Per-turn enrollment-field extraction → deep $set-merge ─────────
+      // Extract ONLY newly-mentioned fields from THIS utterance; a parse/timeout
+      // failure returns null and is tolerated. Merge into KioskInvite.collected
+      // (dotted $set so siblings survive), recompute `completed`, then mirror the
+      // captured values onto the CRM Contact. Each step is independently wrapped.
+      let collected: IKioskCollected = mergeCollected(currentCollected, null);
+      let completed = computeCompleted(collected);
       try {
-        if (await detectConversion(transcript, reply)) {
+        const extract = await extractEnrollmentFields(transcript);
+        if (extract) {
+          collected = mergeCollected(currentCollected, extract);
+          completed = computeCompleted(collected);
+          const dotted = buildCollectedDottedSet(extract);
+          if (Object.keys(dotted).length > 0) {
+            try {
+              const updated = await KioskInvite.findByIdAndUpdate(
+                kiosk.inviteId,
+                { $set: { ...dotted, completed } },
+                { new: true },
+              ).lean();
+              if (updated) {
+                invite = updated;
+                collected =
+                  (updated.collected as IKioskCollected) || collected;
+                completed = computeCompleted(collected);
+              }
+            } catch (err: any) {
+              console.warn(
+                '⚠️ /consult collected $set failed:',
+                err?.message || err,
+              );
+            }
+
+            // Mirror onto the CRM Contact (best-effort, tenant-scoped).
+            const contactId = invite?.contactId
+              ? String(invite.contactId)
+              : '';
+            if (contactId) {
+              const contactUpdate = buildContactUpdate(collected);
+              if (Object.keys(contactUpdate).length > 0) {
+                try {
+                  await CRMService.updateContact(
+                    contactId,
+                    contactUpdate,
+                    kiosk.tenantId,
+                  );
+                } catch (err: any) {
+                  console.warn(
+                    '⚠️ /consult CRM mirror failed:',
+                    err?.message || err,
+                  );
+                }
+              }
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn('⚠️ /consult extraction failed:', err?.message || err);
+      }
+
+      // ── 6. Payment-gated, idempotent auto-convert ─────────────────────────
+      // Convert ONLY when every required field is captured AND payment is
+      // confirmed paid (completed===true) AND the visitor signals a clear
+      // commitment/confirmation this turn. markConverted is idempotent.
+      let converted = invite?.status === 'converted';
+      try {
+        if (
+          completed &&
+          !converted &&
+          (await detectConversion(transcript, reply))
+        ) {
           converted = await kioskInviteService.markConverted(kiosk.inviteId);
         }
       } catch (err: any) {
         console.warn('⚠️ /consult auto-convert failed:', err?.message || err);
       }
 
-      res.json({ transcript, reply, audioBase64, mime, converted });
+      res.json({
+        transcript,
+        reply,
+        audioBase64,
+        mime,
+        converted,
+        collected,
+        completed,
+      });
     } catch (err: any) {
       console.error('❌ /api/kiosk/consult error:', err?.message || err);
       res.status(500).json({ error: 'Consultation failed' });
@@ -334,6 +595,130 @@ router.post(
     } catch (err: any) {
       console.error('❌ /api/kiosk/convert error:', err?.message || err);
       res.status(500).json({ error: 'Conversion failed' });
+    }
+  },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// POST /enroll — register the visitor against the "Enrollment Registration"
+// FormTemplate: flatten KioskInvite.collected → form data, submit it, mark the
+// invite converted (idempotent), then fire the "enrollment.registered" webhook
+// so the operator's Main System (configured on the Webhooks page) is notified.
+// 200: { registered: true, submissionId }
+// 404: { error } (invite missing) | 400: { error } (template missing)
+// 500: { error }
+// ═══════════════════════════════════════════════════════════════════════════
+router.post(
+  '/enroll',
+  verifyKioskToken,
+  async (req: KioskRequest, res: Response) => {
+    try {
+      const kiosk = req.kiosk!; // verifyKioskToken guarantees this
+
+      // Resolve the invite (collected fields + phone/jid/branch come from here).
+      let invite: any = null;
+      try {
+        invite = await KioskInvite.findById(kiosk.inviteId).lean();
+      } catch (err: any) {
+        console.warn('⚠️ /enroll invite load failed:', err?.message || err);
+      }
+      if (!invite) {
+        res.status(404).json({ error: 'Kiosk invite not found' });
+        return;
+      }
+
+      const tenantId =
+        kiosk.tenantId ||
+        (invite.tenantId ? String(invite.tenantId) : undefined);
+
+      // Resolve the Enrollment Registration template BY NAME (tenant-scoped with
+      // the legacy-null $or so default-tenant / unstamped rows still match).
+      let template: any = null;
+      try {
+        const q: Record<string, any> = { name: 'Enrollment Registration' };
+        if (tenantId) {
+          q.$or = [
+            { tenantId },
+            { tenantId: { $exists: false } },
+            { tenantId: null },
+          ];
+        }
+        template = await FormTemplate.findOne(q).lean();
+      } catch (err: any) {
+        console.warn('⚠️ /enroll template lookup failed:', err?.message || err);
+      }
+      if (!template) {
+        res
+          .status(400)
+          .json({ error: 'Enrollment Registration template not found' });
+        return;
+      }
+      const templateId = String(template._id);
+
+      // Flatten collected → the template field keys.
+      const c: IKioskCollected = (invite.collected as IKioskCollected) || {};
+      const p = c.personal || {};
+      const co = c.course || {};
+      const pay = c.payment || {};
+      const data: Record<string, any> = {
+        fullName: p.fullName || '',
+        mobile: p.mobile || '',
+        nic: p.nic || '',
+        email: p.email || '',
+        address: p.address || '',
+        course: co.program || '',
+        level: co.level || '',
+        paid: pay.paid === true,
+        amount: pay.amount || '',
+        method: pay.method || '',
+        reference: pay.reference || '',
+        branch: invite.branch || '',
+      };
+
+      const phone = invite.phone || p.mobile || '';
+      const jid = invite.jid || kiosk.jid || '';
+
+      // Submit the form (creates a FormSubmission; never throws — returns
+      // { success:false } on error).
+      let submissionId: string | undefined;
+      try {
+        const result = await FormService.submitForm(
+          phone,
+          templateId,
+          data,
+          jid,
+        );
+        submissionId = result?.submissionId;
+      } catch (err: any) {
+        console.warn('⚠️ /enroll submitForm failed:', err?.message || err);
+      }
+
+      // Mark the invite converted (idempotent — safe to call again).
+      try {
+        await kioskInviteService.markConverted(kiosk.inviteId);
+      } catch (err: any) {
+        console.warn('⚠️ /enroll markConverted failed:', err?.message || err);
+      }
+
+      // Notify the Main System via the configured webhook (events:["*"] or the
+      // explicit "enrollment.registered" subscription). Fire-and-forget safe.
+      try {
+        await WebhookService.triggerWebhook('enrollment.registered', {
+          submissionId,
+          ...data,
+          jid,
+          branch: invite.branch,
+          tenantId,
+          timestamp: new Date().toISOString(),
+        });
+      } catch (err: any) {
+        console.warn('⚠️ /enroll webhook failed:', err?.message || err);
+      }
+
+      res.json({ registered: true, submissionId });
+    } catch (err: any) {
+      console.error('❌ /api/kiosk/enroll error:', err?.message || err);
+      res.status(500).json({ error: 'Enrollment failed' });
     }
   },
 );

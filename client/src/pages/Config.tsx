@@ -147,6 +147,11 @@ export default function Config() {
   const [resettingAll, setResettingAll] = useState(false);
   const [resettingId, setResettingId] = useState<string | null>(null);
 
+  // Kiosk Voice Consultant provider preference (Config row key === KIOSK_AI_PROVIDER)
+  const [kioskProvider, setKioskProvider] = useState<string>('');
+  const [kioskSaving, setKioskSaving] = useState(false);
+  const [kioskSaved, setKioskSaved] = useState(false);
+
   // Voice Config State
   const [voiceConfigs, setVoiceConfigs] = useState<VoiceConfigData[]>([]);
   const [activeVoiceProvider, setActiveVoiceProvider] =
@@ -404,6 +409,42 @@ export default function Config() {
     fetchVoiceConfig();
     fetchUsageCycle();
   }, [fetchUsageCycle]);
+
+  // Seed the kiosk provider dropdown from the persisted KIOSK_AI_PROVIDER row
+  // whenever configs are (re)loaded. "" / absent = Auto (default chain).
+  useEffect(() => {
+    const row = configs.find((c) => c.key === 'KIOSK_AI_PROVIDER');
+    setKioskProvider(row?.value || '');
+  }, [configs]);
+
+  // Upsert the kiosk provider preference: PUT when the row already exists,
+  // POST when it doesn't. Leaves all other provider management untouched.
+  const handleKioskProviderChange = async (value: string) => {
+    setKioskProvider(value);
+    setKioskSaving(true);
+    setKioskSaved(false);
+    try {
+      const existing = configs.find((c) => c.key === 'KIOSK_AI_PROVIDER');
+      if (existing) {
+        await api.put(`/api/config/${existing._id}`, { value });
+      } else {
+        await api.post('/api/config', {
+          key: 'KIOSK_AI_PROVIDER',
+          value,
+          isProvider: false,
+          description: 'AI provider for the branch Voice Consultant kiosk',
+        });
+      }
+      await fetchConfigs();
+      setKioskSaved(true);
+      setTimeout(() => setKioskSaved(false), 2500);
+    } catch (err: unknown) {
+      console.error('Failed to save kiosk provider:', err);
+      alert('Failed to save kiosk provider: ' + getErrorMessage(err));
+    } finally {
+      setKioskSaving(false);
+    }
+  };
 
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this configuration?')) {
@@ -1082,6 +1123,52 @@ export default function Config() {
               )}
             </div>
           )}
+
+          {/* ── Kiosk Voice Consultant provider ──────────────────── */}
+          <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-indigo-100 rounded-xl">
+                <Mic className="h-5 w-5 text-indigo-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-gray-800">
+                  Kiosk Voice Consultant provider
+                </h3>
+                <p className="text-sm text-gray-600 mt-0.5">
+                  Choose which AI provider powers the branch Voice Consultant
+                  kiosk. Leave on <strong>Auto</strong> to use the default
+                  fallback chain.
+                </p>
+                <div className="flex items-center gap-3 mt-3 flex-wrap">
+                  <select
+                    value={kioskProvider}
+                    onChange={(e) => handleKioskProviderChange(e.target.value)}
+                    disabled={kioskSaving}
+                    className="block w-full max-w-md px-3 py-2 border border-gray-300 rounded-md disabled:opacity-50"
+                  >
+                    <option value="">Auto (default chain)</option>
+                    {aiConfigs.map((c) => (
+                      <option key={c._id} value={c.providerType}>
+                        {(c.providerType || 'unknown') +
+                          ' · ' +
+                          (c.aiModel || 'no model')}
+                      </option>
+                    ))}
+                  </select>
+                  {kioskSaving && (
+                    <span className="flex items-center gap-1 text-xs text-gray-500">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…
+                    </span>
+                  )}
+                  {kioskSaved && !kioskSaving && (
+                    <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Saved
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* ── Quick Connect: Unofficial Session-Based Providers ───── */}
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">

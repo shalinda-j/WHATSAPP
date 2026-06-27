@@ -116,6 +116,23 @@ const MAX_429_RETRIES = 2;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Maps a DB providerType (Config.providerType) to the lowercase substring that
+ * matches the corresponding AIService class name (constructor.name.toLowerCase())
+ * used by the provider-override reorder logic in sendMessage/sendMessageRaw.
+ *
+ * NOTE: google -> "gemini" is essential — the DB stores providerType "google"
+ * but the service class is GeminiService, so "google" would never match.
+ */
+export const PROVIDER_TYPE_TO_OVERRIDE: Record<string, string> = {
+  google: 'gemini',
+  openai: 'openai',
+  groq: 'groq',
+  openrouter: 'openrouter',
+  custom: 'custom',
+  local: 'custom',
+};
+
 /** True when an error is a provider rate-limit / quota (HTTP 429). */
 export function isRateLimitError(err: any): boolean {
   const status = err?.status ?? err?.statusCode ?? err?.response?.status;
@@ -596,6 +613,7 @@ export class AILoadBalancer {
     userId: string,
     message: string,
     tenantId?: string,
+    providerOverride?: string | null,
   ): Promise<string> {
     // Load services with caching (not on every message)
     await this.loadServices();
@@ -661,7 +679,25 @@ export class AILoadBalancer {
     this.totalRequests++;
 
     // Try services in priority order, de-prioritising any in 429 cooldown.
-    const ordered = this.orderByCooldown(this.services);
+    // When a providerOverride is supplied, try matching providers FIRST (mirror
+    // the EXACT reorder logic in sendMessageRaw), then fall back to the normal
+    // orderByCooldown order. When null/undefined, behave exactly as before.
+    const ordered = providerOverride
+      ? [
+          ...this.services.filter((s) =>
+            s.constructor.name
+              .toLowerCase()
+              .includes((providerOverride ?? '').toLowerCase()),
+          ),
+          ...this.services.filter(
+            (s) =>
+              !s.constructor.name
+                .toLowerCase()
+                .includes((providerOverride ?? '').toLowerCase()),
+          ),
+        ]
+      : // No explicit provider: prefer providers not in 429 cooldown.
+        this.orderByCooldown(this.services);
     for (let i = 0; i < ordered.length; i++) {
       const service = ordered[i];
 

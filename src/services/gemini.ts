@@ -416,6 +416,100 @@ export async function analyzeLeadIntent(text: string): Promise<{
   }
 }
 
+/**
+ * Shape of the enrollment fields that can be extracted from a single user
+ * utterance. ALL fields are optional: the extractor only returns the keys it
+ * believes were NEWLY mentioned in the supplied text so callers can deep-merge
+ * the result into a running `collected` state.
+ */
+export type EnrollmentExtract = {
+  personal?: {
+    fullName?: string;
+    mobile?: string;
+    nic?: string;
+    email?: string;
+    address?: string;
+  };
+  course?: {
+    program?: string;
+    level?: string;
+  };
+  payment?: {
+    paid?: boolean;
+    amount?: string;
+    method?: string;
+    reference?: string;
+  };
+};
+
+/**
+ * Extract enrollment-related fields that the user newly mentioned in `text`.
+ *
+ * Returns ONLY the fields present in this utterance (so the caller can deep
+ * $set-merge the partial result). Mirrors the `analyzeLeadIntent` idiom: a
+ * JSON-only Gemini prompt, strip ```json fences, JSON.parse, and a
+ * try/catch -> null so a parse/timeout/missing-key failure NEVER throws or
+ * breaks the caller.
+ */
+export async function extractEnrollmentFields(
+  text: string,
+): Promise<EnrollmentExtract | null> {
+  try {
+    const model = await getGeminiModel();
+
+    const result = await withTimeout(
+      model.generateContent([
+        {
+          text: `You extract enrollment registration fields from a single student message for an education institute kiosk.
+Return ONLY the fields that are NEWLY MENTIONED in this exact message. Do NOT guess, infer, or carry over previous values. If a field is not mentioned, OMIT the key entirely (do not output null/empty).
+
+User Message: "${text}"
+
+Output Format (JSON Only, omit any key not mentioned):
+{
+  "personal": {
+    "fullName": "the person's full name",
+    "mobile": "phone/mobile number as digits",
+    "nic": "national identity card number",
+    "email": "email address",
+    "address": "home/postal address"
+  },
+  "course": {
+    "program": "course or program name",
+    "level": "course level e.g. Certificate/Diploma/HND/Degree"
+  },
+  "payment": {
+    "paid": true,
+    "amount": "amount paid as a string",
+    "method": "payment method e.g. cash/card/bank transfer",
+    "reference": "payment reference/receipt number"
+  }
+}
+Set payment.paid to true ONLY if the user clearly states they have paid; set false ONLY if they clearly state they have not paid; otherwise omit it.
+Output the JSON object only, with no commentary.`,
+        },
+      ]),
+      TIMEOUT,
+      'gemini-enrollment-extract',
+    );
+
+    const responseText = result.response
+      .text()
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
+      .trim();
+
+    const parsed = JSON.parse(responseText) as EnrollmentExtract;
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch (error: any) {
+    if (error.message !== 'MISSING_API_KEY') {
+      console.error('Enrollment field extraction error:', error);
+    }
+    return null;
+  }
+}
+
 // Remove exports of internal model/genAI if possible, or export dummy to prevent breakage
 // export { model, genAI };
 // Since we removed global model, we should remove it from exports or provide a getter

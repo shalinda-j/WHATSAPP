@@ -16,6 +16,34 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
  */
 export type KioskInviteStatus = 'issued' | 'redeemed' | 'converted' | 'expired';
 
+/**
+ * Progressively-collected enrollment fields, captured turn-by-turn during the
+ * kiosk consult. Stored as a nested sub-object so partial `$set` deep-merges
+ * (e.g. `collected.personal.fullName`) update one leaf without clobbering the
+ * siblings. Every field is optional — `completed` flips true only once all the
+ * required leaves (personal.fullName/mobile/nic, course.program,
+ * payment.paid/amount/method) are present and payment is confirmed paid.
+ */
+export interface IKioskCollected {
+  personal?: {
+    fullName?: string;
+    mobile?: string;
+    nic?: string;
+    email?: string;
+    address?: string;
+  };
+  course?: {
+    program?: string;
+    level?: string;
+  };
+  payment?: {
+    paid?: boolean;
+    amount?: string;
+    method?: string;
+    reference?: string;
+  };
+}
+
 export interface IKioskInvite extends Document {
   tenantId?: mongoose.Types.ObjectId;
   /** Exactly 4 digits (1000–9999). */
@@ -29,11 +57,56 @@ export interface IKioskInvite extends Document {
   branch?: string;
   status: KioskInviteStatus;
   sessionId?: string;
+  /** Progressively-collected enrollment fields (deep-merged turn-by-turn). */
+  collected?: IKioskCollected;
+  /** True once all required enrollment fields are captured + payment confirmed. */
+  completed: boolean;
   expiresAt: Date;
   redeemedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
+
+// Nested sub-schemas (no _id on sub-docs). Every leaf is optional so a partial
+// `$set` of a single dotted path (e.g. `collected.personal.fullName`) merges in
+// without disturbing siblings.
+const KioskCollectedPersonalSchema = new Schema(
+  {
+    fullName: { type: String },
+    mobile: { type: String },
+    nic: { type: String },
+    email: { type: String },
+    address: { type: String },
+  },
+  { _id: false },
+);
+
+const KioskCollectedCourseSchema = new Schema(
+  {
+    program: { type: String },
+    level: { type: String },
+  },
+  { _id: false },
+);
+
+const KioskCollectedPaymentSchema = new Schema(
+  {
+    paid: { type: Boolean },
+    amount: { type: String },
+    method: { type: String },
+    reference: { type: String },
+  },
+  { _id: false },
+);
+
+const KioskCollectedSchema = new Schema(
+  {
+    personal: { type: KioskCollectedPersonalSchema },
+    course: { type: KioskCollectedCourseSchema },
+    payment: { type: KioskCollectedPaymentSchema },
+  },
+  { _id: false },
+);
 
 const KioskInviteSchema = new Schema(
   {
@@ -57,6 +130,10 @@ const KioskInviteSchema = new Schema(
       index: true,
     },
     sessionId: { type: String },
+    // Progressively-collected enrollment fields. Defaults to an empty object so
+    // dotted partial `$set` deep-merges always have a parent to write into.
+    collected: { type: KioskCollectedSchema, default: () => ({}) },
+    completed: { type: Boolean, default: false },
     expiresAt: { type: Date, required: true },
     redeemedAt: { type: Date },
   } as any,

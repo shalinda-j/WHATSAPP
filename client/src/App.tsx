@@ -35,6 +35,7 @@ const MarketingInsights = lazy(() => import('./pages/MarketingInsights'));
 const ContentStudio = lazy(() => import('./pages/ContentStudio'));
 const AuditLog = lazy(() => import('./pages/AuditLog'));
 const Kiosk = lazy(() => import('./pages/Kiosk'));
+const ConsultingAssistant = lazy(() => import('./pages/ConsultingAssistant'));
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   const { token, loading } = useAuth();
@@ -268,6 +269,14 @@ function AppRoutes() {
           element={
             <Suspense fallback={<RouteSpinner />}>
               <AuditLog />
+            </Suspense>
+          }
+        />
+        <Route
+          path="consulting-assistant"
+          element={
+            <Suspense fallback={<RouteSpinner />}>
+              <ConsultingAssistant />
             </Suspense>
           }
         />
