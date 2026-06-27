@@ -150,8 +150,8 @@ export default function Kiosk() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950 text-white flex flex-col items-center justify-center px-4 py-10">
-      <div className="w-full max-w-md text-center">
+    <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950 anim-gradient text-white flex flex-col items-center justify-center px-4 py-10">
+      <div className="w-full max-w-md text-center anim-fade-in-up">
         <div className="text-sm uppercase tracking-[0.3em] text-emerald-400 font-semibold mb-2">
           Welcome
         </div>
@@ -172,22 +172,27 @@ export default function Kiosk() {
 
         {/* Code dots */}
         <div className="flex items-center justify-center gap-4 mb-6">
-          {dots.map((filled, i) => (
-            <div
-              key={i}
-              className={`h-6 w-6 rounded-full border-2 transition-colors ${
-                filled
-                  ? 'bg-emerald-400 border-emerald-400'
-                  : 'bg-transparent border-white/30'
-              }`}
-            />
-          ))}
+          {dots.map((filled, i) => {
+            const isNext = !filled && i === code.length;
+            return (
+              <div
+                key={i}
+                className={`h-6 w-6 rounded-full border-2 transition-colors ${
+                  filled
+                    ? 'bg-emerald-400 border-emerald-400 anim-pop'
+                    : isNext
+                      ? 'bg-transparent border-emerald-300/70 anim-breathe'
+                      : 'bg-transparent border-white/30'
+                }`}
+              />
+            );
+          })}
         </div>
 
         {error && (
           <div
             role="alert"
-            className="mb-6 rounded-xl border border-red-400/50 bg-red-500/15 px-4 py-3 text-red-200 text-base font-semibold"
+            className="mb-6 rounded-xl border border-red-400/50 bg-red-500/15 px-4 py-3 text-red-200 text-base font-semibold anim-shake"
           >
             {error}
           </div>
@@ -201,7 +206,7 @@ export default function Kiosk() {
               type="button"
               onClick={() => appendDigit(d)}
               disabled={submitting}
-              className="aspect-square rounded-2xl bg-white/10 hover:bg-white/20 active:bg-white/30 text-3xl font-bold transition-colors disabled:opacity-50"
+              className="aspect-square rounded-2xl bg-white/10 hover:bg-white/20 active:bg-white/30 text-3xl font-bold transition-all hover:-translate-y-0.5 active:scale-95 disabled:opacity-50 disabled:hover:translate-y-0"
             >
               {d}
             </button>
@@ -210,7 +215,7 @@ export default function Kiosk() {
             type="button"
             onClick={clearCode}
             disabled={submitting || code.length === 0}
-            className="aspect-square rounded-2xl bg-white/5 hover:bg-white/15 active:bg-white/25 text-base font-bold uppercase tracking-wide transition-colors disabled:opacity-40"
+            className="aspect-square rounded-2xl bg-white/5 hover:bg-white/15 active:bg-white/25 text-base font-bold uppercase tracking-wide transition-all hover:-translate-y-0.5 active:scale-95 disabled:opacity-40 disabled:hover:translate-y-0"
           >
             Clear
           </button>
@@ -218,7 +223,7 @@ export default function Kiosk() {
             type="button"
             onClick={() => appendDigit('0')}
             disabled={submitting}
-            className="aspect-square rounded-2xl bg-white/10 hover:bg-white/20 active:bg-white/30 text-3xl font-bold transition-colors disabled:opacity-50"
+            className="aspect-square rounded-2xl bg-white/10 hover:bg-white/20 active:bg-white/30 text-3xl font-bold transition-all hover:-translate-y-0.5 active:scale-95 disabled:opacity-50 disabled:hover:translate-y-0"
           >
             0
           </button>
@@ -226,7 +231,7 @@ export default function Kiosk() {
             type="button"
             onClick={backspace}
             disabled={submitting || code.length === 0}
-            className="aspect-square rounded-2xl bg-white/5 hover:bg-white/15 active:bg-white/25 text-2xl font-bold transition-colors disabled:opacity-40"
+            className="aspect-square rounded-2xl bg-white/5 hover:bg-white/15 active:bg-white/25 text-2xl font-bold transition-all hover:-translate-y-0.5 active:scale-95 disabled:opacity-40 disabled:hover:translate-y-0"
             aria-label="Backspace"
           >
             ⌫
@@ -237,7 +242,9 @@ export default function Kiosk() {
           type="button"
           onClick={submitCode}
           disabled={!canSubmit}
-          className="mt-8 w-full rounded-2xl bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 px-6 py-5 text-xl font-black uppercase tracking-wide transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className={`mt-8 w-full rounded-2xl bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 px-6 py-5 text-xl font-black uppercase tracking-wide transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+            canSubmit ? 'anim-breathe' : ''
+          }`}
         >
           {submitting ? 'Checking…' : 'Start'}
         </button>

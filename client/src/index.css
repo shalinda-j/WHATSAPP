@@ -100,3 +100,208 @@ select:focus-visible {
     0 8px 10px -6px rgba(0, 0, 0, 0.1);
   transform: translateY(-1px);
 }
+
+/* ============================================================
+   Kiosk animation system
+   Cohesive, touch-screen-friendly motion for the public kiosk.
+   GPU-friendly: only transform / opacity / background-position.
+   Used by: Kiosk.tsx and components/voice/VoiceConsultant.tsx
+   ============================================================ */
+
+/* --- Entrances --- */
+@keyframes kiosk-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes kiosk-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes kiosk-slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes kiosk-slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes kiosk-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes kiosk-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-6px);
+  }
+  40% {
+    transform: translateX(5px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+
+/* --- Loops --- */
+@keyframes kiosk-pulse-ring {
+  0% {
+    opacity: 0.55;
+    transform: scale(0.85);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+
+@keyframes kiosk-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+@keyframes kiosk-bar-eq {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes kiosk-dot-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  40% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
+}
+
+@keyframes kiosk-gradient-pan {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* --- Utility classes --- */
+.anim-fade-in-up {
+  animation: kiosk-fade-in-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.anim-fade-in {
+  animation: kiosk-fade-in 0.4s ease-out both;
+}
+
+.anim-slide-in-left {
+  animation: kiosk-slide-in-left 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.anim-slide-in-right {
+  animation: kiosk-slide-in-right 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.anim-pop {
+  animation: kiosk-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.anim-shake {
+  animation: kiosk-shake 0.5s ease-in-out both;
+}
+
+.anim-pulse-ring {
+  animation: kiosk-pulse-ring 1.6s ease-out infinite;
+}
+
+.anim-breathe {
+  animation: kiosk-breathe 2s ease-in-out infinite;
+}
+
+.anim-bar {
+  transform-origin: bottom center;
+  animation: kiosk-bar-eq 1s ease-in-out infinite;
+}
+
+.anim-dot {
+  animation: kiosk-dot-bounce 1.4s ease-in-out infinite;
+}
+
+.anim-gradient {
+  background-size: 200% 200%;
+  animation: kiosk-gradient-pan 18s ease infinite;
+}
+
+/* --- Accessibility: respect motion-sensitive visitors --- */
+@media (prefers-reduced-motion: reduce) {
+  .anim-fade-in-up,
+  .anim-fade-in,
+  .anim-slide-in-left,
+  .anim-slide-in-right,
+  .anim-pop,
+  .anim-shake,
+  .anim-pulse-ring,
+  .anim-breathe,
+  .anim-bar,
+  .anim-dot,
+  .anim-gradient {
+    animation: none !important;
+  }
+}

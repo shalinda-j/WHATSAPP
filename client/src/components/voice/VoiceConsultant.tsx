@@ -297,7 +297,7 @@ export default function VoiceConsultant({
 
         {/* Greeting bubble */}
         {greeting && !transcript && !reply && (
-          <div className="w-full bg-slate-700/60 rounded-2xl px-6 py-5 text-center text-xl leading-relaxed shadow-lg">
+          <div className="w-full bg-slate-700/60 rounded-2xl px-6 py-5 text-center text-xl leading-relaxed shadow-lg anim-fade-in">
             <MessageCircle className="inline-block w-6 h-6 mr-2 text-emerald-300 align-text-bottom" />
             {greeting}
           </div>
@@ -307,9 +307,9 @@ export default function VoiceConsultant({
         {converted && (
           <div
             role="status"
-            className="w-full bg-emerald-500/90 text-white rounded-2xl px-6 py-5 flex items-center gap-3 shadow-xl animate-pulse"
+            className="relative overflow-hidden w-full bg-emerald-500/90 text-white rounded-2xl px-6 py-5 flex items-center gap-3 shadow-xl anim-pop"
           >
-            <PartyPopper className="w-8 h-8 shrink-0" />
+            <PartyPopper className="w-8 h-8 shrink-0 animate-bounce" />
             <div>
               <p className="text-xl font-bold">You are enrolled! 🎉</p>
               <p className="text-emerald-50">
@@ -317,6 +317,20 @@ export default function VoiceConsultant({
                 touch shortly.
               </p>
             </div>
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute right-4 top-2 text-2xl animate-bounce"
+              style={{ animationDelay: '120ms' }}
+            >
+              🎉
+            </span>
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute right-12 bottom-2 text-xl animate-bounce opacity-80"
+              style={{ animationDelay: '480ms' }}
+            >
+              ✨
+            </span>
           </div>
         )}
 
@@ -332,7 +346,7 @@ export default function VoiceConsultant({
         {(transcript || reply) && (
           <div className="w-full flex flex-col gap-3">
             {transcript && (
-              <div className="self-end max-w-[85%] bg-emerald-600 rounded-2xl rounded-br-sm px-5 py-3 shadow">
+              <div className="self-end max-w-[85%] bg-emerald-600 rounded-2xl rounded-br-sm px-5 py-3 shadow anim-slide-in-right">
                 <div className="flex items-center gap-2 text-emerald-100 text-xs font-semibold mb-1 uppercase tracking-wide">
                   <User className="w-4 h-4" /> You
                 </div>
@@ -340,7 +354,7 @@ export default function VoiceConsultant({
               </div>
             )}
             {reply && (
-              <div className="self-start max-w-[85%] bg-slate-700 rounded-2xl rounded-bl-sm px-5 py-3 shadow">
+              <div className="self-start max-w-[85%] bg-slate-700 rounded-2xl rounded-bl-sm px-5 py-3 shadow anim-slide-in-left">
                 <div className="flex items-center gap-2 text-emerald-300 text-xs font-semibold mb-1 uppercase tracking-wide">
                   <Bot className="w-4 h-4" /> Consultant
                 </div>
@@ -372,7 +386,7 @@ export default function VoiceConsultant({
               if (state === 'recording') stopRecording();
             }}
             className={[
-              'w-40 h-40 sm:w-48 sm:h-48 rounded-full flex items-center justify-center',
+              'relative w-40 h-40 sm:w-48 sm:h-48 rounded-full flex items-center justify-center',
               'shadow-2xl transition-all duration-200 select-none focus:outline-none',
               'focus:ring-4 focus:ring-emerald-300/50',
               busy
@@ -380,20 +394,69 @@ export default function VoiceConsultant({
                 : state === 'recording'
                   ? 'bg-red-600 scale-110 ring-8 ring-red-400/40'
                   : 'bg-emerald-500 hover:bg-emerald-400 active:scale-95',
+              state === 'idle' && !busy ? 'anim-breathe' : '',
             ].join(' ')}
           >
+            {/* Listening ripples — expanding rings while recording */}
+            {state === 'recording' && (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="anim-pulse-ring pointer-events-none absolute inset-0 rounded-full border-4 border-red-300/60"
+                />
+                <span
+                  aria-hidden="true"
+                  className="anim-pulse-ring pointer-events-none absolute inset-0 rounded-full border-4 border-red-300/60"
+                  style={{ animationDelay: '0.8s' }}
+                />
+              </>
+            )}
             {state === 'processing' ? (
               <Loader2 className="w-16 h-16 animate-spin" />
             ) : state === 'playing' ? (
               <Volume2 className="w-16 h-16 animate-pulse" />
             ) : state === 'recording' ? (
-              <Square className="w-14 h-14" />
+              <Square className="relative w-14 h-14" />
             ) : (
               <Mic className="w-16 h-16" />
             )}
           </button>
-          <p className="text-xl font-medium text-slate-200 h-7">
-            {statusLabel[state]}
+          {/* Speaking equalizer — animated bars while the agent talks */}
+          {state === 'playing' && (
+            <div
+              aria-hidden="true"
+              className="flex items-end justify-center gap-1.5 h-8"
+            >
+              {[0, 1, 2, 3, 4].map((i) => (
+                <span
+                  key={i}
+                  className="anim-bar inline-block w-2 rounded-full bg-emerald-400"
+                  style={{ height: '2rem', animationDelay: `${i * 120}ms` }}
+                />
+              ))}
+            </div>
+          )}
+          <p className="text-xl font-medium text-slate-200 h-7 flex items-center justify-center gap-1">
+            <span>{statusLabel[state]}</span>
+            {state === 'processing' && (
+              <span
+                aria-hidden="true"
+                className="inline-flex items-end gap-1 ml-1"
+              >
+                <span
+                  className="anim-dot inline-block w-1.5 h-1.5 rounded-full bg-slate-300"
+                  style={{ animationDelay: '0ms' }}
+                />
+                <span
+                  className="anim-dot inline-block w-1.5 h-1.5 rounded-full bg-slate-300"
+                  style={{ animationDelay: '150ms' }}
+                />
+                <span
+                  className="anim-dot inline-block w-1.5 h-1.5 rounded-full bg-slate-300"
+                  style={{ animationDelay: '300ms' }}
+                />
+              </span>
+            )}
           </p>
         </div>
 
