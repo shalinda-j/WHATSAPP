@@ -66,19 +66,44 @@ export class OpenAIService implements AIService {
 }
 
 /**
- * Transcribe audio using OpenAI Whisper
+ * Map an audio MIME type to a Whisper-friendly file extension.
+ * Whisper accepts: flac, mp3, mp4, mpeg, mpga, m4a, ogg, opus, wav, webm.
+ * Falls back to 'ogg' (the WhatsApp PTT default) for anything unrecognised.
+ */
+function mimeToAudioExt(mimeType?: string): string {
+  if (!mimeType) return 'ogg';
+  const m = mimeType.toLowerCase();
+  if (m.includes('webm')) return 'webm';
+  if (m.includes('ogg') || m.includes('opus')) return 'ogg';
+  if (m.includes('mp4') || m.includes('m4a') || m.includes('aac')) return 'mp4';
+  if (m.includes('wav') || m.includes('wave') || m.includes('x-wav'))
+    return 'wav';
+  if (m.includes('mpeg') || m.includes('mpga') || m.includes('mp3'))
+    return 'mp3';
+  return 'ogg';
+}
+
+/**
+ * Transcribe audio using OpenAI Whisper.
+ *
+ * `mimeType` is optional and last so all existing callers keep working. When
+ * provided it drives both the temp filename extension and the toFile `type`;
+ * when omitted the previous behaviour (audio/ogg / voice_message.ogg) is kept
+ * exactly.
  */
 export async function transcribeAudio(
   audioBuffer: Buffer,
   apiKey: string,
+  mimeType?: string,
 ): Promise<string> {
   try {
     const openai = new OpenAI({ apiKey });
 
     // We need to convert the Buffer into a File object that OpenAI API accepts
     // The toFile utility from openai package helps with this
-    const file = await toFile(audioBuffer, 'voice_message.ogg', {
-      type: 'audio/ogg',
+    const ext = mimeToAudioExt(mimeType);
+    const file = await toFile(audioBuffer, `voice_message.${ext}`, {
+      type: mimeType || 'audio/ogg',
     });
 
     const transcription = await withTimeout(

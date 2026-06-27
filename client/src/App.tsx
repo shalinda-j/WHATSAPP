@@ -34,6 +34,7 @@ const Tenants = lazy(() => import('./pages/Tenants'));
 const MarketingInsights = lazy(() => import('./pages/MarketingInsights'));
 const ContentStudio = lazy(() => import('./pages/ContentStudio'));
 const AuditLog = lazy(() => import('./pages/AuditLog'));
+const Kiosk = lazy(() => import('./pages/Kiosk'));
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   const { token, loading } = useAuth();
@@ -59,6 +60,15 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+
+      <Route
+        path="/kiosk"
+        element={
+          <Suspense fallback={<RouteSpinner />}>
+            <Kiosk />
+          </Suspense>
+        }
+      />
 
       <Route
         path="/"

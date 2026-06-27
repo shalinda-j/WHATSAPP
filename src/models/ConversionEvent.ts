@@ -14,7 +14,8 @@ import mongoose, { Schema, Document } from 'mongoose';
 export type ConversionKind =
   | 'lead_registered'
   | 'booking_created'
-  | 'fee_paid';
+  | 'fee_paid'
+  | 'enrollment';
 
 export interface IConversionEvent extends Document {
   tenantId?: mongoose.Types.ObjectId;
@@ -41,7 +42,7 @@ const ConversionEventSchema = new Schema(
     jid: { type: String },
     kind: {
       type: String,
-      enum: ['lead_registered', 'booking_created', 'fee_paid'],
+      enum: ['lead_registered', 'booking_created', 'fee_paid', 'enrollment'],
       required: true,
       index: true,
     },

@@ -259,13 +259,17 @@ export interface TranscriptionResult {
   languageConfidence: number;
 }
 
-export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
-  const result = await transcribeAudioWithLanguage(audioBuffer);
+export async function transcribeAudio(
+  audioBuffer: Buffer,
+  mimeType?: string,
+): Promise<string> {
+  const result = await transcribeAudioWithLanguage(audioBuffer, mimeType);
   return result.text;
 }
 
 export async function transcribeAudioWithLanguage(
   audioBuffer: Buffer,
+  mimeType?: string,
 ): Promise<TranscriptionResult> {
   let config = null;
   try {
@@ -284,7 +288,7 @@ export async function transcribeAudioWithLanguage(
   if (apiKey && (provider === 'openai' || provider === 'google-cloud')) {
     try {
       console.log('   🎙️ Trying OpenAI Whisper STT...');
-      text = await openaiTranscribeAudio(audioBuffer, apiKey);
+      text = await openaiTranscribeAudio(audioBuffer, apiKey, mimeType);
       if (text)
         console.log(`   ✅ OpenAI Whisper: "${text.substring(0, 60)}..."`);
     } catch (err: any) {
@@ -298,10 +302,12 @@ export async function transcribeAudioWithLanguage(
     try {
       console.log('   🎙️ Trying Gemini STT...');
 
-      // Try with the audio/ogg MIME type (WhatsApp PTT format)
+      // Use the caller-supplied MIME type when provided (e.g. kiosk uploads:
+      // audio/webm / audio/mp4 / audio/wav); otherwise default to audio/ogg
+      // (WhatsApp PTT format) to preserve the previous behaviour exactly.
       text = await geminiTranscribeAudio(
         audioBuffer.toString('base64'),
-        'audio/ogg',
+        mimeType || 'audio/ogg',
       );
 
       if (text) console.log(`   ✅ Gemini: "${text.substring(0, 60)}..."`);

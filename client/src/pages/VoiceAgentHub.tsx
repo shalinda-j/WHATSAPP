@@ -1592,6 +1592,61 @@ export default function VoiceAgentHub() {
               </div>
             </div>
 
+            {/* Branch Voice Consultant (Kiosk) — live preview of the public terminal */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="bg-gradient-to-r from-teal-50 to-cyan-50 px-6 py-4 border-b border-gray-200">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-teal-100 rounded-lg">
+                      <Mic className="h-5 w-5 text-teal-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-gray-800">
+                        Branch Voice Consultant (Kiosk)
+                      </h3>
+                      <p className="text-xs text-gray-500">
+                        Live preview of the public, push-to-talk terminal branch
+                        visitors use
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href="/kiosk"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 transition-colors"
+                  >
+                    <Play className="h-4 w-4" />
+                    Open kiosk in new tab
+                  </a>
+                </div>
+              </div>
+
+              <div className="p-6">
+                <div className="mb-4 flex items-start gap-3 bg-teal-50 border border-teal-200 rounded-lg px-4 py-3">
+                  <Info className="h-4 w-4 text-teal-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-xs text-teal-800">
+                    <span className="font-semibold">To test:</span> issue a code
+                    from a CRM contact (the{' '}
+                    <span className="font-semibold">Issue Pasyala code</span>{' '}
+                    action), then type that 4-digit code into the kiosk below.
+                    This embeds <span className="font-mono">/kiosk</span> exactly
+                    as branch visitors see it. Microphone capture needs HTTPS or
+                    localhost; the text box always works.
+                  </div>
+                </div>
+
+                <div className="rounded-xl border-2 border-gray-200 overflow-hidden bg-gray-50 shadow-inner">
+                  <iframe
+                    src="/kiosk?preview=1"
+                    title="Branch Voice Consultant Kiosk preview"
+                    className="w-full h-[640px] border-0"
+                    allow="microphone"
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Other Components Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* AI & Brain Configuration */}

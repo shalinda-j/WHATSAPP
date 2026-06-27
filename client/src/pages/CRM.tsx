@@ -32,6 +32,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Briefcase,
+  KeyRound,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -343,6 +344,14 @@ export default function CRM() {
   const [contactTypeFilter] = useState('');
   const [showContactModal, setShowContactModal] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  // Result of issuing a "Pasyala" kiosk code for a contact. When set, a small
+  // modal shows the operator the freshly-issued 4-digit code (also sent to the
+  // customer on WhatsApp). null = hidden.
+  const [pasyalaCode, setPasyalaCode] = useState<{
+    code: string;
+    name: string;
+  } | null>(null);
+  const [issuingCodeFor, setIssuingCodeFor] = useState<string | null>(null);
 
   // Deals state
   const [, setDeals] = useState<Deal[]>([]);
@@ -773,6 +782,34 @@ export default function CRM() {
       fetchDashboard();
     } catch (err) {
       alert(apiErrorText(err, 'Failed to delete contact'));
+    }
+  };
+
+  /**
+   * Issue a "Pasyala" kiosk code for a contact via the SHARED admin api
+   * (admin-authed). The backend texts the 4-digit code to the customer on
+   * WhatsApp; we also surface it here so the operator can read it out at a
+   * branch terminal. Uses the admin api (NOT the public kiosk api).
+   */
+  const handleIssuePasyalaCode = async (contact: Contact) => {
+    setIssuingCodeFor(contact._id);
+    try {
+      const res = await api.post('/api/kiosk-admin/invite', {
+        contactId: contact._id,
+      });
+      const code = res.data?.code;
+      if (!code) {
+        alert('Pasyala code was not returned by the server.');
+        return;
+      }
+      setPasyalaCode({
+        code: String(code),
+        name: `${contact.firstName} ${contact.lastName}`.trim(),
+      });
+    } catch (err) {
+      alert(apiErrorText(err, 'Failed to issue Pasyala code'));
+    } finally {
+      setIssuingCodeFor(null);
     }
   };
 
@@ -1453,6 +1490,14 @@ export default function CRM() {
                         >
                           <MessageSquare className="h-4 w-4" />
                         </a>
+                        <button
+                          onClick={() => handleIssuePasyalaCode(contact)}
+                          disabled={issuingCodeFor === contact._id}
+                          title="Issue Pasyala code"
+                          className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition disabled:opacity-40"
+                        >
+                          <KeyRound className="h-4 w-4" />
+                        </button>
                         <button
                           onClick={() => {
                             setEditingContact(contact);
@@ -2712,6 +2757,33 @@ export default function CRM() {
       {activeTab === 'deals' && renderDeals()}
       {activeTab === 'leads' && renderLeads()}
       {activeTab === 'activities' && renderActivities()}
+
+      {/* Pasyala code result modal */}
+      {pasyalaCode && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 text-center">
+            <div className="mx-auto mb-4 h-14 w-14 bg-indigo-100 rounded-full flex items-center justify-center">
+              <KeyRound className="h-7 w-7 text-indigo-600" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-800">Pasyala code</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              Sent to {pasyalaCode.name || 'the customer'} on WhatsApp
+            </p>
+            <div className="my-5 text-4xl font-bold tracking-[0.4em] text-indigo-700">
+              {pasyalaCode.code}
+            </div>
+            <p className="text-xs text-gray-400 mb-5">
+              The customer can use this code at a branch kiosk terminal.
+            </p>
+            <button
+              onClick={() => setPasyalaCode(null)}
+              className="w-full px-6 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Contact Modal */}
       {showContactModal && (

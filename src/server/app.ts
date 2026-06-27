@@ -38,6 +38,9 @@ import marketingInsightsRouter from './routes/marketingInsights';
 import auditRouter from './routes/audit';
 import slaRouter from './routes/sla';
 import exportsRouter from './routes/exports';
+import kioskRouter from './routes/kiosk';
+import voiceRouter from './routes/voice';
+import kioskAdminRouter from './routes/kiosk-admin';
 import { resolveTenant } from './middleware/tenantContext';
 
 import mongoose from 'mongoose';
@@ -212,6 +215,14 @@ app.use('/api/marketing-insights', marketingInsightsRouter);
 app.use('/api/audit', authenticateToken, resolveTenant, auditRouter);
 app.use('/api/sla', authenticateToken, resolveTenant, slaRouter);
 app.use('/api/export', authenticateToken, resolveTenant, exportsRouter);
+
+// Kiosk: PUBLIC router — no authenticateToken here. It enforces its own
+// short-lived kiosk-token middleware (x-kiosk-token / Bearer) on the
+// protected sub-routes (/consult, /convert); /session is intentionally open.
+app.use('/api/kiosk', kioskRouter);
+// Admin-only STT utility + kiosk invite issuance.
+app.use('/api/voice', authenticateToken, voiceRouter);
+app.use('/api/kiosk-admin', authenticateToken, resolveTenant, kioskAdminRouter);
 
 // Public forms endpoint (for bot)
 app.use('/api/forms/default', async (req, res, next) => {
