@@ -60,6 +60,7 @@ import ChatMessage from './models/ChatMessage';
 import VoiceConfig from './models/VoiceConfig';
 import { initSocket, getIO } from './server/socket';
 import { autoRegistrationService } from './services/AutoRegistrationService';
+import { enrichContactFromMessage } from './services/ConversationEnrichmentService';
 import { usageResetService } from './services/UsageResetService';
 import { agentOrchestrator } from './services/AgentOrchestrator';
 import { agentReflectionService } from './services/AgentReflectionService';
@@ -873,6 +874,19 @@ onMessage(async (message, sock, sessionId) => {
       .catch((err) => {
         console.error('   ⚠️ Auto-registration check error:', err);
       });
+
+    // Enrich the existing Contact (if any) from this inbound message text —
+    // fire-and-forget, never throws, never creates a Contact (registration
+    // above owns creation). Chained .catch guarantees it can't crash the handler.
+    enrichContactFromMessage({
+      userId: jid,
+      text,
+      sessionId,
+      tenantId: defaultTenantId || undefined,
+      realPhone: inboundRealPhone,
+    }).catch((err) => {
+      console.warn('   ⚠️ Contact enrichment skipped:', err);
+    });
 
     // Helper to extract audio message from various wrappers
     const getAudioMessage = (msg: any) => {

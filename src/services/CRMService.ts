@@ -14,7 +14,13 @@ function escapeRegex(str: string): string {
  */
 function buildTenantFilter(tenantId?: string): Record<string, unknown> {
   if (!tenantId) return {};
-  return { $or: [{ tenantId }, { tenantId: { $exists: false } }] };
+  return {
+    $or: [
+      { tenantId },
+      { tenantId: { $exists: false } },
+      { tenantId: null },
+    ],
+  };
 }
 
 /**
@@ -133,7 +139,11 @@ export class CRMService {
     // accessible (single-tenant deployments) via the $exists fallback.
     const query: Record<string, unknown> = { _id: id };
     if (tenantId) {
-      query.$or = [{ tenantId }, { tenantId: { $exists: false } }];
+      query.$or = [
+        { tenantId },
+        { tenantId: { $exists: false } },
+        { tenantId: null },
+      ];
     }
     return Contact.findOne(query).populate('owner', 'username email');
   }
@@ -364,7 +374,11 @@ export class CRMService {
   static async getDealById(id: string, tenantId?: string) {
     const query: Record<string, unknown> = { _id: id };
     if (tenantId) {
-      query.$or = [{ tenantId }, { tenantId: { $exists: false } }];
+      query.$or = [
+        { tenantId },
+        { tenantId: { $exists: false } },
+        { tenantId: null },
+      ];
     }
     return Deal.findOne(query)
       .populate('contact', 'name firstName lastName email phone company')
