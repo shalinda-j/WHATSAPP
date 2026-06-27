@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 
 // Login stays eager — it's the entry point and renders before bundles load.
 import Login from './pages/Login';
@@ -284,6 +285,11 @@ function AppRoutes() {
         <Route path="analytics" element={<Navigate to="/crm" replace />} />
         <Route path="leads" element={<Navigate to="/crm" replace />} />
       </Route>
+
+      {/* Catch-all: an unknown path must NEVER render a blank white screen.
+          Redirect to "/" (which resolves to the dashboard when signed in, or
+          the login page otherwise) instead of matching nothing. */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
@@ -291,9 +297,13 @@ function AppRoutes() {
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
+      {/* App-wide error boundary so a render crash on ANY page (including the
+          public /kiosk) shows a recovery screen instead of a blank white page. */}
+      <AppErrorBoundary>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </AppErrorBoundary>
     </BrowserRouter>
   );
 }
