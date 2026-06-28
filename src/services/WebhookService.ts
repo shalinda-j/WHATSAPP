@@ -95,6 +95,8 @@ export class WebhookService {
     try {
       // Find active webhooks subscribed to this event (or all events with *).
       // Exclude 'ops' category — those receive only ops alerts, not business events.
+      // ⚡ Bolt: Added .lean() to bypass Mongoose document hydration,
+      // reducing memory footprint and improving webhook query speed.
       const webhooks = await (Webhook as any).find({
         isActive: true,
         $and: [
@@ -106,7 +108,7 @@ export class WebhookService {
             ],
           },
         ],
-      });
+      }).lean();
 
       if (webhooks.length === 0) return;
 
@@ -132,10 +134,12 @@ export class WebhookService {
    */
   public static async triggerOpsAlert(alert: OpsAlertInput): Promise<void> {
     try {
+      // ⚡ Bolt: Added .lean() to bypass Mongoose document hydration,
+      // reducing memory footprint and improving webhook query speed.
       const webhooks = (await (Webhook as any).find({
         isActive: true,
         category: 'ops',
-      })) as IWebhook[];
+      }).lean()) as IWebhook[];
 
       if (webhooks.length === 0) return;
 

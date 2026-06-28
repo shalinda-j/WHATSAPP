@@ -157,12 +157,13 @@ router.post('/telegram/:tenantSlug', webhookRateLimit, async (req, res) => {
       .default;
     const { channelRouter } = await import('../../channels');
 
-    const tenant = await Tenant.findOne({ slug: tenantSlug });
+    // ⚡ Bolt: Added .lean() to read-only queries to bypass hydration
+    const tenant = await Tenant.findOne({ slug: tenantSlug }).lean();
     if (!tenant) return res.status(404).json({ error: 'tenant_not_found' });
     const conn = await ChannelConnection.findOne({
       tenantId: tenant._id,
       channel: 'telegram',
-    });
+    }).lean();
     if (!conn) return res.status(404).json({ error: 'connection_not_found' });
 
     const expectedSecret = (conn.config as any)?.webhookSecret as
@@ -241,12 +242,13 @@ async function metaWebhookHandshake(
     const ChannelConnection = (await import('../../models/ChannelConnection'))
       .default;
 
-    const tenant = await Tenant.findOne({ slug: tenantSlug });
+    // ⚡ Bolt: Added .lean() to read-only queries to bypass hydration
+    const tenant = await Tenant.findOne({ slug: tenantSlug }).lean();
     if (!tenant) return res.status(404).send('tenant_not_found');
     const conn = await ChannelConnection.findOne({
       tenantId: tenant._id,
       channel,
-    });
+    }).lean();
     const expected = (conn?.config as any)?.verifyToken as string | undefined;
     if (!expected || token !== expected)
       return res.status(403).send('forbidden');
@@ -282,7 +284,8 @@ async function metaWebhookIngest(
   try {
     const tenantSlug = req.params.tenantSlug;
     const Tenant = (await import('../../models/Tenant')).default;
-    const tenant = await Tenant.findOne({ slug: tenantSlug });
+    // ⚡ Bolt: Added .lean() to read-only queries to bypass hydration
+    const tenant = await Tenant.findOne({ slug: tenantSlug }).lean();
     if (!tenant) return res.status(404).json({ error: 'tenant_not_found' });
 
     // ── X-Hub-Signature-256 verification ──────────────────────────────────
@@ -700,9 +703,10 @@ router.delete('/:id', async (req, res) => {
 // Test webhook (tenant-scoped: can only test your own tenant's webhooks)
 router.post('/:id/test', async (req, res) => {
   try {
+    // ⚡ Bolt: Added .lean() to bypass document hydration for read-only query
     const webhook = await (Webhook as any).findOne(
       withTenantScope(req, { _id: req.params.id }),
-    );
+    ).lean();
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
 
     // This is a bit of a hack to use the private sendPayload method by exposing a test mechanism
