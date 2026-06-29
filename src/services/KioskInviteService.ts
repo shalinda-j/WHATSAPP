@@ -25,7 +25,8 @@ const KIOSK_CODE_TTL_MS = (() => {
 })();
 
 /** The ONE place the branch fallback literal lives. */
-const DEFAULT_BRANCH = (process.env.BRANCH_NAME || 'Pasyala').trim() || 'Pasyala';
+const DEFAULT_BRANCH =
+  (process.env.BRANCH_NAME || 'Pasyala').trim() || 'Pasyala';
 
 // Lazy Contact model lookup to avoid a circular import with the CRM layer
 // (mirrors AutoRegistrationService).
@@ -123,9 +124,7 @@ class KioskInviteService {
    * Issue a new kiosk code for a (resolved) customer and deliver it over
    * WhatsApp best-effort. Never throws on a delivery failure.
    */
-  async issue(
-    input: IssueInput,
-  ): Promise<{ code: string; invite: any }> {
+  async issue(input: IssueInput): Promise<{ code: string; invite: any }> {
     let { contactId, phone, jid } = input;
 
     // Fill phone / jid / contactId from the CRM contact when we can.
@@ -133,11 +132,11 @@ class KioskInviteService {
     if (contact) {
       contactId = contactId || String(contact._id);
       phone = phone || contact.phone || contact.whatsappNumber || undefined;
-      jid =
-        jid || contact.whatsappId || contact.whatsappNumber || undefined;
+      jid = jid || contact.whatsappId || contact.whatsappNumber || undefined;
     }
 
-    const branch = (input.branch && input.branch.trim()) || (await this.resolveBranch());
+    const branch =
+      (input.branch && input.branch.trim()) || (await this.resolveBranch());
     const expiresAt = new Date(Date.now() + KIOSK_CODE_TTL_MS);
 
     let invite: any = null;
@@ -193,14 +192,15 @@ class KioskInviteService {
    * the linked contact + a display name. Returns null when the code is
    * invalid / already used / expired.
    */
-  async redeem(
-    code: string,
-    _tenantId?: string,
-  ): Promise<RedeemResult | null> {
+  async redeem(code: string, _tenantId?: string): Promise<RedeemResult | null> {
     if (!code || !/^\d{4}$/.test(String(code).trim())) return null;
 
     const invite: any = await KioskInvite.findOneAndUpdate(
-      { code: String(code).trim(), status: 'issued', expiresAt: { $gt: new Date() } },
+      {
+        code: String(code).trim(),
+        status: 'issued',
+        expiresAt: { $gt: new Date() },
+      },
       { $set: { status: 'redeemed', redeemedAt: new Date() } },
       { new: true },
     );

@@ -12,10 +12,7 @@ import mongoose, { Schema, Document } from 'mongoose';
  *                      an automated payment hook exists.
  */
 export type ConversionKind =
-  | 'lead_registered'
-  | 'booking_created'
-  | 'fee_paid'
-  | 'enrollment';
+  'lead_registered' | 'booking_created' | 'fee_paid' | 'enrollment';
 
 export interface IConversionEvent extends Document {
   tenantId?: mongoose.Types.ObjectId;

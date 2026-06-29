@@ -279,8 +279,7 @@ class WorkflowExecutionEngine {
           this.log(context, 'info', 'Processing with AI', context.nodeId || '');
 
           const lastOutput = context.variables.lastOutput as
-            | Record<string, unknown>
-            | undefined;
+            Record<string, unknown> | undefined;
           const input =
             context.variables.lastMessage || lastOutput?.message || 'Hello';
 
@@ -345,8 +344,7 @@ class WorkflowExecutionEngine {
           );
 
           const lastOutput = context.variables.lastOutput as
-            | Record<string, unknown>
-            | undefined;
+            Record<string, unknown> | undefined;
           const rawMessage =
             context.variables.aiResponse ||
             lastOutput?.response ||

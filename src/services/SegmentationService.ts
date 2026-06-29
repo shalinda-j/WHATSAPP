@@ -219,8 +219,7 @@ export class SegmentationService {
 
     const allRules: SegmentRule[] = (segment.rules ?? []) as SegmentRule[];
     const orGroups: SegmentRule[][] | undefined = segment.or as
-      | SegmentRule[][]
-      | undefined;
+      SegmentRule[][] | undefined;
 
     const contactCompile = compileSegmentRules(allRules, orGroups, {
       scope: 'contact',
