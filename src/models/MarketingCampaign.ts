@@ -2,18 +2,10 @@
 import { Channel } from '../types/agent';
 
 export type CampaignStatus =
-  | 'draft'
-  | 'scheduled'
-  | 'running'
-  | 'paused'
-  | 'completed'
-  | 'cancelled';
+  'draft' | 'scheduled' | 'running' | 'paused' | 'completed' | 'cancelled';
 
 export type CampaignTriggerKind =
-  | 'manual'
-  | 'scheduled'
-  | 'behaviour'
-  | 'lead_status_change';
+  'manual' | 'scheduled' | 'behaviour' | 'lead_status_change';
 
 export interface ICampaignVariant {
   variantId: string;

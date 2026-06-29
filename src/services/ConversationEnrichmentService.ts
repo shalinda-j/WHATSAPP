@@ -55,7 +55,12 @@ export function extractPhoneFromText(text: string): string | null {
     let normalized = digits;
     // Sri Lanka local form: 0XXXXXXXXX -> 94XXXXXXXXX. Only when the user did
     // NOT type an explicit international "+" prefix.
-    if (!hasPlus && digits.startsWith('0') && digits.length >= 9 && digits.length <= 11) {
+    if (
+      !hasPlus &&
+      digits.startsWith('0') &&
+      digits.length >= 9 &&
+      digits.length <= 11
+    ) {
       normalized = `94${digits.slice(1)}`;
     }
 
@@ -104,7 +109,10 @@ function atNineAm(base: Date, addDays: number): Date {
  * returns null, and a computed date that is not strictly in the future returns
  * null. `now` defaults to a fresh Date().
  */
-export function parseFollowUpDate(text: string, now: Date = new Date()): Date | null {
+export function parseFollowUpDate(
+  text: string,
+  now: Date = new Date(),
+): Date | null {
   if (!text || typeof text !== 'string') return null;
 
   const t = text.toLowerCase();
@@ -121,7 +129,7 @@ export function parseFollowUpDate(text: string, now: Date = new Date()): Date | 
     const month = parseInt(dateMatch[2], 10);
     const rawYear = dateMatch[3] ? parseInt(dateMatch[3], 10) : undefined;
     if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
-      let year =
+      const year =
         rawYear === undefined
           ? now.getFullYear()
           : rawYear < 100
@@ -299,11 +307,12 @@ export async function enrichContactFromMessage(
     set.updatedAt = new Date();
     await Contact.updateOne({ _id: existing._id }, { $set: set });
   } catch (err: any) {
-    console.warn(
-      '⚠️ Conversation enrichment skipped:',
-      err?.message || err,
-    );
+    console.warn('⚠️ Conversation enrichment skipped:', err?.message || err);
   }
 }
 
-export default { enrichContactFromMessage, extractPhoneFromText, parseFollowUpDate };
+export default {
+  enrichContactFromMessage,
+  extractPhoneFromText,
+  parseFollowUpDate,
+};

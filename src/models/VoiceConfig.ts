@@ -2,11 +2,7 @@ import mongoose, { Schema } from 'mongoose';
 import { CryptoService } from '../services/CryptoService';
 
 export type VoiceProvider =
-  | 'google-free'
-  | 'google-cloud'
-  | 'gemini-tts'
-  | 'openai'
-  | 'elevenlabs';
+  'google-free' | 'google-cloud' | 'gemini-tts' | 'openai' | 'elevenlabs';
 export type VoiceMode = 'voice-only' | 'text-only' | 'voice-and-text';
 
 export interface IVoiceConfig {

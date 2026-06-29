@@ -492,8 +492,7 @@ export class AILoadBalancer {
       }
 
       // Fallback heuristic: derive provider type + model from the name.
-      const providerName =
-        typeof service === 'string' ? service : service.name;
+      const providerName = typeof service === 'string' ? service : service.name;
 
       // Extract model name from "Gemini (gemini-1.5-flash)" -> "gemini-1.5-flash"
       const modelMatch = providerName.match(/\((.*?)\)/);
