@@ -78,9 +78,31 @@ export class PersonalizationAgent implements IAgent {
     );
 
     const phone = phoneFromJid(ctx.userId);
-    const contact = await Contact.findOne({
+    // Tenant-scope the contact lookup (legacy-tolerant). Without it a contact
+    // with the same phone belonging to ANOTHER tenant can be matched and then
+    // mutated (name/tags/lastContactedAt via updateOne below), leaking and
+    // corrupting cross-tenant CRM data.
+    const personalizationTenantId =
+      typeof ctx.metadata?.tenantId === 'string' ? ctx.metadata.tenantId : null;
+    const contactPhoneClause = {
       $or: [{ phone }, { whatsappNumber: phone }, { whatsappId: phone }],
-    });
+    };
+    const contact = await Contact.findOne(
+      personalizationTenantId
+        ? {
+            $and: [
+              contactPhoneClause,
+              {
+                $or: [
+                  { tenantId: personalizationTenantId },
+                  { tenantId: { $exists: false } },
+                  { tenantId: null },
+                ],
+              },
+            ],
+          }
+        : contactPhoneClause,
+    );
 
     const crmContext = contact
       ? {
@@ -112,6 +134,8 @@ export class PersonalizationAgent implements IAgent {
     try {
       raw = await aiLoadBalancer.sendMessageRaw({
         systemPrompt,
+        providerOverride: ctx.providerOverride,
+        modelOverride: ctx.modelOverride,
         userMessage: augmentedInput,
         history: ctx.conversationHistory.slice(-6).map((m) => ({
           role: m.role,

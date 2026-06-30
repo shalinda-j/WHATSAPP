@@ -69,7 +69,9 @@ router.get('/stats', async (req, res) => {
  */
 router.get('/:id', async (req, res) => {
   try {
-    const entry = await KnowledgeEntry.findById(req.params.id);
+    const entry = await KnowledgeEntry.findOne(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!entry) {
       return res.status(404).json({ message: 'Knowledge entry not found' });
     }

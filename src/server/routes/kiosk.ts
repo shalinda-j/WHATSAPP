@@ -703,14 +703,18 @@ router.post(
       // Notify the Main System via the configured webhook (events:["*"] or the
       // explicit "enrollment.registered" subscription). Fire-and-forget safe.
       try {
-        await WebhookService.triggerWebhook('enrollment.registered', {
-          submissionId,
-          ...data,
-          jid,
-          branch: invite.branch,
+        await WebhookService.triggerWebhook(
+          'enrollment.registered',
+          {
+            submissionId,
+            ...data,
+            jid,
+            branch: invite.branch,
+            tenantId,
+            timestamp: new Date().toISOString(),
+          },
           tenantId,
-          timestamp: new Date().toISOString(),
-        });
+        );
       } catch (err: any) {
         console.warn('⚠️ /enroll webhook failed:', err?.message || err);
       }

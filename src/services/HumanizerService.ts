@@ -305,42 +305,83 @@ export class HumanizerService {
     this.isProcessingQueue = true;
     const config = await this.getConfig();
 
+    // The queue is SHARED across all sessions, so a blocked head-of-queue
+    // message (rate-capped session, or one with no socket) must NOT stall every
+    // other session behind it. Blocked messages are ROTATED to the tail so
+    // sendable messages for other sessions proceed. `consecutiveSkips` counts
+    // rotations since the last real progress (send/drop); once it reaches the
+    // queue length every remaining message is blocked, so we sleep ONCE per
+    // full pass instead of busy-rotating.
+    let consecutiveSkips = 0;
+    const rotateToTail = () => {
+      const head = this.messageQueue.shift();
+      if (head) this.messageQueue.push(head);
+      consecutiveSkips++;
+    };
+
     while (this.messageQueue.length > 0) {
+      if (consecutiveSkips >= this.messageQueue.length) {
+        // A full pass with no progress — everything is blocked. Sleep once,
+        // then re-attempt the whole queue (cap windows free / sockets return).
+        await this.sleep(config.retryDelayMs);
+        consecutiveSkips = 0;
+      }
+
       const msg = this.messageQueue[0];
       const sock = getSocket(msg.sessionId);
 
       if (!sock) {
-        // No socket available, wait and retry
+        // No socket for this session. Drop after maxRetries, else rotate so
+        // other sessions aren't starved while this one is down.
         if (msg.attempts >= config.maxRetries) {
           console.error(
             `❌ Max retries reached for queued message to ${msg.jid}, dropping`,
           );
           this.messageQueue.shift();
+          consecutiveSkips = 0; // a drop is progress
           continue;
         }
-
         msg.attempts++;
-        console.log(
-          `⏳ No socket available, waiting ${
-            config.retryDelayMs / 1000
-          }s before retry (${msg.attempts}/${config.maxRetries})`,
-        );
-        await this.sleep(config.retryDelayMs);
+        rotateToTail();
+        continue;
+      }
+
+      // Honor the per-session rate cap when DRAINING the queue too. Without
+      // this the cap is a no-op: messages rejected by checkRateCap in
+      // sendHumanizedMessage are queued here and flushed instantly, uncounted —
+      // so the perMinute/perHour/perDay Baileys ban-risk caps never throttle
+      // anything. Rotate the capped message to the tail (do NOT consume a retry
+      // attempt — a cap is transient, not a failure) so a per-day-capped
+      // session can't block every other session's sends.
+      const rate = await this.checkRateCap(msg.sessionId);
+      if (!rate.allowed) {
+        rotateToTail();
         continue;
       }
 
       // Try to send the queued message
       try {
-        await this.sendDirectly(sock, msg.jid, msg.text, msg.sessionId);
+        const sent = await this.sendDirectly(
+          sock,
+          msg.jid,
+          msg.text,
+          msg.sessionId,
+        );
+        // Count the send against the cap (the direct path records too) so
+        // queued sends can't silently bypass the throttle.
+        if (sent) this.recordSend(msg.sessionId);
         this.messageQueue.shift();
+        consecutiveSkips = 0; // progress
         console.log(`✅ Queued message sent to ${msg.jid}`);
       } catch (error) {
         console.error(`❌ Failed to send queued message to ${msg.jid}:`, error);
         if (msg.attempts >= config.maxRetries) {
           this.messageQueue.shift();
+          consecutiveSkips = 0; // a drop is progress
         } else {
+          // Rotate rather than block the head on a single failing message.
           msg.attempts++;
-          await this.sleep(config.retryDelayMs);
+          rotateToTail();
         }
       }
     }

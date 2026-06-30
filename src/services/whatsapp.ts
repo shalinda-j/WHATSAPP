@@ -53,6 +53,12 @@ const reconnectTimers: Map<string, NodeJS.Timeout> = new Map();
 export class WhatsAppSessionManager {
   private sessions: Map<string, WASocket> = new Map();
   private retryCounters: Map<string, number> = new Map();
+  // Conflict (440) retries are tracked SEPARATELY from generic-error retries.
+  // A rolling deploy can fire many 440s in ~2min; if those shared the generic
+  // counter they'd exhaust MAX_RETRIES, so a later transient disconnect would
+  // hit the give-up path and take the bot permanently offline. Conflicts have
+  // their own unbounded-by-design backoff and never count toward MAX_RETRIES.
+  private conflictCounters: Map<string, number> = new Map();
   private connectionStates: Map<
     string,
     'connecting' | 'connected' | 'disconnected'
@@ -200,6 +206,25 @@ export class WhatsAppSessionManager {
         markOnlineOnConnect: false,
       });
 
+      // Re-check the deleted flag before adopting this socket. deleteSession
+      // may have run during the awaits above (Mongo connect / auth state /
+      // version fetch). At that moment no socket existed for it to close, and
+      // it cleared the auth — but without this guard we'd resume here, register
+      // handlers, and re-link the very device the operator just deleted (it
+      // would even show a fresh QR and start replying to customers).
+      if (this.deletedSessions.has(sessionId)) {
+        console.log(
+          `🚫 Session ${sessionId} was deleted during startup. Tearing down the new socket.`,
+        );
+        try {
+          sock.end(undefined);
+        } catch {
+          // ignore
+        }
+        this.connectionStates.delete(sessionId);
+        return;
+      }
+
       this.sessions.set(sessionId, sock);
 
       // Save credentials
@@ -208,6 +233,27 @@ export class WhatsAppSessionManager {
       // Handle Connection Updates
       sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
+
+        // Defense-in-depth for the delete-during-connect race: if the session
+        // was deleted after this socket was created (e.g. while it was still
+        // linking / showing a QR), tear it down instead of letting the 'qr' or
+        // 'open' branches re-link it. The 'close' branch has its own deleted
+        // handling, so let it run its cleanup.
+        if (connection !== 'close' && this.deletedSessions.has(sessionId)) {
+          console.log(
+            `🚫 Session ${sessionId} deleted mid-connect — ending socket.`,
+          );
+          try {
+            sock.end(undefined);
+          } catch {
+            // ignore
+          }
+          this.sessions.delete(sessionId);
+          this.connectionStates.delete(sessionId);
+          this.retryCounters.delete(sessionId);
+          this.conflictCounters.delete(sessionId);
+          return;
+        }
 
         // Update Session Status in DB
         if (qr) {
@@ -244,6 +290,7 @@ export class WhatsAppSessionManager {
             this.sessions.delete(sessionId);
             this.connectionStates.delete(sessionId);
             this.retryCounters.delete(sessionId);
+            this.conflictCounters.delete(sessionId);
             return;
           }
 
@@ -263,6 +310,7 @@ export class WhatsAppSessionManager {
             }
             this.sessions.delete(sessionId);
             this.retryCounters.delete(sessionId);
+            this.conflictCounters.delete(sessionId);
             this.connectionStates.delete(sessionId);
 
             // MEMORY LEAK FIX: Use tracked timer
@@ -275,8 +323,15 @@ export class WhatsAppSessionManager {
           // In deployment environments (like Digital Ocean), rolling deployments cause two instances
           // to run concurrently for a short period, leading to this error. Wiping state here causes forced logouts.
           if (isConflict) {
-            const retries = (this.retryCounters.get(sessionId) || 0) + 1;
-            this.retryCounters.set(sessionId, retries);
+            // Conflict retries use their OWN counter and never count toward
+            // MAX_RETRIES (see field comment). We do NOT reset the generic
+            // retryCounters here: a session that flaps between generic errors
+            // and conflicts must still accumulate its generic failures toward
+            // the give-up cap (otherwise an interleaved conflict would reset
+            // the streak every time and the give-up path could never fire).
+            // The generic counter resets only on a successful 'open'.
+            const retries = (this.conflictCounters.get(sessionId) || 0) + 1;
+            this.conflictCounters.set(sessionId, retries);
 
             // Wait longer for each retry (5s, 10s, 20s, up to 1 minute) to allow the old instance to shut down
             const delay = Math.min(5000 * Math.pow(2, retries - 1), 60000);
@@ -294,7 +349,9 @@ export class WhatsAppSessionManager {
             return;
           }
 
-          // For other errors, try to reconnect with retry logic
+          // For other errors, try to reconnect with retry logic. Error class
+          // changed away from conflict → reset the conflict counter.
+          this.conflictCounters.delete(sessionId);
           const retries = (this.retryCounters.get(sessionId) || 0) + 1;
           this.retryCounters.set(sessionId, retries);
 
@@ -309,10 +366,15 @@ export class WhatsAppSessionManager {
           } else {
             console.error(`❌ Session ${sessionId}: Max retries reached.`);
             this.connectionStates.set(sessionId, 'disconnected');
+            this.sessions.delete(sessionId);
+            // Clear the counter so a later MANUAL startSession isn't instantly
+            // re-capped by the stale retry count.
+            this.retryCounters.delete(sessionId);
           }
         } else if (connection === 'open') {
           console.log(`✅ Session ${sessionId} Connected!`);
           this.retryCounters.set(sessionId, 0); // Reset retries
+          this.conflictCounters.delete(sessionId); // Reset conflict streak
           this.connectionStates.set(sessionId, 'connected');
           await this.updateSessionStatus(
             sessionId,
@@ -568,6 +630,7 @@ export class WhatsAppSessionManager {
     this.sessions.delete(sessionId);
     this.connectionStates.delete(sessionId);
     this.retryCounters.delete(sessionId);
+    this.conflictCounters.delete(sessionId);
     // MEMORY LEAK FIX: Clear reconnect timer
     this.clearReconnectTimer(sessionId);
     console.log(`   ✅ Cleared internal state for session: ${sessionId}`);
@@ -1042,7 +1105,19 @@ export async function sendMediaMessage(
   sessionId = 'default',
 ): Promise<boolean> {
   const sock = manager.getSocket(sessionId);
-  if (!sock) return false;
+  // Mirror sendMessage/sendVoiceMessage: require an actually-connected socket.
+  // A socket that exists but is mid-reconnect ('connecting'/'disconnected')
+  // would otherwise pass the `!sock` guard and then reject inside
+  // sock.sendMessage ('Connection Closed'), which — with no try/catch here —
+  // surfaced as an unhandled promise rejection for fire-and-forget callers.
+  if (!sock || manager.getConnectionState(sessionId) !== 'connected') {
+    console.warn(
+      `⚠️ sendMediaMessage: session '${sessionId}' not connected (state: ${manager.getConnectionState(
+        sessionId,
+      )}). Skipping media send.`,
+    );
+    return false;
+  }
 
   const messagePayload: any = {};
 
@@ -1063,8 +1138,16 @@ export async function sendMediaMessage(
     messagePayload.caption = options.caption;
   }
 
-  await sock.sendMessage(jid, messagePayload);
-  return true;
+  try {
+    await sock.sendMessage(jid, messagePayload);
+    return true;
+  } catch (err: any) {
+    console.error(
+      `❌ sendMediaMessage failed for ${jid} (session ${sessionId}):`,
+      err?.message || err,
+    );
+    return false;
+  }
 }
 
 export function getSocket(sessionId = 'default'): WASocket | undefined {

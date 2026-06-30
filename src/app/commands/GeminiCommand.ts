@@ -3,6 +3,7 @@ import { proto } from '@whiskeysockets/baileys';
 import { aiLoadBalancer } from '../../services/AILoadBalancer';
 import { sendMessage } from '../../services/whatsapp';
 import { SecurityService } from '../../services/SecurityService';
+import { getDefaultTenantId } from '../../services/TenantBootstrapService';
 
 /**
  * AI Chat Command - Chat with AI with conversation memory (Load Balanced)
@@ -21,6 +22,11 @@ export class GeminiCommand extends BaseCommand {
     if (!jid) return;
 
     const text = args.join(' ').trim();
+    // Tag history writes with the default tenant so the !ai/!ask command and
+    // the main reply path share ONE tenant-scoped ConversationHistory row for
+    // this JID (otherwise this command wrote a tenantId-less row that the main
+    // path's tenant-scoped reads/writes couldn't see).
+    const tenantId = getDefaultTenantId() || undefined;
 
     try {
       await this.sendTyping(message, sessionId);
@@ -30,7 +36,7 @@ export class GeminiCommand extends BaseCommand {
 
     // Handle clear command
     if (args[0]?.toLowerCase() === 'clear') {
-      await aiLoadBalancer.clearConversation(jid);
+      await aiLoadBalancer.clearConversation(jid, tenantId);
       await sendMessage(
         jid,
         '🧹 Conversation history cleared! Starting fresh.',
@@ -69,7 +75,11 @@ export class GeminiCommand extends BaseCommand {
     const safePrompt = `<user_query>${question}</user_query>`;
 
     try {
-      const response = await aiLoadBalancer.sendMessage(jid, safePrompt);
+      const response = await aiLoadBalancer.sendMessage(
+        jid,
+        safePrompt,
+        tenantId,
+      );
 
       await sendMessage(jid, `🤖 ${response}`, sessionId);
     } catch (error: any) {

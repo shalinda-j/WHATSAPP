@@ -389,7 +389,10 @@ export class CampaignService {
    * without double-sending (the in-flight 'sending' status is the
    * single-writer guard).
    */
-  async tickSender(tenantId: string): Promise<{ sent: number }> {
+  async tickSender(
+    tenantId: string,
+    tickIntervalMs = 30_000,
+  ): Promise<{ sent: number }> {
     const BATCH = 25;
     const queued = await CampaignExecution.find({
       tenantId,
@@ -427,9 +430,15 @@ export class CampaignService {
       if (isInQuietHours(campaign, tenant?.brand?.timezone)) continue;
 
       const limit = Math.max(1, campaign.rateLimitPerMinute ?? 30);
-      // Convert per-minute limit to a per-tick cap; the loop runs roughly
-      // every 30 seconds, so half the per-minute cap is the slice.
-      const slice = Math.max(1, Math.floor(limit / 2));
+      // Convert the per-minute limit to a per-tick cap based on the ACTUAL
+      // tick interval, not a hard-coded 30s assumption. Previously
+      // `floor(limit/2)` presumed exactly two ticks per minute, so a custom
+      // intervalMs (startCampaignSender accepts one) desynchronised the cap
+      // entirely. ticksPerMinute = 60000 / interval; per-tick allowance =
+      // limit / ticksPerMinute = limit * interval / 60000. Floor of at least 1
+      // (we can't send a fraction of a message per tick).
+      const ticksPerMinute = Math.max(1, 60_000 / tickIntervalMs);
+      const slice = Math.max(1, Math.floor(limit / ticksPerMinute));
       const subset = execs.slice(0, slice);
 
       // Guard variants before mapping: a campaign with no variants array
@@ -450,7 +459,50 @@ export class CampaignService {
         // marked optedOut. Skip them here rather than at send time so
         // the execution row carries an auditable reason and ops have a
         // clean count of suppressed deliveries.
-        if (await isPhoneOptedOut(exec.recipientExternalId)) {
+        //
+        // Channel-aware: isPhoneOptedOut normalises the recipient to bare
+        // digits, which is meaningless for an EMAIL address — it both misses
+        // real email opt-outs ('john@x.com' → '' → never suppressed) AND can
+        // false-positively suppress a valid email whose local part ends in
+        // digits matching an opted-out phone ('user2024@x.com' → '2024'). So
+        // for the email channel match the opt-out by address; for phone-based
+        // channels use isPhoneOptedOut. Both scoped to this tenant.
+        let recipientOptedOut = false;
+        if (exec.channel === 'email') {
+          const email = String(exec.recipientExternalId || '')
+            .trim()
+            .toLowerCase();
+          if (email) {
+            const escaped = email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const hit = await (Contact as any)
+              .findOne(
+                {
+                  $and: [
+                    {
+                      optedOut: true,
+                      email: { $regex: `^${escaped}$`, $options: 'i' },
+                    },
+                    {
+                      $or: [
+                        { tenantId },
+                        { tenantId: { $exists: false } },
+                        { tenantId: null },
+                      ],
+                    },
+                  ],
+                },
+                { _id: 1 },
+              )
+              .lean();
+            recipientOptedOut = Boolean(hit);
+          }
+        } else {
+          recipientOptedOut = await isPhoneOptedOut(
+            exec.recipientExternalId,
+            tenantId,
+          );
+        }
+        if (recipientOptedOut) {
           await CampaignExecution.updateOne(
             { _id: claimed._id },
             {
@@ -671,7 +723,7 @@ export function startCampaignSender(
   if (senderIntervals.has(tenantId)) return;
   const t = setInterval(async () => {
     try {
-      await campaignService.tickSender(tenantId);
+      await campaignService.tickSender(tenantId, intervalMs);
     } catch (err) {
       console.error(
         `campaignService.tickSender failed for tenant ${tenantId}:`,

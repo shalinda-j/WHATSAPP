@@ -144,7 +144,7 @@ async function tick(tenantId: string): Promise<{
       // Skip opted-out contacts: a STOP from the user must silence every
       // future outbound — including agent-driven follow-ups, not just
       // campaign broadcasts.
-      if (phone && (await isPhoneOptedOut(phone))) {
+      if (phone && (await isPhoneOptedOut(phone, tenantId))) {
         continue;
       }
 
@@ -192,6 +192,22 @@ async function tick(tenantId: string): Promise<{
           });
           fired++;
         }
+
+        // Advance the lead's dormancy clock once it has been processed
+        // (sent in autonomous mode, or queued for operator review in
+        // approval mode). The dormant-lead selection above keys off
+        // `updatedAt < now − 5d`; without bumping it here the SAME oldest
+        // dormant leads are re-selected and re-messaged on every 5-minute
+        // tick. The Lead schema has no `timestamps:true`, so updateOne will
+        // NOT auto-touch updatedAt — set it explicitly. One follow-up per
+        // dormancy window is the intended cadence.
+        if (outcome.handled) {
+          const stampNow = new Date();
+          await Lead.updateOne(
+            { _id: lead._id },
+            { $set: { updatedAt: stampNow, lastFollowUpAt: stampNow } },
+          );
+        }
       } catch (err) {
         console.error(
           `FollowUpScheduler: dispatch failed for lead ${lead._id}:`,
@@ -238,7 +254,7 @@ async function tick(tenantId: string): Promise<{
       // Per-phone opt-out check (channel-agnostic STOP list), same as the
       // dormant-lead loop. Clear the due date so an opted-out contact is not
       // re-scanned on every subsequent tick.
-      if (await isPhoneOptedOut(phone)) {
+      if (await isPhoneOptedOut(phone, tenantId)) {
         await Contact.updateOne(
           { _id: contact._id },
           { $unset: { nextFollowUp: '' }, $set: { updatedAt: new Date() } },

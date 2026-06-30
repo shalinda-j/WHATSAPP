@@ -285,10 +285,18 @@ class WorkflowExecutionEngine {
             context.variables.lastMessage || lastOutput?.message || 'Hello';
 
           try {
-            // Call real AI API
-            const response = await fetch(`${API_BASE}/chat`, {
+            // Call real AI API. Use the authenticated /marketing/chat endpoint
+            // ({message} → {response}); the old `/chat` had no POST '/' route
+            // and was auth-gated, so this fetch silently 401/404'd and the node
+            // always fell back to the simulated canned response. Attach the
+            // bearer token like the sibling /workflows/execute call (FIX H7).
+            const token = localStorage.getItem('token') || '';
+            const response = await fetch(`${API_BASE}/marketing/chat`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
               body: JSON.stringify({ message: input }),
             });
 

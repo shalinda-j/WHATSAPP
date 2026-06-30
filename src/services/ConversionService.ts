@@ -89,7 +89,7 @@ class ConversionService {
 
       // A conversion is the strongest intent signal — push the lead score.
       leadScoringService
-        .onConversion(phoneNumber)
+        .onConversion(phoneNumber, tenantId || undefined)
         .catch((err) => console.error('leadScoring.onConversion failed:', err));
 
       // Close the marketing loop: stamp outcome='converted' on the most recent

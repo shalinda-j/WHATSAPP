@@ -406,7 +406,7 @@ async function finalizeBooking(
         location: booking.location,
         sessionId,
         timestamp: new Date(),
-      }).catch((err) =>
+      }, sess?.tenantId).catch((err) =>
         console.error('booking.created webhook trigger failed:', err),
       );
 
@@ -483,8 +483,30 @@ export async function handleSpecificDateRequest(
   sessionId: string,
 ): Promise<boolean> {
   try {
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return false;
+    // Parse the AI-supplied date STRICTLY as YYYY-MM-DD. The previous
+    // `new Date(dateStr)` validation accepted many formats (e.g. '2026/07/05',
+    // 'Jul 5 2026'), but the booking path below rebuilds the date via
+    // `dateStr.split('-')` which only works for hyphenated ISO dates — a
+    // non-ISO string passed validation yet produced an Invalid Date
+    // (Date.UTC(NaN,…)), so finalizeBooking errored or stored garbage.
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
+    if (!m) return false;
+    const yy = Number(m[1]);
+    const mm = Number(m[2]);
+    const dd = Number(m[3]);
+    // Parse the calendar date as UTC so the stored hour matches the slot the
+    // user picked (mirrors the admin POST /bookings convention). Parsing as
+    // local then setHours could shift the day/hour across timezones.
+    const date = new Date(Date.UTC(yy, mm - 1, dd));
+    // Reject out-of-range components (e.g. 2026-13-40) by round-tripping.
+    if (
+      isNaN(date.getTime()) ||
+      date.getUTCFullYear() !== yy ||
+      date.getUTCMonth() !== mm - 1 ||
+      date.getUTCDate() !== dd
+    ) {
+      return false;
+    }
 
     const [hours, minutes] = timeStr.split(':').map(Number);
     const requestedSlot = hours;
@@ -494,11 +516,6 @@ export async function handleSpecificDateRequest(
 
     if (availableSlots.includes(requestedSlot)) {
       // Success! Book it.
-      // Parse the AI-supplied date as UTC then apply the time in UTC so the
-      // stored hour matches the slot the user picked (mirrors the admin
-      // POST /bookings convention). Parsing as local then setHours could
-      // shift the day/hour across timezones.
-      const [yy, mm, dd] = dateStr.split('-').map(Number);
       const appointmentTime = new Date(Date.UTC(yy, mm - 1, dd));
       appointmentTime.setUTCHours(hours, minutes || 0, 0, 0);
 

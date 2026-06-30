@@ -1,6 +1,14 @@
 import OpenAI from 'openai';
 import { AIService, AIChatMessage } from '../interfaces/AIService';
 import { configService } from './ConfigService';
+import { withTimeout } from './withTimeout';
+
+// Hard ceiling on any single Custom-provider network call, matching the
+// openai/groq/openrouter services. Custom endpoints are the most likely to be
+// a flaky self-hosted box (Ollama/LM Studio/vLLM); without this the OpenAI
+// SDK's 10-minute default applies and the socket leaks long after the
+// AILoadBalancer's outer timeout has already moved on to the next provider.
+const TIMEOUT = Number(process.env.AI_REQUEST_TIMEOUT_MS) || 45000;
 
 /**
  * CustomAIService — connect ANY OpenAI-compatible chat endpoint.
@@ -69,12 +77,19 @@ export class CustomAIService implements AIService {
         });
       }
 
-      const completion = await this.client.chat.completions.create({
-        messages: formattedMessages,
-        model: this.modelName,
-        temperature: 0.7,
-        max_tokens: 2048,
-      });
+      const completion = await withTimeout(
+        this.client.chat.completions.create(
+          {
+            messages: formattedMessages,
+            model: this.modelName,
+            temperature: 0.7,
+            max_tokens: 2048,
+          },
+          { timeout: TIMEOUT },
+        ),
+        TIMEOUT,
+        'custom',
+      );
 
       return completion.choices[0]?.message?.content || '';
     } catch (error: any) {

@@ -727,18 +727,34 @@ export async function generateSpeech(
   targetLanguage?: string,
   preferredProvider?: string,
 ): Promise<Buffer> {
-  // Load voice config (DB-resilient)
+  // Load voice config (DB-resilient). Select the newest ACTIVE config to
+  // match every other reader in this module (getActiveVoiceConfig,
+  // isVoiceAgentEnabled, transcribeAudioWithLanguage). The previous
+  // unfiltered findOne().sort({updatedAt:-1}) grabbed the newest row
+  // regardless of isActive, so saving a newer draft/disabled config while an
+  // older active one still existed made TTS either throw "Voice Agent
+  // Disabled" or synthesize with the draft's wrong provider/credentials.
   let config: import('../models/VoiceConfig').IVoiceConfig | null = null;
   try {
-    config = await VoiceConfig.findOne().sort({ updatedAt: -1 });
-  } catch {
+    config = await VoiceConfig.findOne({ isActive: true }).sort({
+      updatedAt: -1,
+    });
+    if (!config) {
+      // No ACTIVE config. Distinguish "voice explicitly disabled" (a config
+      // row exists but is inactive) from "never configured" (no rows at all):
+      // the former must refuse synthesis; the latter falls back to free TTS.
+      const anyConfig = await VoiceConfig.exists({});
+      if (anyConfig) {
+        throw new Error('Voice Agent Disabled');
+      }
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Voice Agent Disabled') {
+      throw err;
+    }
     console.warn(
       '   ⚠️ VoiceConfig DB unavailable — using Google Free TTS defaults',
     );
-  }
-
-  if (config && !config.isActive) {
-    throw new Error('Voice Agent Disabled');
   }
 
   const lang = targetLanguage || detectLanguage(text).lang;

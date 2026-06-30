@@ -1,16 +1,10 @@
 /**
- * Configuration Migration Script
- * This script migrates hardcoded configurations to use the new ConfigurationManagerService
- */
-
-import { configurationManager } from '../services/ConfigurationManagerService';
-import { configService } from '../services/ConfigService';
-
-console.log('🔄 Starting configuration migration...');
-
-/**
- * This script is a reference for how services should be updated to use the new ConfigurationManager
- * Rather than modifying all files automatically, we'll show what needs to be updated
+ * Configuration Migration Guide (reference only).
+ *
+ * Documents how services should be updated to use ConfigurationManagerService.
+ * This module is intentionally SIDE-EFFECT-FREE: importing it must not log or
+ * pull in runtime services. Call `ConfigMigrationGuide.runAllUpdates()`
+ * explicitly if you want the printed checklist.
  */
 export class ConfigMigrationGuide {
   /**
@@ -89,8 +83,5 @@ export class ConfigMigrationGuide {
     );
   };
 }
-
-// Run the migration guide
-ConfigMigrationGuide.runAllUpdates();
 
 export default ConfigMigrationGuide;

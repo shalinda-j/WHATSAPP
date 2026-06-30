@@ -184,7 +184,7 @@ export default function FollowUp() {
     const matchSearch =
       !searchQuery ||
       (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.phone.includes(searchQuery) ||
+      (c.phone || '').includes(searchQuery) ||
       (c.company || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchStatus = statusFilter === 'all' || c.status === statusFilter;
     const matchPriority =
@@ -568,7 +568,7 @@ export default function FollowUp() {
                             {isOverdue ? 'Overdue: ' : 'Follow up: '}
                             {new Date(c.nextFollowUp).toLocaleDateString(
                               'en-US',
-                              { month: 'short', day: 'numeric' },
+                              { month: 'short', day: 'numeric', timeZone: 'UTC' },
                             )}
                           </p>
                         )}
@@ -641,6 +641,7 @@ export default function FollowUp() {
                         month: 'short',
                         day: 'numeric',
                         year: 'numeric',
+                        timeZone: 'UTC',
                       })}
                     </div>
                   )}

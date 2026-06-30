@@ -95,6 +95,11 @@ const LeadSchema = new (mongoose as any).Schema({
   tags: { type: [String], default: [], index: true },
   registeredAt: { type: Date, default: Date.now, index: true },
   updatedAt: { type: Date, default: Date.now },
+  // Last time the FollowUpScheduler dispatched an automated follow-up for
+  // this lead. The scheduler also bumps `updatedAt` to push the lead out of
+  // the dormant window; this dedicated field lets analytics distinguish a
+  // real inbound interaction from an automated follow-up touch.
+  lastFollowUpAt: { type: Date },
 });
 
 // Indexes for search and filtering

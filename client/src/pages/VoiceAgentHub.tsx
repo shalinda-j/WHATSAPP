@@ -389,12 +389,24 @@ export default function VoiceAgentHub() {
       });
       const url = URL.createObjectURL(blob);
       const audioEl = new Audio(url);
+      // Revoke exactly once on any terminal outcome so the blob URL never
+      // leaks. Previously only onended revoked it, so an autoplay-blocked
+      // play() rejection (the very case the catch handles) leaked the URL on
+      // every test click.
+      let revoked = false;
+      const revoke = () => {
+        if (revoked) return;
+        revoked = true;
+        URL.revokeObjectURL(url);
+      };
       audioEl.play().catch(() => {
         setTestVoiceError(
           'Browser blocked autoplay — click "Allow" if prompted',
         );
+        revoke();
       });
-      audioEl.onended = () => URL.revokeObjectURL(url);
+      audioEl.onended = revoke;
+      audioEl.onerror = revoke;
     } catch (err: unknown) {
       const axiosErr = err as {
         response?: { data?: { error?: string } };

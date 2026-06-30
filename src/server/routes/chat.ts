@@ -199,13 +199,16 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
     if (distinctPhones.length > 0) {
       const contacts = (await (Contact as any)
         .find(
-          {
+          // Tenant-scope the contact lookup (legacy-tolerant) — otherwise a
+          // contact with the same phone under a DIFFERENT tenant could supply
+          // its name into this tenant's chat list (cross-tenant identity leak).
+          withTenantScope(req, {
             $or: [
               { phone: { $in: distinctPhones } },
               { whatsappNumber: { $in: distinctPhones } },
               { whatsappId: { $in: distinctPhones } },
             ],
-          },
+          }),
           { name: 1, phone: 1, whatsappNumber: 1, whatsappId: 1 },
         )
         .lean()) as ContactLite[];

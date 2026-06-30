@@ -1,5 +1,6 @@
 import { proto } from '@whiskeysockets/baileys';
 import { aiLoadBalancer } from '../../services/AILoadBalancer';
+import { getDefaultTenantId } from '../../services/TenantBootstrapService';
 import {
   sendMessage,
   downloadWhatsAppAudio,
@@ -136,7 +137,11 @@ export class VoiceHandler {
       const finalPrompt = transcription + langInstruction;
 
       // ── Generate AI response for ALL voice messages ────────────────────────
-      const aiResponse = await aiLoadBalancer.sendMessage(jid, finalPrompt);
+      const aiResponse = await aiLoadBalancer.sendMessage(
+        jid,
+        finalPrompt,
+        getDefaultTenantId() || undefined,
+      );
 
       const shouldSendText =
         voiceMode === 'text-only' || voiceMode === 'voice-and-text';

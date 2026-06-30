@@ -27,7 +27,13 @@ router.post('/chat', authenticateToken, async (req, res) => {
         .json({ error: 'Gemini API Key is not configured.' });
     }
 
-    const dynamicKB = await configService.getDynamicKnowledgeBase();
+    // Scope the KB to the caller's tenant (from the JWT) so a tenant-bound
+    // admin's marketing chat can't surface another tenant's knowledge base.
+    // Super-admins (no tenantId in token) get the global KB as before.
+    const callerTenantId = (req as { user?: { tenantId?: unknown } }).user
+      ?.tenantId;
+    const dynamicKB =
+      await configService.getDynamicKnowledgeBase(callerTenantId);
     // Prepend the operator-configured AI Personality (Admin Panel → Datasets →
     // AI_PERSONALITY) so this marketing chat follows the same brand voice/rules
     // as the rest of the bot instead of a fixed, baked-in CMO persona.

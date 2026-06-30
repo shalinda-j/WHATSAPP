@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { AIService, AIChatMessage } from '../interfaces/AIService';
 import { configService } from './ConfigService';
 import { withTimeout } from './withTimeout';
+import { coerceToSupportedGroqModel } from '../config/groqModels';
 
 // Hard ceiling on any single Groq network call. Prevents a hung request
 // from blocking the AILoadBalancer fallback chain indefinitely.
@@ -22,7 +23,11 @@ export class GroqService implements AIService {
     model?: string;
     providerType?: string;
   }) {
-    this.modelName = config.model || 'mixtral-8x7b-32768';
+    // Coerce blank / decommissioned models (e.g. the old 'mixtral-8x7b-32768'
+    // default, which 404s on every call) to a current supported model. Groq is
+    // priority 1 in the fallback chain, so a dead model here made the primary
+    // provider fail on every message and constantly fall over to Gemini.
+    this.modelName = coerceToSupportedGroqModel(config.model);
     this.name = `Groq (${this.modelName})`;
 
     // Initialize OpenAI client with Groq base URL

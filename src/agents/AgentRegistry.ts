@@ -122,9 +122,14 @@ export class AgentRegistry {
       score: number;
     }> = [];
 
-    // Honour per-channel-account binding allowlist if the caller supplied one.
-    // An empty array from the caller means "no agents bound" — also a valid
-    // explicit choice; we treat only `undefined` as "any agent eligible".
+    // Honour per-channel-account binding allowlist when the caller restricts
+    // it to a non-empty set. NOTE: ChannelConnection.agentBindings DEFAULTS to
+    // `[]` for every connection (see the model + types/agent.ts), and that
+    // default means "every registered agent eligible (legacy default)" — NOT
+    // "no agents bound". So both `undefined` and an empty array fall through to
+    // "any agent eligible"; only a non-empty allowlist actually filters. (An
+    // operator who wants to silence a channel disables the agents or the
+    // connection, rather than saving an empty binding set.)
     const allowlist = ctx.agentBindings;
     const scoringTasks = Array.from(this.agents.values())
       .filter(

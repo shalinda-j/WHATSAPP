@@ -25,7 +25,10 @@ const JAILBREAK_KEYWORDS = [
   'hypothetical scenario',
   'pretend to be',
   'roleplay as',
-  'always answer',
+  // NOTE: 'always answer' was removed — it false-positived on benign requests
+  // like "can you always answer in Sinhala?", silently refusing a real user
+  // with a security-alert reply. The remaining phrases are specific enough to
+  // genuine jailbreak attempts to keep as standalone matches.
   'no ethical constraints',
   'no safety guidelines',
   'disable safety protocols',

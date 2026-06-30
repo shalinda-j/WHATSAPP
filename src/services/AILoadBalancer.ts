@@ -625,14 +625,23 @@ export class AILoadBalancer {
     // Get history from persistent storage
     let history: AIChatMessage[] = [];
 
+    // Cache key MUST include the tenant: the in-memory cache sits in front of
+    // the now-tenant-scoped DB read, so keying by userId alone would re-serve
+    // one tenant's cached turns to another tenant sharing the same external
+    // userId (e.g. the per-tenant kiosk path) — re-introducing the very
+    // cross-tenant context leak the DB scoping fixed.
+    const histKey = `${tenantId || ''}:${userId}`;
+
     // Try to get cached history first (for same-request optimization)
-    const cachedHistory = this.historyCache.get(userId);
+    const cachedHistory = this.historyCache.get(histKey);
     if (cachedHistory) {
       history = cachedHistory;
     } else {
       // Get from persistent storage
-      const persistedMessages =
-        await conversationHistoryService.getHistory(userId);
+      const persistedMessages = await conversationHistoryService.getHistory(
+        userId,
+        tenantId,
+      );
       if (persistedMessages.length > 0) {
         history = persistedMessages.map((m) => ({
           role: m.role,
@@ -655,10 +664,11 @@ export class AILoadBalancer {
             content: h.content,
             timestamp: new Date(),
           })),
+          tenantId,
         );
       }
       // Cache for this request
-      this.historyCache.set(userId, history);
+      this.historyCache.set(histKey, history);
     }
 
     // Always refresh the system prompt from current config so edits to
@@ -733,12 +743,12 @@ export class AILoadBalancer {
 
         // Persist the new messages to database (fire and forget)
         conversationHistoryService
-          .addMessage(userId, 'user', message)
+          .addMessage(userId, 'user', message, tenantId)
           .catch((err) => {
             console.error('Failed to persist user message:', err);
           });
         conversationHistoryService
-          .addMessage(userId, 'assistant', response)
+          .addMessage(userId, 'assistant', response, tenantId)
           .catch((err) => {
             console.error('Failed to persist assistant message:', err);
           });
@@ -769,8 +779,8 @@ export class AILoadBalancer {
               ]
             : history;
 
-        // Update cache
-        this.historyCache.set(userId, trimmedHistory);
+        // Update cache (tenant-scoped key)
+        this.historyCache.set(histKey, trimmedHistory);
 
         // TRACK USAGE
         // Estimate: 4 chars = 1 token
@@ -918,9 +928,9 @@ export class AILoadBalancer {
     });
   }
 
-  async clearConversation(userId: string) {
-    await conversationHistoryService.clearHistory(userId);
-    this.historyCache.delete(userId);
+  async clearConversation(userId: string, tenantId?: unknown) {
+    await conversationHistoryService.clearHistory(userId, tenantId);
+    this.historyCache.delete(`${tenantId || ''}:${userId}`);
     this.userAssignments.delete(userId);
     console.log(`🗑️ LoadBalancer: Cleared conversation for ${userId}`);
   }

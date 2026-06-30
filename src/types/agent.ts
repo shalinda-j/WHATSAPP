@@ -121,6 +121,12 @@ export const AgentContextSchema = z.object({
   // ChannelConnection.agentBindings before invoking the orchestrator.
   // Empty/undefined = every registered agent eligible (legacy default).
   agentBindings: z.array(z.string()).optional(),
+  // Per-agent AI provider/model pin from AgentConfig. The orchestrator copies
+  // these in before execute() so agents can forward them to
+  // aiLoadBalancer.sendMessageRaw — otherwise an operator who pins a provider
+  // for an agent in the admin UI was silently ignored.
+  providerOverride: z.string().nullish(),
+  modelOverride: z.string().nullish(),
   metadata: z.record(z.string(), z.unknown()).default({}),
 });
 export type AgentContext = z.infer<typeof AgentContextSchema>;

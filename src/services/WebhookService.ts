@@ -90,22 +90,40 @@ export class WebhookService {
   public static async triggerWebhook(
     event: string,
     payload: any,
-    webhook?: any,
+    tenantId?: unknown,
   ) {
     try {
       // Find active webhooks subscribed to this event (or all events with *).
       // Exclude 'ops' category — those receive only ops alerts, not business events.
+      //
+      // SECURITY: scope to the originating tenant (legacy-tolerant). Without
+      // this, a business event from tenant A (lead.created / booking.created /
+      // form.submitted — all carrying customer name/phone/PII) fanned out to
+      // EVERY tenant's configured webhook endpoint, leaking PII across tenants.
+      // When no tenantId is supplied we fall back to the previous unscoped
+      // behaviour so single-tenant / legacy callers keep working.
+      const tenantClause = tenantId
+        ? {
+            $or: [
+              { tenantId },
+              { tenantId: { $exists: false } },
+              { tenantId: null },
+            ],
+          }
+        : null;
+      const andClauses: Record<string, unknown>[] = [
+        { $or: [{ events: event }, { events: '*' }] },
+        {
+          $or: [
+            { category: { $ne: 'ops' } },
+            { category: { $exists: false } },
+          ],
+        },
+      ];
+      if (tenantClause) andClauses.push(tenantClause);
       const webhooks = await (Webhook as any).find({
         isActive: true,
-        $and: [
-          { $or: [{ events: event }, { events: '*' }] },
-          {
-            $or: [
-              { category: { $ne: 'ops' } },
-              { category: { $exists: false } },
-            ],
-          },
-        ],
+        $and: andClauses,
       });
 
       if (webhooks.length === 0) return;

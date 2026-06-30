@@ -276,7 +276,7 @@ export default function ChatInterface() {
                     ...c,
                     lastMessage: enriched,
                     unreadCount:
-                      c.userId !== selectedUser ? c.unreadCount + 1 : 0,
+                      c.userId !== activeSelectedUser ? c.unreadCount + 1 : 0,
                     detectedLanguage: lang,
                   }
                 : c,

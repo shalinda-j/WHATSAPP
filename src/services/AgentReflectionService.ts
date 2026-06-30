@@ -143,9 +143,18 @@ export class AgentReflectionService {
     }).limit(200);
 
     for (const entry of stale) {
-      entry.status = 'expired';
-      entry.reviewedAt = now;
-      await entry.save();
+      // Atomically claim this row: only the tick that actually flips it from
+      // 'pending' proceeds. expireStaleApprovals runs on a setInterval that
+      // does NOT await the async body, so a slow run (200 rows × DB latency)
+      // can overlap the next tick; without an atomic claim both runs would
+      // re-process the same rows and write duplicate negative-feedback (-1)
+      // entries. A null result means another tick already claimed it.
+      const claimed = await AgentApprovalQueue.findOneAndUpdate(
+        { _id: entry._id, status: 'pending' },
+        { $set: { status: 'expired', reviewedAt: now } },
+        { new: true },
+      );
+      if (!claimed) continue;
 
       const execution = await AgentExecution.findById(entry.executionId);
       if (execution) {

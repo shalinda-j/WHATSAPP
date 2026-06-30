@@ -394,8 +394,10 @@ export class ConfigService {
     return getPaymentMessage(defaultConfig, query);
   }
 
-  public async getDynamicKnowledgeBase(): Promise<string> {
-    const cacheKey = 'DYNAMIC_KB';
+  public async getDynamicKnowledgeBase(tenantId?: unknown): Promise<string> {
+    // Namespace the cache by tenant so one tenant's KB can't be served to
+    // another from a shared cache slot.
+    const cacheKey = tenantId ? `DYNAMIC_KB:${String(tenantId)}` : 'DYNAMIC_KB';
     const now = Date.now();
 
     // Check cache
@@ -413,14 +415,34 @@ export class ConfigService {
       // bloated the token budget and fed the model internal config that looked
       // like Q&A. We now include only the types meant to inform answers, which
       // also means megatext documents finally reach the AI.
-      const datasets = await Dataset.find({
-        isActive: true,
+      //
+      // Knowledge/megatext datasets are NOT keyed, so each tenant can own its
+      // own — scope by tenant (legacy-tolerant) when a tenantId is supplied,
+      // otherwise one tenant's KB would leak into another tenant's prompt and
+      // bloat its token budget.
+      const typeClause = {
         $or: [
           { type: { $in: ['knowledge', 'megatext'] } },
           { type: { $exists: false } }, // legacy rows with no type
           { type: null },
         ],
-      });
+      };
+      const datasetFilter: Record<string, unknown> = tenantId
+        ? {
+            isActive: true,
+            $and: [
+              typeClause,
+              {
+                $or: [
+                  { tenantId },
+                  { tenantId: { $exists: false } },
+                  { tenantId: null },
+                ],
+              },
+            ],
+          }
+        : { isActive: true, ...typeClause };
+      const datasets = await Dataset.find(datasetFilter);
 
       let dynamicContent = '';
       if (datasets.length > 0) {

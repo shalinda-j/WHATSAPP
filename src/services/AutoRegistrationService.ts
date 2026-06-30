@@ -69,7 +69,27 @@ export class AutoRegistrationService {
           { whatsappId: phone },
         );
       }
-      const existing = await Contact.findOne({ $or: existingClauses });
+      // Tenant-scope the existence check (legacy-tolerant). Without it, once
+      // tenant A has a contact for this phone/JID, an inbound to tenant B finds
+      // A's contact, returns false, and never creates B's own contact or sends
+      // B's welcome — the number is effectively claimed globally by whoever
+      // saw it first. Creates already stamp tenantId below, so scope reads to
+      // match.
+      const existingFilter: Record<string, unknown> = tenantId
+        ? {
+            $and: [
+              { $or: existingClauses },
+              {
+                $or: [
+                  { tenantId },
+                  { tenantId: { $exists: false } },
+                  { tenantId: null },
+                ],
+              },
+            ],
+          }
+        : { $or: existingClauses };
+      const existing = await Contact.findOne(existingFilter);
 
       if (existing) {
         this.registeredNumbers.add(userId);
