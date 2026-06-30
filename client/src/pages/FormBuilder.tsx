@@ -855,16 +855,16 @@ function FormSubmissions() {
 
   const fetchSubmissions = async () => {
     try {
+      // Use the shared api axios instance (baseURL from VITE_API_URL + the
+      // 401/403 auth-failure interceptor), matching fetchTemplates. The old
+      // raw fetch() ignored the baseURL (404s on cross-domain deploys), never
+      // triggered the auth-failure redirect, and threw on a non-JSON error
+      // body — leaving the page stuck on "No submissions yet".
       const url = statusFilter
         ? `/api/forms/submissions?status=${statusFilter}`
         : '/api/forms/submissions';
-      const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      const data = await res.json();
-      setSubmissions(data.submissions || []);
+      const res = await api.get(url);
+      setSubmissions(res.data.submissions || []);
     } catch (error) {
       console.error('Error fetching submissions:', error);
     } finally {
@@ -878,36 +878,24 @@ function FormSubmissions() {
 
   const updateStatus = async (id: string, status: string) => {
     try {
-      await fetch(`/api/forms/submissions/${id}/status`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({ status }),
-      });
+      await api.put(`/api/forms/submissions/${id}/status`, { status });
       fetchSubmissions();
     } catch (error) {
       console.error('Error updating status:', error);
+      alert('Failed to update status. Please try again.');
     }
   };
 
   const exportCSV = async () => {
-    // FIX H6: window.open() doesn't attach the JWT auth header — the
-    // export endpoint returns 401 for unauthenticated requests. Use fetch
-    // with the Authorization header, receive the CSV as a blob, then
-    // trigger the download via a temporary anchor element.
+    // Use the shared api axios instance (baseURL + auth-failure interceptor)
+    // and receive the CSV as a blob, then trigger the download via a temporary
+    // anchor element. Raw fetch() ignored VITE_API_URL (404 on cross-domain
+    // deploys) and bypassed the 401/403 auth-failure handler.
     try {
-      const token = localStorage.getItem('token') || '';
-      const response = await fetch('/api/forms/submissions/export', {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${token}` },
+      const response = await api.get('/api/forms/submissions/export', {
+        responseType: 'blob',
       });
-      if (!response.ok) {
-        alert(`Export failed: HTTP ${response.status}`);
-        return;
-      }
-      const blob = await response.blob();
+      const blob = response.data as Blob;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

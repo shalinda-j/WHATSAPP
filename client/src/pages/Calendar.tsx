@@ -67,6 +67,10 @@ export default function Calendar() {
     new Date(today.getFullYear(), today.getMonth(), 1),
   );
   const [bookings, setBookings] = useState<Booking[]>([]);
+  // "Upcoming" is a cross-month list, fetched independently of the month being
+  // browsed. Deriving it from `bookings` (the displayed month only) made the
+  // widget show wrong/empty data when navigating away from the current month.
+  const [upcomingBookings, setUpcomingBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState<number | null>(
     today.getDate(),
@@ -109,6 +113,47 @@ export default function Calendar() {
     }
   };
 
+  // Fetch the "Upcoming" list independently of the browsed month: pull the
+  // current real month plus the next month, merge, keep future non-cancelled
+  // bookings, and take the soonest 5. This stays correct regardless of which
+  // month the calendar grid is showing.
+  const fetchUpcoming = async () => {
+    try {
+      const now = new Date();
+      const months = [
+        { y: now.getFullYear(), m: now.getMonth() + 1 },
+        {
+          y: now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear(),
+          m: now.getMonth() === 11 ? 1 : now.getMonth() + 2,
+        },
+      ];
+      const results = await Promise.all(
+        months.map((mm) =>
+          api
+            .get(`/api/analytics/bookings?year=${mm.y}&month=${mm.m}`)
+            .then((res) => res.data?.bookings || res.data || [])
+            .catch(() => []),
+        ),
+      );
+      const merged: Booking[] = results.flat();
+      const startOfToday = new Date(new Date().setHours(0, 0, 0, 0));
+      const seen = new Set<string>();
+      const upcoming = merged
+        .filter((b) => b && new Date(b.date) >= startOfToday && b.status !== 'cancelled')
+        .filter((b) => {
+          const id = String((b as { _id?: string })._id ?? `${b.date}-${b.clientPhone}`);
+          if (seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        })
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .slice(0, 5);
+      setUpcomingBookings(upcoming);
+    } catch {
+      // Non-fatal — the Upcoming panel just stays as-is on a transient error.
+    }
+  };
+
   // Tenant-scoped CSV export of bookings for the month the calendar is
   // currently showing. Mirrors the CRM "Export CSV" blob → click → revoke
   // mechanism; the axios `api` instance injects the Bearer token from
@@ -140,6 +185,12 @@ export default function Calendar() {
   useEffect(() => {
     fetchBookings();
   }, [currentDate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The "Upcoming" list is independent of the browsed month — fetch it once on
+  // mount (it spans the current + next real month).
+  useEffect(() => {
+    fetchUpcoming();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (message) {
@@ -218,6 +269,7 @@ export default function Calendar() {
         notes: '',
       });
       fetchBookings();
+      fetchUpcoming();
     } catch (err: unknown) {
       const detail =
         (err as { response?: { data?: { error?: string } } })?.response?.data
@@ -240,6 +292,9 @@ export default function Calendar() {
         setSelectedBooking((prev) =>
           prev ? { ...prev, status: status as Booking['status'] } : null,
         );
+      // Keep the cross-month Upcoming panel in sync (e.g. a cancellation must
+      // drop out of it).
+      fetchUpcoming();
       setMessage({ type: 'success', text: 'Status updated' });
     } catch {
       setMessage({ type: 'error', text: 'Failed to update status' });
@@ -247,15 +302,6 @@ export default function Calendar() {
   };
 
   const days = getDaysInMonth();
-  // Include everything from the start of today — comparing against `today`
-  // (which carries the page-load time) hid this morning's bookings.
-  const startOfToday = new Date(new Date().setHours(0, 0, 0, 0));
-  const upcomingBookings = bookings
-    .filter(
-      (b) => new Date(b.date) >= startOfToday && b.status !== 'cancelled',
-    )
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    .slice(0, 5);
 
   return (
     <div className="max-w-7xl mx-auto pb-8">

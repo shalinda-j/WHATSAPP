@@ -329,9 +329,35 @@ export class HumanizerService {
         continue;
       }
 
+      // Honor the per-session rate cap when DRAINING the queue too. Without
+      // this the cap is a no-op: messages rejected by checkRateCap in
+      // sendHumanizedMessage are queued here and flushed instantly, uncounted —
+      // so the perMinute/perHour/perDay Baileys ban-risk caps never throttle
+      // anything. Hold the queue until the window frees instead of bursting.
+      // Rate-cap waits do NOT consume a retry attempt (transient, not a
+      // failure); the queue's maxQueueSize bound still caps memory.
+      const rate = await this.checkRateCap(msg.sessionId);
+      if (!rate.allowed) {
+        console.log(
+          `⏳ Rate cap (${rate.reason}) for '${msg.sessionId}' — holding queue ${
+            config.retryDelayMs / 1000
+          }s before retry`,
+        );
+        await this.sleep(config.retryDelayMs);
+        continue;
+      }
+
       // Try to send the queued message
       try {
-        await this.sendDirectly(sock, msg.jid, msg.text, msg.sessionId);
+        const sent = await this.sendDirectly(
+          sock,
+          msg.jid,
+          msg.text,
+          msg.sessionId,
+        );
+        // Count the send against the cap (the direct path records too) so
+        // queued sends can't silently bypass the throttle.
+        if (sent) this.recordSend(msg.sessionId);
         this.messageQueue.shift();
         console.log(`✅ Queued message sent to ${msg.jid}`);
       } catch (error) {

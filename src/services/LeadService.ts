@@ -3,6 +3,7 @@ import { configurationManager } from './ConfigurationManagerService';
 import { CRMService } from './CRMService';
 import { WebhookService } from './WebhookService';
 import Lead from '../models/Lead';
+import Session from '../models/Session';
 import sessionStateService from './SessionStateService';
 import { conversionService } from './ConversionService';
 
@@ -471,8 +472,17 @@ async function saveLeadRegistration(
       JSON.stringify(session.data, null, 2),
     );
 
+    // Resolve the owning tenant from the WhatsApp session so the lead is
+    // tenant-attributable and the downstream webhook only fans out to THIS
+    // tenant's endpoints (not every tenant's). Optional — legacy/single-tenant
+    // sessions have no tenantId and fall back to the legacy-tolerant scope.
+    const sess = await Session.findOne({ sessionId })
+      .select('tenantId')
+      .lean<{ tenantId?: unknown }>();
+    const leadTenantId = sess?.tenantId;
+
     // Create lead in database
-    const leadData = {
+    const leadData: Record<string, unknown> = {
       fullName: session.data.fullName,
       age: session.data.age,
       phoneNumber: session.data.phoneNumber,
@@ -483,6 +493,7 @@ async function saveLeadRegistration(
       status: 'new',
       source: 'whatsapp',
     };
+    if (leadTenantId) leadData.tenantId = leadTenantId;
 
     console.log('📋 Lead data to save:', JSON.stringify(leadData, null, 2));
 
@@ -512,7 +523,7 @@ async function saveLeadRegistration(
       jobType: session.data.jobVacancyType,
       sessionId,
       timestamp: new Date(),
-    }).catch((err) =>
+    }, leadTenantId).catch((err) =>
       console.error('lead.created webhook trigger failed:', err),
     );
 

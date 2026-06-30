@@ -212,7 +212,9 @@ router.get('/type/:type', async (req, res) => {
 
 router.get('/:id', validateObjectId(), async (req, res) => {
   try {
-    const dataset = await Dataset.findById(req.params.id);
+    const dataset = await Dataset.findOne(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!dataset) return res.status(404).json({ message: 'Dataset not found' });
     res.json(dataset);
   } catch (err: any) {
@@ -237,8 +239,8 @@ router.put('/:id/language/:lang', validateObjectId(), async (req, res) => {
     }
 
     const updatePath = `content.${lang}`;
-    const updatedDataset = await Dataset.findByIdAndUpdate(
-      id,
+    const updatedDataset = await Dataset.findOneAndUpdate(
+      withTenantScope(req, { _id: id }),
       { $set: { [updatePath]: content } },
       { new: true },
     );
@@ -338,7 +340,7 @@ router.post('/', async (req, res) => {
     // in-place instead of letting the unique index throw E11000. Without this,
     // the frontend can't recover from a stale `_id` in local state.
     if (key && typeof key === 'string' && key.trim() !== '') {
-      const existing = await Dataset.findOne({ key });
+      const existing = await Dataset.findOne(withTenantScope(req, { key }));
       if (existing) {
         if (name !== undefined) existing.name = name;
         if (description !== undefined) existing.description = description;
@@ -462,8 +464,8 @@ router.put('/:id', validateObjectId(), async (req, res) => {
     if (Object.keys(updateData).length > 0) updateOp.$set = updateData;
     if (Object.keys(unsetData).length > 0) updateOp.$unset = unsetData;
 
-    let updatedDataset = await Dataset.findByIdAndUpdate(
-      req.params.id,
+    let updatedDataset = await Dataset.findOneAndUpdate(
+      withTenantScope(req, { _id: req.params.id }),
       updateOp,
       { new: true },
     );
@@ -477,11 +479,15 @@ router.put('/:id', validateObjectId(), async (req, res) => {
       typeof key === 'string' &&
       key.trim() !== ''
     ) {
-      const byKey = await Dataset.findOne({ key: key.trim() });
+      const byKey = await Dataset.findOne(
+        withTenantScope(req, { key: key.trim() }),
+      );
       if (byKey) {
-        updatedDataset = await Dataset.findByIdAndUpdate(byKey._id, updateOp, {
-          new: true,
-        });
+        updatedDataset = await Dataset.findOneAndUpdate(
+          withTenantScope(req, { _id: byKey._id }),
+          updateOp,
+          { new: true },
+        );
       }
     }
 
@@ -509,7 +515,9 @@ router.put('/:id', validateObjectId(), async (req, res) => {
 
 router.delete('/:id', validateObjectId(), async (req, res) => {
   try {
-    const deleted = await Dataset.findByIdAndDelete(req.params.id);
+    const deleted = await Dataset.findOneAndDelete(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!deleted) {
       return res.status(404).json({ error: 'Dataset not found' });
     }

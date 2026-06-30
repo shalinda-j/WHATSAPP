@@ -14,6 +14,17 @@ import { Channel } from '../types/agent';
  * the recurring payment?" doesn't accidentally opt themselves out of
  * marketing entirely. The agreed industry boundary is single-word /
  * single-phrase replies.
+ *
+ * IMPORTANT: this is a CONVERSATIONAL enrollment/education bot, not a
+ * one-way SMS marketing list. Bare negative answers like "No" (English) or
+ * "Epa"/"එපා" (Sinhala "no / don't want") are ordinary replies to bot
+ * questions — treating them as STOP keywords permanently suppressed real
+ * leads from ALL campaigns and follow-ups. Those ambiguous single negatives
+ * are deliberately NOT in this set; opting out requires an unambiguous
+ * unsubscribe word/phrase (STOP, UNSUBSCRIBE, "stop karanna", "navathanna",
+ * …). Multi-word Sinhala stop phrases ("aye epa" = "no more / stop") stay
+ * because, as whole messages, they express intent to stop rather than a
+ * bare answer.
  */
 const STOP_KEYWORDS = new Set([
   // English / canonical
@@ -25,8 +36,6 @@ const STOP_KEYWORDS = new Set([
   'OPT-OUT',
   'CANCEL',
   'QUIT',
-  'END',
-  'NO',
   'REMOVE ME',
   // Sinhala (English-letter natural phrasing — most users type Sinhala phonetic)
   'AYE EPA',
@@ -34,7 +43,6 @@ const STOP_KEYWORDS = new Set([
   'AYI EPA',
   'AYEE EPAA',
   'AAYE EPAA',
-  'EPA',
   'STOP KARANNA',
   'NAVATHANNA',
   'NAVATHA',
@@ -58,26 +66,49 @@ export function isStopKeyword(message: string | undefined | null): boolean {
 /**
  * Mark every Contact matching the phone identifiers as opted out. Idempotent:
  * a second call has no observable effect beyond updating optedOutAt.
+ *
+ * When `tenantId` is supplied the update is scoped to that tenant (with the
+ * usual legacy-row tolerance for un-tenanted contacts) so a STOP from one
+ * tenant's customer can't opt out a different tenant's contact that happens
+ * to share the same phone number. Callers that don't yet have tenant context
+ * (the legacy single-process WhatsApp flow) may omit it.
  */
 export async function markContactOptedOut(
   phoneOrJid: string,
   channel: Channel | 'manual',
   reason?: string,
+  tenantId?: unknown,
 ): Promise<number> {
   if (!phoneOrJid) return 0;
   const digits = phoneOrJid.replace(/\D/g, '');
   if (!digits) return 0;
 
+  const phoneClause = {
+    $or: [
+      { phone: digits },
+      { whatsappNumber: digits },
+      { whatsappId: digits },
+      { phone: { $regex: `${digits}$` } },
+      { whatsappNumber: { $regex: `${digits}$` } },
+    ],
+  };
+  const filter: Record<string, unknown> = tenantId
+    ? {
+        $and: [
+          phoneClause,
+          {
+            $or: [
+              { tenantId },
+              { tenantId: { $exists: false } },
+              { tenantId: null },
+            ],
+          },
+        ],
+      }
+    : phoneClause;
+
   const res = await (Contact as any).updateMany(
-    {
-      $or: [
-        { phone: digits },
-        { whatsappNumber: digits },
-        { whatsappId: digits },
-        { phone: { $regex: `${digits}$` } },
-        { whatsappNumber: { $regex: `${digits}$` } },
-      ],
-    },
+    filter,
     {
       $set: {
         optedOut: true,
@@ -96,23 +127,49 @@ export async function markContactOptedOut(
  * opted-out. Used as a pre-flight check in campaign / follow-up senders
  * so we never deliver to a contact who explicitly asked to be left alone.
  */
-export async function isPhoneOptedOut(phoneOrJid: string): Promise<boolean> {
+export async function isPhoneOptedOut(
+  phoneOrJid: string,
+  tenantId?: unknown,
+): Promise<boolean> {
   if (!phoneOrJid) return false;
   const digits = phoneOrJid.replace(/\D/g, '');
   if (!digits) return false;
 
-  const hit = await (Contact as any)
-    .findOne(
-      {
-        optedOut: true,
-        $or: [
-          { phone: digits },
-          { whatsappNumber: digits },
-          { whatsappId: digits },
+  // Mirror the suffix-match clauses used by markContactOptedOut so a contact
+  // flagged via the suffix path (e.g. stored '+940771234567' vs STOP digits
+  // '0771234567') is actually detected here. Without the suffix clauses the
+  // pre-flight check missed those rows and campaign / follow-up senders kept
+  // delivering to an opted-out contact — a compliance failure. `digits` is
+  // \D-stripped so it contains only 0-9 and is safe to embed in $regex.
+  const phoneClause = {
+    optedOut: true,
+    $or: [
+      { phone: digits },
+      { whatsappNumber: digits },
+      { whatsappId: digits },
+      { phone: { $regex: `${digits}$` } },
+      { whatsappNumber: { $regex: `${digits}$` } },
+    ],
+  };
+  // Tenant-scope the read (legacy-tolerant) when a tenant is supplied, mirroring
+  // markContactOptedOut's tenant clause. Without it, ONE tenant's opt-out for a
+  // number suppressed EVERY tenant's sends to a separately-consented contact
+  // sharing that phone. Omitting tenantId keeps the prior global behaviour for
+  // legacy callers.
+  const filter: Record<string, unknown> = tenantId
+    ? {
+        $and: [
+          phoneClause,
+          {
+            $or: [
+              { tenantId },
+              { tenantId: { $exists: false } },
+              { tenantId: null },
+            ],
+          },
         ],
-      },
-      { _id: 1 },
-    )
-    .lean();
+      }
+    : phoneClause;
+  const hit = await (Contact as any).findOne(filter, { _id: 1 }).lean();
   return Boolean(hit);
 }

@@ -116,7 +116,23 @@ export function parseFollowUpDate(text: string, now: Date = new Date()): Date | 
 
   // 1. Explicit date: DD/MM, DD/MM/YYYY, D-M (day-first).
   const dateMatch = t.match(/\b(\d{1,2})[/\-](\d{1,2})(?:[/\-](\d{2,4}))?\b/);
-  if (dateMatch) {
+  // A bare DD/MM (no year) is highly ambiguous with ratios and fractions —
+  // "9/10 would recommend", "3/4 cup", "size 10/12" all parse as a future
+  // day/month and would wrongly flip the contact to status='follow_up'. So:
+  // accept a match with an explicit year as unambiguous, but for a bare
+  // DD/MM require nearby date context (a preposition / scheduling keyword
+  // immediately before it). Otherwise fall through to the other parsers.
+  const hasYear = !!(dateMatch && dateMatch[3]);
+  let dateContextOk = hasYear;
+  if (dateMatch && !hasYear) {
+    const idx = dateMatch.index ?? 0;
+    const before = t.slice(Math.max(0, idx - 18), idx);
+    dateContextOk =
+      /\b(on|by|before|after|date|dated|reschedul\w*|follow[\s-]?up|call|meet|meeting|appointment|schedule|scheduled|deadline|due|next)\s*$/.test(
+        before,
+      );
+  }
+  if (dateMatch && dateContextOk) {
     const day = parseInt(dateMatch[1], 10);
     const month = parseInt(dateMatch[2], 10);
     const rawYear = dateMatch[3] ? parseInt(dateMatch[3], 10) : undefined;

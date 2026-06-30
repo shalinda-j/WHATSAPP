@@ -65,6 +65,11 @@ router.post(
         metadata: parsed.data.metadata,
       });
       const log = await CallLog.create({
+        // Stamp the owning tenant. Without it the log has no tenantId and the
+        // call-log list endpoint's legacy-tolerant scope ({tenantId:{$exists:
+        // false}}) surfaces it in EVERY tenant's call-log list (cross-tenant
+        // leak) while never being attributed to the tenant that placed it.
+        tenantId,
         sessionId: 'voice-telephony',
         callerId: parsed.data.from ?? 'system',
         callerPhone: parsed.data.to,

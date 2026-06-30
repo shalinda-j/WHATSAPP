@@ -202,7 +202,7 @@ router.get('/datasets', async (req, res) => {
   try {
     const Dataset = (await import('../../models/Dataset')).default;
 
-    const datasets = await Dataset.find({ isActive: true })
+    const datasets = await Dataset.find(withTenantScope(req, { isActive: true }))
       .sort({ updatedAt: -1 })
       .limit(10)
       .lean();

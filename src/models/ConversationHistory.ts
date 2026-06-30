@@ -19,10 +19,13 @@ export interface IConversationHistory {
   createdAt: Date;
 }
 
-// Default retention: 30 days (configurable via environment variable)
-const CONVERSATION_RETENTION_DAYS = parseInt(
-  process.env.CONVERSATION_RETENTION_DAYS || '30',
-  10,
+// Default retention: 30 days (configurable via environment variable).
+// Guard against a malformed env value (e.g. '30d'): parseInt would yield NaN,
+// and NaN * 86400 makes MongoDB reject/ignore the TTL index so conversations
+// would never expire. Fall back to 30 days and clamp to a sane minimum.
+const CONVERSATION_RETENTION_DAYS = Math.max(
+  1,
+  parseInt(process.env.CONVERSATION_RETENTION_DAYS || '30', 10) || 30,
 );
 
 const ConversationMessageSchema = new mongoose.Schema(

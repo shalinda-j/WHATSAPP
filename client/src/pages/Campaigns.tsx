@@ -90,6 +90,12 @@ export default function Campaigns() {
   const [generating, setGenerating] = useState(false);
   const [genResult, setGenResult] = useState<GenerateResult | null>(null);
   const [genError, setGenError] = useState<string | null>(null);
+  // Image chosen for an AI-generated draft. GenerateResult is an ephemeral
+  // preview (no campaign id / per-variant mediaUrl), so there's nothing to
+  // PATCH yet — but the picked URL must not be silently discarded. We retain
+  // it here, surface it in the suggestion box, and pre-fill the new-campaign
+  // image field so it carries forward when the operator creates the campaign.
+  const [genImageUrl, setGenImageUrl] = useState<string>('');
 
   // Create campaign dialog state
   const [showCreate, setShowCreate] = useState(false);
@@ -147,9 +153,18 @@ export default function Campaigns() {
     const url = asset.url ?? '';
     if (assetPickerTarget === 'create') {
       setNewImageUrl(url);
+    } else if (
+      assetPickerTarget &&
+      typeof assetPickerTarget === 'object' &&
+      'variantId' in assetPickerTarget
+    ) {
+      // AI-suggestion image pick: GenerateResult has no persisted variant to
+      // attach to yet, so retain the URL and pre-fill the new-campaign image
+      // field. Previously this branch dropped the URL entirely — the operator
+      // picked an image and nothing happened.
+      setGenImageUrl(url);
+      setNewImageUrl(url);
     }
-    // For variants in generate result, we just close and note the URL
-    // (the backend's mediaUrl is per-variant; we display it as a note)
     setShowAssetPicker(false);
     setAssetPickerTarget(null);
   };
@@ -189,6 +204,7 @@ export default function Campaigns() {
     setVariantCount(3);
     setGenResult(null);
     setGenError(null);
+    setGenImageUrl('');
   };
 
   const runGenerate = async () => {
@@ -196,6 +212,7 @@ export default function Campaigns() {
     setGenerating(true);
     setGenError(null);
     setGenResult(null);
+    setGenImageUrl('');
     try {
       const res = await api.post<GenerateResult>(
         `/api/campaigns/${generateFor._id}/generate-variants`,
@@ -603,16 +620,41 @@ export default function Campaigns() {
                 )}
                 {/* If AI suggests an image should be attached, show picker */}
                 {genResult.shouldAttachImage && (
-                  <div className="mt-3 rounded-md bg-blue-50 ring-1 ring-blue-200 px-3 py-2 flex items-center justify-between">
-                    <span className="text-xs text-blue-800">
-                      💡 AI recommends attaching an image for better engagement.
-                    </span>
-                    <button
-                      onClick={() => openAssetPicker({ variantId: 'all' })}
-                      className="text-xs text-blue-700 font-medium underline hover:text-blue-900"
-                    >
-                      Pick from Content Studio
-                    </button>
+                  <div className="mt-3 rounded-md bg-blue-50 ring-1 ring-blue-200 px-3 py-2 flex items-center justify-between gap-3">
+                    {genImageUrl ? (
+                      <>
+                        <span className="text-xs text-blue-800 flex items-center gap-2 min-w-0">
+                          <img
+                            src={genImageUrl}
+                            alt="Selected"
+                            className="h-8 w-8 rounded object-cover ring-1 ring-blue-200 shrink-0"
+                          />
+                          <span className="truncate">
+                            Image selected — it will be attached when you create
+                            the campaign.
+                          </span>
+                        </span>
+                        <button
+                          onClick={() => openAssetPicker({ variantId: 'all' })}
+                          className="text-xs text-blue-700 font-medium underline hover:text-blue-900 shrink-0"
+                        >
+                          Change
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-xs text-blue-800">
+                          💡 AI recommends attaching an image for better
+                          engagement.
+                        </span>
+                        <button
+                          onClick={() => openAssetPicker({ variantId: 'all' })}
+                          className="text-xs text-blue-700 font-medium underline hover:text-blue-900 shrink-0"
+                        >
+                          Pick from Content Studio
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

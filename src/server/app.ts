@@ -20,7 +20,8 @@ import analyticsRouter from './routes/analytics';
 import crmRouter from './routes/crm';
 import chatRouter from './routes/chat';
 import workflowRouter from './routes/workflows';
-import formsRouter from './routes/forms';
+import formsRouter, { defaultFormHandler } from './routes/forms';
+import { standardRateLimit } from './middleware/rateLimit';
 import knowledgeRouter from './routes/knowledge';
 import callAgentRouter from './routes/call-agent';
 import agentsRouter from './routes/agents';
@@ -195,6 +196,13 @@ app.use('/api/analytics', authenticateToken, analyticsRouter);
 app.use('/api/crm', authenticateToken, crmRouter);
 app.use('/api/chat', authenticateToken, chatRouter);
 app.use('/api/workflows', authenticateToken, workflowRouter);
+// PUBLIC default-form route for the bot — MUST be registered BEFORE the
+// authenticated `/api/forms` mount below. Express matches in order, so this
+// exact-path GET serves /api/forms/default without a token, while every other
+// /api/forms/* path falls through to the authenticated router. (The old
+// `app.use('/api/forms/default', next)` bypass was dead code: it sat AFTER the
+// authenticated mount, which had already 401'd unauthenticated callers.)
+app.get('/api/forms/default', standardRateLimit, defaultFormHandler);
 app.use('/api/forms', authenticateToken, formsRouter);
 app.use('/api/knowledge', authenticateToken, knowledgeRouter);
 app.use('/api/call-agent', callAgentRouter);
@@ -223,12 +231,6 @@ app.use('/api/kiosk', kioskRouter);
 // Admin-only STT utility + kiosk invite issuance.
 app.use('/api/voice', authenticateToken, voiceRouter);
 app.use('/api/kiosk-admin', authenticateToken, resolveTenant, kioskAdminRouter);
-
-// Public forms endpoint (for bot)
-app.use('/api/forms/default', async (req, res, next) => {
-  // Bypass auth for default form
-  next();
-});
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));

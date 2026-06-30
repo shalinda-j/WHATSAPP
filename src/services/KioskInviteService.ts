@@ -83,12 +83,32 @@ class KioskInviteService {
     contactId?: string;
     phone?: string;
     jid?: string;
+    tenantId?: unknown;
   }): Promise<any | null> {
     const Contact = getContactModel();
     if (!Contact) return null;
 
+    // Tenant-tolerant scope: restrict to the invite's tenant while still
+    // matching legacy un-tenanted contacts. Without this, the phone/JID $or
+    // could resolve a DIFFERENT tenant's contact that shares the number and
+    // then stamp that foreign contactId/phone onto the invite (cross-tenant
+    // leak). Returns null clause when no tenant is known (legacy behaviour).
+    const tenantClause = opts.tenantId
+      ? {
+          $or: [
+            { tenantId: opts.tenantId },
+            { tenantId: { $exists: false } },
+            { tenantId: null },
+          ],
+        }
+      : null;
+    const scoped = (base: Record<string, unknown>): Record<string, unknown> =>
+      tenantClause ? { $and: [base, tenantClause] } : base;
+
     if (opts.contactId) {
-      const byId = await Contact.findById(opts.contactId).catch(() => null);
+      const byId = await Contact.findOne(scoped({ _id: opts.contactId })).catch(
+        () => null,
+      );
       if (byId) return byId;
     }
 
@@ -107,7 +127,7 @@ class KioskInviteService {
       );
     }
     if (!or.length) return null;
-    return Contact.findOne({ $or: or }).catch(() => null);
+    return Contact.findOne(scoped({ $or: or })).catch(() => null);
   }
 
   private displayName(contact: any | null, phone?: string): string {
@@ -129,7 +149,12 @@ class KioskInviteService {
     let { contactId, phone, jid } = input;
 
     // Fill phone / jid / contactId from the CRM contact when we can.
-    const contact = await this.resolveContact({ contactId, phone, jid });
+    const contact = await this.resolveContact({
+      contactId,
+      phone,
+      jid,
+      tenantId: input.tenantId,
+    });
     if (contact) {
       contactId = contactId || String(contact._id);
       phone = phone || contact.phone || contact.whatsappNumber || undefined;
@@ -210,6 +235,7 @@ class KioskInviteService {
       contactId: invite.contactId ? String(invite.contactId) : undefined,
       phone: invite.phone,
       jid: invite.jid,
+      tenantId: invite.tenantId,
     });
 
     return {

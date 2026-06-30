@@ -2,7 +2,7 @@ import express from 'express';
 import { WhatsAppSessionManager } from '../../services/whatsapp';
 import Session from '../../models/Session';
 import { authenticateToken } from '../middleware/auth';
-import { resolveTenant } from '../middleware/tenantContext';
+import { resolveTenant, withTenantScope } from '../middleware/tenantContext';
 
 const router = express.Router();
 const manager = WhatsAppSessionManager.instance;
@@ -15,7 +15,9 @@ router.use(resolveTenant);
 router.get('/', async (req, res) => {
   try {
     // Only return non-deleted sessions
-    const sessions = await Session.find({ deleted: { $ne: true } }).sort({
+    const sessions = await Session.find(
+      withTenantScope(req, { deleted: { $ne: true } }),
+    ).sort({
       createdAt: -1,
     });
     const activeCount = manager.getActiveSessionsCount();
@@ -108,7 +110,9 @@ router.post('/', async (req, res) => {
 // Get specific session status
 router.get('/:id', async (req, res) => {
   try {
-    const session = await Session.findOne({ sessionId: req.params.id });
+    const session = await Session.findOne(
+      withTenantScope(req, { sessionId: req.params.id }),
+    );
     if (!session) return res.status(404).json({ error: 'Session not found' });
     res.json(session);
   } catch (error: any) {
@@ -127,7 +131,7 @@ router.put('/:id/name', async (req, res) => {
     }
 
     const session = await Session.findOneAndUpdate(
-      { sessionId: id },
+      withTenantScope(req, { sessionId: id }),
       { sessionName },
       { new: true },
     );
@@ -146,6 +150,15 @@ router.put('/:id/name', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    // Verify the caller's tenant actually owns this session before
+    // disconnecting/deleting it — otherwise any tenant admin could destroy
+    // another tenant's live WhatsApp device by guessing its sessionId.
+    const owned = await Session.findOne(
+      withTenantScope(req, { sessionId: id }),
+    );
+    if (!owned) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
     await manager.deleteSession(id);
     res.json({ message: 'Session deleted and disconnected' });
   } catch (error: any) {

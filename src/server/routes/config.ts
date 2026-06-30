@@ -94,6 +94,9 @@ router.put('/:id', async (req, res) => {
       { $set: updates },
       { new: true },
     );
+    if (!updatedConfig) {
+      return res.status(404).json({ error: 'Config not found' });
+    }
     res.json(updatedConfig);
   } catch (err: any) {
     res.status(500).json({ error: err.message });

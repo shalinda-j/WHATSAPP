@@ -131,6 +131,14 @@ export class ContentRecommenderAgent implements IAgent {
       return this.silent(promptVersion, start, 'no_content_available');
     }
 
+    // Keep the UNTRUNCATED answer keyed by id. `summary` below is sliced to
+    // 400 chars purely to keep the LLM prompt within budget — but the chosen
+    // entry's answer is what we actually send to the customer, so reusing the
+    // truncated `summary` for the outbound message cut long answers off
+    // mid-sentence. Compose the reply from this full-text map instead.
+    const fullAnswerById = new Map<string, string>(
+      entries.map((e: any) => [String(e._id), String(e.answer)]),
+    );
     const available: AvailableContentItem[] = entries.map((e: any) => ({
       id: String(e._id),
       title: String(e.question).slice(0, 200),
@@ -144,9 +152,29 @@ export class ContentRecommenderAgent implements IAgent {
     // Build CONTACT_PROFILE from CRM if known; fall back to a minimal
     // anonymous profile so the agent still mirrors language.
     const phone = phoneFromJid(ctx.userId);
-    const contact = await Contact.findOne({
+    // Tenant-scope the contact lookup (legacy-tolerant), consistent with the
+    // KnowledgeEntry query above — otherwise CONTACT_PROFILE (tags,
+    // lifecycleStage) could be built from another tenant's contact that shares
+    // the same phone number.
+    const recommenderContactPhoneClause = {
       $or: [{ phone }, { whatsappNumber: phone }, { whatsappId: phone }],
-    });
+    };
+    const contact = await Contact.findOne(
+      tenantId
+        ? {
+            $and: [
+              recommenderContactPhoneClause,
+              {
+                $or: [
+                  { tenantId },
+                  { tenantId: { $exists: false } },
+                  { tenantId: null },
+                ],
+              },
+            ],
+          }
+        : recommenderContactPhoneClause,
+    );
     const contactProfile = {
       language: ctx.language,
       tags: contact?.tags ?? [],
@@ -240,7 +268,10 @@ export class ContentRecommenderAgent implements IAgent {
         raw.inputTokens + raw.outputTokens,
       );
     }
-    const messageBody = `${recommendation.suggestedMessage.trim()}\n\n${chosen.summary}`;
+    // Use the untruncated answer for the customer-facing reply; fall back to
+    // the 400-char prompt summary only if the full text is somehow missing.
+    const chosenAnswer = fullAnswerById.get(chosen.id) ?? chosen.summary;
+    const messageBody = `${recommendation.suggestedMessage.trim()}\n\n${chosenAnswer}`;
 
     // Fire-and-forget: bump KnowledgeEntry.usageCount + touch lastUsedAt.
     KnowledgeEntry.updateOne(

@@ -125,12 +125,20 @@ ContactSchema.index({ whatsappId: 1 }, { sparse: true });
 // this index the filter triggers a collection scan on every send.
 ContactSchema.index({ whatsappOptIn: 1 });
 
-// Pre-save hook to auto-sync fields
-ContactSchema.pre('save', function () {
-  // Auto-populate name from firstName/lastName if not provided
+// Derive the required `name` BEFORE validation. Mongoose runs schema
+// validation as an internally-registered pre('save') step that fires before
+// user pre('save') hooks, so deriving name in pre('save') was dead code: a
+// Contact created with only firstName/lastName threw a "name is required"
+// ValidationError before the derivation could run. Doing it in pre('validate')
+// guarantees the rescue happens in time.
+ContactSchema.pre('validate', function () {
   if (!this.name && (this.firstName || this.lastName)) {
     this.name = `${this.firstName || ''} ${this.lastName || ''}`.trim();
   }
+});
+
+// Pre-save hook to auto-sync fields
+ContactSchema.pre('save', function () {
   // Auto-populate firstName/lastName from name if not provided
   if (this.name && !this.firstName) {
     const parts = this.name.split(' ');

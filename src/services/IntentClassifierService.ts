@@ -184,6 +184,21 @@ const RULES: IntentRule[] = [
 
 const MIN_SCORE = 1;
 
+/**
+ * Match a keyword against the message. A plain substring match made short
+ * tokens fire inside unrelated words — 'hi' matched 'this', 'hey' matched
+ * 'they', 'no' matched 'know' — so "is this available?" was misclassified as a
+ * greeting. Single alphanumeric-word keywords are therefore matched on word
+ * boundaries; phrases / URLs / punctuated keywords (which contain non-word
+ * characters and can't false-positive this way) keep the substring match.
+ */
+function keywordMatches(haystack: string, keyword: string): boolean {
+  if (/[^a-z0-9]/i.test(keyword)) {
+    return haystack.includes(keyword);
+  }
+  return new RegExp(`\\b${keyword}\\b`, 'i').test(haystack);
+}
+
 export function classifyIntent(text: string): Intent {
   if (!text || typeof text !== 'string') return 'unknown';
   const lower = text.toLowerCase();
@@ -194,7 +209,7 @@ export function classifyIntent(text: string): Intent {
   for (const rule of RULES) {
     let score = 0;
     for (const k of rule.keywords) {
-      if (lower.includes(k)) score++;
+      if (keywordMatches(lower, k)) score++;
     }
     if (score > bestScore) {
       bestScore = score;

@@ -89,7 +89,23 @@ export class DealAgent implements IAgent {
     );
 
     const phone = phoneFromJid(ctx.userId);
-    const lead = await Lead.findOne({ phoneNumber: phone });
+    // Tenant-scope the lead lookup (legacy-tolerant), mirroring
+    // LeadQualifierAgent. Without it, two tenants sharing a phone number let
+    // DealAgent read — and then updateOne (status/notes) — the WRONG tenant's
+    // lead, corrupting another tenant's CRM.
+    const dealTenantId =
+      typeof ctx.metadata?.tenantId === 'string' ? ctx.metadata.tenantId : null;
+    const leadFilter: Record<string, unknown> = dealTenantId
+      ? {
+          phoneNumber: phone,
+          $or: [
+            { tenantId: dealTenantId },
+            { tenantId: { $exists: false } },
+            { tenantId: null },
+          ],
+        }
+      : { phoneNumber: phone };
+    const lead = await Lead.findOne(leadFilter);
     const leadContext = lead
       ? {
           exists: true,

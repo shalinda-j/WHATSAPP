@@ -331,7 +331,12 @@ router.get('/:id/messages', validateObjectId(), async (req, res) => {
 
     // SECURITY FIX: Escape regex special characters
     const escapedPhone = phoneDigits.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const query = { userId: { $regex: new RegExp(`^${escapedPhone}.*`) } };
+    // Tenant-scope the message lookup (legacy-tolerant) — the lead is already
+    // tenant-verified above, but without scoping here two tenants sharing a
+    // phone number would leak each other's chat history through this endpoint.
+    const query = withTenantScope(req, {
+      userId: { $regex: new RegExp(`^${escapedPhone}.*`) },
+    });
     const total = await ChatMessage.countDocuments(query);
     const messages = await ChatMessage.find(query)
       .sort({ timestamp: -1 })

@@ -67,19 +67,31 @@ export function isIpAllowed(
 }
 
 /**
- * Reads the client IP using the standard hierarchy: x-forwarded-for first
- * (proxied deployments), then Express's resolved req.ip, then the raw
- * socket address. Returns the first non-empty value.
+ * Reads the client IP for security decisions (the IP allowlist).
+ *
+ * SECURITY: the leftmost X-Forwarded-For token is whatever the *external*
+ * client chose to send, so it must never be trusted for access control —
+ * an attacker could spoof `X-Forwarded-For: <allowlisted-ip>` and bypass
+ * the allowlist. Express resolves `req.ip` correctly from the right end of
+ * XFF using the app-level `trust proxy` hop count (set to 1 in app.ts), so
+ * we prefer it. Only when `req.ip` is absent (non-Express callers) do we
+ * fall back to the LAST XFF entry — the one appended by the closest hop —
+ * never the unvalidated first token, then the raw socket address.
  */
 export function clientIpFromRequest(req: {
   headers?: Record<string, unknown>;
   ip?: string;
   socket?: { remoteAddress?: string };
 }): string {
+  if (req.ip) return req.ip;
   const xff = (req.headers?.['x-forwarded-for'] ?? '') as string;
   if (xff && typeof xff === 'string') {
-    const first = xff.split(',')[0]?.trim();
-    if (first) return first;
+    const parts = xff
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean);
+    const last = parts[parts.length - 1];
+    if (last) return last;
   }
-  return req.ip || req.socket?.remoteAddress || '';
+  return req.socket?.remoteAddress || '';
 }

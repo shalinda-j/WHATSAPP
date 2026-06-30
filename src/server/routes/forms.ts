@@ -36,7 +36,9 @@ router.get(
   validateObjectId(),
   async (req, res) => {
     try {
-      const template = await FormTemplate.findById(req.params.id);
+      const template = await FormTemplate.findOne(
+        withTenantScope(req, { _id: req.params.id }),
+      );
       if (!template) {
         return res.status(404).json({ error: 'Template not found' });
       }
@@ -47,9 +49,15 @@ router.get(
   },
 );
 
-// Get default/active form template (for bot)
-// SECURITY FIX: Add rate limiting to prevent abuse
-router.get('/default', standardRateLimit, async (req, res) => {
+// Get default/active form template (for bot). PUBLIC — no auth (the bot has
+// no admin token). Exported so app.ts can mount it BEFORE the authenticated
+// `/api/forms` router; mounting it only inside this router doesn't help
+// because the parent `app.use('/api/forms', authenticateToken, ...)` prefix
+// match forces auth onto every path including /default.
+export async function defaultFormHandler(
+  _req: import('express').Request,
+  res: import('express').Response,
+): Promise<void> {
   try {
     let template = await FormTemplate.findOne({
       isActive: true,
@@ -59,13 +67,17 @@ router.get('/default', standardRateLimit, async (req, res) => {
       template = await FormTemplate.findOne({ isActive: true });
     }
     if (!template) {
-      return res.status(404).json({ error: 'No active form template found' });
+      res.status(404).json({ error: 'No active form template found' });
+      return;
     }
     res.json(template);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
-});
+}
+
+// Kept for direct hits on the authenticated router too (harmless duplicate).
+router.get('/default', standardRateLimit, defaultFormHandler);
 
 // Create form template
 router.post(

@@ -90,6 +90,12 @@ export default function VoiceConsultant({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  // Tracks whether the button is currently held. Push-to-talk gates its
+  // release handlers on state==='recording', but startRecording stays 'idle'
+  // until getUserMedia resolves — so a fast kiosk tap releases before the mic
+  // is ready and the stop is skipped, leaving the recorder running forever.
+  // This flag captures the press/release intent independent of async state.
+  const wantRecordingRef = useRef(false);
   const recordMimeRef = useRef<string>('audio/webm');
   // Guards async work that resolves after the component has unmounted.
   const mountedRef = useRef<boolean>(true);
@@ -166,6 +172,7 @@ export default function VoiceConsultant({
   // Begin push-to-talk recording.
   const startRecording = useCallback(async () => {
     if (state === 'recording' || state === 'processing') return;
+    wantRecordingRef.current = true;
     setError(null);
 
     // Insecure context / no mediaDevices → fall back to text only.
@@ -184,6 +191,13 @@ export default function VoiceConsultant({
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       if (!mountedRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      // The button was already released while the mic was being acquired (fast
+      // tap). Don't start the recorder — tear the stream down and bail so the
+      // mic isn't left recording with no pending stop.
+      if (!wantRecordingRef.current) {
         stream.getTracks().forEach((t) => t.stop());
         return;
       }
@@ -233,6 +247,9 @@ export default function VoiceConsultant({
   }, [state, sendAudio, stopStream]);
 
   const stopRecording = useCallback(() => {
+    // Clear the press intent first so an in-flight startRecording (still
+    // awaiting getUserMedia) bails instead of starting an orphaned recorder.
+    wantRecordingRef.current = false;
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== 'inactive') {
       try {
@@ -375,15 +392,20 @@ export default function VoiceConsultant({
             }
             disabled={busy}
             onMouseDown={state === 'recording' ? undefined : startRecording}
-            onMouseUp={state === 'recording' ? stopRecording : undefined}
-            onMouseLeave={state === 'recording' ? stopRecording : undefined}
+            // Release handlers must run REGARDLESS of state: on a fast tap the
+            // button is released while startRecording is still awaiting the
+            // mic (state still 'idle'), so gating on state==='recording' here
+            // would skip the stop. stopRecording is a safe no-op when nothing
+            // is recording and also clears the press intent.
+            onMouseUp={stopRecording}
+            onMouseLeave={stopRecording}
             onTouchStart={(e) => {
               e.preventDefault();
               if (state !== 'recording') void startRecording();
             }}
             onTouchEnd={(e) => {
               e.preventDefault();
-              if (state === 'recording') stopRecording();
+              stopRecording();
             }}
             className={[
               'relative w-40 h-40 sm:w-48 sm:h-48 rounded-full flex items-center justify-center',

@@ -685,13 +685,16 @@ export default function CRM() {
 
   useEffect(() => {
     fetchSessions();
-    fetchDashboard();
     fetchAnalytics();
+    // fetchDashboard() is intentionally NOT called here — the [sessionFilter]
+    // effect below already fires on mount with the initial 'all' value, so
+    // calling it here too issued two identical /api/crm/dashboard requests on
+    // every page load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Re-fetch dashboard whenever the device scope changes; the per-tab
-  // effect below picks up sessionFilter through its own dep too.
+  // Fetch dashboard on mount AND whenever the device scope changes; the
+  // per-tab effect below picks up sessionFilter through its own dep too.
   useEffect(() => {
     fetchDashboard();
     // eslint-disable-next-line react-hooks/exhaustive-deps

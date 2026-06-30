@@ -38,7 +38,7 @@ const TARGET_COLLECTIONS = [
   'knowledgeentries',
   'sessions',
   'sessionstates',
-  'callogs',
+  'calllogs',
   'voiceconfigs',
   'webhooks',
   'workflows',

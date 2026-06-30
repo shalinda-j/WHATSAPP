@@ -13,6 +13,16 @@ import { aiLoadBalancer } from './AILoadBalancer';
  * - Real-time knowledge sync
  */
 
+/**
+ * Escape regex metacharacters in user-derived input before embedding it in a
+ * RegExp / $regex. Without this, a message containing an unbalanced '[' or '('
+ * (e.g. "What is C++ (the new course)?") makes `new RegExp(...)` throw
+ * synchronously — which silently killed fallback search and auto-learning.
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Minimum confidence threshold for auto-learning
 const AUTO_LEARN_CONFIDENCE_THRESHOLD = 0.8;
 const MIN_MESSAGE_LENGTH = 10;
@@ -122,8 +132,8 @@ export class KnowledgeTrainingService {
       const regexFilter: any = {
         isActive: true,
         $or: [
-          { question: { $regex: query, $options: 'i' } },
-          { tags: { $in: [new RegExp(query, 'i')] } },
+          { question: { $regex: escapeRegex(query), $options: 'i' } },
+          { tags: { $in: [new RegExp(escapeRegex(query), 'i')] } },
         ],
       };
       // This query already uses $or for the match; combine with the tenant
@@ -207,7 +217,7 @@ export class KnowledgeTrainingService {
       // provided, tolerating legacy rows without a tenantId).
       const existingFilter: any = {
         question: {
-          $regex: new RegExp(`^${userMessage.substring(0, 50)}`, 'i'),
+          $regex: new RegExp(`^${escapeRegex(userMessage.substring(0, 50))}`, 'i'),
         },
       };
       if (tenantId) {

@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { authenticateToken } from '../middleware/auth';
 import { resolveTenant } from '../middleware/tenantContext';
@@ -117,10 +117,17 @@ const RESERVED_AGENT_NAMES = new Set([
 
 router.get(
   '/:name',
-  asyncHandler(async (req, res) => {
-    if (RESERVED_AGENT_NAMES.has(String(req.params.name))) {
-      return res.status(404).json({ error: 'not_found' });
-    }
+  // Reserved first segments (/skills, /approvals, /traces, /reflections) are
+  // real sub-resources whose literal routes are registered LATER in this
+  // router. This param route would otherwise shadow them and 404 (e.g. GET
+  // /api/agents/skills never reached its handler, leaving the Skills panel
+  // empty). next('route') skips the rest of THIS route so Express falls
+  // through to the matching literal route.
+  (req: Request, _res: Response, next: NextFunction) => {
+    if (RESERVED_AGENT_NAMES.has(String(req.params.name))) return next('route');
+    return next();
+  },
+  asyncHandler(async (req: Request, res: Response) => {
     const config = await AgentConfig.findOne({ name: String(req.params.name) });
     if (!config) throw new Error('Agent not found');
     const [versions, recentExecutions, todayStats] = await Promise.all([

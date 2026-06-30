@@ -117,7 +117,7 @@ router.post(
           // message left the socket. Running this inside the existing try means
           // a transient lookup error is counted as a per-recipient failure
           // rather than aborting the whole batch.
-          if (await isPhoneOptedOut(number)) {
+          if (await isPhoneOptedOut(number, req.tenant?._id)) {
             result.skipped++;
             write({
               type: 'progress',

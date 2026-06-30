@@ -559,7 +559,7 @@ export class FormService {
           ? String((tpl as any).tenantId)
           : undefined,
         timestamp: new Date().toISOString(),
-      }).catch(() => {});
+      }, (tpl as any)?.tenantId).catch(() => {});
 
       return {
         success: true,

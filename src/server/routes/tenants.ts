@@ -11,18 +11,28 @@ const router = Router();
 router.use(authenticateToken);
 
 /**
- * Tenant management is a super-admin / admin operation. Without this gate
- * any authenticated user could enumerate every tenant in the deployment
- * — a serious info-disclosure leak for multi-tenant installs.
+ * Tenant management (enumerate / rename / replan / suspend / activate ANY
+ * tenant) is a SUPER-ADMIN operation. The previous gate admitted any role
+ * 'admin' — but Admin.role DEFAULTS to 'admin' and tenant-bound admins carry
+ * a tenantId in their JWT, so a regular tenant admin passed the gate and could
+ * enumerate, edit, and suspend every other tenant (cross-tenant privilege
+ * escalation + DoS).
+ *
+ * Mirror resolveTenant's super-admin definition exactly: a super-admin is a
+ * user WITHOUT a tenantId binding in their token (legacy single-admin /
+ * default deployments) OR one whose role is explicitly super_admin. Any token
+ * that carries a tenantId binding is tenant-scoped and must be rejected here.
  */
-function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
+function requireSuperAdmin(req: AuthRequest, res: Response, next: NextFunction) {
   const role = req.user?.role;
-  if (role !== 'admin' && !isSuperAdminRole(role)) {
-    return res.status(403).json({ error: 'admin_role_required' });
+  const tenantId = (req.user as { tenantId?: unknown } | undefined)?.tenantId;
+  const isSuperAdmin = isSuperAdminRole(role) || !tenantId;
+  if (!isSuperAdmin) {
+    return res.status(403).json({ error: 'super_admin_required' });
   }
   next();
 }
-router.use(requireAdmin);
+router.use(requireSuperAdmin);
 
 const TenantCreateSchema = z.object({
   slug: z

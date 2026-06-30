@@ -29,7 +29,6 @@ export class QuoteCommand extends BaseCommand {
     // Provide a small delay or fetch user profile info for a dynamic reply
     const senderJid = message.key?.participant || message.key?.remoteJid;
     if (!senderJid) return;
-    const quotedText = `"${text}" - @${senderJid.split('@')[0]}`;
 
     // Extract stats for permission check (using sender number)
     const senderNumber = senderJid.replace(/\D/g, ''); // Extract number only
@@ -62,9 +61,14 @@ export class QuoteCommand extends BaseCommand {
       // Build message with @mentions
       const names = mentions.map((id) => `@${id.split('@')[0]}`).join(' ');
 
+      // Prepend the admin's typed announcement (if any) above the mention list.
+      // Previously only the bare @number list was sent and the actual message
+      // (e.g. "!everyone Meeting at 5pm") was silently dropped.
+      const body = text.trim() ? `${text.trim()}\n\n${names}` : names;
+
       // Send message with mentions
       await sock.sendMessage(jid, {
-        text: names,
+        text: body,
         mentions: mentions,
       });
     } catch (error) {

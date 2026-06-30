@@ -186,6 +186,13 @@ function isGreetingMessage(text: string): boolean {
  * "which country?" again after the customer already said "Japan".
  */
 const leadFlowState = new Map<string, LeadFlowFact>();
+// Hard cap to stop unbounded growth: one entry accumulates per distinct sender
+// that hits the AI-down fallback path and nothing else evicts them. The sibling
+// dedup/last-message maps have periodic cleanup; this map had none, so over a
+// long-running process (especially during an AI outage when this path is hot)
+// it leaked one entry per JID forever. Insertion-order eviction, with a
+// delete+set on each write so an active sender's entry refreshes to newest.
+const MAX_LEAD_FLOW_SIZE = 10_000;
 
 function mergeLeadFacts(jid: string, latest: LeadFlowFact): LeadFlowFact {
   const existing = leadFlowState.get(jid) ?? {
@@ -198,6 +205,13 @@ function mergeLeadFacts(jid: string, latest: LeadFlowFact): LeadFlowFact {
     country: latest.country ?? existing.country,
     name: latest.name ?? existing.name,
   };
+  // Refresh recency: deleting before set moves this jid to the newest slot in
+  // Map insertion order, so eviction targets genuinely-stale senders.
+  leadFlowState.delete(jid);
+  if (leadFlowState.size >= MAX_LEAD_FLOW_SIZE) {
+    const oldest = leadFlowState.keys().next().value;
+    if (oldest !== undefined) leadFlowState.delete(oldest);
+  }
   leadFlowState.set(jid, merged);
   return merged;
 }
@@ -1046,7 +1060,7 @@ onMessage(async (message, sock, sessionId) => {
       // when enrolment language appears) so the funnel can rank hot leads.
       // Fire-and-forget — must never block or break the reply path.
       leadScoringService
-        .scoreInbound(jid.replace(/@.*/, ''), text)
+        .scoreInbound(jid.replace(/@.*/, ''), text, defaultTenantId || undefined)
         .catch((err) => console.error('   ⚠️ leadScoring failed:', err));
       // WhatsApp push name — store on the message so the chat list can
       // render a human-readable label even when the userId is a Linked-ID
@@ -1089,15 +1103,22 @@ onMessage(async (message, sock, sessionId) => {
         );
       }
 
-      // [NEW] Trigger Webhook for incoming message
-      WebhookService.triggerWebhook('message.received', {
-        id: savedMsg._id,
-        from: jid,
-        type: messageType,
-        content: text,
-        sessionId,
-        timestamp: new Date(),
-      });
+      // [NEW] Trigger Webhook for incoming message. Scope to the tenant that
+      // owns this message (the WhatsApp path uses the cached default tenant,
+      // same value stamped on the ChatMessage above) so inbound-message PII
+      // doesn't fan out to other tenants' webhook endpoints.
+      WebhookService.triggerWebhook(
+        'message.received',
+        {
+          id: savedMsg._id,
+          from: jid,
+          type: messageType,
+          content: text,
+          sessionId,
+          timestamp: new Date(),
+        },
+        defaultTenantId || undefined,
+      );
     } catch (dbErr) {
       console.error('   ❌ Failed to save user message:', dbErr);
     }
@@ -1195,11 +1216,21 @@ onMessage(async (message, sock, sessionId) => {
       // so an English/Tamil customer handled by an agent got a Sinhala-biased
       // reply. Sinhala script → si, Tamil script → ta, real English words → en,
       // Singlish/unknown → si (the default market language).
-      const detectedAgentLanguage: 'si' | 'ta' | 'en' = /[඀-෿]/.test(text)
+      //
+      // For media messages detect from the customer's OWN caption, NOT the
+      // synthetic English analysis note now held in `text` (line 1017) — which
+      // would otherwise force an English reply to a Sinhala/Tamil customer who
+      // attached a photo/PDF. Mirrors the AI path's `langSource` handling.
+      // Captionless media has an empty caption → falls through to the Sinhala
+      // default.
+      const agentLangSource = incomingMedia ? mediaCaption : text;
+      const detectedAgentLanguage: 'si' | 'ta' | 'en' = /[඀-෿]/.test(
+        agentLangSource,
+      )
         ? 'si'
-        : /[஀-௿]/.test(text)
+        : /[஀-௿]/.test(agentLangSource)
           ? 'ta'
-          : isEnglishText(text)
+          : isEnglishText(agentLangSource)
             ? 'en'
             : 'si';
 

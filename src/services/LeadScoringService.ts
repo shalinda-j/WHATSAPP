@@ -82,10 +82,37 @@ class LeadScoringService {
    * the fit axis from the lead's known profile. Only scores KNOWN leads —
    * brand-new contacts get their first score when they register.
    */
-  async scoreInbound(phoneNumber: string, messageText: string): Promise<void> {
+  /**
+   * Build a tenant-tolerant phone lookup. In multi-tenant deployments two
+   * tenants can each have a Lead with the same phoneNumber; an unscoped
+   * findOne returns whichever was inserted first, so one tenant's inbound
+   * message would bump the OTHER tenant's lead score, corrupting both funnels.
+   */
+  private leadFilter(
+    phoneNumber: string,
+    tenantId?: unknown,
+  ): Record<string, unknown> {
+    if (!tenantId) return { phoneNumber };
+    return {
+      phoneNumber,
+      $or: [
+        { tenantId },
+        { tenantId: { $exists: false } },
+        { tenantId: null },
+      ],
+    };
+  }
+
+  async scoreInbound(
+    phoneNumber: string,
+    messageText: string,
+    tenantId?: unknown,
+  ): Promise<void> {
     try {
       if (!phoneNumber) return;
-      const lead: any = await Lead.findOne({ phoneNumber });
+      const lead: any = await Lead.findOne(
+        this.leadFilter(phoneNumber, tenantId),
+      );
       if (!lead) return;
 
       const text = (messageText || '').toLowerCase();
@@ -107,10 +134,12 @@ class LeadScoringService {
   }
 
   /** A conversion is the strongest possible intent signal — bump hard. */
-  async onConversion(phoneNumber: string): Promise<void> {
+  async onConversion(phoneNumber: string, tenantId?: unknown): Promise<void> {
     try {
       if (!phoneNumber) return;
-      const lead: any = await Lead.findOne({ phoneNumber });
+      const lead: any = await Lead.findOne(
+        this.leadFilter(phoneNumber, tenantId),
+      );
       if (!lead) return;
       const score: LeadScore = lead.score || blankScore();
       score.intent = Math.min(50, (score.intent || 0) + 25);
