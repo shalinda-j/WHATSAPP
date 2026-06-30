@@ -55,13 +55,26 @@ describe('isIpAllowed', () => {
 });
 
 describe('clientIpFromRequest', () => {
-  it('prefers the first hop in x-forwarded-for', () => {
+  // SECURITY: the leftmost X-Forwarded-For token is attacker-controlled, so it
+  // must NOT be trusted for the IP allowlist. Express resolves req.ip correctly
+  // from the right end of XFF using the app-level `trust proxy` hop count, so
+  // req.ip is preferred. (Regression guard for the XFF-spoofing allowlist
+  // bypass.)
+  it('prefers req.ip over the spoofable first x-forwarded-for token', () => {
     expect(
       clientIpFromRequest({
         headers: { 'x-forwarded-for': '203.0.113.42, 10.0.0.1' },
         ip: '10.0.0.1',
       }),
-    ).toBe('203.0.113.42');
+    ).toBe('10.0.0.1');
+  });
+
+  it('uses the LAST x-forwarded-for hop (not the first) when req.ip is absent', () => {
+    expect(
+      clientIpFromRequest({
+        headers: { 'x-forwarded-for': '203.0.113.42, 198.51.100.7' },
+      }),
+    ).toBe('198.51.100.7');
   });
 
   it('falls back to req.ip when xff is missing', () => {

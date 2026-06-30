@@ -137,8 +137,13 @@ The critic verified the ConversationHistory change AND found 2 real defects I in
 - LOW — AILoadBalancer.historyCache was keyed by userId only (in front of the now-scoped DB read) → would re-leak cross-tenant context in multi-tenant. Keyed by `${tenantId}:${userId}` at all 4 sites.
 Completeness scan (Part B) was CLEAN: schedulers all wired, slaTracker pure+scoped, VoiceHandler orphaned dead code, synthetic-key callers (workflow/call_agent_greeting) don't collide with real JIDs. No systematic gap.
 
-## ✅ CONVERGED (2026-06-30)
-7 iterations. ~104 fixes. Full backend + frontend tsc: 0 errors. **Full `npm run build` (client + backend): SUCCESS** (Vite built in 11.5s, backend tsc compile clean). Iteration-7 edits independently reviewed: clean. Full-codebase coverage.
+## ✅ CONVERGED (2026-06-30 → 07-01)
+7 iterations + a runtime-test pass. ~104 fixes. Full backend + frontend tsc: 0 errors. **Full `npm run build` (client + backend): SUCCESS**. **Jest suite: 181/181 passing across 18 suites.** Iteration-7 edits independently reviewed: clean. Full-codebase coverage.
+
+### Iteration 8 (2026-07-01) — ran the test suite (runtime verification)
+- `npm test` is safe as configured (runInBand, maxWorkers 1, transpile-only, 512MB cap); invoke jest's real JS entry on Windows (`node node_modules/jest/bin/jest.js`) — the `node node_modules/.bin/jest` script form fails in Git Bash (executes the shell wrapper as JS).
+- 1 test broke: `IpAllowlist.test.ts › "prefers the first hop in x-forwarded-for"` asserted the OLD insecure XFF-spoofing behavior that the iteration-1 security fix removed. Updated it to assert req.ip-first (+ added a last-hop-fallback regression guard). All green after.
+- Verification trifecta now complete: tsc + build + tests.
 - Pre-existing bugs fixed in iterations 1-4 (~95). Iterations 5-7 were verification rounds: they found only defects in the sweep's OWN newly-added code (1 Humanizer regression, the ConversationHistory follow-ons) — all fixed. The last completeness scan found NO pre-existing systematic gaps.
 - 3 architectural false-positives rejected via premise-verification (calendar shared-cal, AgentRegistry empty-allowlist, ConfigService global-key).
 - Reviews that came back fully clean: tenant-query nesting (it.5), auth/security middleware (it.6), completeness Part B (it.7).
