@@ -190,6 +190,11 @@ export class AgentOrchestrator {
     const ctxWithPrompt: AgentContext = {
       ...ctx,
       assignedPrompt: augmentedPrompt,
+      // Forward the operator's per-agent provider/model pin so agents can pass
+      // it to sendMessageRaw. Previously these AgentConfig fields were never
+      // propagated, so a pinned provider/model was silently ignored.
+      providerOverride: config.providerOverride ?? undefined,
+      modelOverride: config.modelOverride ?? undefined,
     };
 
     const start = Date.now();

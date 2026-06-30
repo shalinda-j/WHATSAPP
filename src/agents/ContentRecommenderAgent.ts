@@ -197,6 +197,8 @@ export class ContentRecommenderAgent implements IAgent {
     try {
       raw = await aiLoadBalancer.sendMessageRaw({
         systemPrompt,
+        providerOverride: ctx.providerOverride,
+        modelOverride: ctx.modelOverride,
         userMessage,
         history: ctx.conversationHistory.slice(-4).map((m) => ({
           role: m.role,

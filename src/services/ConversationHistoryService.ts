@@ -28,11 +28,31 @@ export class ConversationHistoryService {
   }
 
   /**
+   * Build the identity filter. When a tenantId is supplied the history is
+   * scoped to that tenant so the same customer JID contacting two tenants gets
+   * SEPARATE histories (no cross-tenant AI-context leak). When omitted (legacy
+   * callers) the filter is userId-only, preserving the prior behaviour.
+   * `tenantId: undefined` would be stripped by Mongoose anyway, so we build the
+   * object explicitly to be unambiguous.
+   */
+  private identityFilter(
+    userId: string,
+    tenantId?: unknown,
+  ): Record<string, unknown> {
+    return tenantId ? { userId, tenantId } : { userId };
+  }
+
+  /**
    * Get conversation history for a user
    */
-  async getHistory(userId: string): Promise<IConversationMessage[]> {
+  async getHistory(
+    userId: string,
+    tenantId?: unknown,
+  ): Promise<IConversationMessage[]> {
     try {
-      const conversation = await ConversationHistory.findOne({ userId });
+      const conversation = await ConversationHistory.findOne(
+        this.identityFilter(userId, tenantId),
+      );
       if (!conversation) {
         return [];
       }
@@ -50,6 +70,7 @@ export class ConversationHistoryService {
     userId: string,
     role: 'system' | 'user' | 'assistant',
     content: string,
+    tenantId?: unknown,
   ): Promise<void> {
     try {
       const message: IConversationMessage = {
@@ -63,8 +84,10 @@ export class ConversationHistoryService {
       // whole array back into JS, mutate it, and save() — which was racy
       // (two concurrent addMessage calls could clobber each other's trim)
       // and pulled the full document over the wire on every message.
+      // The upsert filter carries tenantId, so an inserted row is owned by the
+      // right tenant (and matches the boot-backfilled existing rows).
       await ConversationHistory.findOneAndUpdate(
-        { userId },
+        this.identityFilter(userId, tenantId),
         {
           $push: {
             messages: { $each: [message], $slice: -MAX_MESSAGES_PER_USER },
@@ -84,10 +107,11 @@ export class ConversationHistoryService {
   async setInitialHistory(
     userId: string,
     messages: IConversationMessage[],
+    tenantId?: unknown,
   ): Promise<void> {
     try {
       await ConversationHistory.findOneAndUpdate(
-        { userId },
+        this.identityFilter(userId, tenantId),
         {
           $set: {
             messages,
@@ -107,9 +131,11 @@ export class ConversationHistoryService {
   /**
    * Clear conversation history for a user
    */
-  async clearHistory(userId: string): Promise<boolean> {
+  async clearHistory(userId: string, tenantId?: unknown): Promise<boolean> {
     try {
-      await ConversationHistory.deleteOne({ userId });
+      await ConversationHistory.deleteOne(
+        this.identityFilter(userId, tenantId),
+      );
       return true;
     } catch (error) {
       console.error('[ConversationHistory] Error clearing history:', error);
@@ -155,10 +181,10 @@ export class ConversationHistoryService {
   /**
    * Extend conversation expiry (refresh TTL)
    */
-  async extendExpiry(userId: string): Promise<void> {
+  async extendExpiry(userId: string, tenantId?: unknown): Promise<void> {
     try {
       await ConversationHistory.findOneAndUpdate(
-        { userId },
+        this.identityFilter(userId, tenantId),
         { $set: { lastActivityAt: new Date() } },
       );
     } catch (error) {

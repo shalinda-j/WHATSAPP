@@ -90,7 +90,65 @@ Each finding verified against source before fixing. One finding rejected on veri
 - SecurityService: removed 'always answer' jailbreak keyword (false-positived "can you always answer in Sinhala?" → silent security-refusal)
 - agents.ts: route restructured to a `next('route')` guard before the asyncHandler (more robust than the prior annotation; same skills-panel fix)
 
-## Iteration 4 — TODO (deferred: HIGH but large/core-path; do carefully)
-- [ ] **ConfigService tenant-scoping (2x HIGH, latent in single-tenant deploy)**: ConfigService.get()/getAIPersonality()/getCompanyInfo()/getBookingConfig()/getDynamicKnowledgeBase() read Dataset with NO tenant filter and cache GLOBALLY by key → in a multi-tenant deploy, tenant B's bot serves tenant A's personality/KB/company-info on the MAIN reply path (AILoadBalancer.buildSystemContent → configurationManager → configService). Fix needs: thread tenantId through ConfigService + configurationManager + AILoadBalancer + all callers (gemini.ts, marketing.ts) and namespace the cache by tenantId. Large, touches core path — do as a focused unit with full AILoadBalancer call-graph verification.
-- [ ] AgentOrchestrator: config.providerOverride/modelOverride are dead (never forwarded to agent sendMessageRaw calls) — operator's pinned provider/model silently ignored. Carry into AgentContext + forward in each agent.
-- [ ] Continue fresh hunt on any remaining un-swept areas (models edge cases, remaining providers openai/openrouter/custom, voiceTelephony providers).
+## Iteration 4 (2026-06-30) — deferred HIGH items resolved, backend tsc clean
+- [x] ConfigService keyed-config leak (Finding 1) — **REJECTED on verification**: Dataset.key is `unique:true, sparse:true` GLOBALLY (not compound with tenantId), so only ONE row can ever exist per key (AI_PERSONALITY/COMPANY_INFO/BOOKING_CONFIG/CONVERSATION_EXAMPLES) across the whole DB — a 2nd tenant can't create its own (E11000). Per-key config is global-by-design; ConfigService returning that single row is correct, NOT a cross-tenant leak. (3rd false positive caught by verifying the architectural premise — would've been a wasted ~10-file refactor + pointless per-tenant cache keys.)
+- [x] getDynamicKnowledgeBase (Finding 2) — REAL: knowledge/megatext datasets are NOT keyed, so they can be per-tenant; the unscoped read concatenated every tenant's KB. Main bot path already used the scoped getKnowledgeBaseForAI, so fixed the real tenant-aware caller: scoped the Dataset query (legacy-tolerant) + namespaced cache by tenantId in ConfigService + ConfigurationManagerService.getAIKnowledgeBase, threaded tenantId from the marketing /chat route (JWT tenantId).
+- [x] AgentOrchestrator provider/model override — FIXED: added providerOverride/modelOverride to AgentContext, orchestrator copies them from AgentConfig into ctxWithPrompt, all 5 agents forward them to sendMessageRaw. providerOverride now actually works (used for provider ordering). NOTE: modelOverride is forwarded but sendMessageRaw currently accepts-and-ignores it (no per-provider model switching) — a deeper downstream gap left for later.
+
+## Coverage note
+4 iterations have now swept the full codebase: services (75), agents (17), channels (9), server/app (64), models (35), utils/config, all frontend pages, index.ts message flow, whatsapp.ts session manager, commands, AI/config layer. ~95 fixes applied; 3 findings rejected on architectural verification (calendar shared-cal, AgentRegistry empty-allowlist, ConfigService global-key). Findings are drying up (loop-until-dry).
+
+## Iteration 5 (2026-06-30) — self-review + final hunt DONE, backend tsc clean
+3 agents: 2 adversarial self-reviews of the sweep's own edits + 1 hunt on un-swept files.
+
+### REGRESSION I introduced — caught + fixed
+- HumanizerService.processQueue (my iteration-3 rate-cap fix): the rate-capped head of the SHARED cross-session queue blocked every other session behind it (sleep+continue on index 0 forever). Rewrote: rotate blocked (rate-capped / no-socket / retryable-error) messages to the tail; sleep only ONCE per full pass when every message is blocked (consecutiveSkips guard) — no starvation, no busy-spin.
+
+### Self-review nuance — fixed
+- whatsapp.ts conflict branch: was resetting generic retryCounters on every 440-conflict, so a session flapping generic↔conflict never reached the MAX_RETRIES give-up. Removed the reset — generic counter now resets only on a successful 'open' (conflicts still tracked separately, never count toward the cap).
+
+### Self-review CLEAN (strong validation)
+- Tenant-scoping review of ALL 20+ changed queries: empty findings. withTenantScope $and-nesting correct everywhere; no $or collisions; WebhookService callers all pass tenantId in the correct 3rd-arg position; findOneAndUpdate/Delete filters match the right docs.
+
+### Final hunt — un-swept files
+- groqModels.ts: my decommissioned-pattern list missed the retired undotted llama3-8b-8192 / llama3-70b-8192 family → broadened to /^llama3-/i (current models use dotted 'llama-3.x', so safe).
+- custom.ts: no per-request timeout (OpenAI SDK 10-min default) → socket leak after the LB's outer timeout moved on. Added withTimeout + { timeout } matching openai/groq/openrouter.
+- Verified clean: MongoAuthService (BufferJSON round-trip, clearState), provider !hasSystem fallback (dead in live path — LB always supplies a system msg), voiceTelephony providers (intentional stubs).
+
+## Status: CONVERGING
+5 iterations, ~99 fixes, full-codebase coverage + a self-review that caught 1 of my own regressions. 3 architectural false-positives rejected. The 2nd self-review (tenant queries) and most of the provider hunt came back clean — findings have largely dried up. Iterations 4-5 changes are NOT yet committed/pushed (iterations 1-3 are, commit cae53fe).
+
+## Iteration 6 (2026-06-30) — re-verify + final convergence round, backend tsc clean
+- [x] Re-verified the iteration-5 HumanizerService.processQueue rewrite by tracing all edge cases (capped-head, all-no-socket, mixed): rotates blocked messages, sleeps once per full pass, guaranteed termination. Correct.
+- [x] Auth/security middleware review (auth.ts/validation.ts/rateLimit.ts/tenantContext.ts/socket.ts): CLEAN — real jwt.verify (sig+expiry), no missing-return bypass, role checks consistent, validateObjectId correct, rateLimit per-IP+path behind trust proxy. Strong assurance.
+- [x] Remaining-services review (SLA/segmentation/budget/approval/RAG/CRM/history): mostly clean (atomic $inc, escaped regex, $and-nesting correct). ONE finding — fixed:
+  - ConversationHistory keyed by bare JID only (userId unique) → a customer messaging two tenants shared ONE merged AI history row (cross-tenant conversation-content leak + corrupted context). Added tenantId field + compound unique {userId,tenantId} index; threaded optional tenantId through all 5 service methods (legacy-tolerant: undefined→userId-only) + AILoadBalancer call sites + index.ts (msg.tenantId / defaultTenantId). SAFE for the single-tenant live deploy: TenantBootstrapService already backfills tenantId on conversationhistories at boot, so scoped reads/writes still match existing rows (no history reset). Multi-tenant operator action documented: drop the legacy userId_1 index.
+
+## Status: CONVERGED (pending one final confirmation)
+6 iterations, ~100 fixes, full-codebase coverage. Last two rounds were validation-heavy: tenant-query review clean, auth review clean, only 1 actionable finding in the entire final services+auth sweep (fixed). 3 architectural false-positives correctly rejected; 1 self-introduced regression caught + fixed. Findings have dried up.
+Commits: iterations 1-3 pushed (cae53fe). Iterations 4-6 staged in working tree, NOT yet committed.
+
+## Iteration 7 (2026-06-30) — completeness critic caught 2 bugs in MY iteration-6 change, both fixed. tsc clean (backend + frontend)
+The critic verified the ConversationHistory change AND found 2 real defects I introduced:
+- HIGH — missed caller: GeminiCommand (`!ai`/`!ask`/`!chat`/`!gpt`) called sendMessage/clearConversation WITHOUT tenantId, so a customer whose first message was `!ask` got a tenantId-less history row; later main-path (defaultTenantId) writes then hit E11000 forever (caught/swallowed) → permanent AI-memory loss + log spam. Fixes:
+  - Root: TenantBootstrapService now drops the legacy `userId_1` index at boot AFTER ensuring the compound {userId,tenantId} index exists (fail-safe: keeps the old index if the compound can't build). Eliminates the E11000 for ALL callers, present + future.
+  - Continuity: added getDefaultTenantId() cached accessor to TenantBootstrapService; threaded into GeminiCommand + VoiceHandler so command + main paths share one tenant-scoped history row.
+  - Also fixed the same `callogs`→`calllogs` typo in TenantBootstrapService's backfill list.
+- LOW — AILoadBalancer.historyCache was keyed by userId only (in front of the now-scoped DB read) → would re-leak cross-tenant context in multi-tenant. Keyed by `${tenantId}:${userId}` at all 4 sites.
+Completeness scan (Part B) was CLEAN: schedulers all wired, slaTracker pure+scoped, VoiceHandler orphaned dead code, synthetic-key callers (workflow/call_agent_greeting) don't collide with real JIDs. No systematic gap.
+
+## ✅ CONVERGED (2026-06-30)
+7 iterations. ~104 fixes. Full backend + frontend tsc: 0 errors. **Full `npm run build` (client + backend): SUCCESS** (Vite built in 11.5s, backend tsc compile clean). Iteration-7 edits independently reviewed: clean. Full-codebase coverage.
+- Pre-existing bugs fixed in iterations 1-4 (~95). Iterations 5-7 were verification rounds: they found only defects in the sweep's OWN newly-added code (1 Humanizer regression, the ConversationHistory follow-ons) — all fixed. The last completeness scan found NO pre-existing systematic gaps.
+- 3 architectural false-positives rejected via premise-verification (calendar shared-cal, AgentRegistry empty-allowlist, ConfigService global-key).
+- Reviews that came back fully clean: tenant-query nesting (it.5), auth/security middleware (it.6), completeness Part B (it.7).
+Findings have dried up: the only things surfacing now are in code added THIS sweep, which is stable and verified. Further hunting has ~zero marginal yield on pre-existing bugs.
+
+## Commit status
+- Iterations 1-3: committed + pushed (cae53fe, branch fix/integration-defects-2026-06-26).
+- Iterations 4-7: staged in working tree, NOT yet committed. Ready to commit/push on request.
+
+## Remaining (operator/owner actions, NOT code bugs)
+- Multi-tenant: the boot index-drop now handles ConversationHistory automatically; no manual step needed.
+- Deferred deeper gap (documented, not a regression): sendMessageRaw accepts modelOverride but doesn't apply it per-provider (providerOverride DOES work). Would need per-provider model switching.
+- DigitalOcean↔GitHub access still blocked (separate infra issue) — owner must re-authorize for auto-deploy.

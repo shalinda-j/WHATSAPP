@@ -324,10 +324,12 @@ export class WhatsAppSessionManager {
           // to run concurrently for a short period, leading to this error. Wiping state here causes forced logouts.
           if (isConflict) {
             // Conflict retries use their OWN counter and never count toward
-            // MAX_RETRIES (see field comment). Error class changed to conflict
-            // → reset the generic counter so a prior transient streak doesn't
-            // carry over.
-            this.retryCounters.delete(sessionId);
+            // MAX_RETRIES (see field comment). We do NOT reset the generic
+            // retryCounters here: a session that flaps between generic errors
+            // and conflicts must still accumulate its generic failures toward
+            // the give-up cap (otherwise an interleaved conflict would reset
+            // the streak every time and the give-up path could never fire).
+            // The generic counter resets only on a successful 'open'.
             const retries = (this.conflictCounters.get(sessionId) || 0) + 1;
             this.conflictCounters.set(sessionId, retries);
 

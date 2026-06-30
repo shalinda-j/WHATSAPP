@@ -95,6 +95,8 @@ export class FollowUpAgent implements IAgent {
     try {
       raw = await aiLoadBalancer.sendMessageRaw({
         systemPrompt,
+        providerOverride: ctx.providerOverride,
+        modelOverride: ctx.modelOverride,
         userMessage,
       });
     } catch (err: any) {

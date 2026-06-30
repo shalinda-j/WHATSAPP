@@ -348,15 +348,18 @@ export class ConfigurationManagerService {
   /**
    * Get AI knowledge base
    */
-  async getAIKnowledgeBase(): Promise<string> {
-    const cacheKey = 'aiKnowledgeBase';
+  async getAIKnowledgeBase(tenantId?: unknown): Promise<string> {
+    // Namespace the cache by tenant so a per-tenant KB isn't served globally.
+    const cacheKey = tenantId
+      ? `aiKnowledgeBase:${String(tenantId)}`
+      : 'aiKnowledgeBase';
 
     if (this.isCacheValid(cacheKey)) {
       return this.cache.get(cacheKey);
     }
 
     try {
-      const kb = await configService.getDynamicKnowledgeBase();
+      const kb = await configService.getDynamicKnowledgeBase(tenantId);
       this.setCache(cacheKey, kb);
       return kb;
     } catch (error) {

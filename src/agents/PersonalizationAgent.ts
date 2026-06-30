@@ -134,6 +134,8 @@ export class PersonalizationAgent implements IAgent {
     try {
       raw = await aiLoadBalancer.sendMessageRaw({
         systemPrompt,
+        providerOverride: ctx.providerOverride,
+        modelOverride: ctx.modelOverride,
         userMessage: augmentedInput,
         history: ctx.conversationHistory.slice(-6).map((m) => ({
           role: m.role,

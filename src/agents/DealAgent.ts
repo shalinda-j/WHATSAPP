@@ -126,6 +126,8 @@ export class DealAgent implements IAgent {
     try {
       raw = await aiLoadBalancer.sendMessageRaw({
         systemPrompt,
+        providerOverride: ctx.providerOverride,
+        modelOverride: ctx.modelOverride,
         userMessage: augmentedInput,
         history: ctx.conversationHistory.slice(-8).map((m) => ({
           role: m.role,

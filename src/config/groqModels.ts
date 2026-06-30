@@ -15,13 +15,22 @@
 export const GROQ_DEFAULT_MODEL =
   process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 
-/** Retired / decommissioned Groq models — 404 on every call. */
+/**
+ * Retired / decommissioned Groq models — 404 on every call.
+ *
+ * NOTE on the `llama3-` prefix: all CURRENT Groq Llama models use the dotted
+ * form 'llama-3.1-…' / 'llama-3.3-…' (i.e. they start with 'llama-3', not
+ * 'llama3'). The original undotted 'llama3-8b-8192' / 'llama3-70b-8192'
+ * production models AND the 'llama3-groq-*' tool-use previews are all retired,
+ * so the broad /^llama3-/i pattern safely catches every retired undotted name
+ * without touching a current 'llama-3.x' model.
+ */
 export const DECOMMISSIONED_GROQ_MODEL_PATTERNS: RegExp[] = [
   /^mixtral-8x7b/i, // decommissioned 2024
   /^llama2-70b/i, // decommissioned
   /^llama-3\.1-70b/i, // decommissioned (replaced by 3.3)
   /^gemma-7b/i, // decommissioned (replaced by gemma2-9b-it)
-  /^llama3-groq-/i, // tool-use preview models, retired
+  /^llama3-/i, // retired undotted family: llama3-8b-8192, llama3-70b-8192, llama3-groq-*
 ];
 
 export function isDecommissionedGroqModel(

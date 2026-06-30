@@ -108,6 +108,8 @@ export class LeadQualifierAgent implements IAgent {
     try {
       raw = await aiLoadBalancer.sendMessageRaw({
         systemPrompt,
+        providerOverride: ctx.providerOverride,
+        modelOverride: ctx.modelOverride,
         userMessage: ctx.inputMessage,
         history: ctx.conversationHistory.slice(-8).map((m) => ({
           role: m.role,

@@ -15,7 +15,7 @@ const LEGACY_COLLECTIONS = [
   'knowledgeentries',
   'sessions',
   'sessionstates',
-  'callogs',
+  'calllogs', // Mongoose pluralizes model 'CallLog' to 'calllogs' (three L's)
   'voiceconfigs',
   'webhooks',
   'workflows',
@@ -28,6 +28,17 @@ export interface BootstrapResult {
   tenant: ITenant;
   created: boolean;
   migrated: Array<{ collection: string; modified: number }>;
+}
+
+// The resolved default-tenant _id, cached at boot by ensureDefaultTenantAndMigrate.
+// Lets non-HTTP code paths that lack a resolveTenant middleware (WhatsApp
+// command handlers, etc.) tag their writes with the default tenant the same way
+// index.ts does, without a per-call DB lookup or a circular import on index.ts.
+let cachedDefaultTenantId: string | null = null;
+
+/** The default-tenant id resolved at boot, or null before bootstrap runs. */
+export function getDefaultTenantId(): string | null {
+  return cachedDefaultTenantId;
 }
 
 /**
@@ -64,6 +75,7 @@ export async function ensureDefaultTenantAndMigrate(): Promise<BootstrapResult> 
     created = true;
     console.log('🏢 Created default tenant');
   }
+  cachedDefaultTenantId = String(tenant._id);
 
   const migrated: BootstrapResult['migrated'] = [];
   const db = mongoose.connection.db;
@@ -104,6 +116,38 @@ export async function ensureDefaultTenantAndMigrate(): Promise<BootstrapResult> 
         .map((m) => `${m.collection}:${m.modified}`)
         .join(', ')}`,
     );
+  }
+
+  // ConversationHistory moved from a userId-only unique index to a compound
+  // { userId, tenantId } unique index. Mongoose never drops the legacy
+  // `userId_1` index, and keeping it makes ANY history writer that omits
+  // tenantId (e.g. the WhatsApp command path) collide with the tenant-scoped
+  // main path on a cross-filter insert → E11000 on every subsequent message
+  // for that JID. The backfill above has now stamped tenantId on every row, so
+  // each (userId, tenantId) pair is unique. We (1) ensure the compound unique
+  // index exists, then ONLY on success (2) drop the legacy single-field index.
+  // Both steps are idempotent and fail-safe: if the compound index can't be
+  // built we keep userId_1 as the guarantee rather than leaving the collection
+  // unconstrained.
+  if (db) {
+    try {
+      const coll = db.collection('conversationhistories');
+      await coll.createIndex({ userId: 1, tenantId: 1 }, { unique: true });
+      try {
+        await coll.dropIndex('userId_1');
+        console.log('🔧 Dropped legacy conversationhistories.userId_1 index');
+      } catch {
+        // Already absent (fresh DB or prior boot) — fine.
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes('ns not found') && !msg.includes('NamespaceNotFound')) {
+        console.warn(
+          'ConversationHistory index migration skipped (kept legacy index):',
+          msg,
+        );
+      }
+    }
   }
 
   return { tenant, created, migrated };

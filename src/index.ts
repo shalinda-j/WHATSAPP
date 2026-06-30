@@ -351,7 +351,7 @@ async function startServer() {
         if (msg.channel === 'whatsapp') return; // owned by legacy handler
         try {
           const channelHistory = await conversationHistoryService
-            .getHistory(msg.externalUserId)
+            .getHistory(msg.externalUserId, msg.tenantId)
             .then((h) =>
               // Drop persisted system entries (personality/KB anchor written by
               // AILoadBalancer) — agents expect only genuine user/assistant turns.
@@ -1194,7 +1194,7 @@ onMessage(async (message, sock, sessionId) => {
       // user's prior messages (last 10 turns). Empty array meant every agent
       // call was "first message" — no personalisation, no BANT continuity.
       const agentHistory = await conversationHistoryService
-        .getHistory(jid)
+        .getHistory(jid, defaultTenantId || undefined)
         .then((h) =>
           // Drop persisted system entries (personality/KB anchor written by
           // AILoadBalancer) — agents expect only genuine user/assistant turns.
@@ -1679,7 +1679,7 @@ async function handleCommand(
       break;
 
     case '!clear':
-      aiLoadBalancer.clearConversation(jid);
+      aiLoadBalancer.clearConversation(jid, defaultTenantId || undefined);
       await sendMessage(
         jid,
         await configurationManager.getClearMessage(),
