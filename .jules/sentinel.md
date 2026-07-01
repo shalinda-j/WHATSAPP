@@ -9,3 +9,8 @@
 **Vulnerability:** A simple string comparison (`!==`) was used to validate the `WEBHOOK_SECRET` against the incoming payload secret in the webhook inbound endpoint.
 **Learning:** Simple string comparison can expose the application to timing attacks, where an attacker can theoretically guess the secret character by character by measuring the time it takes for the comparison to fail.
 **Prevention:** Use `crypto.timingSafeEqual` with a constant-time comparison algorithm (such as SHA-256 hashes of the strings) to ensure that comparisons always take the same amount of time, regardless of whether they succeed or fail.
+
+## 2024-05-27 - IDOR in Express endpoints using findById
+**Vulnerability:** Found multiple instances where endpoints used unscoped `findById`, `findByIdAndUpdate`, and `findByIdAndDelete` which allowed users to manipulate or access resources strictly by ID, bypassing tenant boundaries if the ID was known.
+**Learning:** Utilizing generic mongoose `findById*` patterns bypasses custom scoping middleware since they query directly by `_id` and do not allow easily mixing in tenant conditions dynamically.
+**Prevention:** Use `findOne`, `findOneAndUpdate`, and `findOneAndDelete` wrappers with dynamically combined filters (e.g., `withTenantScope(req, { _id: req.params.id })`) in multi-tenant environments.
