@@ -1483,7 +1483,7 @@ export default function CRM() {
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
                         <a
-                          href={`https://wa.me/${contact.phone.replace(
+                          href={`https://wa.me/${(contact.phone || '').replace(
                             /[^0-9]/g,
                             '',
                           )}`}
@@ -2338,7 +2338,7 @@ export default function CRM() {
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
                         <a
-                          href={`https://wa.me/${lead.phoneNumber.replace(
+                          href={`https://wa.me/${(lead.phoneNumber || '').replace(
                             /[^0-9]/g,
                             '',
                           )}`}
@@ -2643,10 +2643,9 @@ export default function CRM() {
 
             <div className="p-6 border-t border-gray-100 flex justify-end gap-3">
               <a
-                href={`https://wa.me/${selectedRegistration.phoneNumber.replace(
-                  /[^0-9]/g,
-                  '',
-                )}`}
+                href={`https://wa.me/${(
+                  selectedRegistration.phoneNumber || ''
+                ).replace(/[^0-9]/g, '')}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl font-medium"

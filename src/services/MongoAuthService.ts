@@ -32,27 +32,43 @@ const AuthModel =
   (mongoose.models.AuthCredentials as any) ||
   (mongoose as any).model('AuthCredentials', AuthSchema);
 
+// Register the monitoring listeners exactly once per process. mongoose.connection
+// is a shared singleton, so registering them inside connectToMongoDB (which is
+// called on every WhatsApp session start/reconnect) leaked one listener of each
+// type per call → Node's "MaxListenersExceededWarning" and a slow memory leak
+// that destabilised the connection every DB-backed page (CRM, etc.) relies on.
+let mongoConnectionListenersRegistered = false;
+
 // --- MongoDB Connection Helper ---
 export const connectToMongoDB = async (uri: string): Promise<void> => {
+  // Idempotent: if we're already connected there is nothing to do. Skipping the
+  // connect loop here avoids re-pinging + re-running the index migration on
+  // every session start, and (crucially) avoids re-registering the listeners.
+  if (mongoose.connection.readyState === 1) return;
+
   const MAX_RETRIES = 5;
   const RETRY_DELAY = 5000; // 5 seconds
 
-  // Add connection event handlers for monitoring
-  mongoose.connection.on('connected', () => {
-    console.log('📦 MongoDB connection established');
-  });
+  // Add connection event handlers for monitoring — ONCE per process.
+  if (!mongoConnectionListenersRegistered) {
+    mongoConnectionListenersRegistered = true;
 
-  mongoose.connection.on('disconnected', () => {
-    console.warn('⚠️ MongoDB connection lost');
-  });
+    mongoose.connection.on('connected', () => {
+      console.log('📦 MongoDB connection established');
+    });
 
-  mongoose.connection.on('error', (err) => {
-    console.error('❌ MongoDB connection error:', err);
-  });
+    mongoose.connection.on('disconnected', () => {
+      console.warn('⚠️ MongoDB connection lost');
+    });
 
-  mongoose.connection.on('reconnected', () => {
-    console.log('🔄 MongoDB reconnected');
-  });
+    mongoose.connection.on('error', (err) => {
+      console.error('❌ MongoDB connection error:', err);
+    });
+
+    mongoose.connection.on('reconnected', () => {
+      console.log('🔄 MongoDB reconnected');
+    });
+  }
 
   for (let i = 1; i <= MAX_RETRIES; i++) {
     try {
