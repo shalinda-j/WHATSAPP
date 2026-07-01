@@ -160,8 +160,8 @@ router.put(
         );
       }
 
-      const template = await FormTemplate.findByIdAndUpdate(
-        req.params.id,
+      const template = await FormTemplate.findOneAndUpdate(
+        withTenantScope(req, { _id: req.params.id }),
         {
           name,
           description,
@@ -195,7 +195,9 @@ router.delete(
   validateObjectId(),
   async (req, res) => {
     try {
-      const template = await FormTemplate.findByIdAndDelete(req.params.id);
+      const template = await FormTemplate.findOneAndDelete(
+        withTenantScope(req, { _id: req.params.id }),
+      );
       if (!template) {
         return res.status(404).json({ error: 'Template not found' });
       }
@@ -221,8 +223,8 @@ router.post(
         tid ? { tenantId: tid } : {},
         { isDefault: false },
       );
-      const template = await FormTemplate.findByIdAndUpdate(
-        req.params.id,
+      const template = await FormTemplate.findOneAndUpdate(
+        withTenantScope(req, { _id: req.params.id }),
         { isDefault: true, updatedAt: new Date() },
         { new: true },
       );
@@ -244,7 +246,9 @@ router.post(
   validateObjectId(),
   async (req, res) => {
     try {
-      const original = await FormTemplate.findById(req.params.id);
+      const original = await FormTemplate.findOne(
+        withTenantScope(req, { _id: req.params.id }),
+      );
       if (!original) {
         return res.status(404).json({ error: 'Template not found' });
       }
@@ -394,7 +398,9 @@ router.get(
   validateObjectId(),
   async (req, res) => {
     try {
-      const submission = await FormSubmission.findById(req.params.id)
+      const submission = await FormSubmission.findOne(
+        withTenantScope(req, { _id: req.params.id }),
+      )
         .populate('formId', 'name fields')
         .lean();
 
