@@ -224,7 +224,7 @@ export default function Sessions() {
                 >
                   {getStatusIcon(session.status)}
                   <span className="capitalize">
-                    {session.status.replace('_', ' ')}
+                    {(session.status || '').replace('_', ' ')}
                   </span>
                 </div>
 

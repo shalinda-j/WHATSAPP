@@ -527,7 +527,7 @@ export default function Leads() {
                     <td className="px-8 py-5">
                       <div className="flex items-center justify-end gap-2">
                         <a
-                          href={`https://wa.me/${lead.phoneNumber.replace(
+                          href={`https://wa.me/${(lead.phoneNumber || '').replace(
                             /[^0-9]/g,
                             '',
                           )}`}
@@ -865,7 +865,7 @@ export default function Leads() {
             <div className="px-8 py-6 bg-gray-50/80 border-t border-gray-100 flex flex-col sm:flex-row gap-4 justify-between items-center">
               <div className="flex gap-2">
                 <a
-                  href={`https://wa.me/${selectedLead.phoneNumber.replace(
+                  href={`https://wa.me/${(selectedLead.phoneNumber || '').replace(
                     /[^0-9]/g,
                     '',
                   )}`}
