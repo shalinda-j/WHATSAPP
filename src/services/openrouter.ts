@@ -70,17 +70,27 @@ export class OpenRouterService implements AIService {
         });
       }
 
-      // Call OpenRouter API (using OpenAI SDK)
+      // Call OpenRouter API (using OpenAI SDK). `reasoning` is an OpenRouter
+      // extension (not in the OpenAI types), so build params as `any`.
+      const params: Record<string, unknown> = {
+        messages: formattedMessages,
+        model: this.modelName,
+        temperature: 0.7,
+        max_tokens: 2048,
+      };
+      // Disable reasoning-token generation by default. Reasoning models
+      // (qwen3, deepseek-r1, o1-style) otherwise spend 1000s of hidden tokens
+      // before answering — e.g. qwen3.7-plus took 52s (>45s timeout) with
+      // reasoning ON vs ~7s with it OFF, which was silently timing out every
+      // chat. Non-reasoning models ignore this field. Set
+      // OPENROUTER_ENABLE_REASONING=true to opt back in.
+      if (process.env.OPENROUTER_ENABLE_REASONING !== 'true') {
+        params.reasoning = { enabled: false };
+      }
       const completion = await withTimeout(
-        this.client.chat.completions.create(
-          {
-            messages: formattedMessages,
-            model: this.modelName,
-            temperature: 0.7,
-            max_tokens: 2048,
-          },
-          { timeout: TIMEOUT },
-        ),
+        this.client.chat.completions.create(params as never, {
+          timeout: TIMEOUT,
+        }),
         TIMEOUT,
         'openrouter',
       );
