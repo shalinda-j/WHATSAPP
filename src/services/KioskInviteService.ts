@@ -44,6 +44,15 @@ export interface IssueInput {
   branch?: string;
   tenantId?: string;
   sessionId?: string;
+  // When false, the code is created but NOT delivered over WhatsApp — the
+  // caller sends its own message (e.g. the booking flow includes the code in
+  // the appointment-confirmation message instead of a duplicate one). Defaults
+  // to true (the manual CRM "Issue code" button relies on the auto-delivery).
+  deliver?: boolean;
+  // Override the default 7-day code expiry. The booking flow sets this so the
+  // code stays valid through the customer's actual visit day even when the
+  // appointment is more than a week out.
+  expiresAt?: Date;
 }
 
 export interface RedeemResult {
@@ -163,7 +172,12 @@ class KioskInviteService {
     }
 
     const branch = (input.branch && input.branch.trim()) || (await this.resolveBranch());
-    const expiresAt = new Date(Date.now() + KIOSK_CODE_TTL_MS);
+    // Caller may pin the expiry (booking flow → valid through the visit day);
+    // otherwise fall back to the default rolling TTL.
+    const expiresAt =
+      input.expiresAt instanceof Date && !isNaN(input.expiresAt.getTime())
+        ? input.expiresAt
+        : new Date(Date.now() + KIOSK_CODE_TTL_MS);
 
     let invite: any = null;
     let code = '';
@@ -195,7 +209,9 @@ class KioskInviteService {
     }
 
     // Best-effort WhatsApp delivery — a send failure must NOT bubble up.
-    if (jid) {
+    // Skipped when the caller opts out (deliver:false) to avoid a duplicate
+    // message (e.g. the booking confirmation already carries the code).
+    if (jid && input.deliver !== false) {
       try {
         const message =
           `🔢 ඔබගේ Kiosk කේතය: *${code}*\n\n` +
