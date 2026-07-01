@@ -17,6 +17,7 @@
 
 import { transcribeAudio as openaiTranscribeAudio } from './openai';
 import { transcribeAudio as geminiTranscribeAudio } from './gemini';
+import { openrouterTranscribe, openrouterSpeak } from './openrouterVoice';
 import { getAudioUrl } from 'google-tts-api';
 import OpenAI from 'openai';
 import axios from 'axios';
@@ -293,6 +294,22 @@ export async function transcribeAudioWithLanguage(
         console.log(`   ✅ OpenAI Whisper: "${text.substring(0, 60)}..."`);
     } catch (err: any) {
       console.warn(`   ⚠️ OpenAI Whisper failed: ${err.message}`);
+    }
+  }
+
+  // ── Step 1b: Try OpenRouter STT (multi-provider) ──────────────────────────
+  // Uses the OpenRouter API key already configured for chat (Config provider),
+  // so voice works with NO separate GEMINI_API_KEY / OPENAI_API_KEY. OpenRouter
+  // routes to Whisper/Chirp/etc., covering Sinhala/Tamil/English. Skipped
+  // silently when no OpenRouter provider is configured.
+  if (!text) {
+    try {
+      console.log('   🎙️ Trying OpenRouter STT...');
+      text = await openrouterTranscribe(audioBuffer, mimeType);
+      if (text)
+        console.log(`   ✅ OpenRouter STT: "${text.substring(0, 60)}..."`);
+    } catch (err: any) {
+      console.warn(`   ⚠️ OpenRouter STT failed: ${err?.message}`);
     }
   }
 
@@ -783,6 +800,19 @@ export async function generateSpeech(
 
   const waterfall: Array<{ name: string; fn: () => Promise<Buffer> }> = [];
 
+  // 0. OpenRouter TTS — primary if explicitly chosen. Uses the configured
+  //    OpenRouter provider key (no separate key needed). Self-checks the key
+  //    and throws when unavailable, so the waterfall simply moves on.
+  if (
+    primaryProvider === 'openrouter' ||
+    primaryProvider === 'openrouter-tts'
+  ) {
+    waterfall.push({
+      name: 'OpenRouter TTS (primary)',
+      fn: () => openrouterSpeak(text),
+    });
+  }
+
   // 1. Gemini TTS — primary if explicitly chosen (highest quality, all languages incl. Sinhala)
   if (primaryProvider === 'gemini-tts' && geminiApiKey) {
     waterfall.push({
@@ -849,6 +879,18 @@ export async function generateSpeech(
     waterfall.push({
       name: 'OpenAI TTS (fallback)',
       fn: () => ttsOpenAI(text, lang, apiKey, voiceId, model),
+    });
+  }
+
+  // OpenRouter TTS fallback — preferred over the low-quality free TTS whenever
+  // an OpenRouter provider is configured. Self-checks the key (throws → next).
+  if (
+    primaryProvider !== 'openrouter' &&
+    primaryProvider !== 'openrouter-tts'
+  ) {
+    waterfall.push({
+      name: 'OpenRouter TTS (fallback)',
+      fn: () => openrouterSpeak(text),
     });
   }
 
