@@ -20,6 +20,7 @@ import {
 } from './services/AIProviderSeeder';
 import { seedDatasets } from './services/DatasetSeeder';
 import { seedDefaultFormTemplate } from './services/FormTemplateSeeder';
+import { seedAdminFromEnv } from './services/AdminSeeder';
 import {
   transcribeAudio,
   generateSpeech,
@@ -305,6 +306,9 @@ async function startServer() {
   if (process.env.MONGODB_URI) {
     try {
       await connectToMongoDB(process.env.MONGODB_URI);
+      // Create a super-admin from env creds on a fresh DB so operators can log
+      // in without hitting the setup screen. No-op once any admin exists.
+      await seedAdminFromEnv();
       // Seed AI providers from .env into the Config collection
       await seedAIProviders();
       // Self-heal any provider still pinned to a retired Gemini model (404s).

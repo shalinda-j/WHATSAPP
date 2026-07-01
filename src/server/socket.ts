@@ -6,10 +6,37 @@ import { ACTUAL_JWT_SECRET } from './jwt-secret';
 let io: Server;
 
 export const initSocket = (server: HttpServer) => {
+  // Mirror the HTTP CORS policy (app.ts) so the Socket.io handshake honours the
+  // SAME ALLOWED_ORIGINS list. Previously this read CORS_ORIGIN (which is never
+  // set in the deploy) and fell back to '*', silently widening the socket to any
+  // origin even while the REST API was locked down.
+  const localOrigins = [
+    'http://localhost:5000',
+    'http://localhost:5173',
+    'http://localhost:8080',
+    'http://127.0.0.1:5000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:8080',
+  ];
+  const envOrigins = (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((o) => o.trim().replace(/\/$/, ''))
+    .filter((o) => o.length > 0);
+  const allowedOrigins = [...localOrigins, ...envOrigins];
+  const isDev = process.env.NODE_ENV !== 'production';
+
   io = new Server(server, {
     cors: {
-      origin: process.env.CORS_ORIGIN || '*', // Adjust for production
+      origin: (origin, callback) => {
+        // No Origin header (native/server clients): allow only in dev.
+        if (!origin) return callback(null, isDev);
+        const normalised = origin.replace(/\/$/, '');
+        if (allowedOrigins.includes(normalised)) return callback(null, true);
+        console.warn(`⚠️ Socket CORS blocked origin: ${origin}`);
+        return callback(null, false);
+      },
       methods: ['GET', 'POST'],
+      credentials: true,
     },
   });
 

@@ -435,9 +435,32 @@ router.post(
       }
 
       if (!transcript) {
-        res
-          .status(400)
-          .json({ error: 'No speech or text was provided' });
+        // If audio WAS uploaded but we couldn't transcribe it (STT provider
+        // failed / not configured), don't hand the push-to-talk visitor a bare
+        // HTTP error — reply with a spoken Sinhala retry prompt so the kiosk
+        // plays it back. The truly-empty case (no audio AND no text) still 400s.
+        if (req.file?.buffer?.length) {
+          const retry =
+            'සමාවන්න, ඔබ කී දේ මට හරියට ඇසුණේ නැහැ. කරුණාකර නැවත කතා කරන්න.';
+          let audioBase64: string | undefined;
+          try {
+            const buf = await generateSpeech(retry, 'si');
+            audioBase64 = buf.toString('base64');
+          } catch {
+            // TTS unavailable too — return a text-only retry prompt.
+          }
+          res.status(200).json({
+            transcript: '',
+            reply: retry,
+            audioBase64,
+            mime: 'audio/mpeg',
+            converted: false,
+            collected: {},
+            completed: false,
+          });
+          return;
+        }
+        res.status(400).json({ error: 'No speech or text was provided' });
         return;
       }
 
