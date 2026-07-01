@@ -758,14 +758,14 @@ export default function VoiceAgentHub() {
                 <Zap className="h-4 w-4" />
                 <span>Provider:</span>
                 <strong className="capitalize">
-                  {activeVoiceProvider.replace('-', ' ')}
+                  {(activeVoiceProvider || '').replace('-', ' ')}
                 </strong>
               </div>
               <div className="flex items-center gap-1.5">
                 <Mic className="h-4 w-4" />
                 <span>Mode:</span>
                 <strong className="capitalize">
-                  {voiceMode.replace(/-/g, ' ')}
+                  {(voiceMode || '').replace(/-/g, ' ')}
                 </strong>
               </div>
             </div>
@@ -1142,7 +1142,7 @@ export default function VoiceAgentHub() {
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-500">Mode:</span>
                             <span className="font-medium text-gray-800 capitalize">
-                              {config.mode.replace(/-/g, ' ')}
+                              {(config.mode || '').replace(/-/g, ' ')}
                             </span>
                           </div>
                           {info.requiresGoogleApiKey && (
@@ -1294,7 +1294,7 @@ export default function VoiceAgentHub() {
                           : 'text-gray-400'
                       }`}
                     >
-                      {activeVoiceProvider.replace('-', ' ')}
+                      {(activeVoiceProvider || '').replace('-', ' ')}
                     </span>
                   </div>
 
