@@ -12,6 +12,7 @@ import Booking from '../models/Booking';
 import Session from '../models/Session';
 import { agentReflectionService } from './AgentReflectionService';
 import { conversionService } from './ConversionService';
+import { kioskInviteService } from './KioskInviteService';
 
 // Define the stages of the booking conversation
 export enum BookingInitState {
@@ -348,6 +349,12 @@ async function finalizeBooking(
 
   await sendMessage(jid, `✅ *Confirming your appointment...*`, sessionId);
 
+  // Auto-issued kiosk voice-consult code for THIS visit — filled inside the
+  // booking-save block below and appended to the confirmation message, so
+  // every customer the bot books a Campus Visit for automatically gets a code
+  // to talk to the AI Consulting Voice Assistant when they arrive.
+  let kioskCode: string | null = null;
+
   try {
     // 1. Create Google Calendar Event (if credentials exist)
     const fullDescription = `${eventDescription}\n\nClient: ${
@@ -429,6 +436,36 @@ async function finalizeBooking(
           source: 'whatsapp',
         })
         .catch((err) => console.error('recordConversion(booking) failed:', err));
+
+      // Auto-issue a kiosk voice-consult code tied to this visit. Best-effort
+      // and awaited only so the code can be included in the confirmation below
+      // (deliver:false = no duplicate WhatsApp message). Kept valid through the
+      // visit day (+1 day buffer) or the default 7-day window, whichever is
+      // later, so a visit booked further out still has a live code on the day.
+      try {
+        const visitDayEnd = new Date(appointmentDate);
+        visitDayEnd.setHours(23, 59, 59, 999);
+        const codeExpiry = new Date(
+          Math.max(
+            visitDayEnd.getTime() + 24 * 60 * 60 * 1000,
+            Date.now() + 7 * 24 * 60 * 60 * 1000,
+          ),
+        );
+        const issued = await kioskInviteService.issue({
+          phone: callerPhone,
+          jid,
+          tenantId: sess?.tenantId ? String(sess.tenantId) : undefined,
+          sessionId,
+          deliver: false, // included in the confirmation message below
+          expiresAt: codeExpiry,
+        });
+        kioskCode = issued?.code || null;
+      } catch (kErr) {
+        console.error(
+          'Kiosk code auto-issue on booking failed (non-fatal):',
+          (kErr as any)?.message || kErr,
+        );
+      }
     } catch (err) {
       console.error('Failed to save booking to DB:', err);
     }
@@ -445,6 +482,14 @@ async function finalizeBooking(
 
     if (gcalLink) {
       msg += `\n🔗 *Calendar Link:* ${gcalLink}\n`;
+    }
+
+    // Kiosk voice-consult code for the visit day (auto-issued above).
+    if (kioskCode) {
+      msg +=
+        `\n🔢 *Voice Consult Code:* ${kioskCode}\n` +
+        `${campusLocation} ශාඛාවට ආ දිනයේ, kiosk තිරයේ මෙම කේතය ඇතුළත් කර අපගේ AI උපදේශක සමඟ කතා කරන්න.\n` +
+        `(When you arrive, enter this code at the kiosk to talk to our AI consultant.)\n`;
     }
 
     msg += `\nPlease download the attached file to add this event to your personal calendar.`;
