@@ -67,9 +67,13 @@ export class KnowledgeTrainingService {
           { tenantId: null },
         ];
       }
+      // ⚡ Bolt: Using .lean() directly without additional selection since we
+      // need both question and answer to construct the Q&A text. This bypasses Mongoose
+      // hydration entirely, which provides significant performance gains.
       const entries = await KnowledgeEntry.find(filter)
         .sort({ usageCount: -1, confidence: -1 })
-        .limit(100);
+        .limit(100)
+        .lean<IKnowledgeEntry[]>();
 
       if (entries.length === 0) {
         // Fallback to dataset knowledge base
@@ -109,13 +113,15 @@ export class KnowledgeTrainingService {
       : {};
     try {
       // Use text search if available
+      // ⚡ Bolt: Adding .lean() to reduce memory usage during read-only operation
       const results = await KnowledgeEntry.find(
         { isActive: true, ...tenantClause },
         { score: { $meta: 'textScore' } },
       )
         .find({ $text: { $search: query } })
         .sort({ score: { $meta: 'textScore' } })
-        .limit(limit);
+        .limit(limit)
+        .lean<IKnowledgeEntry[]>();
 
       // Update usage count
       if (results.length > 0) {
@@ -142,7 +148,10 @@ export class KnowledgeTrainingService {
         regexFilter.$and = [{ $or: regexFilter.$or }, tenantClause];
         delete regexFilter.$or;
       }
-      const regexResults = await KnowledgeEntry.find(regexFilter).limit(limit);
+      // ⚡ Bolt: Adding .lean() to regex fallback as it is a read-only query
+      const regexResults = await KnowledgeEntry.find(regexFilter)
+        .limit(limit)
+        .lean<IKnowledgeEntry[]>();
 
       return regexResults;
     }
@@ -217,7 +226,10 @@ export class KnowledgeTrainingService {
       // provided, tolerating legacy rows without a tenantId).
       const existingFilter: any = {
         question: {
-          $regex: new RegExp(`^${escapeRegex(userMessage.substring(0, 50))}`, 'i'),
+          $regex: new RegExp(
+            `^${escapeRegex(userMessage.substring(0, 50))}`,
+            'i',
+          ),
         },
       };
       if (tenantId) {
@@ -276,7 +288,8 @@ export class KnowledgeTrainingService {
    */
   async importFromDataset(datasetKey: string): Promise<number> {
     try {
-      const dataset = await Dataset.findOne({ key: datasetKey });
+      // ⚡ Bolt: Using .lean() to quickly fetch the raw dataset content for importing
+      const dataset = await Dataset.findOne({ key: datasetKey }).lean();
       if (!dataset || !dataset.content) {
         return 0;
       }

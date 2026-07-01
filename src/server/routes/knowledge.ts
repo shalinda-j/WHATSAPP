@@ -37,11 +37,13 @@ router.get('/', async (req, res) => {
         { score: { $meta: 'textScore' } },
       )
         .sort({ score: { $meta: 'textScore' } })
-        .limit(50);
+        .limit(50)
+        .lean(); // ⚡ Bolt: Use .lean() to bypass document hydration
     } else {
       entries = await KnowledgeEntry.find(scoped)
         .sort({ usageCount: -1, createdAt: -1 })
-        .limit(100);
+        .limit(100)
+        .lean(); // ⚡ Bolt: Use .lean() to bypass document hydration
     }
 
     res.json(entries);
@@ -71,7 +73,7 @@ router.get('/:id', async (req, res) => {
   try {
     const entry = await KnowledgeEntry.findOne(
       withTenantScope(req, { _id: req.params.id }),
-    );
+    ).lean(); // ⚡ Bolt: Use .lean() to bypass document hydration
     if (!entry) {
       return res.status(404).json({ message: 'Knowledge entry not found' });
     }
