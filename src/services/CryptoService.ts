@@ -37,8 +37,12 @@ const ENCRYPTION_KEY = Buffer.from(
 export class CryptoService {
   static encrypt(text: string | undefined): string | undefined {
     if (!text || text.trim() === '') return text;
-    // Check if already encrypted (IV hex is 32 chars long)
-    if (text.includes(':') && text.split(':')[0].length === 32) return text;
+    // Already-encrypted check: our format is `<32 hex-char IV>:<cipher>`.
+    // Require the prefix to be 32 HEX chars (not merely 32 chars) so a
+    // plaintext secret that happens to have a 32-char first colon-segment
+    // isn't mistaken for ciphertext and stored unencrypted (it would then read
+    // back as '' when decrypt fails on the non-hex IV).
+    if (/^[0-9a-f]{32}:/i.test(text)) return text;
 
     try {
       const iv = crypto.randomBytes(IV_LENGTH);

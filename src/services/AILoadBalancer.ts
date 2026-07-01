@@ -656,10 +656,15 @@ export class AILoadBalancer {
     // cross-tenant context leak the DB scoping fixed.
     const histKey = `${tenantId || ''}:${userId}`;
 
-    // Try to get cached history first (for same-request optimization)
+    // Try to get cached history first (for same-request optimization).
+    // Clone it — do NOT alias the cached array. Two concurrent messages from
+    // the same user (distinct texts sent seconds apart, within one provider
+    // call's await window) would otherwise push/re-trim the ONE shared array
+    // reference, scrambling turn order and double-persisting turns. Each
+    // request works on its own copy; the cache is re-committed on success.
     const cachedHistory = this.historyCache.get(histKey);
     if (cachedHistory) {
-      history = cachedHistory;
+      history = [...cachedHistory];
     } else {
       // Get from persistent storage
       const persistedMessages = await conversationHistoryService.getHistory(
@@ -691,8 +696,13 @@ export class AILoadBalancer {
           tenantId,
         );
       }
-      // Cache for this request
-      this.historyCache.set(histKey, history);
+      // Cache a CLONE of the freshly-built base (system + few-shot). We then
+      // push the user/assistant turns onto our local `history`; the cache is
+      // only re-committed on a successful reply (below). So if every provider
+      // fails and we throw, the cache keeps the clean base instead of a
+      // dangling user turn with no assistant reply (which would poison context
+      // and stack up on each outage).
+      this.historyCache.set(histKey, [...history]);
     }
 
     // Always refresh the system prompt from current config so edits to
@@ -807,11 +817,13 @@ export class AILoadBalancer {
         this.historyCache.set(histKey, trimmedHistory);
 
         // TRACK USAGE
-        // Estimate: 4 chars = 1 token
-        const inputLen = history.reduce(
-          (acc, msg) => acc + msg.content.length,
-          0,
-        );
+        // Estimate: 4 chars = 1 token. Exclude the assistant turn we just
+        // pushed (line above) — the INPUT sent to the provider was everything
+        // BEFORE the reply. Counting the reply here would double-count it as
+        // both input and output and inflate usageUsed on the Config row.
+        const inputLen = history
+          .slice(0, -1)
+          .reduce((acc, msg) => acc + msg.content.length, 0);
         const outputLen = response.length;
         const inputTokens = Math.ceil(inputLen / 4);
         const outputTokens = Math.ceil(outputLen / 4);

@@ -57,13 +57,41 @@ function pickConfigFields(body: unknown): Record<string, unknown> {
       out[k] = src[k];
     }
   }
+  // Never overwrite a stored apiKey with an empty/blank value. GET now redacts
+  // apiKey (see below), so edit forms come back with an empty key field; saving
+  // one must PRESERVE the existing key, not wipe it. A real rotation still works
+  // because a non-empty key is kept.
+  if (
+    Object.prototype.hasOwnProperty.call(out, 'apiKey') &&
+    (typeof out.apiKey !== 'string' || out.apiKey.trim() === '')
+  ) {
+    delete out.apiKey;
+  }
   return out;
+}
+
+/**
+ * Strip the decrypted apiKey from a Config document before sending it to a
+ * client, replacing it with a `hasApiKey` boolean. The schema's toJSON/toObject
+ * getters decrypt apiKey, so a raw res.json(config) would leak every provider's
+ * API key (and unofficial session cookies) in plaintext to any authed caller.
+ */
+function redactConfig(doc: unknown): Record<string, unknown> {
+  const o = (
+    doc && typeof (doc as any).toObject === 'function'
+      ? (doc as any).toObject()
+      : { ...(doc as any) }
+  ) as Record<string, unknown>;
+  const hasApiKey = typeof o.apiKey === 'string' && o.apiKey.trim() !== '';
+  delete o.apiKey;
+  o.hasApiKey = hasApiKey;
+  return o;
 }
 
 router.get('/', async (req, res) => {
   try {
     const configs = await Config.find();
-    res.json(configs);
+    res.json(configs.map(redactConfig));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -77,7 +105,7 @@ router.post('/', async (req, res) => {
     }
     const newConfig = new Config(payload);
     await newConfig.save();
-    res.json(newConfig);
+    res.json(redactConfig(newConfig));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -97,7 +125,7 @@ router.put('/:id', async (req, res) => {
     if (!updatedConfig) {
       return res.status(404).json({ error: 'Config not found' });
     }
-    res.json(updatedConfig);
+    res.json(redactConfig(updatedConfig));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

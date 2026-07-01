@@ -7,6 +7,28 @@ const router = Router();
 // SECURITY FIX: All voice config routes require authentication
 router.use(authenticateToken);
 
+/**
+ * Strip decrypted secrets (apiKey, googleApiKey) before returning a voice
+ * config to a client. VoiceConfig's toJSON/toObject getters decrypt these, so
+ * a raw res.json would leak OpenAI/ElevenLabs/Google Cloud credentials in
+ * plaintext to any authed caller. Replaced with hasApiKey/hasGoogleApiKey.
+ */
+function redactVoiceConfig(doc: unknown): Record<string, unknown> {
+  const o = (
+    doc && typeof (doc as any).toObject === 'function'
+      ? (doc as any).toObject()
+      : { ...(doc as any) }
+  ) as Record<string, unknown>;
+  const has = (v: unknown) => typeof v === 'string' && v.trim() !== '';
+  const hasApiKey = has(o.apiKey);
+  const hasGoogleApiKey = has(o.googleApiKey);
+  delete o.apiKey;
+  delete o.googleApiKey;
+  o.hasApiKey = hasApiKey;
+  o.hasGoogleApiKey = hasGoogleApiKey;
+  return o;
+}
+
 // GET all voice configs
 router.get('/', async (req: Request, res: Response) => {
   try {
@@ -17,9 +39,9 @@ router.get('/', async (req: Request, res: Response) => {
         isActive: true,
         mode: 'voice-and-text',
       });
-      return res.json([defaultConfig]);
+      return res.json([redactVoiceConfig(defaultConfig)]);
     }
-    res.json(configs);
+    res.json(configs.map(redactVoiceConfig));
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch voice config' });
   }
@@ -34,14 +56,16 @@ router.get('/active', async (req: Request, res: Response) => {
     if (!activeConfig) {
       const latestConfig = await VoiceConfig.findOne().sort({ updatedAt: -1 });
       return res.json(
-        latestConfig || {
-          provider: 'google-free',
-          isActive: true,
-          mode: 'voice-and-text',
-        },
+        redactVoiceConfig(
+          latestConfig || {
+            provider: 'google-free',
+            isActive: true,
+            mode: 'voice-and-text',
+          },
+        ),
       );
     }
-    res.json(activeConfig);
+    res.json(redactVoiceConfig(activeConfig));
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch active voice config' });
   }
@@ -68,22 +92,30 @@ router.post('/', async (req: Request, res: Response) => {
       );
     }
 
-    const config = await VoiceConfig.findOneAndUpdate(
-      { provider },
-      {
-        provider,
-        apiKey,
-        googleApiKey,
-        voiceId,
-        isActive: isActive !== false,
-        mode,
-        ttsModel,
-        updatedAt: new Date(),
-      },
-      { new: true, upsert: true, setDefaultsOnInsert: true },
-    );
+    const update: Record<string, unknown> = {
+      provider,
+      voiceId,
+      isActive: isActive !== false,
+      mode,
+      ttsModel,
+      updatedAt: new Date(),
+    };
+    // Preserve stored secrets when the client posts an empty/redacted value.
+    // GET redacts apiKey/googleApiKey, so an unchanged edit form sends them
+    // blank — writing that would wipe the real key. A genuine rotation (a
+    // non-empty value) still updates.
+    if (typeof apiKey === 'string' && apiKey.trim() !== '')
+      update.apiKey = apiKey;
+    if (typeof googleApiKey === 'string' && googleApiKey.trim() !== '')
+      update.googleApiKey = googleApiKey;
 
-    res.json(config);
+    const config = await VoiceConfig.findOneAndUpdate({ provider }, update, {
+      new: true,
+      upsert: true,
+      setDefaultsOnInsert: true,
+    });
+
+    res.json(redactVoiceConfig(config));
   } catch (error) {
     res.status(500).json({ error: 'Failed to update voice config' });
   }
@@ -95,7 +127,7 @@ router.post('/toggle', async (req: Request, res: Response) => {
     const { isActive } = req.body;
     await VoiceConfig.updateMany({}, { $set: { isActive } });
     const configs = await VoiceConfig.find().sort({ updatedAt: -1 });
-    res.json({ success: true, isActive, configs });
+    res.json({ success: true, isActive, configs: configs.map(redactVoiceConfig) });
   } catch (error) {
     res.status(500).json({ error: 'Failed to toggle voice agent' });
   }

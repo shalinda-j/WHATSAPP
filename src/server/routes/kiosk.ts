@@ -443,9 +443,16 @@ router.post(
           const retry =
             'සමාවන්න, ඔබ කී දේ මට හරියට ඇසුණේ නැහැ. කරුණාකර නැවත කතා කරන්න.';
           let audioBase64: string | undefined;
+          let retryMime = 'audio/mpeg';
           try {
             const buf = await generateSpeech(retry, 'si');
-            audioBase64 = buf.toString('base64');
+            if (buf && buf.length > 0) {
+              // Detect the real container — generateSpeech may return WAV/OGG
+              // (e.g. gemini-tts returns WAV), not MP3. Announcing WAV as
+              // audio/mpeg can stop it playing in the kiosk browser.
+              retryMime = detectAudioMime(buf);
+              audioBase64 = buf.toString('base64');
+            }
           } catch {
             // TTS unavailable too — return a text-only retry prompt.
           }
@@ -453,7 +460,7 @@ router.post(
             transcript: '',
             reply: retry,
             audioBase64,
-            mime: 'audio/mpeg',
+            mime: retryMime,
             converted: false,
             collected: {},
             completed: false,

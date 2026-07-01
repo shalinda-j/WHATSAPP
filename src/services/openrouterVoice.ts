@@ -14,10 +14,10 @@
  * exact same source AILoadBalancer uses for chat. So once an OpenRouter
  * provider is added in the admin panel, voice works with NO extra config.
  *
- * Models are overridable via env; the defaults are broadly-available slugs that
- * cover Sinhala/Tamil/English:
- *   OPENROUTER_STT_MODEL (default openai/whisper-large-v3 — ~99 languages)
- *   OPENROUTER_TTS_MODEL (default openai/gpt-4o-mini-tts — OpenAI-compatible)
+ * Models are overridable via env; the defaults are the doc-confirmed OpenRouter
+ * audio slugs (https://openrouter.ai/docs) that cover Sinhala/Tamil/English:
+ *   OPENROUTER_STT_MODEL (default openai/whisper-1 — ~99 languages)
+ *   OPENROUTER_TTS_MODEL (default openai/gpt-4o-mini-tts-2025-12-15 — OpenAI-compatible)
  */
 import axios from 'axios';
 import Config from '../models/Config';

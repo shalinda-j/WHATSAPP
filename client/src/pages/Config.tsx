@@ -68,6 +68,7 @@ interface Config {
   isProvider?: boolean;
   providerType?: string;
   apiKey?: string;
+  hasApiKey?: boolean;
   aiModel?: string;
   baseUrl?: string;
   usageLimit?: number;
@@ -97,7 +98,9 @@ interface VoiceConfigData {
     | 'openai'
     | 'elevenlabs';
   apiKey?: string;
+  hasApiKey?: boolean;
   googleApiKey?: string;
+  hasGoogleApiKey?: boolean;
   voiceId?: string;
   isActive?: boolean;
   mode: 'voice-only' | 'text-only' | 'voice-and-text';
@@ -1592,7 +1595,7 @@ export default function Config() {
                     <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
                       <span className="text-xs text-gray-500 inline-flex items-center gap-1">
                         <ShieldAlert className="h-3 w-3" /> Key:{' '}
-                        {c.apiKey ? 'set (encrypted)' : 'missing'}
+                        {c.hasApiKey || c.apiKey ? 'set (encrypted)' : 'missing'}
                       </span>
                       <div className="flex items-center gap-2">
                         <button

@@ -360,7 +360,21 @@ export class ConfigService {
    * Configure via Admin Panel > Datasets > COMPANY_INFO
    */
   public async getCompanyInfo(): Promise<CompanyInfo> {
-    const info = await this.get('COMPANY_INFO', DEFAULT_COMPANY_INFO);
+    let info = await this.get('COMPANY_INFO', DEFAULT_COMPANY_INFO);
+    // The seeder writes object-valued datasets as { en: {...} }, but get()'s
+    // multi-language unwrap only handles a STRING/ARRAY `en`, so an object stays
+    // wrapped and every real field ends up nested under `en`. Unwrap it here so
+    // the seeded default (and any nested writes) surface instead of blanks. The
+    // operator-edited shape (flat, from PUT /api/config/company-info) has no
+    // `en` object and is left untouched.
+    if (
+      info &&
+      typeof info === 'object' &&
+      (info as { en?: unknown }).en &&
+      typeof (info as { en?: unknown }).en === 'object'
+    ) {
+      info = (info as { en: CompanyInfo }).en;
+    }
     // Merge with defaults to ensure all fields are present
     const merged = { ...DEFAULT_COMPANY_INFO, ...info };
 

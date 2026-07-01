@@ -892,8 +892,12 @@ export default function VoiceAgentHub() {
                 const config = getProviderConfig(provider);
                 const isActiveProvider = activeVoiceProvider === provider;
                 const isEditing = editingProvider === provider;
-                const hasApiKey = !!config.apiKey;
-                const hasGoogleApiKey = !!config.googleApiKey;
+                // API keys are redacted by the server (GET returns
+                // hasApiKey/hasGoogleApiKey booleans, not the raw key); fall
+                // back to the legacy raw field for older responses.
+                const hasApiKey = (config as any).hasApiKey ?? !!config.apiKey;
+                const hasGoogleApiKey =
+                  (config as any).hasGoogleApiKey ?? !!config.googleApiKey;
 
                 return (
                   <div

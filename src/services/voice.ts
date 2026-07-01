@@ -234,9 +234,12 @@ export async function getVoiceMode(): Promise<
 
 export async function isVoiceAgentEnabled(): Promise<boolean> {
   try {
-    const c = await VoiceConfig.findOne({ isActive: true }).sort({
-      updatedAt: -1,
-    });
+    // Read the flag off the LATEST config row — do NOT filter by isActive.
+    // Filtering by { isActive: true } made the disabled state unreachable:
+    // when voice is toggled off (all rows isActive:false) the query returns
+    // null and `null?.isActive ?? true` → true, so it reported enabled even
+    // when disabled. Read the newest row and return its actual flag.
+    const c = await VoiceConfig.findOne().sort({ updatedAt: -1 });
     return c?.isActive ?? true;
   } catch {
     return true;
@@ -668,31 +671,44 @@ async function ttsGoogleFree(text: string, lang: string): Promise<Buffer> {
     return fetchGoogleFreeSegment(text, langCode);
   }
 
-  // Split on sentence boundaries
+  // Split on sentence boundaries into chunks that each fit under MAX. A single
+  // sentence longer than MAX is HARD-SPLIT on word boundaries — otherwise
+  // fetchGoogleFreeSegment truncates it at ~192 chars and silently drops the
+  // tail of the speech.
   const sentences = text.split(/(?<=[.!?।෴ ]+)\s+/);
-  const segments: Buffer[] = [];
+  const chunks: string[] = [];
   let chunk = '';
+  const flush = () => {
+    if (chunk.trim()) chunks.push(chunk.trim());
+    chunk = '';
+  };
 
   for (const sentence of sentences) {
-    if ((chunk + ' ' + sentence).length <= MAX) {
+    if (sentence.length > MAX) {
+      flush();
+      let rest = sentence;
+      while (rest.length > MAX) {
+        let cut = rest.lastIndexOf(' ', MAX);
+        if (cut <= 0) cut = MAX; // no space in range → hard cut
+        chunks.push(rest.slice(0, cut).trim());
+        rest = rest.slice(cut).trim();
+      }
+      chunk = rest;
+    } else if ((chunk + ' ' + sentence).length <= MAX) {
       chunk = chunk ? chunk + ' ' + sentence : sentence;
     } else {
-      if (chunk) {
-        try {
-          segments.push(await fetchGoogleFreeSegment(chunk, langCode));
-        } catch (e) {
-          console.warn('   ⚠️ Google Free segment failed, skipping...');
-        }
-      }
+      flush();
       chunk = sentence;
     }
   }
+  flush();
 
-  if (chunk) {
+  const segments: Buffer[] = [];
+  for (const c of chunks) {
     try {
-      segments.push(await fetchGoogleFreeSegment(chunk, langCode));
+      segments.push(await fetchGoogleFreeSegment(c, langCode));
     } catch (e) {
-      console.warn('   ⚠️ Google Free final segment failed');
+      console.warn('   ⚠️ Google Free segment failed, skipping...');
     }
   }
 
