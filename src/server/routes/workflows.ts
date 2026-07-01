@@ -9,6 +9,7 @@ import {
 } from '../middleware/tenantContext';
 import { getIntegrationExecutor } from '../services/workflowExecutors';
 import { interpolate } from '../services/workflowInterpolate';
+import { validateObjectId } from '../middleware/validation';
 
 const router = Router();
 
@@ -719,9 +720,13 @@ router.post('/execute', async (req: Request, res: Response) => {
  * @route GET /api/workflows/:id
  * @desc Get a single workflow by ID
  */
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', validateObjectId(), async (req: Request, res: Response) => {
   try {
-    const workflow = await Workflow.findById(req.params.id);
+    // Scope by tenant so a tenant-bound admin can't read another tenant's
+    // workflow by guessing its id (cross-tenant IDOR).
+    const workflow = await Workflow.findOne(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!workflow) return res.status(404).json({ error: 'Workflow not found' });
     res.json(workflow);
   } catch (error) {
@@ -765,11 +770,11 @@ router.post('/', async (req: Request, res: Response) => {
  * @route PUT /api/workflows/:id
  * @desc Update a workflow
  */
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', validateObjectId(), async (req: Request, res: Response) => {
   try {
     const { name, description, nodes, edges, isActive, metadata } = req.body;
-    const workflow = await Workflow.findByIdAndUpdate(
-      req.params.id,
+    const workflow = await Workflow.findOneAndUpdate(
+      withTenantScope(req, { _id: req.params.id }),
       {
         name,
         description,
@@ -792,9 +797,11 @@ router.put('/:id', async (req: Request, res: Response) => {
  * @route DELETE /api/workflows/:id
  * @desc Delete a workflow
  */
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', validateObjectId(), async (req: Request, res: Response) => {
   try {
-    const workflow = await Workflow.findByIdAndDelete(req.params.id);
+    const workflow = await Workflow.findOneAndDelete(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!workflow) return res.status(404).json({ error: 'Workflow not found' });
     res.json({ message: 'Workflow deleted successfully' });
   } catch (error) {
@@ -806,9 +813,11 @@ router.delete('/:id', async (req: Request, res: Response) => {
  * @route POST /api/workflows/:id/execute
  * @desc Execute a saved workflow by ID
  */
-router.post('/:id/execute', async (req: Request, res: Response) => {
+router.post('/:id/execute', validateObjectId(), async (req: Request, res: Response) => {
   try {
-    const workflow = await Workflow.findById(req.params.id);
+    const workflow = await Workflow.findOne(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!workflow) return res.status(404).json({ error: 'Workflow not found' });
     if (!workflow.isActive)
       return res.status(400).json({ error: 'Workflow is not active' });
@@ -846,11 +855,14 @@ router.post('/:id/execute', async (req: Request, res: Response) => {
  * @route POST /api/workflows/:id/duplicate
  * @desc Duplicate a workflow
  */
-router.post('/:id/duplicate', async (req: Request, res: Response) => {
+router.post('/:id/duplicate', validateObjectId(), async (req: Request, res: Response) => {
   try {
-    const original = await Workflow.findById(req.params.id);
+    const original = await Workflow.findOne(
+      withTenantScope(req, { _id: req.params.id }),
+    );
     if (!original) return res.status(404).json({ error: 'Workflow not found' });
 
+    const tid = tenantIdOf(req);
     const duplicate = new Workflow({
       name: `${original.name} (Copy)`,
       description: original.description,
@@ -858,6 +870,7 @@ router.post('/:id/duplicate', async (req: Request, res: Response) => {
       edges: original.edges,
       metadata: original.metadata,
       version: original.version,
+      ...(tid ? { tenantId: tid } : {}),
     });
     await duplicate.save();
     res.status(201).json(duplicate);

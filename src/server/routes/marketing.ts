@@ -1,30 +1,24 @@
 import { Router } from 'express';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { configService } from '../../services/ConfigService';
 import { MARKETING_MANAGER_SYSTEM_PROMPT } from '../../config/prompts/marketing';
 import { authenticateToken } from '../middleware/auth';
-import { GEMINI_DEFAULT_MODEL } from '../../config/brand';
 import { withOperatorPersona } from '../../agents/composeSystemPrompt';
+import { aiLoadBalancer } from '../../services/AILoadBalancer';
 
 const router = Router();
 
 router.post('/chat', authenticateToken, async (req, res) => {
   try {
     const { message, companyId } = req.body;
-    // Use the new public method
-    const config = configService.getCompanyConfig(companyId || 'default');
-
-    if (!config) {
-      return res.status(404).json({ error: 'Company configuration not found' });
+    // Validate up front so a missing message returns a clear 400 instead of an
+    // opaque 500 from deep inside the model SDK.
+    if (typeof message !== 'string' || !message.trim()) {
+      return res.status(400).json({ error: 'message is required' });
     }
 
-    const apiKey = await configService.getGoogleProviderKey();
-    const validKey = apiKey || process.env.GEMINI_API_KEY;
-
-    if (!validKey) {
-      return res
-        .status(500)
-        .json({ error: 'Gemini API Key is not configured.' });
+    const config = configService.getCompanyConfig(companyId || 'default');
+    if (!config) {
+      return res.status(404).json({ error: 'Company configuration not found' });
     }
 
     // Scope the KB to the caller's tenant (from the JWT) so a tenant-bound
@@ -40,16 +34,17 @@ router.post('/chat', authenticateToken, async (req, res) => {
     const systemInstruction = await withOperatorPersona(
       MARKETING_MANAGER_SYSTEM_PROMPT(config, dynamicKB),
     );
-    const genAI = new GoogleGenerativeAI(validKey);
-    const model = genAI.getGenerativeModel({
-      model: GEMINI_DEFAULT_MODEL,
-      systemInstruction,
+
+    // Route through the load-balancer so marketing chat inherits the SAME
+    // multi-provider failover chain (Groq/Gemini/OpenRouter/OpenAI) + 429
+    // cooldown as the main bot — instead of a Gemini-ONLY hard-fail that 500'd
+    // whenever the Gemini key/quota was missing (e.g. OpenRouter-only setups).
+    const raw = await aiLoadBalancer.sendMessageRaw({
+      systemPrompt: systemInstruction,
+      userMessage: message,
     });
 
-    const result = await model.generateContent(message);
-    const response = result.response.text();
-
-    res.json({ response });
+    res.json({ response: raw.text });
   } catch (error: any) {
     console.error('Marketing Manager Error:', error);
     res.status(500).json({

@@ -26,8 +26,11 @@ import { withTimeout } from './withTimeout';
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 const TIMEOUT = Number(process.env.AI_REQUEST_TIMEOUT_MS) || 45000;
 
-const STT_MODEL = process.env.OPENROUTER_STT_MODEL || 'openai/whisper-large-v3';
-const TTS_MODEL = process.env.OPENROUTER_TTS_MODEL || 'openai/gpt-4o-mini-tts';
+// Doc-confirmed OpenRouter audio slugs (env-overridable). whisper-1 covers
+// ~99 languages incl. Sinhala; gpt-4o-mini-tts is the OpenAI-compatible TTS.
+const STT_MODEL = process.env.OPENROUTER_STT_MODEL || 'openai/whisper-1';
+const TTS_MODEL =
+  process.env.OPENROUTER_TTS_MODEL || 'openai/gpt-4o-mini-tts-2025-12-15';
 
 /** The active OpenRouter provider's API key from Config, or null when none. */
 export async function getOpenRouterApiKey(): Promise<string | null> {
@@ -92,7 +95,12 @@ export async function openrouterTranscribe(
     TIMEOUT,
     'openrouter-stt',
   );
-  return String(res.data?.text || '').trim();
+  const text = String(res.data?.text || '').trim();
+  // Throw (rather than return '') so the caller's waterfall logs a real
+  // failure and deterministically moves to the next provider, instead of
+  // silently treating "no transcript" like "OpenRouter not configured".
+  if (!text) throw new Error('OpenRouter STT returned no text');
+  return text;
 }
 
 /** Synthesize speech via OpenRouter's /audio/speech. Returns audio bytes. Throws on failure. */

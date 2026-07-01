@@ -33,10 +33,23 @@ function getAuthClient() {
 async function getBookedHoursFromDb(date: Date): Promise<Set<number>> {
   const booked = new Set<number>();
   try {
-    const dayStart = new Date(date);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(date);
-    dayEnd.setHours(23, 59, 59, 999);
+    // Use UTC day bounds. Booking dates are commonly stored as date-only
+    // (UTC midnight), so local setHours() on a non-UTC host would shift the
+    // window and either miss same-day bookings or pull in adjacent days.
+    const dayStart = new Date(
+      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0),
+    );
+    const dayEnd = new Date(
+      Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth(),
+        date.getUTCDate(),
+        23,
+        59,
+        59,
+        999,
+      ),
+    );
 
     const bookings = await Booking.find({
       date: { $gte: dayStart, $lte: dayEnd },
