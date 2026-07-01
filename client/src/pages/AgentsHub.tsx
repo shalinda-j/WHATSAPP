@@ -338,19 +338,19 @@ export default function AgentsHub() {
                 <div className="bg-gray-50 rounded-md py-2">
                   <div className="text-gray-500">Today exec</div>
                   <div className="text-sm font-semibold text-gray-900">
-                    {a.todayUsage.executions.toLocaleString()}
+                    {(a.todayUsage?.executions ?? 0).toLocaleString()}
                   </div>
                 </div>
                 <div className="bg-gray-50 rounded-md py-2">
                   <div className="text-gray-500">Tokens</div>
                   <div className="text-sm font-semibold text-gray-900">
-                    {a.todayUsage.tokens.toLocaleString()}
+                    {(a.todayUsage?.tokens ?? 0).toLocaleString()}
                   </div>
                 </div>
                 <div className="bg-gray-50 rounded-md py-2">
                   <div className="text-gray-500">Cost</div>
                   <div className="text-sm font-semibold text-gray-900">
-                    ${a.todayUsage.costUsd.toFixed(2)}
+                    ${(a.todayUsage?.costUsd ?? 0).toFixed(2)}
                   </div>
                 </div>
               </div>
@@ -557,12 +557,12 @@ export default function AgentsHub() {
                     </p>
 
                     <div className="flex flex-wrap gap-1">
-                      {s.assignedAgents.length === 0 ? (
+                      {(s.assignedAgents || []).length === 0 ? (
                         <span className="text-[10px] text-gray-400 italic">
                           not assigned to any agent
                         </span>
                       ) : (
-                        s.assignedAgents.map((ag) => (
+                        (s.assignedAgents || []).map((ag) => (
                           <span
                             key={ag}
                             className="text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded"

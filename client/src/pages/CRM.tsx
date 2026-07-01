@@ -1327,7 +1327,7 @@ export default function CRM() {
                       {deal.title}
                     </p>
                     <p className="text-xs text-gray-500">
-                      ${deal.value.toLocaleString()}
+                      ${(deal.value || 0).toLocaleString()}
                     </p>
                   </div>
                   <span
@@ -1514,7 +1514,7 @@ export default function CRM() {
                               type: contact.type,
                               source: contact.source,
                               status: contact.status,
-                              tags: contact.tags.join(', '),
+                              tags: (contact.tags || []).join(', '),
                               notes: contact.notes || '',
                             });
                             setShowContactModal(true);
@@ -1626,7 +1626,7 @@ export default function CRM() {
                     {deal.title}
                   </h4>
                   <p className="text-lg font-bold text-green-600">
-                    ${deal.value.toLocaleString()}
+                    ${(deal.value || 0).toLocaleString()}
                   </p>
                   {deal.contact && (
                     <p className="text-sm text-gray-500 mt-2">

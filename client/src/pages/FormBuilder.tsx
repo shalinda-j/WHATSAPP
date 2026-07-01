@@ -108,7 +108,7 @@ export default function FormBuilder() {
     setEditingTemplate(template);
     setFormName(template.name);
     setFormDescription(template.description || '');
-    setFormFields(template.fields);
+    setFormFields(template.fields || []);
     setTriggerMode(template.triggerMode);
     setTriggerDelay(template.triggerDelay);
     setWelcomeMessage(template.welcomeMessage || '');
@@ -290,7 +290,7 @@ export default function FormBuilder() {
                       {template.description}
                     </p>
                     <div className="flex gap-4 mt-2 text-sm text-gray-500">
-                      <span>{template.fields.length} fields</span>
+                      <span>{template.fields?.length || 0} fields</span>
                       <span>Trigger: {template.triggerMode}</span>
                       {template.triggerMode !== 'manual' && (
                         <span>Delay: {template.triggerDelay}s</span>

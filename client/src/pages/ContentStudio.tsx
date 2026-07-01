@@ -65,8 +65,8 @@ export default function ContentStudio() {
         api.get<{ providers: Provider[] }>('/api/content/providers'),
         api.get<{ assets: Asset[] }>('/api/content/assets?type=image'),
       ]);
-      setProviders(provRes.data.providers);
-      setAssets(assetsRes.data.assets);
+      setProviders(provRes.data.providers || []);
+      setAssets(assetsRes.data.assets || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load');
     } finally {
@@ -168,7 +168,7 @@ export default function ContentStudio() {
                 title={
                   p.ready
                     ? `Default model: ${p.defaultModel}`
-                    : `Missing: ${p.missing.join(', ')}`
+                    : `Missing: ${(p.missing || []).join(', ')}`
                 }
               >
                 {p.ready ? (
@@ -178,7 +178,9 @@ export default function ContentStudio() {
                 )}
                 <span className="font-medium capitalize">{p.name}</span>
                 <span className="text-[10px] opacity-70">
-                  {p.ready ? p.defaultModel : `set ${p.missing.join(' + ')}`}
+                  {p.ready
+                    ? p.defaultModel
+                    : `set ${(p.missing || []).join(' + ')}`}
                 </span>
               </div>
             ))
