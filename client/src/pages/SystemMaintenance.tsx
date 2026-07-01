@@ -568,7 +568,7 @@ export default function SystemMaintenance() {
                   Deleted <b>{wipeResult.totalDeleted}</b> row(s).
                 </p>
                 <ul className="text-xs text-gray-600 bg-gray-50 rounded p-3 mb-4 font-mono">
-                  {Object.entries(wipeResult.deleted).map(([k, v]) => (
+                  {Object.entries(wipeResult.deleted || {}).map(([k, v]) => (
                     <li key={k}>
                       {k}: <b>{String(v)}</b>
                     </li>

@@ -111,7 +111,7 @@ export default function MarketingInsights() {
             <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
               <TrendingUp className="h-4 w-4" /> Per-channel funnel
             </h2>
-            {report.perChannel.length === 0 ? (
+            {(report.perChannel || []).length === 0 ? (
               <div className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
                 No campaign data in the selected window. Once Phase 3 lands and
                 campaigns start sending, this populates automatically.
@@ -132,7 +132,7 @@ export default function MarketingInsights() {
                     </tr>
                   </thead>
                   <tbody>
-                    {report.perChannel.map((c) => (
+                    {(report.perChannel || []).map((c) => (
                       <tr key={c.channel} className="border-t border-gray-100">
                         <td className="px-3 py-2 capitalize">{c.channel}</td>
                         <td className="px-3 py-2 text-right">{c.sent}</td>
@@ -154,7 +154,7 @@ export default function MarketingInsights() {
             )}
           </section>
 
-          {report.topCampaigns.length > 0 && (
+          {(report.topCampaigns || []).length > 0 && (
             <section>
               <h2 className="text-sm font-semibold text-gray-700 mb-2">
                 Top campaigns
@@ -169,7 +169,7 @@ export default function MarketingInsights() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {report.topCampaigns.map((c) => (
+                    {(report.topCampaigns || []).map((c) => (
                       <tr key={c.campaignId}>
                         <td className="px-3 py-2 text-gray-900">{c.name}</td>
                         <td className="px-3 py-2 text-right">{c.converted}</td>
@@ -188,14 +188,14 @@ export default function MarketingInsights() {
             <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
               <Sparkles className="h-4 w-4" /> AI recommendations
             </h2>
-            {report.recommendations.length === 0 ? (
+            {(report.recommendations || []).length === 0 ? (
               <div className="rounded-lg border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-500">
                 The MarketingInsightsAgent (Phase 6) writes recommendations here
                 once it has enough campaign data to analyse.
               </div>
             ) : (
               <ul className="space-y-2">
-                {report.recommendations.map((r, i) => (
+                {(report.recommendations || []).map((r, i) => (
                   <li
                     key={i}
                     className="rounded-lg border border-gray-200 bg-white p-3"

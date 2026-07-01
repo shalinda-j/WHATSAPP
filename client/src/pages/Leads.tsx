@@ -720,12 +720,12 @@ export default function Leads() {
                         Qualifications & Transcripts
                       </h3>
                       <span className="text-[10px] font-bold bg-gray-100 text-gray-500 px-3 py-1 rounded-full uppercase">
-                        {selectedLead.qualifications.length} Files
+                        {(selectedLead.qualifications || []).length} Files
                       </span>
                     </div>
 
                     <div className="space-y-3">
-                      {selectedLead.qualifications.length === 0 ? (
+                      {(selectedLead.qualifications || []).length === 0 ? (
                         <div className="text-center py-10 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200">
                           <FileText className="h-10 w-10 text-gray-200 mx-auto mb-2" />
                           <p className="text-gray-400 text-xs font-bold uppercase tracking-tight">
@@ -733,7 +733,7 @@ export default function Leads() {
                           </p>
                         </div>
                       ) : (
-                        selectedLead.qualifications.map((qual, idx) => (
+                        (selectedLead.qualifications || []).map((qual, idx) => (
                           <div
                             key={idx}
                             className="group flex items-center justify-between p-4 bg-white border border-gray-100 rounded-2xl hover:border-indigo-200 hover:shadow-md transition duration-300"

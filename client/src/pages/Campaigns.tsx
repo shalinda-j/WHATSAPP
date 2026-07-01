@@ -331,7 +331,7 @@ export default function Campaigns() {
                 <tr key={c._id} className="border-t border-gray-100">
                   <td className="px-3 py-2 font-medium text-gray-900">
                     {c.name}
-                    {c.variants.some((v) => v.mediaUrl) && (
+                    {(c.variants || []).some((v) => v.mediaUrl) && (
                       <span title="Has image" className="inline">
                         <Image className="h-3 w-3 text-blue-400 inline ml-1.5" />
                       </span>
@@ -350,9 +350,13 @@ export default function Campaigns() {
                   <td className="px-3 py-2 text-right">
                     {c.variants?.length ?? 0}
                   </td>
-                  <td className="px-3 py-2 text-right">{c.stats.sent}</td>
-                  <td className="px-3 py-2 text-right">{c.stats.replied}</td>
-                  <td className="px-3 py-2 text-right">{c.stats.converted}</td>
+                  <td className="px-3 py-2 text-right">{c.stats?.sent ?? 0}</td>
+                  <td className="px-3 py-2 text-right">
+                    {c.stats?.replied ?? 0}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {c.stats?.converted ?? 0}
+                  </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex items-center justify-end gap-3">
                       <button

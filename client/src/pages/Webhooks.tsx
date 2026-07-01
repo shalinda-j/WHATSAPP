@@ -265,7 +265,7 @@ export default function Webhooks() {
                   {hook.url}
                 </code>
                 <div className="mt-2 flex gap-2">
-                  {hook.events.map((ev) => (
+                  {(hook.events || []).map((ev) => (
                     <span
                       key={ev}
                       className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded-md"

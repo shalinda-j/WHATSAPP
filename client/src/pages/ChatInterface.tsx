@@ -1014,7 +1014,7 @@ export default function ChatInterface() {
                               msg.metadata.sentimentLabel !== 'neutral' && (
                                 <span
                                   className={`text-[9px] px-1.5 py-0.5 rounded-full ${
-                                    SENTIMENT_BADGE[msg.metadata.sentimentLabel]
+                                    (SENTIMENT_BADGE[msg.metadata.sentimentLabel] || SENTIMENT_BADGE.neutral)
                                       .className
                                   }`}
                                   title={
@@ -1024,7 +1024,7 @@ export default function ChatInterface() {
                                   }
                                 >
                                   {
-                                    SENTIMENT_BADGE[msg.metadata.sentimentLabel]
+                                    (SENTIMENT_BADGE[msg.metadata.sentimentLabel] || SENTIMENT_BADGE.neutral)
                                       .label
                                   }
                                 </span>
