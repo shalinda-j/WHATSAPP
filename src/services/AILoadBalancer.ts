@@ -114,6 +114,15 @@ const RATE_LIMIT_COOLDOWN_MS =
   Number(process.env.AI_RATE_LIMIT_COOLDOWN_MS) || 60000;
 const MAX_429_RETRIES = 2;
 
+// Model slugs that are NOT chat/completion models. Registering one of these as
+// a chat provider makes every /chat/completions call fail (usually 400), which
+// takes down the whole fallback chain. Matched case-insensitively as a token
+// inside the slug so `google/gemini-...-tts-preview`, `openai/whisper-1`,
+// `text-embedding-3`, `dall-e-3`, etc. are all caught. Chat models with these
+// words are not expected; voice/embeddings use dedicated services.
+const NON_CHAT_MODEL_RE =
+  /(^|[/\-_.:])(tts|whisper|speech|transcrib|audio|lyria|dall-?e|embed(ding)?|moderation|rerank|image|imagen)([/\-_.:]|$)/i;
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
@@ -279,6 +288,21 @@ export class AILoadBalancer {
             `⚠️ Skipping provider ${conf.providerType} (${conf.aiModel}): ` +
               `API key could not be decrypted. Re-enter the key in ` +
               `Admin Panel > Configuration > AI Providers.`,
+          );
+          continue;
+        }
+        // Skip models that aren't chat/completion models (text-to-speech,
+        // transcription, image, embedding, moderation, rerank). Operators who
+        // add e.g. `google/gemini-...-tts-preview` for VOICE would otherwise
+        // have it registered as a CHAT provider, where every /chat/completions
+        // call returns 400 and poisons the whole fallback chain. Voice reads
+        // the OpenRouter key separately (openrouterVoice.ts) so deactivating it
+        // here does not disable TTS.
+        if (conf.aiModel && NON_CHAT_MODEL_RE.test(conf.aiModel)) {
+          console.warn(
+            `⚠️ Skipping provider ${conf.providerType} (${conf.aiModel}): ` +
+              `this is an audio/TTS/embedding model, not a chat model. Pick a ` +
+              `chat-capable model in Admin Panel > Configuration > AI Providers.`,
           );
           continue;
         }

@@ -559,7 +559,9 @@ export class FormService {
           ? String((tpl as any).tenantId)
           : undefined,
         timestamp: new Date().toISOString(),
-      }, (tpl as any)?.tenantId).catch(() => {});
+      }, (tpl as any)?.tenantId).catch(() => {
+        /* fire-and-forget webhook; failures are logged upstream */
+      });
 
       return {
         success: true,

@@ -96,7 +96,9 @@ router.post('/', async (req: Request, res: Response) => {
   // onto the ChannelConnection row.
   const adapter = channelRouter.get(parsed.data.channel);
   if (adapter) {
-    await adapter.stop(String(tenantId)).catch(() => {});
+    await adapter.stop(String(tenantId)).catch(() => {
+      /* best-effort stop before restart; ignore if not running */
+    });
     adapter.start(String(tenantId)).catch((err) => {
       console.error(`adapter.start for ${parsed.data.channel} failed:`, err);
     });

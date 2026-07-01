@@ -137,7 +137,7 @@ export function parseFollowUpDate(text: string, now: Date = new Date()): Date | 
     const month = parseInt(dateMatch[2], 10);
     const rawYear = dateMatch[3] ? parseInt(dateMatch[3], 10) : undefined;
     if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
-      let year =
+      const year =
         rawYear === undefined
           ? now.getFullYear()
           : rawYear < 100
