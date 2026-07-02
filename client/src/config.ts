@@ -1,7 +1,11 @@
 import axios from 'axios';
 
-// Get API URL from env or default to relative path (for same-domain deployment)
-const API_URL = import.meta.env.VITE_API_URL || '';
+// Get API URL from env or default to relative path (for same-domain deployment).
+// Exported so raw-fetch call sites (FormData uploads / streaming endpoints that
+// can't use the axios instance) resolve against the SAME base as every other
+// request instead of hardcoding a relative path that breaks on split-domain
+// deployments.
+export const API_URL = import.meta.env.VITE_API_URL || '';
 
 export const api = axios.create({
   baseURL: API_URL,

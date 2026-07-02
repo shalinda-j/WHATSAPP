@@ -141,10 +141,18 @@ async function tick(tenantId: string): Promise<{
       const phone = lead.phoneNumber;
       const contact = phone ? (contactsByPhone.get(phone) ?? null) : null;
 
-      // Skip opted-out contacts: a STOP from the user must silence every
-      // future outbound — including agent-driven follow-ups, not just
-      // campaign broadcasts.
-      if (phone && (await isPhoneOptedOut(phone, tenantId))) {
+      // A lead we can't reach (no phone) or that opted out (a STOP must
+      // silence every future outbound, including agent follow-ups) is skipped
+      // — but we MUST still bump its dormancy clock. Selection sorts
+      // `updatedAt` ascending with a fixed limit, so a skipped-without-stamp
+      // lead stays the oldest row forever; once the N oldest dormant leads are
+      // all opted-out/phoneless the batch is permanently starved and NO lead
+      // ever receives a follow-up again.
+      if (!phone || (await isPhoneOptedOut(phone, tenantId))) {
+        await Lead.updateOne(
+          { _id: lead._id },
+          { $set: { updatedAt: new Date() } },
+        );
         continue;
       }
 
@@ -230,7 +238,28 @@ async function tick(tenantId: string): Promise<{
     // overdue reminder the moment this code ships.
     const now = new Date();
     const dueContacts = await Contact.find({
-      $or: [{ tenantId }, { tenantId: { $exists: false } }, { tenantId: null }],
+      $and: [
+        {
+          $or: [
+            { tenantId },
+            { tenantId: { $exists: false } },
+            { tenantId: null },
+          ],
+        },
+        // Require at least one deliverable handle. A phoneless due contact can
+        // never be messaged, so fetching-then-skipping it lets it sit at the
+        // top of the `nextFollowUp` asc / limited batch forever and starve
+        // every deliverable contact behind it. Excluding it here leaves its
+        // nextFollowUp untouched (operator still sees it pending) while
+        // freeing the batch slot. ($nin [null,''] also excludes missing fields.)
+        {
+          $or: [
+            { phone: { $nin: [null, ''] } },
+            { whatsappNumber: { $nin: [null, ''] } },
+            { whatsappId: { $nin: [null, ''] } },
+          ],
+        },
+      ],
       // Missing field never matches $lte; $ne:null also drops any rows that
       // explicitly stored null. Only genuinely-due dates are selected.
       nextFollowUp: { $ne: null, $lte: now },

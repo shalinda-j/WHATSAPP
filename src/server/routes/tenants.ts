@@ -1,9 +1,8 @@
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import {
   authenticateToken,
-  AuthRequest,
-  isSuperAdminRole,
+  requireSuperAdmin,
 } from '../middleware/auth';
 import Tenant from '../../models/Tenant';
 
@@ -12,26 +11,10 @@ router.use(authenticateToken);
 
 /**
  * Tenant management (enumerate / rename / replan / suspend / activate ANY
- * tenant) is a SUPER-ADMIN operation. The previous gate admitted any role
- * 'admin' — but Admin.role DEFAULTS to 'admin' and tenant-bound admins carry
- * a tenantId in their JWT, so a regular tenant admin passed the gate and could
- * enumerate, edit, and suspend every other tenant (cross-tenant privilege
- * escalation + DoS).
- *
- * Mirror resolveTenant's super-admin definition exactly: a super-admin is a
- * user WITHOUT a tenantId binding in their token (legacy single-admin /
- * default deployments) OR one whose role is explicitly super_admin. Any token
- * that carries a tenantId binding is tenant-scoped and must be rejected here.
+ * tenant) is a SUPER-ADMIN operation — see requireSuperAdmin in
+ * middleware/auth.ts. Tenant-bound admins carry a tenantId in their JWT and
+ * are rejected, preventing cross-tenant privilege escalation + DoS.
  */
-function requireSuperAdmin(req: AuthRequest, res: Response, next: NextFunction) {
-  const role = req.user?.role;
-  const tenantId = (req.user as { tenantId?: unknown } | undefined)?.tenantId;
-  const isSuperAdmin = isSuperAdminRole(role) || !tenantId;
-  if (!isSuperAdmin) {
-    return res.status(403).json({ error: 'super_admin_required' });
-  }
-  next();
-}
 router.use(requireSuperAdmin);
 
 const TenantCreateSchema = z.object({

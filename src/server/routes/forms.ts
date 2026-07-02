@@ -160,8 +160,11 @@ router.put(
         );
       }
 
-      const template = await FormTemplate.findByIdAndUpdate(
-        req.params.id,
+      // Tenant-scope the by-id mutation so an operator can't edit another
+      // tenant's template. Legacy null/undefined rows stay editable; a
+      // cross-tenant id 404s indistinguishably from a missing one.
+      const template = await FormTemplate.findOneAndUpdate(
+        withTenantScope(req, { _id: req.params.id }),
         {
           name,
           description,
@@ -195,7 +198,11 @@ router.delete(
   validateObjectId(),
   async (req, res) => {
     try {
-      const template = await FormTemplate.findByIdAndDelete(req.params.id);
+      // Tenant-scope the delete so a tenant admin can't delete another
+      // tenant's template by id.
+      const template = await FormTemplate.findOneAndDelete(
+        withTenantScope(req, { _id: req.params.id }),
+      );
       if (!template) {
         return res.status(404).json({ error: 'Template not found' });
       }
@@ -221,8 +228,11 @@ router.post(
         tid ? { tenantId: tid } : {},
         { isDefault: false },
       );
-      const template = await FormTemplate.findByIdAndUpdate(
-        req.params.id,
+      // Tenant-scope the by-id promotion so a tenant admin can't hijack
+      // another tenant's default form (the public /default handler serves
+      // whatever is flagged isDefault).
+      const template = await FormTemplate.findOneAndUpdate(
+        withTenantScope(req, { _id: req.params.id }),
         { isDefault: true, updatedAt: new Date() },
         { new: true },
       );
@@ -244,11 +254,17 @@ router.post(
   validateObjectId(),
   async (req, res) => {
     try {
-      const original = await FormTemplate.findById(req.params.id);
+      // Tenant-scope the source read so a tenant admin can't clone another
+      // tenant's template.
+      const original = await FormTemplate.findOne(
+        withTenantScope(req, { _id: req.params.id }),
+      );
       if (!original) {
         return res.status(404).json({ error: 'Template not found' });
       }
 
+      // Stamp the copy with the caller's tenant (matches POST /templates).
+      const tid = tenantIdOf(req);
       const duplicate = new FormTemplate({
         name: `${original.name} (Copy)`,
         description: original.description,
@@ -259,6 +275,7 @@ router.post(
         completionMessage: original.completionMessage,
         isDefault: false,
         isActive: true,
+        ...(tid ? { tenantId: tid } : {}),
       });
 
       await duplicate.save();

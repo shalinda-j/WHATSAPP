@@ -13,6 +13,50 @@ import Session from '../models/Session';
 import { agentReflectionService } from './AgentReflectionService';
 import { conversionService } from './ConversionService';
 import { kioskInviteService } from './KioskInviteService';
+import {
+  normalisePhoneDigits,
+  loadPhoneMapForLids,
+  normaliseLidJid,
+} from './LidPhoneMappingService';
+import { isLidJid } from '../utils/jid';
+
+/** Resolve the tenant that owns a WhatsApp session (undefined if none). */
+async function tenantIdForSession(sessionId: string): Promise<unknown> {
+  try {
+    const sess = await Session.findOne({ sessionId })
+      .select('tenantId')
+      .lean();
+    return (sess as { tenantId?: unknown } | null)?.tenantId ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Resolve a caller's REAL phone from a chat JID for booking storage. Returns
+ * digits only; never the raw '...@lid' string. Falls back to the stored
+ * LID→phone mapping, then to the bare local part as a last resort.
+ */
+async function resolveCallerPhone(
+  jid: string,
+  sessionId: string,
+): Promise<string> {
+  const direct = normalisePhoneDigits(jid);
+  if (direct) return direct;
+  if (isLidJid(jid)) {
+    try {
+      const map = await loadPhoneMapForLids([jid], sessionId);
+      const mapped =
+        map.get(normaliseLidJid(jid) ?? jid) ??
+        map.get(jid.replace('@lid', ''));
+      if (mapped) return mapped;
+    } catch (e) {
+      console.error('LID→phone resolve for booking failed:', e);
+    }
+  }
+  // Last resort: bare local part, but never with an "@lid"/"@..." suffix.
+  return jid.split('@')[0] || jid;
+}
 
 // Define the stages of the booking conversation
 export enum BookingInitState {
@@ -255,8 +299,12 @@ async function sendTimeSlotMenu(
 ): Promise<void> {
   const dateStr = format(date, 'EEEE, MMMM do');
 
-  // Fetch real availability or mock
-  const slots = await getRealAvailability(date);
+  // Fetch real availability or mock — tenant-scoped so we only subtract THIS
+  // tenant's booked slots (not the whole platform's).
+  const slots = await getRealAvailability(
+    date,
+    await tenantIdForSession(sessionId),
+  );
   session.availableSlots = slots;
 
   if (slots.length === 0) {
@@ -305,8 +353,11 @@ async function finalizeBooking(
     bookingConfig.eventDescription || 'Introduction and Assessment';
   const eventDuration = bookingConfig.eventDurationHours || 1;
 
-  // Extract phone number from jid
-  const callerPhone = jid.replace('@s.whatsapp.net', '').replace('@c.us', '');
+  // Resolve the caller's real phone (never store a raw "...@lid") and the
+  // owning tenant up-front — both are needed by the guard, the save, and the
+  // tenant-scoped availability.
+  const callerPhone = await resolveCallerPhone(jid, sessionId);
+  const bookingTenantId = await tenantIdForSession(sessionId);
 
   // Double-booking guard (layer B): refuse if the exact date+hour already has a
   // confirmed/pending booking. Availability already subtracts booked slots, but
@@ -319,10 +370,20 @@ async function finalizeBooking(
     const targetHour = appointmentDate.getHours();
     const targetTimeStr = format(appointmentDate, 'HH:mm');
 
-    const sameDay = await Booking.find({
+    // Tenant-scope the guard (legacy-tolerant) so tenant A's 10:00 booking
+    // doesn't block tenant B from the same slot — bookings are per-tenant.
+    const sameDayFilter: Record<string, unknown> = {
       date: { $gte: dayStart, $lte: dayEnd },
       status: { $in: ['confirmed', 'pending'] },
-    })
+    };
+    if (bookingTenantId) {
+      sameDayFilter.$or = [
+        { tenantId: bookingTenantId },
+        { tenantId: { $exists: false } },
+        { tenantId: null },
+      ];
+    }
+    const sameDay = await Booking.find(sameDayFilter)
       .select('date time')
       .lean();
 
@@ -382,11 +443,9 @@ async function finalizeBooking(
     const timeStr24 = format(appointmentDate, 'HH:mm');
     try {
       // Multi-tenant isolation: stamp the bot-created booking with the tenant
-      // that owns this WhatsApp session, mirroring the admin POST /bookings
-      // stamping. Optional — legacy/single-tenant sessions have no tenantId.
-      const sess = await Session.findOne({ sessionId })
-        .select('tenantId')
-        .lean();
+      // that owns this WhatsApp session (resolved once, above), mirroring the
+      // admin POST /bookings stamping. Optional — legacy/single-tenant
+      // sessions have no tenantId.
       const booking = await Booking.create({
         clientName: callerName || callerPhone,
         clientPhone: callerPhone,
@@ -399,7 +458,7 @@ async function finalizeBooking(
         sessionId,
         location: campusLocation,
         gcalLink: gcalLink || undefined,
-        tenantId: sess?.tenantId,
+        tenantId: bookingTenantId,
       });
 
       // Notify any subscribed webhooks that a booking was confirmed.
@@ -413,7 +472,7 @@ async function finalizeBooking(
         location: booking.location,
         sessionId,
         timestamp: new Date(),
-      }, sess?.tenantId).catch((err) =>
+      }, bookingTenantId).catch((err) =>
         console.error('booking.created webhook trigger failed:', err),
       );
 
@@ -454,7 +513,7 @@ async function finalizeBooking(
         const issued = await kioskInviteService.issue({
           phone: callerPhone,
           jid,
-          tenantId: sess?.tenantId ? String(sess.tenantId) : undefined,
+          tenantId: bookingTenantId ? String(bookingTenantId) : undefined,
           sessionId,
           deliver: false, // included in the confirmation message below
           expiresAt: codeExpiry,
@@ -467,7 +526,18 @@ async function finalizeBooking(
         );
       }
     } catch (err) {
+      // Do NOT swallow and fall through to the "Appointment Confirmed!" message
+      // below — if the booking row didn't persist, the operator has no record,
+      // no webhook/conversion fired, and the slot isn't reserved, yet the
+      // customer would believe they're booked. Apologise and abort instead.
       console.error('Failed to save booking to DB:', err);
+      await sendMessage(
+        jid,
+        `❌ Sorry, there was an error reserving your slot. Please try again by replying *!visit*.`,
+        sessionId,
+      );
+      await sessionStateService.deleteSession(jid, 'booking');
+      return;
     }
 
     // 4. Send confirmation text with full details
@@ -556,8 +626,12 @@ export async function handleSpecificDateRequest(
     const [hours, minutes] = timeStr.split(':').map(Number);
     const requestedSlot = hours;
 
-    // Check availability
-    const availableSlots = await getRealAvailability(date);
+    // Check availability — tenant-scoped so cross-tenant bookings don't
+    // spuriously mark this tenant's slot as taken.
+    const availableSlots = await getRealAvailability(
+      date,
+      await tenantIdForSession(sessionId),
+    );
 
     if (availableSlots.includes(requestedSlot)) {
       // Success! Book it.

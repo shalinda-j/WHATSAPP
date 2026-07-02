@@ -36,6 +36,30 @@ export function isSuperAdminRole(role?: string | null): boolean {
   return typeof role === 'string' && SUPER_ADMIN_ALIASES.has(role);
 }
 
+/**
+ * Gate for super-admin-only operations (global AI-provider CRUD, tenant
+ * management, etc.). Mirrors resolveTenant's definition exactly: a super-admin
+ * is a user WITHOUT a tenantId binding in their token (legacy single-admin /
+ * default deployments) OR one whose role is explicitly super_admin. Any token
+ * that carries a tenantId binding is tenant-scoped and rejected here.
+ *
+ * Must run AFTER authenticateToken so req.user is populated.
+ */
+export function requireSuperAdmin(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+): void {
+  const role = req.user?.role;
+  const tenantId = (req.user as { tenantId?: unknown } | undefined)?.tenantId;
+  const isSuperAdmin = isSuperAdminRole(role) || !tenantId;
+  if (!isSuperAdmin) {
+    res.status(403).json({ error: 'super_admin_required' });
+    return;
+  }
+  next();
+}
+
 export const authenticateToken = (
   req: AuthRequest,
   res: Response,

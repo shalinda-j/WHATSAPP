@@ -20,6 +20,7 @@ import axios from 'axios';
 import ChannelConnection from '../../models/ChannelConnection';
 import Tenant from '../../models/Tenant';
 import { resolveTenant } from '../middleware/tenantContext';
+import { authenticateToken } from '../middleware/auth';
 import { Channel } from '../../types/agent';
 
 const router = Router();
@@ -237,15 +238,24 @@ router.get('/providers', (_req: Request, res: Response) => {
   res.json({ providers: out });
 });
 
-router.use(resolveTenant);
-
 /**
  * GET /api/auth/oauth/:provider/start
- * Builds the provider authorize URL and 302s. The operator must already be
- * signed in (resolveTenant pulls tenantId from the session/JWT).
+ * Returns the provider authorize URL as JSON for the (authenticated) client to
+ * navigate to. This MUST be authenticated: it embeds the caller's real tenantId
+ * into the signed OAuth state so the callback attaches the resulting
+ * ChannelConnection to the right tenant.
+ *
+ * Previously this route was unauthenticated (only resolveTenant ran) and 302'd
+ * directly. Because a browser <a href> can't carry the JWT, req.user was always
+ * undefined → resolveTenant fell back to the 'default' tenant. That let ANY
+ * unauthenticated visitor complete the flow and inject a channel into the
+ * default tenant, and stamped real tenants' connections onto 'default'. We now
+ * require auth and hand back the URL for an authenticated fetch() to redirect to.
  */
 router.get(
   '/:provider/start',
+  authenticateToken,
+  resolveTenant,
   async (req: Request<{ provider: string }>, res: Response) => {
     const cfg = PROVIDERS[req.params.provider];
     if (!cfg) return res.status(404).json({ error: 'unknown_provider' });
@@ -283,7 +293,7 @@ router.get(
     url.searchParams.set('state', state);
     url.searchParams.set('response_type', 'code');
 
-    res.redirect(url.toString());
+    res.json({ authorizeUrl: url.toString() });
   },
 );
 

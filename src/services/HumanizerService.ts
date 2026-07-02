@@ -514,13 +514,30 @@ export class HumanizerService {
     text: string,
     sessionId = 'default',
   ): Promise<boolean> {
+    // Preserve the historic boolean contract for the many conversational
+    // callers: true only when the message went out immediately.
+    const r = await this.sendHumanizedMessageDetailed(jid, text, sessionId);
+    return r.delivered;
+  }
+
+  /**
+   * Richer variant of sendHumanizedMessage that distinguishes immediate
+   * delivery from "queued for later". Campaign/marketing senders MUST use this
+   * so a queued message is not mis-recorded as a hard failure (which would
+   * double-send on the next relaunch and undercount stats.sent).
+   */
+  public static async sendHumanizedMessageDetailed(
+    jid: string,
+    text: string,
+    sessionId = 'default',
+  ): Promise<{ delivered: boolean; queued: boolean }> {
     const rate = await this.checkRateCap(sessionId);
     if (!rate.allowed) {
       console.warn(
         `⚠️ Rate cap hit (${rate.reason}) for session '${sessionId}' — queueing for later delivery`,
       );
       await this.queueMessage(jid, text, sessionId);
-      return false;
+      return { delivered: false, queued: true };
     }
 
     const sock = getSocket(sessionId);
@@ -530,18 +547,18 @@ export class HumanizerService {
         `⚠️ sendHumanizedMessage: Session '${sessionId}' socket not available. Queueing message...`,
       );
       await this.queueMessage(jid, text, sessionId);
-      return false;
+      return { delivered: false, queued: true };
     }
 
     try {
       const sent = await this.sendDirectly(sock, jid, text, sessionId);
       if (sent) this.recordSend(sessionId);
-      return sent;
+      return { delivered: sent, queued: false };
     } catch (error) {
       console.error('❌ Error sending humanized message:', error);
       // Queue for retry on error
       await this.queueMessage(jid, text, sessionId);
-      return false;
+      return { delivered: false, queued: true };
     }
   }
 

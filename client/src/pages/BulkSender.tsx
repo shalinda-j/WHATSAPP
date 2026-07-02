@@ -15,7 +15,7 @@ import {
   Phone,
   Download,
 } from 'lucide-react';
-import { api as _api } from '../config';
+import { api as _api, API_URL } from '../config';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface ProgressLine {
@@ -253,7 +253,7 @@ const BulkSender = () => {
     abortRef.current = new AbortController();
 
     try {
-      const response = await fetch('/api/bulk/send', {
+      const response = await fetch(`${API_URL}/api/bulk/send`, {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,

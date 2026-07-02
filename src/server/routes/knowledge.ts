@@ -2,13 +2,23 @@ import { Router } from 'express';
 import { knowledgeTrainingService } from '../../services/KnowledgeTrainingService';
 import KnowledgeEntry from '../../models/KnowledgeEntry';
 import { authenticateToken } from '../middleware/auth';
-import { resolveTenant, withTenantScope } from '../middleware/tenantContext';
+import {
+  resolveTenant,
+  withTenantScope,
+  tenantIdOf,
+} from '../middleware/tenantContext';
 
 const router = Router();
 
 // All routes require authentication + tenant context
 router.use(authenticateToken);
 router.use(resolveTenant);
+
+/** Caller's tenantId as a string (or undefined for legacy/super-admin). */
+function reqTenantId(req: any): string | undefined {
+  const tid = tenantIdOf(req);
+  return tid ? String(tid) : undefined;
+}
 
 /**
  * GET /api/knowledge
@@ -101,6 +111,7 @@ router.post('/', async (req, res) => {
       category || 'general',
       tags || [],
       language || 'all',
+      reqTenantId(req),
     );
 
     res.json(entry);
@@ -130,6 +141,7 @@ router.post('/batch', async (req, res) => {
           entry.category || 'general',
           entry.tags || [],
           entry.language || 'all',
+          reqTenantId(req),
         );
         created.push(newEntry);
       }
@@ -162,6 +174,7 @@ router.put('/:id', async (req, res) => {
     const entry = await knowledgeTrainingService.updateKnowledge(
       req.params.id,
       updates,
+      reqTenantId(req),
     );
 
     if (!entry) {
@@ -182,6 +195,7 @@ router.delete('/:id', async (req, res) => {
   try {
     const success = await knowledgeTrainingService.deleteKnowledge(
       req.params.id,
+      reqTenantId(req),
     );
 
     if (!success) {
@@ -224,6 +238,7 @@ router.post('/import/:datasetKey', async (req, res) => {
   try {
     const count = await knowledgeTrainingService.importFromDataset(
       req.params.datasetKey,
+      reqTenantId(req),
     );
     res.json({ imported: count });
   } catch (err: any) {

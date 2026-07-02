@@ -127,7 +127,7 @@ Incoming Message
 
 Access at `http://localhost:8080` after starting the server.
 
-Default login is created on first run — check server logs for credentials, or set `ADMIN_EMAIL` / `ADMIN_PASSWORD` in `.env`.
+Default login is created on first run — check server logs for credentials, or set `SUPER_ADMIN_USERNAME` / `SUPER_ADMIN_PASSWORD` (or `ADMIN_USERNAME` / `ADMIN_PASSWORD`) in `.env`. (There is no `ADMIN_EMAIL` — the seeder reads a username, not an email.)
 
 Key pages:
 

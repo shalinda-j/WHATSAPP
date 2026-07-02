@@ -180,7 +180,17 @@ router.post('/personality', async (req, res) => {
 // DELETE /api/call-agent/logs/:id
 router.delete('/logs/:id', async (req, res) => {
   try {
-    await CallLog.findByIdAndDelete(req.params.id);
+    // Tenant-scope the delete so a tenant admin can't remove another
+    // tenant's call log by id (GET /logs is already scoped the same way).
+    const scope = tenantScope(req as { tenant?: { _id?: unknown } });
+    const filter =
+      Object.keys(scope).length > 0
+        ? { $and: [{ _id: req.params.id }, scope] }
+        : { _id: req.params.id };
+    const deleted = await CallLog.findOneAndDelete(filter);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Call log not found' });
+    }
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete log' });

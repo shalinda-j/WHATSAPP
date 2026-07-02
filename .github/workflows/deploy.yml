@@ -38,8 +38,11 @@ jobs:
     - name: Install dependencies
       run: npm install --no-audit --no-fund
 
-    - name: Build Backend
-      run: npm run build:client
+    # Build BOTH backend (dist/) and client (client/dist/). The step was
+    # mislabeled and ran only `build:client`, so the uploaded artifact's dist/
+    # (backend) was always empty.
+    - name: Build
+      run: npm run build
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
@@ -50,28 +53,22 @@ jobs:
           client/dist/
         retention-days: 7
 
-  deploy-production:
-    name: Deploy to Production
+  # Production deployment is handled by DigitalOcean App Platform's
+  # auto-deploy-on-push (push to main → DO builds from the Dockerfile and
+  # rolls out). This workflow only builds + verifies artifacts. The previous
+  # `deploy-production` job printed "Deploying…" and went green WITHOUT
+  # deploying anything, which falsely reported a successful production deploy
+  # on every push. It's intentionally omitted to avoid that false signal.
+  #
+  # If you move OFF DO auto-deploy, add a real deploy job here (doctl apps
+  # create-deployment, scp/ssh, etc.) gated on `github.ref == 'refs/heads/main'`.
+  deploy-note:
+    name: Deployment Note
     needs: build
     runs-on: ubuntu-latest
-    environment:
-      name: production
-      url: https://your-domain.com
     if: github.ref == 'refs/heads/main'
-
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-
-    - name: Download Artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: whatsapp-bot-${{ needs.build.outputs.backend-version }}
-
-    - name: Deploy
+    - name: Info
       run: |
-        echo "Deploying version ${{ needs.build.outputs.backend-version }}"
-        # Add your deployment commands here
-        # Example: scp, rsync, or CI/CD tool commands
-        # scp -r ./dist user@server:/app/
-        # ssh user@server "cd /app && pm2 restart whatsapp-bot"
+        echo "Artifacts built for version ${{ needs.build.outputs.backend-version }}."
+        echo "Production rollout is performed by DigitalOcean App Platform on push to main."

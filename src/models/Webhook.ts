@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { CryptoService } from '../services/CryptoService';
 
 export type WebhookCategory = 'data' | 'ops';
 export type WebhookFormat = 'generic' | 'slack' | 'discord';
@@ -36,7 +37,17 @@ const WebhookSchema = new Schema(
     name: { type: String, required: true },
     url: { type: String, required: true },
     events: { type: [String], default: [] },
-    secret: { type: String },
+    // HMAC signing secret — encrypted at rest via CryptoService (same pattern
+    // as Config.apiKey). The getter decrypts on property access so
+    // WebhookService's crypto.createHmac(..., webhook.secret) still signs with
+    // the real value. Route responses must still REDACT it (getters don't run
+    // on toObject/toJSON here, so serialization yields ciphertext, but we strip
+    // it entirely — a secret must never leave the server).
+    secret: {
+      type: String,
+      set: (val: string) => CryptoService.encrypt(val),
+      get: (val: string) => CryptoService.decrypt(val),
+    },
     isActive: { type: Boolean, default: true },
     category: {
       type: String,

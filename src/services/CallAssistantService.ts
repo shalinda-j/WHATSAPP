@@ -236,7 +236,11 @@ class CallAssistantService {
         userId: jid,
         role: 'user',
       })
-        .sort({ createdAt: -1 })
+        // ChatMessage's timestamp field is `timestamp` (indexed), NOT
+        // `createdAt` \u2014 sorting by a nonexistent field returned messages in
+        // arbitrary/insertion order, so language was inferred from OLD messages
+        // instead of the 5 most recent.
+        .sort({ timestamp: -1 })
         .limit(5);
 
       for (const msg of recentMessages) {
@@ -246,11 +250,14 @@ class CallAssistantService {
     } catch {
       // DB not available, default to Sinhala
     }
-    return process.env.DEFAULT_LANGUAGE === 'english'
-      ? 'en'
-      : process.env.DEFAULT_LANGUAGE === 'tamil'
-        ? 'ta'
-        : 'si';
+    // DEFAULT_LANGUAGE is shared with LiveCallSettingsService, which uses ISO
+    // codes ('si'/'en'/'ta'). Accept ISO codes AND the legacy word forms
+    // ('english'/'tamil'/'sinhala') so either domain works and 'en' is no
+    // longer silently treated as Sinhala.
+    const dl = (process.env.DEFAULT_LANGUAGE || '').trim().toLowerCase();
+    if (dl === 'en' || dl === 'english') return 'en';
+    if (dl === 'ta' || dl === 'tamil') return 'ta';
+    return 'si';
   }
 
   /**

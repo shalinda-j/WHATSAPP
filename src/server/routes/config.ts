@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import Config from '../../models/Config';
 import Dataset from '../../models/Dataset';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, requireSuperAdmin } from '../middleware/auth';
 import { HumanizerService } from '../../services/HumanizerService';
 import {
   configService,
@@ -97,7 +97,11 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+// Provider CRUD writes to the GLOBAL, un-partitioned Config collection
+// (shared AI providers + their decrypted secrets), so they are super-admin
+// only — a tenant-bound admin must not be able to delete/rewrite the AI
+// providers every tenant depends on, or inject a session-cookie provider.
+router.post('/', requireSuperAdmin, async (req, res) => {
   try {
     const payload = pickConfigFields(req.body);
     if (!payload.key) {
@@ -111,34 +115,12 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
-  try {
-    const updates = pickConfigFields(req.body);
-    if (Object.keys(updates).length === 0) {
-      return res.status(400).json({ error: 'no editable fields supplied' });
-    }
-    const updatedConfig = await Config.findByIdAndUpdate(
-      req.params.id,
-      { $set: updates },
-      { new: true },
-    );
-    if (!updatedConfig) {
-      return res.status(404).json({ error: 'Config not found' });
-    }
-    res.json(redactConfig(updatedConfig));
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.delete('/:id', async (req, res) => {
-  try {
-    await Config.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Config deleted' });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// NOTE: the generic `PUT /:id` and `DELETE /:id` provider handlers are
+// registered near the BOTTOM of this file, AFTER all the literal
+// `/humanizer`, `/booking`, `/company-info`, … routes. Express matches in
+// registration order, so a `/:id` param route declared here would shadow
+// every literal PUT below (a PUT to /api/config/humanizer would match
+// /:id with id="humanizer" and 500 on the ObjectId cast).
 
 // ============================================
 // Humanizer Configuration Endpoints
@@ -165,25 +147,22 @@ router.put('/humanizer', async (req, res) => {
   try {
     const config = req.body as HumanizerConfig;
 
-    // Find or create the dataset
-    let dataset = await Dataset.findOne({ key: 'HUMANIZER_CONFIG' });
-
-    if (dataset) {
-      dataset.content = config;
-      dataset.isActive = true;
-      await dataset.save();
-    } else {
-      dataset = new Dataset({
+    // Upsert with the flat config as `content`. (content is a Mixed field —
+    // use findOneAndUpdate so the whole value is written atomically instead of
+    // relying on doc.markModified for an in-place Mixed assignment.)
+    const dataset = await Dataset.findOneAndUpdate(
+      { key: 'HUMANIZER_CONFIG' },
+      {
         name: 'Humanizer Configuration',
-        key: 'HUMANIZER_CONFIG',
         content: config,
         scope: 'ALL',
         category: 'config',
         isActive: true,
         description: 'Timing parameters for message humanization',
-      });
-      await dataset.save();
-    }
+        updatedAt: new Date(),
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
 
     // Clear cache to apply changes immediately
     HumanizerService.clearConfigCache();
@@ -409,25 +388,20 @@ router.put('/booking', async (req, res) => {
   try {
     const config = req.body;
 
-    // Find or create the dataset
-    let dataset = await Dataset.findOne({ key: 'BOOKING_CONFIG' });
-
-    if (dataset) {
-      dataset.content = config;
-      dataset.isActive = true;
-      await dataset.save();
-    } else {
-      dataset = new Dataset({
+    // Upsert the flat config as `content` (Mixed field) atomically.
+    const dataset = await Dataset.findOneAndUpdate(
+      { key: 'BOOKING_CONFIG' },
+      {
         name: 'Booking Configuration',
-        key: 'BOOKING_CONFIG',
         content: config,
         scope: 'ALL',
         category: 'config',
         isActive: true,
         description: 'Booking system configuration (location, organizer, etc.)',
-      });
-      await dataset.save();
-    }
+        updatedAt: new Date(),
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
 
     // Clear cache to apply changes immediately
     configService.clearCache();
@@ -463,25 +437,22 @@ router.put('/company-info', async (req, res) => {
   try {
     const info = req.body;
 
-    // Find or create the dataset
-    let dataset = await Dataset.findOne({ key: 'COMPANY_INFO' });
-
-    if (dataset) {
-      dataset.content = info;
-      dataset.isActive = true;
-      await dataset.save();
-    } else {
-      dataset = new Dataset({
+    // Upsert the flat company info as `content` (Mixed field) atomically.
+    // getCompanyInfo() reads a flat object here (and also tolerates a legacy
+    // { en: {...} } seeded shape).
+    const dataset = await Dataset.findOneAndUpdate(
+      { key: 'COMPANY_INFO' },
+      {
         name: 'Company Information',
-        key: 'COMPANY_INFO',
         content: info,
         scope: 'ALL',
         category: 'info',
         isActive: true,
         description: 'General company contact details',
-      });
-      await dataset.save();
-    }
+        updatedAt: new Date(),
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
 
     // Clear cache to apply changes immediately
     configService.clearCache();
@@ -633,7 +604,7 @@ router.get('/usage-cycle', async (req, res) => {
  * POST /api/config/reset-usage
  * Manually reset ALL AI provider usage counters for the current month
  */
-router.post('/reset-usage', async (req, res) => {
+router.post('/reset-usage', requireSuperAdmin, async (req, res) => {
   try {
     const result = await usageResetService.performReset('manual');
     res.json({
@@ -650,11 +621,12 @@ router.post('/reset-usage', async (req, res) => {
  * POST /api/config/:id/reset-usage
  * Manually reset a single AI provider's usage counter
  */
-router.post('/:id/reset-usage', async (req, res) => {
+router.post('/:id/reset-usage', requireSuperAdmin, async (req, res) => {
   try {
-    const success = await usageResetService.resetProvider(req.params.id);
+    const providerId = String(req.params.id);
+    const success = await usageResetService.resetProvider(providerId);
     if (!success) return res.status(404).json({ error: 'Provider not found' });
-    res.json({ success: true, providerId: req.params.id, resetAt: new Date() });
+    res.json({ success: true, providerId, resetAt: new Date() });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -669,7 +641,7 @@ router.post('/:id/reset-usage', async (req, res) => {
  * Validate a pasted session cookie before saving.
  * Body: { providerType: 'openai-session' | 'claude-session', sessionToken: string }
  */
-router.post('/session/test', async (req, res) => {
+router.post('/session/test', requireSuperAdmin, async (req, res) => {
   const { providerType, sessionToken } = req.body || {};
   if (!providerType || !sessionToken) {
     return res.status(400).json({
@@ -714,7 +686,7 @@ router.post('/session/test', async (req, res) => {
  * Validate + save (or update) a session-based provider in one call.
  * Body: { providerType, sessionToken, model?, isActive? }
  */
-router.post('/session/save', async (req, res) => {
+router.post('/session/save', requireSuperAdmin, async (req, res) => {
   const { providerType, sessionToken, model, isActive } = req.body || {};
   if (!providerType || !sessionToken) {
     return res.status(400).json({
@@ -807,6 +779,42 @@ router.post('/session/save', async (req, res) => {
       code: err?.code,
       rawMessage: rawMsg,
     });
+  }
+});
+
+// ============================================
+// Generic provider CRUD by id — MUST stay below every literal route above.
+// A `/:id` param route matches any single segment, so declaring these before
+// the literal `/humanizer`, `/booking`, `/company-info`, … routes would make
+// those unreachable. Both are super-admin only (global Config collection).
+// ============================================
+
+router.put('/:id', requireSuperAdmin, async (req, res) => {
+  try {
+    const updates = pickConfigFields(req.body);
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'no editable fields supplied' });
+    }
+    const updatedConfig = await Config.findByIdAndUpdate(
+      req.params.id,
+      { $set: updates },
+      { new: true },
+    );
+    if (!updatedConfig) {
+      return res.status(404).json({ error: 'Config not found' });
+    }
+    res.json(redactConfig(updatedConfig));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/:id', requireSuperAdmin, async (req, res) => {
+  try {
+    await Config.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Config deleted' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 

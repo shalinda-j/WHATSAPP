@@ -737,15 +737,35 @@ export default function Channels() {
                 if (!info) return null;
                 if (info.ready) {
                   return (
-                    <a
-                      href={`/api/auth/oauth/${oauthProvider}/start`}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        // Start must be called with the auth header (a plain
+                        // <a href> can't carry the JWT), so the backend can
+                        // bind the OAuth state to THIS tenant. It returns the
+                        // authorize URL for us to navigate to.
+                        try {
+                          const res = await api.get<{ authorizeUrl?: string }>(
+                            `/api/auth/oauth/${oauthProvider}/start`,
+                          );
+                          if (res.data?.authorizeUrl) {
+                            window.location.href = res.data.authorizeUrl;
+                          } else {
+                            setError(
+                              'Could not start OAuth: no authorize URL returned.',
+                            );
+                          }
+                        } catch {
+                          setError('Failed to start the OAuth flow.');
+                        }
+                      }}
                       className="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-md bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700"
                     >
                       Connect with{' '}
                       {pickChannel.charAt(0).toUpperCase() +
                         pickChannel.slice(1)}{' '}
                       →
-                    </a>
+                    </button>
                   );
                 }
                 return (

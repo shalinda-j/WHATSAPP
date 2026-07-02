@@ -101,7 +101,13 @@ async function getVoiceConfigCached(): Promise<{ mode: string }> {
   ) {
     return voiceConfigCache;
   }
-  const fresh = await VoiceConfig.findOne().sort({ updatedAt: -1 }).lean();
+  // Read the ACTIVE config's mode, matching the active-only readers in
+  // voice.ts (getActiveVoiceConfig et al.). Previously this took the newest row
+  // regardless of isActive, so a newer disabled row could override the mode of
+  // the currently-active voice config.
+  const fresh = await VoiceConfig.findOne({ isActive: true })
+    .sort({ updatedAt: -1 })
+    .lean();
   voiceConfigCache = { mode: fresh?.mode || 'voice-and-text' };
   voiceConfigCacheTime = now;
   return voiceConfigCache;
@@ -948,8 +954,14 @@ onMessage(async (message, sock, sessionId) => {
     if (text && isStopKeyword(text)) {
       console.log(`   🚫 STOP keyword detected from ${jid}, marking opted-out`);
       try {
+        // Use the RESOLVED real phone when we have it. For an @lid chat the
+        // raw jid is opaque LID digits that never match the contact's real
+        // phone/whatsappId, so a STOP opted out ZERO contacts while still
+        // telling the user "you're unsubscribed" — and campaigns kept sending.
+        // Fall back to the raw jid (markContactOptedOut also matches the full
+        // JID string for LID-only contacts).
         const modified = await markContactOptedOut(
-          jid,
+          inboundRealPhone ?? jid,
           'whatsapp',
           'inbound_stop_keyword',
         );

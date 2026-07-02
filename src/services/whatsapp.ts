@@ -516,6 +516,16 @@ export class WhatsAppSessionManager {
       });
     } catch (error) {
       console.error(`❌ startSession error (${sessionId}):`, error);
+      // Reset the state so the "already connecting/connected" guard at the top
+      // of startSession doesn't wedge this session in 'connecting' FOREVER — a
+      // Mongo/network blip during connect would otherwise make every future
+      // start (reconnect timer or admin route) no-op, leaving the bot offline
+      // until a full process restart. Then schedule a backoff reconnect, unless
+      // the operator explicitly deleted the session.
+      this.connectionStates.delete(sessionId);
+      if (!this.deletedSessions.has(sessionId)) {
+        this.scheduleReconnect(sessionId, 5000);
+      }
     }
   }
 
@@ -815,6 +825,19 @@ export async function sendMessage(
   return HumanizerService.sendHumanizedMessage(jid, text, sessionId);
 }
 
+/**
+ * Like sendMessage but reports whether the message went out immediately or was
+ * QUEUED for later delivery. The campaign/channel path uses this so a queued
+ * message isn't recorded as a hard failure (which double-sends on relaunch).
+ */
+export async function sendMessageDetailed(
+  jid: string,
+  text: string,
+  sessionId = 'default',
+): Promise<{ delivered: boolean; queued: boolean }> {
+  return HumanizerService.sendHumanizedMessageDetailed(jid, text, sessionId);
+}
+
 export async function sendTyping(jid: string, sessionId = 'default') {
   const sock = manager.getSocket(sessionId);
   if (sock) await sock.sendPresenceUpdate('composing', jid);
@@ -916,14 +939,35 @@ async function processVoiceQueue(): Promise<void> {
     }
 
     try {
-      await sendVoiceMessageDirect(
+      const ok = await sendVoiceMessageDirect(
         sock,
         msg.jid,
         msg.audioBuffer,
         msg.sessionId,
       );
-      voiceMessageQueue.shift();
-      console.log(`✅ Queued voice message sent to ${msg.jid}`);
+      if (ok) {
+        voiceMessageQueue.shift();
+        console.log(`✅ Queued voice message sent to ${msg.jid}`);
+      } else {
+        // sendVoiceMessageDirect returns false (it does NOT throw) on a small/
+        // empty buffer, a failed ffmpeg conversion, or a sock.sendMessage
+        // error. Treat that as a failed attempt so the retry/drop path runs —
+        // previously the boolean was ignored, so a failed voice note was
+        // shifted off the queue and logged as "✅ sent" while the customer
+        // received nothing (the whole MAX_VOICE_RETRIES design was dead code).
+        if (msg.attempts >= MAX_VOICE_RETRIES) {
+          console.error(
+            `❌ Max retries reached for queued voice message to ${msg.jid} (send returned false), dropping`,
+          );
+          voiceMessageQueue.shift();
+        } else {
+          msg.attempts++;
+          console.warn(
+            `⚠️ Voice send returned false for ${msg.jid}, retry ${msg.attempts}/${MAX_VOICE_RETRIES}`,
+          );
+          await new Promise((r) => setTimeout(r, VOICE_RETRY_DELAY_MS));
+        }
+      }
     } catch (error) {
       console.error(
         `❌ Failed to send queued voice message to ${msg.jid}:`,

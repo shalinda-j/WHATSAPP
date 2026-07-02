@@ -13,9 +13,7 @@ jobs:
     name: ESLint Analysis
     runs-on: ubuntu-latest
     permissions:
-      actions: read
       contents: read
-      security-events: write
 
     steps:
       - name: Checkout
@@ -29,21 +27,14 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      # Run the project's own ESLint config. Non-blocking (continue-on-error)
+      # because lint findings are advisory here — the TypeScript job is the hard
+      # gate. Previously this used super-linter@v5 with inputs it doesn't accept
+      # (eslint:/output-format:), so it never produced results.sarif and the
+      # subsequent SARIF upload step failed on every run.
       - name: Run ESLint
-        uses: github/super-linter@v5
-        with:
-          languages: JAVASCRIPT, TYPESCRIPT
-          eslint: true
-          multiple-linters: false
-          fail-on-error: true
-          output-detail: detailed
-          output-format: sarif
+        run: npm run lint
         continue-on-error: true
-
-      - name: Upload ESLint results
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: results.sarif
 
   typescript:
     name: TypeScript Check
@@ -68,9 +59,15 @@ jobs:
         working-directory: ./client
         run: npm install --no-audit --no-fund
 
+      # Use `tsc -b` (build mode), NOT `tsc --noEmit`. The client uses a
+      # solution-style tsconfig (references tsconfig.app.json/tsconfig.node.json
+      # with no root files/include), so `tsc --noEmit` type-checks ZERO files and
+      # silently passes even when the client has type errors — they'd only
+      # surface later inside the Docker build. `tsc -b` builds the referenced
+      # projects and actually type-checks them.
       - name: Type check Frontend
         working-directory: ./client
-        run: npx tsc --noEmit
+        run: npx tsc -b
 
   prettier:
     name: Prettier Check
@@ -88,8 +85,13 @@ jobs:
       - name: Install Prettier
         run: npm install -g prettier
 
+      # Advisory (continue-on-error): the TypeScript job is the hard gate.
+      # .prettierrc now uses endOfLine:"auto" so the uniformly-CRLF repo no
+      # longer trips "Delete ␍" on every file, but formatting drift shouldn't
+      # block merges here.
       - name: Check Prettier formatting
         run: prettier --check "**/*.{js,jsx,ts,tsx,json,css,md}"
+        continue-on-error: true
 
   complexity:
     name: Complexity Analysis

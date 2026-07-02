@@ -192,6 +192,29 @@ export class SegmentationService {
   }
 
   /**
+   * True when any OR-group contains a lead-scoped rule.
+   *
+   * The per-scope compile + phone-intersection used by recompute/materialise
+   * handles lead rules in the TOP-LEVEL AND block correctly, but a lead rule
+   * INSIDE an OR group loses its OR semantics: it gets AND-intersected against
+   * the contact set instead of unioned, so the segment under-counts. A full fix
+   * requires resolving each OR-group's lead sub-rules to phones PER GROUP and
+   * injecting them as a contact-phone disjunct. Until then we warn loudly rather
+   * than silently mis-target a campaign. (Tracked in PROD-SWEEP-2026-07-02.md.)
+   */
+  private static orGroupsHaveLeadScope(
+    orGroups: SegmentRule[][] | undefined,
+  ): boolean {
+    if (!orGroups) return false;
+    return orGroups.some((g) =>
+      Array.isArray(g) &&
+      g.some(
+        (r) => typeof r?.field === 'string' && r.field.startsWith('lead.'),
+      ),
+    );
+  }
+
+  /**
    * Compile rules → Mongo filter → count of matching contacts.
    *
    * The segment's rule list may contain a mix of 'contact.*' and 'lead.*'
@@ -221,6 +244,15 @@ export class SegmentationService {
     const orGroups: SegmentRule[][] | undefined = segment.or as
       | SegmentRule[][]
       | undefined;
+
+    if (SegmentationService.orGroupsHaveLeadScope(orGroups)) {
+      console.warn(
+        `⚠️ SegmentationService.recompute: segment ${segmentId} has lead-scoped ` +
+          `rules inside OR groups — cross-scope OR is not fully supported, so the ` +
+          `member count may be UNDER-counted. Rework as top-level AND or split ` +
+          `into separate segments.`,
+      );
+    }
 
     const contactCompile = compileSegmentRules(allRules, orGroups, {
       scope: 'contact',
@@ -308,6 +340,15 @@ export class SegmentationService {
 
     const allRules = (segment.rules ?? []) as SegmentRule[];
     const orGroups = segment.or as SegmentRule[][] | undefined;
+
+    if (SegmentationService.orGroupsHaveLeadScope(orGroups)) {
+      console.warn(
+        `⚠️ SegmentationService.materialise: segment ${segmentId} has lead-scoped ` +
+          `rules inside OR groups — cross-scope OR is not fully supported, so the ` +
+          `recipient set may be UNDER-counted. Rework as top-level AND or split ` +
+          `into separate segments.`,
+      );
+    }
 
     const contactCompile = compileSegmentRules(allRules, orGroups, {
       scope: 'contact',

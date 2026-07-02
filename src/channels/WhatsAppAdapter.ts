@@ -7,7 +7,7 @@ import {
   OutboundMessage,
 } from './types';
 import {
-  sendMessage as whatsappSendMessage,
+  sendMessageDetailed as whatsappSendMessageDetailed,
   getConnectionStatus,
 } from '../services/whatsapp';
 
@@ -43,8 +43,17 @@ export class WhatsAppAdapter implements IChannelAdapter {
     try {
       const sessionId =
         (msg.metadata?.sessionId as string) ?? DEFAULT_TENANT_SESSION;
-      const ok = await whatsappSendMessage(msg.recipient, msg.text, sessionId);
-      return ok ? { ok: true } : { ok: false, error: 'Send returned false' };
+      const { delivered, queued } = await whatsappSendMessageDetailed(
+        msg.recipient,
+        msg.text,
+        sessionId,
+      );
+      // A queued message WILL be delivered by the Humanizer queue — report it
+      // as a success (with the queued flag) so the campaign sender doesn't mark
+      // the execution failed and re-send it (duplicate) on the next relaunch.
+      if (delivered) return { ok: true };
+      if (queued) return { ok: true, queued: true };
+      return { ok: false, error: 'Send returned false' };
     } catch (err: any) {
       return { ok: false, error: err?.message ?? 'WhatsApp send threw' };
     }

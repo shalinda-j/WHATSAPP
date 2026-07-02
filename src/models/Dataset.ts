@@ -77,11 +77,14 @@ const DatasetSchema = new Schema(
       default: 'knowledge',
       index: true,
     },
-    content: {
-      en: { type: Schema.Types.Mixed },
-      si: { type: Schema.Types.Mixed },
-      ta: { type: Schema.Types.Mixed },
-    },
+    // Stored as a Mixed value. The multi-language convention is a
+    // { en, si, ta } map (each language a string or object), but some config
+    // datasets (HUMANIZER_CONFIG, BOOKING_CONFIG, COMPANY_INFO) store a FLAT
+    // object directly. Declaring only en/si/ta subpaths made Mongoose's strict
+    // mode silently strip every key of those flat objects on save (content
+    // persisted as {} — the operator's settings vanished). Mixed accepts both
+    // shapes; readers in ConfigService already handle string / {en} / flat.
+    content: { type: Schema.Types.Mixed },
     scope: { type: String, default: 'ALL' },
     category: {
       type: String,
@@ -104,9 +107,12 @@ const DatasetSchema = new Schema(
   },
 );
 
-// Indexes for efficient querying
+// Indexes for efficient querying.
+// NOTE: `key` is already indexed by its path-level `unique: true, sparse: true`
+// above. Re-declaring DatasetSchema.index({ key: 1 }) here created a SECOND,
+// conflicting index spec on the same field (plain vs unique+sparse), which
+// MongoDB rejects with IndexOptionsConflict when indexes are (re)built.
 DatasetSchema.index({ type: 1, isActive: 1 });
-DatasetSchema.index({ key: 1 });
 
 let Dataset: Model<any>;
 if (mongoose.models.Dataset) {

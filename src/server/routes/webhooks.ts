@@ -642,13 +642,31 @@ router.post('/whatsapp-calling', metaEventRateLimit, async (req, res) => {
 router.use(authenticateToken);
 router.use(resolveTenant);
 
+/**
+ * Strip the HMAC signing secret from a webhook before returning it to a client,
+ * replacing it with a `hasSecret` boolean. The secret is encrypted at rest, but
+ * it must never leave the server in ANY form (the previous handlers returned it
+ * verbatim to every authed caller).
+ */
+function redactWebhook(doc: unknown): Record<string, unknown> {
+  const o = (
+    doc && typeof (doc as any).toObject === 'function'
+      ? (doc as any).toObject()
+      : { ...(doc as any) }
+  ) as Record<string, unknown>;
+  const hasSecret = typeof o.secret === 'string' && o.secret.trim() !== '';
+  delete o.secret;
+  o.hasSecret = hasSecret;
+  return o;
+}
+
 // Get all webhooks (tenant-scoped)
 router.get('/', async (req, res) => {
   try {
     const webhooks = await (Webhook as any)
       .find(withTenantScope(req, {}))
       .sort({ createdAt: -1 });
-    res.json(webhooks);
+    res.json((webhooks as unknown[]).map(redactWebhook));
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -663,7 +681,7 @@ router.post('/', async (req, res) => {
       ...(tid ? { tenantId: tid } : {}),
     });
     await webhook.save();
-    res.status(201).json(webhook);
+    res.status(201).json(redactWebhook(webhook));
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }
@@ -672,13 +690,23 @@ router.post('/', async (req, res) => {
 // Update webhook (tenant-scoped: a tenant can only update its own webhooks)
 router.put('/:id', async (req, res) => {
   try {
+    // Never overwrite a stored secret with an empty/blank value (edit forms
+    // come back with the secret redacted, so an omitted/blank secret must
+    // PRESERVE the existing one rather than wipe it).
+    const body = { ...req.body };
+    if (
+      Object.prototype.hasOwnProperty.call(body, 'secret') &&
+      (typeof body.secret !== 'string' || body.secret.trim() === '')
+    ) {
+      delete body.secret;
+    }
     const webhook = await (Webhook as any).findOneAndUpdate(
       withTenantScope(req, { _id: req.params.id }),
-      req.body,
+      body,
       { new: true },
     );
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
-    res.json(webhook);
+    res.json(redactWebhook(webhook));
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

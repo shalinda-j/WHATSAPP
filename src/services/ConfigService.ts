@@ -473,8 +473,34 @@ export class ConfigService {
         });
       }
 
+      // Always surface the operator's company profile (name, address, phone,
+      // hours) to the AI. COMPANY_INFO is a `config`-type dataset read by key,
+      // so it's intentionally excluded from the type-filtered dataset dump
+      // above — inject it explicitly so the bot can answer with real business
+      // details instead of never knowing them. Unedited [PLACEHOLDER] values
+      // are skipped so the model never parrots "[ADD YOUR CONTACT NUMBER]".
+      let companyBlock = '';
+      try {
+        const info = (await this.getCompanyInfo()) as unknown as Record<
+          string,
+          unknown
+        >;
+        const lines = Object.entries(info)
+          .filter(([, v]) => {
+            if (typeof v !== 'string') return false;
+            const s = v.trim();
+            return s.length > 0 && !/^\[.*\]$/.test(s);
+          })
+          .map(([k, v]) => `- ${k}: ${v}`);
+        if (lines.length > 0) {
+          companyBlock = `\n\n# 🏢 Company Profile\n${lines.join('\n')}\n`;
+        }
+      } catch {
+        // best-effort — the KB still returns without the company block
+      }
+
       // Combine with static defaults
-      const result = `${JOB_KNOWLEDGE_BASE(defaultConfig)}${dynamicContent}`;
+      const result = `${JOB_KNOWLEDGE_BASE(defaultConfig)}${companyBlock}${dynamicContent}`;
 
       // Cache the result
       this.cache[cacheKey] = result;

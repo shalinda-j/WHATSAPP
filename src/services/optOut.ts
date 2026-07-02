@@ -80,18 +80,27 @@ export async function markContactOptedOut(
   tenantId?: unknown,
 ): Promise<number> {
   if (!phoneOrJid) return 0;
-  const digits = phoneOrJid.replace(/\D/g, '');
-  if (!digits) return 0;
+  const raw = String(phoneOrJid).trim();
+  const digits = raw.replace(/\D/g, '');
+  if (!digits && !raw.includes('@')) return 0;
 
-  const phoneClause = {
-    $or: [
+  const orClauses: Record<string, unknown>[] = [];
+  if (digits) {
+    orClauses.push(
       { phone: digits },
       { whatsappNumber: digits },
       { whatsappId: digits },
       { phone: { $regex: `${digits}$` } },
       { whatsappNumber: { $regex: `${digits}$` } },
-    ],
-  };
+    );
+  }
+  // Also match LID-only contacts stored under the full JID string (e.g.
+  // '...@lid'), whose digits never line up with a real phone number.
+  if (raw.includes('@')) {
+    orClauses.push({ whatsappId: raw }, { 'customFields.rawWhatsappJid': raw });
+  }
+  if (orClauses.length === 0) return 0;
+  const phoneClause = { $or: orClauses };
   const filter: Record<string, unknown> = tenantId
     ? {
         $and: [

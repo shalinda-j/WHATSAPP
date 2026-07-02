@@ -7,6 +7,7 @@ import {
   BANTSignalSchema,
 } from '../types/agent';
 import { aiLoadBalancer } from '../services/AILoadBalancer';
+import { normalisePhoneDigits } from '../services/LidPhoneMappingService';
 import Lead from '../models/Lead';
 import { LEAD_QUALIFIER_V1_PROMPT } from './prompts/lead-qualifier-v1';
 import { withOperatorPersona } from './composeSystemPrompt';
@@ -72,12 +73,13 @@ function stripJsonFences(text: string): string {
   return text.trim();
 }
 
-function extractPhoneFromJid(jid: string): string {
-  // WhatsApp JIDs look like '94771234567@s.whatsapp.net' or
-  // '94771234567:12@s.whatsapp.net'. Strip everything after the first
-  // non-digit so the phone matches Lead.phoneNumber regardless of suffix.
-  const m = jid.match(/^(\d+)/);
-  return m ? m[1] : jid;
+function extractPhoneFromJid(jid: string): string | null {
+  // Return the NORMALISED real phone, or null for an opaque '...@lid' JID.
+  // The old `/^(\d+)/` strip happily returned the LID's internal digits, so a
+  // Lead was created with a fake "phone" that no follow-up/opt-out/JID lookup
+  // could ever match. normalisePhoneDigits rejects @lid and repairs local
+  // Sri Lanka formats to full country-code form.
+  return normalisePhoneDigits(jid);
 }
 
 export class LeadQualifierAgent implements IAgent {
@@ -160,35 +162,42 @@ export class LeadQualifierAgent implements IAgent {
     const tenantId =
       typeof ctx.metadata?.tenantId === 'string' ? ctx.metadata.tenantId : null;
 
-    // Ensure a Lead row exists for this phone (upsert = create-if-missing).
-    // $setOnInsert fields only apply when the document is newly created.
-    // Scope the lookup to this tenant (legacy-tolerant) and stamp tenantId on
-    // insert so newly-created leads are OWNED — otherwise they have no tenantId
-    // and become invisible to the tenant-scoped follow-up scan.
-    const leadFilter: Record<string, unknown> = tenantId
-      ? {
-          phoneNumber: phone,
-          $or: [
-            { tenantId },
-            { tenantId: { $exists: false } },
-            { tenantId: null },
-          ],
-        }
-      : { phoneNumber: phone };
-    const lead = await Lead.findOneAndUpdate(
-      leadFilter,
-      {
-        $setOnInsert: {
-          fullName: `WhatsApp Enquiry (${phone})`,
-          phoneNumber: phone,
-          jobVacancyType: 'Pending Registration',
-          source: 'whatsapp',
-          status: 'new',
-          ...(tenantId ? { tenantId } : {}),
+    // Only touch the CRM when we have a REAL phone. For an @lid conversation
+    // phone is null — creating a Lead keyed on opaque LID digits pollutes the
+    // CRM with an unreachable record, so we skip the upsert and still return
+    // the qualifying reply below.
+    let lead = null;
+    if (phone) {
+      // Ensure a Lead row exists for this phone (upsert = create-if-missing).
+      // $setOnInsert fields only apply when the document is newly created.
+      // Scope the lookup to this tenant (legacy-tolerant) and stamp tenantId on
+      // insert so newly-created leads are OWNED — otherwise they have no
+      // tenantId and become invisible to the tenant-scoped follow-up scan.
+      const leadFilter: Record<string, unknown> = tenantId
+        ? {
+            phoneNumber: phone,
+            $or: [
+              { tenantId },
+              { tenantId: { $exists: false } },
+              { tenantId: null },
+            ],
+          }
+        : { phoneNumber: phone };
+      lead = await Lead.findOneAndUpdate(
+        leadFilter,
+        {
+          $setOnInsert: {
+            fullName: `WhatsApp Enquiry (${phone})`,
+            phoneNumber: phone,
+            jobVacancyType: 'Pending Registration',
+            source: 'whatsapp',
+            status: 'new',
+            ...(tenantId ? { tenantId } : {}),
+          },
         },
-      },
-      { upsert: true, new: true },
-    );
+        { upsert: true, new: true },
+      );
+    }
 
     // Apply BANT signals to whichever record we got (new or existing).
     if (lead) {

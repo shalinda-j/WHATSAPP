@@ -394,6 +394,26 @@ export class CampaignService {
     tickIntervalMs = 30_000,
   ): Promise<{ sent: number }> {
     const BATCH = 25;
+
+    // Reclaim executions stuck in 'sending'. The single-writer guard moves a
+    // row queued→sending BEFORE the actual send; if the worker crashes or is
+    // killed mid-send, the row never resolves to sent/failed. Because it's no
+    // longer 'queued' it's never re-picked, and because it's not 'failed' the
+    // relaunch dedup treats it as live forever — the recipient never gets the
+    // message and the slot is wedged. Return rows that have sat in 'sending'
+    // past a stale window to 'queued' so another tick retries them. (The
+    // window is generous — several ticks — so we don't reclaim an in-flight
+    // send that's merely slow.)
+    const STALE_SENDING_MS = Math.max(5 * 60_000, tickIntervalMs * 4);
+    await CampaignExecution.updateMany(
+      {
+        tenantId,
+        status: 'sending',
+        updatedAt: { $lt: new Date(Date.now() - STALE_SENDING_MS) },
+      },
+      { $set: { status: 'queued' } },
+    );
+
     const queued = await CampaignExecution.find({
       tenantId,
       status: 'queued',

@@ -12,7 +12,10 @@
 ############################
 # Stage 1: build everything
 ############################
-FROM node:20.18.1-bookworm-slim AS builder
+# Node 20.19+ is required by resolved deps (vite 7 needs ^20.19.0; mongoose 9
+# needs >=20.19.0). 20.18.1 is below that minimum and fails the client build's
+# engine check.
+FROM node:20.19.0-bookworm-slim AS builder
 
 WORKDIR /app
 
@@ -48,7 +51,7 @@ RUN npm prune --omit=dev
 ############################
 # Stage 2: minimal runtime
 ############################
-FROM node:20.18.1-bookworm-slim AS runtime
+FROM node:20.19.0-bookworm-slim AS runtime
 
 ENV NODE_ENV=production \
     PORT=8080

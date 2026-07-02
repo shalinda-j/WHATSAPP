@@ -6,6 +6,7 @@ import Lead from '../models/Lead';
 import Session from '../models/Session';
 import sessionStateService from './SessionStateService';
 import { conversionService } from './ConversionService';
+import { normalisePhoneDigits } from './LidPhoneMappingService';
 
 // Extended Lead Data Interface
 interface LeadData {
@@ -279,8 +280,12 @@ export async function handleLeadMessage(
 
     // Step 3: Phone Number
     case LeadState.AWAITING_PHONE:
-      const phone = cleanText.replace(/[^0-9]/g, '');
-      if (phone.length < 9) {
+      // Normalise to full country-code form ('0771234567' -> '94771234567')
+      // with the shared helper. Storing the raw local form broke autonomous
+      // follow-ups (invalid JID '0771234567@s.whatsapp.net'), opt-out suffix
+      // matching, and lead-by-JID reconciliation downstream.
+      const phone = normalisePhoneDigits(cleanText);
+      if (!phone) {
         await sendMessage(
           jid,
           `⚠️ Please enter a valid phone number.`,
@@ -411,19 +416,34 @@ export async function handleLeadMessage(
       if (cvChoice === 1) {
         // User has CV - send upload link (configurable via admin panel)
         const companyInfo = await configurationManager.getCompanyInfo();
-        const cvUploadUrl =
-          process.env.CV_UPLOAD_URL || 'https://forms.gle/your-cv-upload-form';
+        const cvUploadUrl = process.env.CV_UPLOAD_URL?.trim();
 
         await sendTyping(jid, sessionId);
-        await sendMessage(
-          jid,
-          `📄 *CV Upload*\n\n` +
-            `Please upload your CV using this link:\n` +
-            `${cvUploadUrl}\n\n` +
-            `After uploading, type "done" to complete registration.\n` +
-            `Or type "skip" to skip for now.`,
-          sessionId,
-        );
+        if (cvUploadUrl) {
+          await sendMessage(
+            jid,
+            `📄 *CV Upload*\n\n` +
+              `Please upload your CV using this link:\n` +
+              `${cvUploadUrl}\n\n` +
+              `After uploading, type "done" to complete registration.\n` +
+              `Or type "skip" to skip for now.`,
+            sessionId,
+          );
+        } else {
+          // No upload link configured — NEVER send the old dead placeholder
+          // 'https://forms.gle/your-cv-upload-form'. Guide the user without a
+          // link (offer email if the company profile has one).
+          const email = companyInfo?.email
+            ? `\nOr email it to ${companyInfo.email}.`
+            : '';
+          await sendMessage(
+            jid,
+            `📄 *CV Upload*\n\n` +
+              `Please bring your CV with you when you visit us.${email}\n\n` +
+              `Type "done" when you're ready, or "skip" to skip for now.`,
+            sessionId,
+          );
+        }
         return true;
       } else if (
         cvChoice === 2 ||

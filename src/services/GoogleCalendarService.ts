@@ -30,7 +30,10 @@ function getAuthClient() {
  * given calendar day. Prevents double-booking even when Google Calendar is in
  * mock mode (no credentials) or the event was created only in MongoDB.
  */
-async function getBookedHoursFromDb(date: Date): Promise<Set<number>> {
+async function getBookedHoursFromDb(
+  date: Date,
+  tenantId?: unknown,
+): Promise<Set<number>> {
   const booked = new Set<number>();
   try {
     // Use UTC day bounds. Booking dates are commonly stored as date-only
@@ -51,10 +54,21 @@ async function getBookedHoursFromDb(date: Date): Promise<Set<number>> {
       ),
     );
 
-    const bookings = await Booking.find({
+    // Scope to the tenant (legacy-tolerant) so one tenant's bookings don't
+    // remove slots from another tenant's availability. Booking rows created by
+    // the bot are tenant-stamped; legacy/global rows (no tenantId) still count.
+    const bookedFilter: Record<string, unknown> = {
       date: { $gte: dayStart, $lte: dayEnd },
       status: { $in: ['confirmed', 'pending'] },
-    })
+    };
+    if (tenantId) {
+      bookedFilter.$or = [
+        { tenantId },
+        { tenantId: { $exists: false } },
+        { tenantId: null },
+      ];
+    }
+    const bookings = await Booking.find(bookedFilter)
       .select('date time')
       .lean();
 
@@ -80,7 +94,10 @@ async function getBookedHoursFromDb(date: Date): Promise<Set<number>> {
  * Get available slots for a given date
  * (This is a simplified logic: checks specific slots against busy times)
  */
-export async function getRealAvailability(date: Date): Promise<number[]> {
+export async function getRealAvailability(
+  date: Date,
+  tenantId?: unknown,
+): Promise<number[]> {
   const auth = getAuthClient();
 
   // Default slots if auth is missing (Mock Mode)
@@ -88,7 +105,7 @@ export async function getRealAvailability(date: Date): Promise<number[]> {
 
   // Always subtract slots already taken by our own confirmed/pending bookings
   // so we never offer a slot that's already booked (double-booking guard).
-  const dbBooked = await getBookedHoursFromDb(date);
+  const dbBooked = await getBookedHoursFromDb(date, tenantId);
 
   if (!auth) {
     return defaultSlots.filter((slot) => !dbBooked.has(slot));

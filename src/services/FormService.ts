@@ -15,6 +15,42 @@ interface UserFormState {
 }
 
 /**
+ * Parse a user-typed date STRICTLY and return it as ISO YYYY-MM-DD, or null if
+ * unparseable/invalid. Accepts ISO (YYYY-MM-DD) and day-first DD/MM/YYYY or
+ * DD-MM-YYYY (the local convention). Deliberately does NOT fall back to
+ * `new Date(str)`: that reads slash dates as US MM/DD, so "01/02/1990" (1 Feb)
+ * was silently stored as 2 Jan. Rejects impossible dates like 31/02/1990.
+ */
+function parseFormDateToIso(input: string): string | null {
+  const s = input.trim();
+  let year: number, month: number, day: number;
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s);
+  const dmy = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(s);
+  if (iso) {
+    year = +iso[1];
+    month = +iso[2];
+    day = +iso[3];
+  } else if (dmy) {
+    day = +dmy[1];
+    month = +dmy[2];
+    year = +dmy[3];
+  } else {
+    return null;
+  }
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const dt = new Date(Date.UTC(year, month - 1, day));
+  // Round-trip to reject overflow (e.g. Feb 31 → Mar 2/3).
+  if (
+    dt.getUTCFullYear() !== year ||
+    dt.getUTCMonth() !== month - 1 ||
+    dt.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/**
  * FormService - Handles dynamic registration forms for WhatsApp bot
  * Now uses persistent storage via SessionStateService
  * Options for job_type, country, experience are pulled from Datasets at runtime
@@ -486,15 +522,17 @@ export class FormService {
         return { valid: true, value: resolved };
       }
 
-      case 'date':
-        const dateValue = new Date(trimmedAnswer);
-        if (isNaN(dateValue.getTime())) {
+      case 'date': {
+        const isoDate = parseFormDateToIso(trimmedAnswer);
+        if (!isoDate) {
           return {
             valid: false,
-            message: 'Please enter a valid date (e.g., 1990-01-15).',
+            message:
+              'Please enter a valid date as YYYY-MM-DD or DD/MM/YYYY (e.g., 1990-01-15 or 15/01/1990).',
           };
         }
-        return { valid: true, value: dateValue.toISOString().split('T')[0] };
+        return { valid: true, value: isoDate };
+      }
 
       case 'file':
         // For file type, we expect a URL or file ID

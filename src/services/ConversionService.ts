@@ -120,16 +120,32 @@ class ConversionService {
   }> {
     try {
       const match: Record<string, unknown> = {};
-      if (tenantId) match.tenantId = tenantId;
-      const events = await ConversionEvent.find(match)
-        .sort({ createdAt: -1 })
-        .limit(500)
-        .lean();
-      const byKind: Record<string, number> = {};
-      for (const e of events as Array<{ kind: string }>) {
-        byKind[e.kind] = (byKind[e.kind] ?? 0) + 1;
+      // Cast tenantId to ObjectId. countDocuments()/find() would auto-cast a
+      // string, but the aggregate `$match` below is NOT cast by Mongoose — a
+      // raw string there matches ZERO ObjectId-typed docs, so byKind would come
+      // back empty (Total correct, per-kind tiles all 0). Casting here keeps all
+      // three queries consistent.
+      if (tenantId) {
+        match.tenantId = mongoose.Types.ObjectId.isValid(tenantId)
+          ? new mongoose.Types.ObjectId(tenantId)
+          : tenantId;
       }
-      return { total: events.length, byKind, recent: events.slice(0, 20) };
+      // Count and group across ALL events (not a 500-row window — that capped
+      // `total` and skewed `byKind` once a tenant passed 500 conversions). Only
+      // the `recent` list is limited, since that's all the UI shows.
+      const [total, byKindAgg, recent] = await Promise.all([
+        ConversionEvent.countDocuments(match),
+        ConversionEvent.aggregate([
+          { $match: match },
+          { $group: { _id: '$kind', count: { $sum: 1 } } },
+        ]),
+        ConversionEvent.find(match).sort({ createdAt: -1 }).limit(20).lean(),
+      ]);
+      const byKind: Record<string, number> = {};
+      for (const g of byKindAgg as Array<{ _id: string; count: number }>) {
+        if (g._id) byKind[g._id] = g.count;
+      }
+      return { total, byKind, recent };
     } catch (err) {
       console.error('❌ ConversionService.getStats failed:', err);
       return { total: 0, byKind: {}, recent: [] };

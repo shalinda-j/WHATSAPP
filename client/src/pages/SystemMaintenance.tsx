@@ -47,6 +47,9 @@ export default function SystemMaintenance() {
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetStep, setResetStep] = useState(0); // 0: Warning, 1: Type Confirm, 2: Final Yes/No
   const [resetConfirmationInput, setResetConfirmationInput] = useState('');
+  // Admin password — required by POST /api/system/reset as a second factor.
+  // Without sending it the reset always 400s ("Admin password is required").
+  const [resetPassword, setResetPassword] = useState('');
   const [isResetting, setIsResetting] = useState(false);
 
   // Data Sets wipe modal state (surgical wipe — leaves runtime config
@@ -126,7 +129,10 @@ export default function SystemMaintenance() {
   const handleFactoryReset = async () => {
     setIsResetting(true);
     try {
-      await api.post('/api/system/reset', { confirmation: 'reset-my-system' });
+      await api.post('/api/system/reset', {
+        confirmation: 'reset-my-system',
+        password: resetPassword,
+      });
       alert('System has been reset. You will be logged out.');
       logout();
       window.location.href = '/login';
@@ -479,9 +485,20 @@ export default function SystemMaintenance() {
                 <h3 className="text-xl font-bold text-center text-red-600 mb-4">
                   FINAL CONFIRMATION
                 </h3>
-                <p className="text-gray-800 text-center mb-6 font-semibold">
+                <p className="text-gray-800 text-center mb-4 font-semibold">
                   Are you absolutely sure you want to wipe everything?
                 </p>
+                <p className="text-gray-600 text-center text-sm mb-2">
+                  Enter your admin password to authorise this.
+                </p>
+                <input
+                  type="password"
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  className="w-full p-2 border border-red-300 rounded mb-6 text-center focus:ring-2 focus:ring-red-500 outline-none"
+                  placeholder="Admin password"
+                  autoComplete="current-password"
+                />
                 <div className="flex space-x-4">
                   <button
                     onClick={() => setShowResetModal(false)}
@@ -491,8 +508,8 @@ export default function SystemMaintenance() {
                   </button>
                   <button
                     onClick={handleFactoryReset}
-                    disabled={isResetting}
-                    className="flex-1 px-4 py-2 bg-red-700 text-white rounded hover:bg-red-800 transition-colors flex justify-center items-center"
+                    disabled={isResetting || resetPassword.length === 0}
+                    className="flex-1 px-4 py-2 bg-red-700 text-white rounded hover:bg-red-800 disabled:opacity-50 transition-colors flex justify-center items-center"
                   >
                     {isResetting ? 'Wiping...' : 'YES, WIPE ALL'}
                   </button>

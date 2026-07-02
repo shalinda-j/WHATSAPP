@@ -604,7 +604,13 @@ export class GeminiService implements AIService {
   async generateResponse(messages: AIChatMessage[]): Promise<string> {
     try {
       if (!this.apiKey || this.apiKey === 'your_gemini_api_key_here') {
-        return '⚠️ Google Gemini API Key is missing. Please configure it in the Admin Panel to enable AI Features.';
+        // THROW (don't return the string) — this is a provider in the failover
+        // chain. Returning a message here makes AILoadBalancer treat it as a
+        // successful reply and send "API Key is missing" to the customer
+        // instead of failing over to the next configured provider.
+        throw new Error(
+          'Gemini API key missing/placeholder — configure it in Admin Panel > AI Providers.',
+        );
       }
 
       // Sanitise into a Gemini-valid payload (starts with user, alternates,

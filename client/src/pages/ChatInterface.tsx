@@ -125,6 +125,9 @@ export default function ChatInterface() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  // Surface send failures to the operator — previously a failed send was only
+  // console.error'd, so the message silently didn't go out with no feedback.
+  const [sendError, setSendError] = useState<string | null>(null);
   const [, setSocket] = useState<Socket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [showMobileChat, setShowMobileChat] = useState(false);
@@ -428,19 +431,23 @@ export default function ChatInterface() {
 
     const msgLang = detectLanguage(newMessage);
     setSending(true);
+    setSendError(null);
     try {
       // If the operator is scoped to a specific device, use that session for
       // the outbound. Falls back to 'default' on the backend when omitted.
       await api.post('/api/chat/send', {
         userId: selectedUser,
         message: newMessage.trim(),
-        tone: toneMode !== 'auto' ? toneMode : undefined,
         language: msgLang,
         ...(sessionFilter !== 'all' ? { sessionId: sessionFilter } : {}),
       });
       setNewMessage('');
     } catch (error) {
       console.error('Failed to send message:', error);
+      // Keep the typed text so the operator can retry, and TELL them it failed.
+      setSendError(
+        'Message could not be sent (the device may be disconnected). Please retry.',
+      );
     } finally {
       setSending(false);
     }
@@ -1047,6 +1054,12 @@ export default function ChatInterface() {
 
             {/* Message Input */}
             <div className="px-4 py-3 bg-white border-t border-gray-200">
+              {/* Send failure feedback */}
+              {sendError && (
+                <div className="mb-2 flex items-center gap-2 rounded-md bg-red-50 border border-red-200 px-3 py-2">
+                  <span className="text-xs text-red-700">{sendError}</span>
+                </div>
+              )}
               {/* Language indicator */}
               {newMessage && (
                 <div className="mb-2 flex items-center gap-2">

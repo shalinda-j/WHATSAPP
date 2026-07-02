@@ -474,14 +474,29 @@ export default function VoiceAgentHub() {
   const saveProviderConfig = async (providerName: string) => {
     const providerInfo =
       PROVIDER_INFO[providerName as keyof typeof PROVIDER_INFO];
-    if (providerInfo.requiresApiKey && !editFormData.apiKey) {
+    // A key is only required when the provider has NONE stored yet. The server
+    // redacts stored keys on GET, so the edit field comes back empty for an
+    // already-configured provider — requiring re-entry every save was the
+    // regression. An empty field on an already-configured provider means
+    // "keep the existing key".
+    const existing = getProviderConfig(providerName) as VoiceConfigData & {
+      hasApiKey?: boolean;
+      hasGoogleApiKey?: boolean;
+    };
+    const hasKey = existing.hasApiKey ?? !!existing.apiKey;
+    const hasGoogleKey = existing.hasGoogleApiKey ?? !!existing.googleApiKey;
+    if (providerInfo.requiresApiKey && !editFormData.apiKey && !hasKey) {
       setMessage({
         type: 'error',
         text: `API Key is required for ${providerInfo.name}`,
       });
       return;
     }
-    if (providerInfo.requiresGoogleApiKey && !editFormData.googleApiKey) {
+    if (
+      providerInfo.requiresGoogleApiKey &&
+      !editFormData.googleApiKey &&
+      !hasGoogleKey
+    ) {
       setMessage({
         type: 'error',
         text: `Google Cloud API Key is required for ${providerInfo.name}`,
@@ -495,12 +510,15 @@ export default function VoiceAgentHub() {
       const configToSave: VoiceConfigData = {
         provider: providerName as VoiceConfigData['provider'],
         mode: editFormData.mode || 'voice-and-text',
-        apiKey: editFormData.apiKey,
-        googleApiKey: editFormData.googleApiKey,
         voiceId: editFormData.voiceId,
         ttsModel: editFormData.ttsModel,
         isActive: true,
       };
+      // Only send keys the operator actually typed. Sending an empty string
+      // would overwrite (wipe) the stored key; omitting it preserves it.
+      if (editFormData.apiKey) configToSave.apiKey = editFormData.apiKey;
+      if (editFormData.googleApiKey)
+        configToSave.googleApiKey = editFormData.googleApiKey;
 
       await api.post('/api/voice-config', configToSave);
       await fetchAllData();
@@ -564,6 +582,17 @@ export default function VoiceAgentHub() {
         providerName === 'elevenlabs' ? 'eleven_multilingual_v2' : 'tts-1',
       isActive: false,
     };
+  };
+
+  // Whether a provider has a stored API key. The server REDACTS the key on
+  // GET (returns a `hasApiKey` boolean, not the raw value), so checking
+  // `.apiKey` alone always reads empty for a configured provider — falling back
+  // to the raw field keeps older responses working.
+  const providerHasApiKey = (providerName: string): boolean => {
+    const c = getProviderConfig(providerName) as VoiceConfigData & {
+      hasApiKey?: boolean;
+    };
+    return c.hasApiKey ?? !!c.apiKey;
   };
 
   // Get voice name by ID
@@ -869,7 +898,7 @@ export default function VoiceAgentHub() {
                 Voice Synthesis Providers
               </h2>
               {activeVoiceProvider !== 'google-free' &&
-                !getProviderConfig(activeVoiceProvider).apiKey && (
+                !providerHasApiKey(activeVoiceProvider) && (
                   <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full flex items-center gap-1">
                     <AlertCircle className="h-3 w-3" />
                     API Key Required

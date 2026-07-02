@@ -5,6 +5,10 @@ on:
     types: [opened, edited, labeled, unlabeled, closed]
   pull_request:
     types: [opened, edited, labeled, unlabeled, closed]
+  # The stale-cleanup job below is gated on `github.event_name == 'schedule'`,
+  # so without a schedule trigger it could NEVER run. Run it daily.
+  schedule:
+    - cron: '0 6 * * *'
 
 jobs:
   auto-label:

@@ -848,10 +848,17 @@ interface FormSubmissionItem {
   submittedAt: string;
 }
 
+const SUBMISSIONS_PAGE_SIZE = 20;
+
 function FormSubmissions() {
   const [submissions, setSubmissions] = useState<FormSubmissionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
+  // Pagination: the backend paginates (default limit 20) but the UI used to
+  // send no page/limit, so only the 20 newest submissions were ever visible.
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
 
   const fetchSubmissions = async () => {
     try {
@@ -860,11 +867,14 @@ function FormSubmissions() {
       // raw fetch() ignored the baseURL (404s on cross-domain deploys), never
       // triggered the auth-failure redirect, and threw on a non-JSON error
       // body — leaving the page stuck on "No submissions yet".
-      const url = statusFilter
-        ? `/api/forms/submissions?status=${statusFilter}`
-        : '/api/forms/submissions';
-      const res = await api.get(url);
+      const params = new URLSearchParams();
+      if (statusFilter) params.set('status', statusFilter);
+      params.set('page', String(page));
+      params.set('limit', String(SUBMISSIONS_PAGE_SIZE));
+      const res = await api.get(`/api/forms/submissions?${params.toString()}`);
       setSubmissions(res.data.submissions || []);
+      setTotalPages(res.data.totalPages || 1);
+      setTotal(res.data.total || 0);
     } catch (error) {
       console.error('Error fetching submissions:', error);
     } finally {
@@ -874,7 +884,7 @@ function FormSubmissions() {
 
   useEffect(() => {
     fetchSubmissions();
-  }, [statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [statusFilter, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateStatus = async (id: string, status: string) => {
     try {
@@ -919,7 +929,10 @@ function FormSubmissions() {
       <div className="flex justify-between items-center mb-4">
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setPage(1); // reset to first page when the filter changes
+          }}
           className="border rounded px-3 py-2"
         >
           <option value="">All Statuses</option>
@@ -1010,6 +1023,32 @@ function FormSubmissions() {
           </div>
         )}
       </div>
+
+      {/* Pagination — the list is limited to SUBMISSIONS_PAGE_SIZE per page,
+          so without these controls only the newest page was ever reachable. */}
+      {total > 0 && (
+        <div className="flex items-center justify-between mt-4 text-sm text-gray-600">
+          <span>
+            Page {page} of {totalPages} · {total} total
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="px-3 py-1 border rounded disabled:opacity-50 hover:bg-gray-50"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="px-3 py-1 border rounded disabled:opacity-50 hover:bg-gray-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }

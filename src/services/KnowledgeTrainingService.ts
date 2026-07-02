@@ -23,6 +23,23 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * Build a by-id filter that also constrains to the caller's tenant (with the
+ * usual legacy-row tolerance for entries created before the tenantId field
+ * existed). When no tenantId is supplied the filter is a plain by-id match so
+ * single-tenant / legacy callers keep working.
+ */
+function byIdTenantFilter(
+  id: string,
+  tenantId?: string,
+): Record<string, unknown> {
+  if (!tenantId) return { _id: id };
+  return {
+    _id: id,
+    $or: [{ tenantId }, { tenantId: { $exists: false } }, { tenantId: null }],
+  };
+}
+
 // Minimum confidence threshold for auto-learning
 const AUTO_LEARN_CONFIDENCE_THRESHOLD = 0.8;
 const MIN_MESSAGE_LENGTH = 10;
@@ -71,9 +88,15 @@ export class KnowledgeTrainingService {
         .sort({ usageCount: -1, confidence: -1 })
         .limit(100);
 
+      // ALWAYS include the operator-configured dataset knowledge base (company
+      // profile, dynamic datasets, static job KB), scoped to this tenant.
+      // Previously it was only returned as a fallback when zero KnowledgeEntry
+      // rows existed — so the moment auto-learn created a single entry, the
+      // entire dataset KB silently dropped out of the AI prompt (D7). Passing
+      // tenantId also keeps the fallback tenant-scoped (D8).
+      const datasetKB = await configurationManager.getAIKnowledgeBase(tenantId);
+
       if (entries.length === 0) {
-        // Fallback to dataset knowledge base
-        const datasetKB = await configurationManager.getAIKnowledgeBase();
         return datasetKB;
       }
 
@@ -81,11 +104,15 @@ export class KnowledgeTrainingService {
       const formattedKB = entries
         .map((entry) => `Q: ${entry.question}\nA: ${entry.answer}`)
         .join('\n\n');
+      const entriesBlock = `# Knowledge Base (${entries.length} entries)\n\n${formattedKB}`;
 
-      return `# Knowledge Base (${entries.length} entries)\n\n${formattedKB}`;
+      // Combine learned/manual Q&A with the dataset KB so both reach the model.
+      return datasetKB && datasetKB.trim()
+        ? `${entriesBlock}\n\n${datasetKB}`
+        : entriesBlock;
     } catch (error) {
       console.error('[KnowledgeTraining] Error getting knowledge base:', error);
-      return await configurationManager.getAIKnowledgeBase();
+      return await configurationManager.getAIKnowledgeBase(tenantId);
     }
   }
 
@@ -274,7 +301,10 @@ export class KnowledgeTrainingService {
   /**
    * Import knowledge from dataset
    */
-  async importFromDataset(datasetKey: string): Promise<number> {
+  async importFromDataset(
+    datasetKey: string,
+    tenantId?: string,
+  ): Promise<number> {
     try {
       const dataset = await Dataset.findOne({ key: datasetKey });
       if (!dataset || !dataset.content) {
@@ -301,6 +331,8 @@ export class KnowledgeTrainingService {
               item.answer,
               item.category || datasetKey.toLowerCase(),
               item.tags || [],
+              item.language || 'all',
+              tenantId,
             );
             importCount++;
           }
@@ -313,6 +345,9 @@ export class KnowledgeTrainingService {
             pair.question,
             pair.answer,
             datasetKey.toLowerCase(),
+            [],
+            'all',
+            tenantId,
           );
           importCount++;
         }
@@ -432,9 +467,13 @@ export class KnowledgeTrainingService {
   /**
    * Delete knowledge entry
    */
-  async deleteKnowledge(id: string): Promise<boolean> {
+  async deleteKnowledge(id: string, tenantId?: string): Promise<boolean> {
     try {
-      const result = await KnowledgeEntry.findByIdAndDelete(id);
+      // Tenant-scope the delete so a tenant admin can't remove another
+      // tenant's entry by id.
+      const result = await KnowledgeEntry.findOneAndDelete(
+        byIdTenantFilter(id, tenantId),
+      );
       if (result) {
         this.invalidateCache();
         return true;
@@ -452,10 +491,13 @@ export class KnowledgeTrainingService {
   async updateKnowledge(
     id: string,
     updates: Partial<IKnowledgeEntry>,
+    tenantId?: string,
   ): Promise<IKnowledgeEntry | null> {
     try {
-      const entry = await KnowledgeEntry.findByIdAndUpdate(
-        id,
+      // Tenant-scope the update so a tenant admin can't edit another
+      // tenant's entry by id.
+      const entry = await KnowledgeEntry.findOneAndUpdate(
+        byIdTenantFilter(id, tenantId),
         { ...updates, updatedAt: new Date() },
         { new: true },
       );

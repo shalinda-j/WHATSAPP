@@ -387,7 +387,21 @@ export class AILoadBalancer {
           }
         }
       }
+    } catch (dbErr) {
+      // Isolated so a transient Mongo failure doesn't also wipe out the env-key
+      // failover providers below. Previously a single throw here skipped env
+      // supplementation entirely, collapsing every reply into the canned
+      // "No AI services configured" template even with valid env keys present.
+      console.error(
+        'Failed to load AI providers from DB (continuing with env failover):',
+        dbErr,
+      );
+    }
 
+    // Env-key supplementation + priority sort. This ALWAYS runs — even when the
+    // DB read above failed — so provider keys in the environment act as true
+    // failover instead of being skipped on a Mongo blip.
+    try {
       // Supplement DB providers with any provider keys present in the
       // environment that aren't already configured. Without this, a deployment
       // whose Gemini quota is exhausted (free tier = 250/day) had NOTHING to
@@ -444,7 +458,20 @@ export class AILoadBalancer {
       for (const ep of envProviders) {
         if (loadedTypes.has(ep.type)) continue; // already loaded from DB
         if (!isRealKey(ep.key)) continue;
-        this.services.push(ep.make());
+        const svc = ep.make();
+        // Apply the same non-chat-model guard as DB providers: if the operator
+        // pointed a *_MODEL env var at a TTS/embedding/transcription model,
+        // don't register it as a chat provider (it would 400 on every
+        // completion and poison the whole fallback chain).
+        const envModel = svc.name?.match(/\(([^)]+)\)/)?.[1] ?? '';
+        if (envModel && NON_CHAT_MODEL_RE.test(envModel)) {
+          console.warn(
+            `⚠️ Skipping ${ep.type} from env: model "${envModel}" is not a ` +
+              `chat model. Set a chat-capable *_MODEL env var.`,
+          );
+          continue;
+        }
+        this.services.push(svc);
         loadedTypes.add(ep.type);
         console.log(`➕ Added ${ep.type} from environment key (failover).`);
       }
@@ -471,7 +498,7 @@ export class AILoadBalancer {
         `🤖 Loaded ${this.services.length} AI services from DB. Primary: ${this.services[0]?.constructor.name}`,
       );
     } catch (err) {
-      console.error('Failed to load AI services:', err);
+      console.error('Failed during env provider supplementation:', err);
     }
   }
 
@@ -588,6 +615,32 @@ export class AILoadBalancer {
       (until > now ? cooled : fresh).push(s);
     }
     return [...fresh, ...cooled];
+  }
+
+  /**
+   * Order services for a request, honouring an optional provider pin.
+   *
+   * The pin is normalised through PROVIDER_TYPE_TO_OVERRIDE first, so a DB
+   * providerType like "google" correctly maps to the GeminiService class name
+   * — previously agents forwarded the raw providerType and it never matched, so
+   * the pin was silently ignored. With no pin we fall back to cooldown order.
+   */
+  private orderByProviderOverride(
+    providerOverride?: string | null,
+  ): AIService[] {
+    if (!providerOverride) return this.orderByCooldown(this.services);
+    const key = providerOverride.toLowerCase();
+    const needle = (PROVIDER_TYPE_TO_OVERRIDE[key] ?? key).toLowerCase();
+    const match = this.services.filter((s) =>
+      s.constructor.name.toLowerCase().includes(needle),
+    );
+    const rest = this.services.filter(
+      (s) => !s.constructor.name.toLowerCase().includes(needle),
+    );
+    // If nothing matched the pin, keep the normal order rather than an empty
+    // "matched" set followed by everything (functionally identical, but this is
+    // clearer and lets the caller log a miss if desired).
+    return match.length > 0 ? [...match, ...rest] : rest;
   }
 
   /**
@@ -726,22 +779,7 @@ export class AILoadBalancer {
     // When a providerOverride is supplied, try matching providers FIRST (mirror
     // the EXACT reorder logic in sendMessageRaw), then fall back to the normal
     // orderByCooldown order. When null/undefined, behave exactly as before.
-    const ordered = providerOverride
-      ? [
-          ...this.services.filter((s) =>
-            s.constructor.name
-              .toLowerCase()
-              .includes((providerOverride ?? '').toLowerCase()),
-          ),
-          ...this.services.filter(
-            (s) =>
-              !s.constructor.name
-                .toLowerCase()
-                .includes((providerOverride ?? '').toLowerCase()),
-          ),
-        ]
-      : // No explicit provider: prefer providers not in 429 cooldown.
-        this.orderByCooldown(this.services);
+    const ordered = this.orderByProviderOverride(providerOverride);
     for (let i = 0; i < ordered.length; i++) {
       const service = ordered[i];
 
@@ -894,22 +932,25 @@ export class AILoadBalancer {
       { role: 'user', content: options.userMessage },
     ];
 
-    const ordered = options.providerOverride
-      ? [
-          ...this.services.filter((s) =>
-            s.constructor.name
-              .toLowerCase()
-              .includes((options.providerOverride ?? '').toLowerCase()),
-          ),
-          ...this.services.filter(
-            (s) =>
-              !s.constructor.name
-                .toLowerCase()
-                .includes((options.providerOverride ?? '').toLowerCase()),
-          ),
-        ]
-      : // No explicit provider: prefer providers not in 429 cooldown.
-        this.orderByCooldown(this.services);
+    let ordered = this.orderByProviderOverride(options.providerOverride);
+
+    // Honour an optional per-call model pin by preferring loaded providers whose
+    // model matches (service.name embeds the model, e.g. "Gemini (…)"). Exact
+    // per-call model switching would need the provider to be loaded with that
+    // model; when none matches this is a no-op rather than being silently
+    // dropped as before.
+    if (options.modelOverride) {
+      const mo = options.modelOverride.toLowerCase();
+      const withModel = ordered.filter((s) =>
+        (s.name ?? '').toLowerCase().includes(mo),
+      );
+      if (withModel.length > 0) {
+        ordered = [
+          ...withModel,
+          ...ordered.filter((s) => !(s.name ?? '').toLowerCase().includes(mo)),
+        ];
+      }
+    }
 
     let lastError: unknown = null;
     for (const service of ordered) {
@@ -919,6 +960,17 @@ export class AILoadBalancer {
         // rate-limited agent call fails over instead of bubbling an error
         // that collapses the whole turn into the canned template.
         const text = await this.callProviderWithRetry(service, messages);
+        // Guard against an empty/whitespace reply. A provider can return ''
+        // without throwing; the conversational path already fails over on this,
+        // but the agent path used to return the blank as a "successful" result.
+        // Treat it as a failure and try the next provider.
+        if (!text || !text.trim()) {
+          lastError = new Error(`${service.name} returned an empty reply`);
+          console.warn(
+            `sendMessageRaw: ${service.name} returned empty — failing over`,
+          );
+          continue;
+        }
         const latencyMs = Date.now() - start;
         const inputLen = messages.reduce((a, m) => a + m.content.length, 0);
         const inputTokens = Math.ceil(inputLen / 4);

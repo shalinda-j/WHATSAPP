@@ -377,26 +377,23 @@ export class ConfigurationManagerService {
    */
   async updateConfiguration(key: string, content: any): Promise<boolean> {
     try {
-      // Check if dataset exists
-      let dataset = await Dataset.findOne({ key });
-
-      if (dataset) {
-        // Update existing
-        dataset.content = content;
-        dataset.updatedAt = new Date();
-        await dataset.save();
-      } else {
-        // Create new
-        dataset = new Dataset({
-          key,
-          name: this.formatKeyName(key),
-          category: 'config',
-          content,
-          description: `Configuration for ${this.formatKeyName(key)}`,
-          isActive: true,
-        });
-        await dataset.save();
-      }
+      // Upsert atomically. `content` is a Mixed field, so writing it via
+      // findOneAndUpdate persists whatever shape it's given (string OR object)
+      // — the previous `doc.content = content; doc.save()` path relied on
+      // Mongoose auto-detecting a Mixed change, which it doesn't, so object
+      // updates were silently persisted as {}.
+      await Dataset.findOneAndUpdate(
+        { key },
+        {
+          $set: { content, isActive: true, updatedAt: new Date() },
+          $setOnInsert: {
+            name: this.formatKeyName(key),
+            category: 'config',
+            description: `Configuration for ${this.formatKeyName(key)}`,
+          },
+        },
+        { new: true, upsert: true },
+      );
 
       // Clear cache for this key
       this.cache.delete(key);
