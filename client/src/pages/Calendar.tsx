@@ -15,6 +15,7 @@ import {
   MapPin,
   Video,
   Download,
+  Hash,
 } from 'lucide-react';
 
 interface Booking {
@@ -28,6 +29,10 @@ interface Booking {
   notes?: string;
   status: 'confirmed' | 'pending' | 'cancelled' | 'completed';
   sessionId?: string;
+  // In-branch voice-kiosk code the customer enters on arrival (issued when the
+  // visit is booked). Shown so branch staff can verify/announce it.
+  kioskCode?: string;
+  kioskCodeExpiresAt?: string;
   createdAt: string;
 }
 
@@ -526,6 +531,14 @@ export default function Calendar() {
                               {b.type}
                             </>
                           )}
+                          {b.kioskCode && (
+                            <>
+                              <Hash className="h-3 w-3 ml-1 text-indigo-500" />
+                              <span className="font-mono font-semibold text-indigo-700">
+                                {b.kioskCode}
+                              </span>
+                            </>
+                          )}
                         </p>
                       </div>
                       <span
@@ -703,6 +716,20 @@ export default function Calendar() {
                     <p className="text-xs text-gray-500">Type</p>
                     <p className="font-semibold text-gray-900">
                       {selectedBooking.type}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {selectedBooking.kioskCode && (
+                <div className="flex items-center gap-3 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+                  <Hash className="h-5 w-5 text-indigo-600" />
+                  <div>
+                    <p className="text-xs text-gray-500">Kiosk Code</p>
+                    <p className="font-mono font-bold tracking-widest text-lg text-indigo-800">
+                      {selectedBooking.kioskCode}
+                    </p>
+                    <p className="text-[11px] text-gray-500">
+                      Customer enters this at the branch kiosk on arrival.
                     </p>
                   </div>
                 </div>

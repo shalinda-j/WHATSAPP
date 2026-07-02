@@ -13,6 +13,12 @@ export interface IBooking {
   sessionId?: string;
   location?: string;
   gcalLink?: string;
+  // In-branch voice-kiosk code issued for this visit. Saved here (not just on
+  // the KioskInvite) so the Calendar can show the code the customer must enter
+  // at the branch kiosk — and so it survives after the short-lived invite doc
+  // is TTL-reaped.
+  kioskCode?: string;
+  kioskCodeExpiresAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -45,6 +51,8 @@ const BookingSchema = new Schema(
     sessionId: { type: String, index: true },
     location: { type: String },
     gcalLink: { type: String },
+    kioskCode: { type: String },
+    kioskCodeExpiresAt: { type: Date },
   },
   { timestamps: true },
 );

@@ -4,6 +4,8 @@ import Lead from '../../models/Lead';
 import Booking from '../../models/Booking';
 import { authenticateToken } from '../middleware/auth';
 import { resolveTenant, withTenantScope } from '../middleware/tenantContext';
+import { kioskInviteService } from '../../services/KioskInviteService';
+import { resolveActiveSessionId } from '../../services/whatsapp';
 
 const router = Router();
 
@@ -426,6 +428,48 @@ router.post('/bookings', async (req, res) => {
       status: 'confirmed',
       tenantId: req.tenant?._id,
     });
+
+    // Invite the lead: issue an in-branch kiosk code, save it on the booking so
+    // the Calendar shows it, and deliver it to the customer over WhatsApp
+    // (best-effort). This is the admin-side "invite every user" flow — the same
+    // code the WhatsApp booking flow issues. Non-fatal on failure.
+    try {
+      const visitDayEnd = new Date(dateObj);
+      visitDayEnd.setUTCHours(23, 59, 59, 999);
+      const codeExpiry = new Date(
+        Math.max(
+          visitDayEnd.getTime() + 24 * 60 * 60 * 1000,
+          Date.now() + 7 * 24 * 60 * 60 * 1000,
+        ),
+      );
+      const activeSession = resolveActiveSessionId(sessionId) || undefined;
+      // Issue WITHOUT delivery so we don't block the admin response on the
+      // Humanizer typing delay; save the code, then fire-and-forget the WhatsApp
+      // invite.
+      const issued = await kioskInviteService.issue({
+        phone: clientPhone,
+        tenantId: req.tenant?._id ? String(req.tenant._id) : undefined,
+        bookingId: String(booking._id),
+        sessionId: activeSession,
+        deliver: false,
+        expiresAt: codeExpiry,
+      });
+      if (issued?.code) {
+        booking.kioskCode = issued.code;
+        booking.kioskCodeExpiresAt = codeExpiry;
+        await booking.save();
+        void kioskInviteService.deliverCode({
+          jid: (issued.invite as { jid?: string })?.jid,
+          code: issued.code,
+          sessionId: activeSession,
+        });
+      }
+    } catch (kErr: any) {
+      console.error(
+        'Kiosk code issue on admin booking failed (non-fatal):',
+        kErr?.message || kErr,
+      );
+    }
 
     res.status(201).json(booking);
   } catch (err: any) {

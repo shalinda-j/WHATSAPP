@@ -44,6 +44,8 @@ export interface IssueInput {
   branch?: string;
   tenantId?: string;
   sessionId?: string;
+  /** Link the code back to the Booking it was issued for (visit bookings). */
+  bookingId?: string;
   // When false, the code is created but NOT delivered over WhatsApp — the
   // caller sends its own message (e.g. the booking flow includes the code in
   // the appointment-confirmation message instead of a duplicate one). Defaults
@@ -189,6 +191,7 @@ class KioskInviteService {
           tenantId: input.tenantId || undefined,
           code,
           contactId: contactId || undefined,
+          bookingId: input.bookingId || undefined,
           phone,
           jid,
           branch,
@@ -210,23 +213,42 @@ class KioskInviteService {
 
     // Best-effort WhatsApp delivery — a send failure must NOT bubble up.
     // Skipped when the caller opts out (deliver:false) to avoid a duplicate
-    // message (e.g. the booking confirmation already carries the code).
+    // message (e.g. the booking confirmation already carries the code, or the
+    // caller wants to deliver it fire-and-forget without blocking a response).
     if (jid && input.deliver !== false) {
-      try {
-        const message =
-          `🔢 ඔබගේ Kiosk කේතය: *${code}*\n\n` +
-          `${branch} ශාඛාවේ kiosk තිරයේ මෙම කේතය ඇතුළු කර ඔබගේ සංවාදය දිගටම කරගෙන යන්න.\n` +
-          `(මෙම කේතය නියමිත කාලයකින් කල් ඉකුත් වේ.)`;
-        await sendMessage(jid, message, input.sessionId || 'default');
-      } catch (err) {
-        console.error(
-          '⚠️ Kiosk code WhatsApp delivery failed (best-effort):',
-          (err as any)?.message || err,
-        );
-      }
+      await this.deliverCode({ jid, code, branch, sessionId: input.sessionId });
     }
 
     return { code, invite };
+  }
+
+  /**
+   * Send a kiosk code to a customer over WhatsApp (best-effort — never throws).
+   * The single source of the delivery message, shared by issue() and by callers
+   * that want to deliver AFTER responding (e.g. the admin booking flow, which
+   * saves the code synchronously then fires delivery so the Humanizer typing
+   * delay doesn't block the HTTP response).
+   */
+  async deliverCode(opts: {
+    jid?: string;
+    code: string;
+    branch?: string;
+    sessionId?: string;
+  }): Promise<void> {
+    if (!opts.jid) return;
+    try {
+      const branch = opts.branch || (await this.resolveBranch());
+      const message =
+        `🔢 ඔබගේ Kiosk කේතය: *${opts.code}*\n\n` +
+        `${branch} ශාඛාවේ kiosk තිරයේ මෙම කේතය ඇතුළු කර ඔබගේ සංවාදය දිගටම කරගෙන යන්න.\n` +
+        `(මෙම කේතය නියමිත කාලයකින් කල් ඉකුත් වේ.)`;
+      await sendMessage(opts.jid, message, opts.sessionId || 'default');
+    } catch (err) {
+      console.error(
+        '⚠️ Kiosk code WhatsApp delivery failed (best-effort):',
+        (err as any)?.message || err,
+      );
+    }
   }
 
   /**

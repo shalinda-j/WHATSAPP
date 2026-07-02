@@ -515,10 +515,20 @@ async function finalizeBooking(
           jid,
           tenantId: bookingTenantId ? String(bookingTenantId) : undefined,
           sessionId,
+          bookingId: String(booking._id), // link the code to this booking
           deliver: false, // included in the confirmation message below
           expiresAt: codeExpiry,
         });
         kioskCode = issued?.code || null;
+        // Persist the code + expiry ON the booking so the admin Calendar shows
+        // it (and it survives the invite's TTL reap). The booking was created
+        // above; update it in place.
+        if (kioskCode) {
+          await Booking.updateOne(
+            { _id: booking._id },
+            { $set: { kioskCode, kioskCodeExpiresAt: codeExpiry } },
+          );
+        }
       } catch (kErr) {
         console.error(
           'Kiosk code auto-issue on booking failed (non-fatal):',

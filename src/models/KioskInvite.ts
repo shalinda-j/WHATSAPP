@@ -49,6 +49,8 @@ export interface IKioskInvite extends Document {
   /** Exactly 4 digits (1000–9999). */
   code: string;
   contactId?: mongoose.Types.ObjectId;
+  /** The Booking this code was issued for (when issued from a visit booking). */
+  bookingId?: mongoose.Types.ObjectId;
   /** Real phone (digits / +digits) when known. */
   phone?: string;
   /** The WhatsApp JID — also the kiosk userId so the thread continues. */
@@ -118,6 +120,7 @@ const KioskInviteSchema = new Schema(
       match: /^\d{4}$/,
     },
     contactId: { type: Schema.Types.ObjectId, ref: 'Contact' },
+    bookingId: { type: Schema.Types.ObjectId, ref: 'Booking' },
     phone: { type: String },
     jid: { type: String },
     // No hardcoded default here — KioskInviteService resolves the canonical
