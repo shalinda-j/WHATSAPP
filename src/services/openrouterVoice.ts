@@ -42,10 +42,18 @@ export async function getOpenRouterApiKey(): Promise<string | null> {
     });
     // `apiKey` decrypts via the schema getter (same as AILoadBalancer).
     const key = (conf as unknown as { apiKey?: string } | null)?.apiKey;
-    return key && typeof key === 'string' && key.trim() ? key : null;
+    if (key && typeof key === 'string' && key.trim()) return key;
   } catch {
-    return null;
+    /* fall through to env */
   }
+  // Fall back to the OPENROUTER_API_KEY env var — the SAME failover source the
+  // chat load-balancer uses. Without this, a deployment that configures
+  // OpenRouter only via env (no admin provider row) had chat working but voice
+  // TTS silently falling back to Google, because this lookup was DB-only.
+  const envKey = process.env.OPENROUTER_API_KEY;
+  return envKey && envKey.trim() && !/^your_.*_here$/i.test(envKey.trim())
+    ? envKey.trim()
+    : null;
 }
 
 /**

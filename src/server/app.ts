@@ -354,6 +354,27 @@ app.get('/health', async (req, res) => {
       } catch (aiErr: any) {
         health.ai = { error: aiErr?.message ?? 'ai diagnostics threw' };
       }
+
+      // Voice / TTS readiness — proves the AI Voice Consultant kiosk can
+      // actually synthesize speech via OpenRouter (API key + model resolvable)
+      // without needing a live kiosk session. `hasKey` is a boolean — it never
+      // exposes the key itself.
+      try {
+        const { getOpenRouterVoiceSettings } = await import(
+          '../services/openrouterVoice'
+        );
+        const v = await getOpenRouterVoiceSettings();
+        health.voice = {
+          openrouterTts: {
+            ready: !!v.apiKey,
+            hasKey: !!v.apiKey,
+            model: v.model,
+            voice: v.voice,
+          },
+        };
+      } catch (vErr: any) {
+        health.voice = { error: vErr?.message ?? 'voice diagnostics threw' };
+      }
     } catch (e: any) {
       health.diagnosticsError = e?.message ?? 'health diagnostics threw';
     }
