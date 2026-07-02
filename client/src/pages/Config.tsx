@@ -680,6 +680,11 @@ export default function Config() {
                       Custom (any OpenAI-compatible endpoint)
                     </option>
                   </optgroup>
+                  <optgroup label="Voice / TTS">
+                    <option value="openrouter-tts">
+                      OpenRouter TTS (Voice Consultant)
+                    </option>
+                  </optgroup>
                   <optgroup label="Image generation">
                     {IMAGE_PROVIDER_TYPES.map((t) => (
                       <option key={t} value={t}>
@@ -765,7 +770,33 @@ export default function Config() {
                     </a>
                   </p>
                 )}
+                {formData.providerType === 'openrouter-tts' && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    OpenRouter TTS model used by the AI Voice Consultant (kiosk).
+                    e.g. <code>openai/gpt-4o-mini-tts</code>. Leave the API Key
+                    blank to reuse your OpenRouter chat provider&apos;s key.
+                  </p>
+                )}
               </div>
+              {formData.providerType === 'openrouter-tts' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Voice
+                  </label>
+                  <input
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                    value={formData.value || ''}
+                    onChange={(e) =>
+                      setFormData({ ...formData, value: e.target.value })
+                    }
+                    placeholder="e.g. alloy, verse, shimmer"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    The spoken voice for the Voice Consultant. Defaults to{' '}
+                    <code>alloy</code> when blank.
+                  </p>
+                </div>
+              )}
               {(formData.providerType === 'custom' ||
                 formData.providerType === 'local') && (
                 <div>

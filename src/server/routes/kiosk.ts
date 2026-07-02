@@ -347,7 +347,8 @@ function buildConsultModelInput(
     `නීති: (1) එක් වරකට අවශ්‍ය ලැයිස්තුවේ පළමු අයිතමය පමණක් අසන්න — එක් ප්‍රශ්නයක් පමණයි. ` +
     `(2) පරිශීලකයා දෙන සෑම අගයක්ම නැවත කියවා "${'මෙය හරිද?'}" ලෙස තහවුරු කරගන්න. ` +
     `(3) පාඨමාලා, මට්ටම් සහ ගාස්තු පිළිබඳ විස්තර දැනුම් පදනමෙන් (dataset knowledge base) පමණක් ලබා දෙන්න — කිසිවක් මනක්කල්පිත නොකරන්න. ` +
-    `(4) නම, ජංගම අංකය, NIC, පාඨමාලාව, සහ ගෙවීම (ගෙවා ඇත) යන සියල්ල තහවුරු වූ පසු ලියාපදිංචිය සම්පූර්ණ බව පැහැදිලිව දන්වා ගෙවීම තහවුරු කරන ලෙස ඉල්ලන්න.)`;
+    `(4) නම, ජංගම අංකය, NIC, පාඨමාලාව, සහ ගෙවීම (ගෙවා ඇත) යන සියල්ල තහවුරු වූ පසු ලියාපදිංචිය සම්පූර්ණ බව පැහැදිලිව දන්වා ගෙවීම තහවුරු කරන ලෙස ඉල්ලන්න. ` +
+    `(5) මිනිසෙකු මෙන් උණුසුම්ව, කාරුණිකව, සානුකම්පිතව කතා කරන්න — පරිශීලකයාගේ හැඟීම් පිළිගෙන, දිරිගන්වමින්, ස්වාභාවික කතාබහක් ලෙස කෙටියෙන් පිළිතුරු දෙන්න. යාන්ත්‍රික/රොබෝ ස්වරයක් නොවේ. (Respond warmly, empathetically and human — acknowledge feelings, be encouraging, natural and concise, never robotic.))`;
 
   return `${appendSinhalaInstruction(userText)}\n\n${stateBlock}`;
 }
@@ -389,7 +390,7 @@ router.post('/session', async (req: Request, res: Response) => {
 
     const greeting = `ආයුබෝවන් ${name}! ${
       branch ? `${branch} ශාඛාවට ` : ''
-    }සාදරයෙන් පිළිගනිමු. ඔබට අවශ්‍ය දේ කතා කරන්න හෝ ටයිප් කරන්න.`;
+    }සාදරයෙන් පිළිගනිමු. පහත බොත්තම එක් වරක් ඔබා, ඔබට අවශ්‍ය දේ කතා කරන්න — මම මිනිසෙකු මෙන් පිළිතුරු දෙන්නම්.`;
 
     res.json({ token, name, branch, greeting });
   } catch (err: any) {
@@ -445,7 +446,8 @@ router.post(
           let audioBase64: string | undefined;
           let retryMime = 'audio/mpeg';
           try {
-            const buf = await generateSpeech(retry, 'si');
+            // Prefer OpenRouter TTS (waterfall falls back if unconfigured).
+            const buf = await generateSpeech(retry, 'si', 'openrouter');
             if (buf && buf.length > 0) {
               // Detect the real container — generateSpeech may return WAV/OGG
               // (e.g. gemini-tts returns WAV), not MP3. Announcing WAV as
@@ -505,11 +507,14 @@ router.post(
         reply = 'සමාවන්න, මට මේ මොහොතේ පිළිතුරු දීමට නොහැකි විය. නැවත උත්සාහ කරන්න.';
       }
 
-      // ── 4. Gemini TTS → base64 (+ magic-byte mime). Never fatal. ──────────
+      // ── 4. OpenRouter TTS → base64 (+ magic-byte mime). Never fatal. ──────
+      // Prefer OpenRouter TTS (model/voice from the Add Model 'openrouter-tts'
+      // row); generateSpeech's waterfall falls back to other providers if
+      // OpenRouter isn't configured.
       let audioBase64 = '';
       let mime = 'audio/mpeg';
       try {
-        const audio = await generateSpeech(reply, 'si', 'gemini-tts');
+        const audio = await generateSpeech(reply, 'si', 'openrouter');
         if (audio && audio.length > 0) {
           mime = detectAudioMime(audio);
           audioBase64 = audio.toString('base64');

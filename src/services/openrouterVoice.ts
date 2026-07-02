@@ -48,6 +48,51 @@ export async function getOpenRouterApiKey(): Promise<string | null> {
   }
 }
 
+/**
+ * Resolve the TTS model + voice + key for OpenRouter speech synthesis.
+ *
+ * Precedence (so the operator can set the TTS model from the admin "Add Model"
+ * section WITHOUT touching env or code):
+ *   1. A Config provider row of type 'openrouter-tts' (added via Add Model):
+ *        aiModel -> model, value -> voice, apiKey -> key.
+ *   2. env OPENROUTER_TTS_MODEL / OPENROUTER_TTS_VOICE.
+ *   3. Built-in defaults.
+ * The key falls back to the chat OpenRouter provider's key when the TTS row
+ * doesn't carry its own, so adding just a model row is enough.
+ */
+export async function getOpenRouterVoiceSettings(): Promise<{
+  apiKey: string | null;
+  model: string;
+  voice: string;
+}> {
+  let rowModel: string | undefined;
+  let rowVoice: string | undefined;
+  let rowKey: string | undefined;
+  try {
+    const ttsRow = await Config.findOne({
+      isProvider: true,
+      isActive: true,
+      providerType: 'openrouter-tts',
+    });
+    const r = ttsRow as unknown as {
+      aiModel?: string;
+      value?: string;
+      apiKey?: string;
+    } | null;
+    rowModel = r?.aiModel?.trim() || undefined;
+    rowVoice = r?.value?.trim() || undefined;
+    rowKey = r?.apiKey?.trim() || undefined;
+  } catch {
+    /* fall through to env/defaults */
+  }
+  const apiKey = rowKey || (await getOpenRouterApiKey());
+  return {
+    apiKey: apiKey || null,
+    model: rowModel || TTS_MODEL,
+    voice: rowVoice || process.env.OPENROUTER_TTS_VOICE || 'alloy',
+  };
+}
+
 export function isOpenRouterVoiceAvailable(): Promise<boolean> {
   return getOpenRouterApiKey().then((k) => Boolean(k));
 }
@@ -108,15 +153,18 @@ export async function openrouterSpeak(
   text: string,
   voice?: string,
 ): Promise<Buffer> {
-  const apiKey = await getOpenRouterApiKey();
-  if (!apiKey) throw new Error('OpenRouter provider not configured');
+  // Resolve model + voice + key from the admin-configured 'openrouter-tts'
+  // provider row (Add Model section), falling back to env/defaults.
+  const settings = await getOpenRouterVoiceSettings();
+  if (!settings.apiKey) throw new Error('OpenRouter provider not configured');
 
   const body = {
-    model: TTS_MODEL,
+    model: settings.model,
     input: text,
-    voice: voice || process.env.OPENROUTER_TTS_VOICE || 'alloy',
+    voice: voice || settings.voice,
     response_format: 'mp3',
   };
+  const apiKey = settings.apiKey;
   const res = await withTimeout(
     axios.post(`${OPENROUTER_BASE}/audio/speech`, body, {
       headers: {
