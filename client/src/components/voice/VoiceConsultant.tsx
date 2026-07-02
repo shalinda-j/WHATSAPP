@@ -11,6 +11,8 @@ import {
   Bot,
   User,
   PhoneOff,
+  Sparkles,
+  X,
 } from 'lucide-react';
 
 /**
@@ -45,6 +47,8 @@ interface VoiceConsultantProps {
   greeting?: string;
   name?: string;
   branch?: string;
+  /** When provided, renders an "End session" control in the top bar. */
+  onEndSession?: () => void;
 }
 
 // Preferred recording mime types, most-compatible first.
@@ -89,6 +93,7 @@ export default function VoiceConsultant({
   greeting,
   name,
   branch,
+  onEndSession,
 }: VoiceConsultantProps) {
   const [state, setState] = useState<ConsultState>('idle');
   const [transcript, setTranscript] = useState<string>('');
@@ -407,73 +412,123 @@ export default function VoiceConsultant({
   const orbScale =
     state === 'listening' ? 1 + Math.min(0.35, level * 4) : 1;
 
-  return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white flex flex-col items-center px-4 py-8">
-      <div className="w-full max-w-2xl flex flex-col items-center gap-6">
-        {/* Header */}
-        <div className="text-center">
-          <div className="flex items-center justify-center gap-3 mb-2">
-            <Bot className="w-9 h-9 text-emerald-400" />
-            <h1 className="text-3xl sm:text-4xl font-bold">Voice Consultant</h1>
-          </div>
-          {(name || branch) && (
-            <p className="text-slate-300 text-lg">
-              {name ? `Welcome, ${name}` : 'Welcome'}
-              {branch ? ` · ${branch}` : ''}
-            </p>
-          )}
-        </div>
+  const orbState =
+    state === 'processing'
+      ? 'bg-slate-600'
+      : state === 'speaking'
+        ? 'bg-gradient-to-br from-indigo-500 to-indigo-600'
+        : state === 'listening'
+          ? 'bg-gradient-to-br from-rose-500 to-red-600 ring-8 ring-red-400/30'
+          : 'bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 anim-breathe';
 
-        {/* Greeting bubble */}
+  return (
+    <div className="relative flex min-h-[100dvh] w-full flex-col overflow-hidden bg-slate-950 text-white">
+      {/* Ambient background */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900" />
+        <div
+          className={[
+            'absolute left-1/2 top-[-15%] h-[55vmin] w-[55vmin] -translate-x-1/2 rounded-full blur-[110px] transition-colors duration-700',
+            state === 'listening'
+              ? 'bg-rose-500/25'
+              : state === 'speaking'
+                ? 'bg-indigo-500/25'
+                : 'bg-emerald-500/20',
+          ].join(' ')}
+        />
+        <div className="absolute bottom-[-10%] right-[-5%] h-[45vmin] w-[45vmin] rounded-full bg-indigo-500/10 blur-[110px]" />
+      </div>
+
+      {/* Top bar */}
+      <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-white/10 bg-slate-950/50 px-4 py-3 backdrop-blur-md sm:px-6 sm:py-4">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-500/15 ring-1 ring-emerald-400/30 sm:h-10 sm:w-10">
+            <Sparkles className="h-5 w-5 text-emerald-300" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-400 sm:text-xs">
+              AI Consultant
+            </p>
+            <p className="truncate text-sm font-bold sm:text-base">
+              {branch || 'Voice Assistant'}
+            </p>
+          </div>
+        </div>
+        {onEndSession && (
+          <button
+            type="button"
+            onClick={onEndSession}
+            className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-sm font-semibold text-slate-100 ring-1 ring-white/15 transition-colors hover:bg-red-500/80 hover:ring-red-400/50 sm:px-4"
+          >
+            <X className="h-4 w-4" />
+            <span className="hidden sm:inline">End session</span>
+            <span className="sm:hidden">End</span>
+          </button>
+        )}
+      </header>
+
+      {/* Main stage */}
+      <main className="relative z-10 mx-auto flex w-full max-w-3xl flex-1 flex-col items-center gap-5 px-4 py-6 sm:gap-7 sm:py-10">
+        {name && (
+          <p className="text-center text-base text-slate-300 sm:text-lg">
+            Welcome, <span className="font-semibold text-white">{name}</span>
+          </p>
+        )}
+
+        {/* Greeting */}
         {greeting && !transcript && !reply && (
-          <div className="w-full bg-slate-700/60 rounded-2xl px-6 py-5 text-center text-xl leading-relaxed shadow-lg anim-fade-in">
-            <MessageCircle className="inline-block w-6 h-6 mr-2 text-emerald-300 align-text-bottom" />
+          <div className="anim-fade-in w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-center text-base leading-relaxed shadow-lg backdrop-blur-sm sm:px-6 sm:py-5 sm:text-lg">
+            <MessageCircle className="mr-2 inline-block h-5 w-5 align-text-bottom text-emerald-300 sm:h-6 sm:w-6" />
             {greeting}
           </div>
         )}
 
-        {/* Converted celebration banner */}
+        {/* Conversion celebration */}
         {converted && (
           <div
             role="status"
-            className="relative overflow-hidden w-full bg-emerald-500/90 text-white rounded-2xl px-6 py-5 flex items-center gap-3 shadow-xl anim-pop"
+            className="anim-pop relative w-full overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-5 py-4 shadow-xl sm:px-6 sm:py-5"
           >
-            <PartyPopper className="w-8 h-8 shrink-0 animate-bounce" />
-            <div>
-              <p className="text-xl font-bold">You are enrolled! 🎉</p>
-              <p className="text-emerald-50">
-                Welcome aboard{name ? `, ${name}` : ''}. Our team will be in
-                touch shortly.
-              </p>
+            <div className="flex items-center gap-3">
+              <PartyPopper className="h-7 w-7 shrink-0 animate-bounce sm:h-8 sm:w-8" />
+              <div>
+                <p className="text-lg font-bold sm:text-xl">
+                  You are enrolled! 🎉
+                </p>
+                <p className="text-sm text-emerald-50 sm:text-base">
+                  Welcome aboard{name ? `, ${name}` : ''}. Our team will be in
+                  touch shortly.
+                </p>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Error / mic-blocked notice */}
+        {/* Error / mic-blocked */}
         {error && (
-          <div className="w-full bg-amber-500/20 border border-amber-400/50 text-amber-100 rounded-2xl px-5 py-4 flex items-start gap-3">
-            <AlertTriangle className="w-6 h-6 shrink-0 text-amber-300" />
-            <p className="text-base">{error}</p>
+          <div className="flex w-full items-start gap-3 rounded-2xl border border-amber-400/50 bg-amber-500/15 px-4 py-3 text-amber-100 sm:px-5 sm:py-4">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-amber-300 sm:h-6 sm:w-6" />
+            <p className="text-sm sm:text-base">{error}</p>
           </div>
         )}
 
-        {/* Conversation transcript / reply */}
+        {/* Conversation */}
         {(transcript || reply) && (
-          <div className="w-full flex flex-col gap-3">
+          <div className="flex w-full flex-col gap-3">
             {transcript && (
-              <div className="self-end max-w-[85%] bg-emerald-600 rounded-2xl rounded-br-sm px-5 py-3 shadow anim-slide-in-right">
-                <div className="flex items-center gap-2 text-emerald-100 text-xs font-semibold mb-1 uppercase tracking-wide">
-                  <User className="w-4 h-4" /> You
+              <div className="anim-slide-in-right max-w-[90%] self-end rounded-2xl rounded-br-sm bg-emerald-600 px-4 py-3 shadow sm:max-w-[80%] sm:px-5">
+                <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-emerald-100">
+                  <User className="h-3.5 w-3.5" /> You
                 </div>
-                <p className="text-lg leading-snug">{transcript}</p>
+                <p className="text-base leading-snug sm:text-lg">{transcript}</p>
               </div>
             )}
             {reply && (
-              <div className="self-start max-w-[85%] bg-slate-700 rounded-2xl rounded-bl-sm px-5 py-3 shadow anim-slide-in-left">
-                <div className="flex items-center gap-2 text-emerald-300 text-xs font-semibold mb-1 uppercase tracking-wide">
-                  <Bot className="w-4 h-4" /> Consultant
+              <div className="anim-slide-in-left max-w-[90%] self-start rounded-2xl rounded-bl-sm border border-white/10 bg-slate-800/80 px-4 py-3 shadow backdrop-blur-sm sm:max-w-[80%] sm:px-5">
+                <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
+                  <Bot className="h-3.5 w-3.5" /> Consultant
                 </div>
-                <p className="text-lg leading-snug whitespace-pre-wrap">
+                <p className="whitespace-pre-wrap text-base leading-snug sm:text-lg">
                   {reply}
                 </p>
               </div>
@@ -481,48 +536,42 @@ export default function VoiceConsultant({
           </div>
         )}
 
-        {/* Single hands-free control */}
-        <div className="flex flex-col items-center gap-4 mt-2">
+        {/* Hands-free control — anchored toward the bottom for thumb reach */}
+        <div className="mt-auto flex w-full flex-col items-center gap-4 pt-4">
           <button
             type="button"
             aria-label={active ? 'End conversation' : 'Start conversation'}
             onClick={active ? stopSession : () => void startSession()}
             className={[
-              'relative w-40 h-40 sm:w-48 sm:h-48 rounded-full flex items-center justify-center',
-              'shadow-2xl transition-transform duration-150 select-none focus:outline-none',
-              'focus:ring-4 focus:ring-emerald-300/50',
-              state === 'processing'
-                ? 'bg-slate-600'
-                : state === 'speaking'
-                  ? 'bg-indigo-500'
-                  : state === 'listening'
-                    ? 'bg-red-600 ring-8 ring-red-400/40'
-                    : 'bg-emerald-500 hover:bg-emerald-400 anim-breathe',
+              'relative flex items-center justify-center rounded-full',
+              'h-32 w-32 sm:h-40 sm:w-40 lg:h-44 lg:w-44',
+              'shadow-2xl transition-transform duration-150 will-change-transform select-none',
+              'focus:outline-none focus:ring-4 focus:ring-emerald-300/50',
+              orbState,
             ].join(' ')}
             style={{ transform: `scale(${orbScale})` }}
           >
-            {/* Listening ripples react to the live level */}
             {state === 'listening' && (
               <>
                 <span
                   aria-hidden="true"
-                  className="anim-pulse-ring pointer-events-none absolute inset-0 rounded-full border-4 border-red-300/60"
+                  className="anim-pulse-ring pointer-events-none absolute inset-0 rounded-full border-4 border-rose-300/60"
                 />
                 <span
                   aria-hidden="true"
-                  className="anim-pulse-ring pointer-events-none absolute inset-0 rounded-full border-4 border-red-300/60"
+                  className="anim-pulse-ring pointer-events-none absolute inset-0 rounded-full border-4 border-rose-300/60"
                   style={{ animationDelay: '0.8s' }}
                 />
               </>
             )}
             {state === 'processing' ? (
-              <Loader2 className="w-16 h-16 animate-spin" />
+              <Loader2 className="h-12 w-12 animate-spin sm:h-14 sm:w-14" />
             ) : state === 'speaking' ? (
-              <Volume2 className="w-16 h-16 animate-pulse" />
+              <Volume2 className="h-12 w-12 animate-pulse sm:h-14 sm:w-14" />
             ) : active ? (
-              <PhoneOff className="w-14 h-14" />
+              <PhoneOff className="h-11 w-11 sm:h-12 sm:w-12" />
             ) : (
-              <Mic className="w-16 h-16" />
+              <Mic className="h-12 w-12 sm:h-14 sm:w-14" />
             )}
           </button>
 
@@ -530,44 +579,39 @@ export default function VoiceConsultant({
           {state === 'speaking' && (
             <div
               aria-hidden="true"
-              className="flex items-end justify-center gap-1.5 h-8"
+              className="flex h-6 items-end justify-center gap-1.5 sm:h-8"
             >
               {[0, 1, 2, 3, 4].map((i) => (
                 <span
                   key={i}
-                  className="anim-bar inline-block w-2 rounded-full bg-indigo-300"
+                  className="anim-bar inline-block w-1.5 rounded-full bg-indigo-300 sm:w-2"
                   style={{ height: '2rem', animationDelay: `${i * 120}ms` }}
                 />
               ))}
             </div>
           )}
 
-          <p className="text-xl font-medium text-slate-200 h-7 flex items-center justify-center gap-1">
+          <p className="flex h-7 items-center justify-center gap-1 text-lg font-medium text-slate-200 sm:text-xl">
             <span>{statusLabel[state]}</span>
             {state === 'processing' && (
-              <span aria-hidden="true" className="inline-flex items-end gap-1 ml-1">
-                <span
-                  className="anim-dot inline-block w-1.5 h-1.5 rounded-full bg-slate-300"
-                  style={{ animationDelay: '0ms' }}
-                />
-                <span
-                  className="anim-dot inline-block w-1.5 h-1.5 rounded-full bg-slate-300"
-                  style={{ animationDelay: '150ms' }}
-                />
-                <span
-                  className="anim-dot inline-block w-1.5 h-1.5 rounded-full bg-slate-300"
-                  style={{ animationDelay: '300ms' }}
-                />
+              <span aria-hidden="true" className="ml-1 inline-flex items-end gap-1">
+                {[0, 150, 300].map((d) => (
+                  <span
+                    key={d}
+                    className="anim-dot inline-block h-1.5 w-1.5 rounded-full bg-slate-300"
+                    style={{ animationDelay: `${d}ms` }}
+                  />
+                ))}
               </span>
             )}
           </p>
-          {active && (
-            <p className="text-sm text-slate-400">
-              Tap the button again to end the conversation.
-            </p>
-          )}
+          <p className="min-h-[1.25rem] text-center text-xs text-slate-400 sm:text-sm">
+            {active
+              ? 'Just speak — I answer automatically. Tap to end.'
+              : 'Tap once, then talk naturally.'}
+          </p>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

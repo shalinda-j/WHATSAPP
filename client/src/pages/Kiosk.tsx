@@ -11,7 +11,7 @@ import VoiceConsultant from '../components/voice/VoiceConsultant';
  *           POSTs /api/kiosk/session (no token yet); a valid code returns a
  *           short-lived kiosk JWT which we stash in sessionStorage via
  *           setKioskToken().
- * Step 2 — the voice consultant loop (push-to-talk + text fallback).
+ * Step 2 — the hands-free voice consultant loop (one tap → continuous voice).
  *
  * This page is intentionally rendered OUTSIDE the admin Layout / ProtectedRoute
  * so it needs no admin login — it lives on a shared terminal.
@@ -118,34 +118,16 @@ export default function Kiosk() {
   );
 
   if (step === 'consult') {
+    // VoiceConsultant owns the full-screen consult experience (its own top bar
+    // with the End-session control, ambient background, and responsive layout),
+    // so we render it directly instead of wrapping it in a second header/frame.
     return (
-      <div className="min-h-screen w-full bg-slate-900 text-white flex flex-col">
-        <header className="flex items-center justify-between px-6 py-4 bg-slate-950/60 border-b border-white/10">
-          <div className="min-w-0">
-            <div className="text-sm uppercase tracking-widest text-emerald-400 font-semibold">
-              Branch Consultant
-            </div>
-            {session.branch && (
-              <div className="text-lg font-bold truncate">{session.branch}</div>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={endSession}
-            className="shrink-0 rounded-xl bg-red-600 hover:bg-red-500 active:bg-red-700 px-6 py-3 text-base font-bold transition-colors"
-          >
-            End session
-          </button>
-        </header>
-
-        <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-6">
-          <VoiceConsultant
-            greeting={session.greeting}
-            name={session.name}
-            branch={session.branch}
-          />
-        </main>
-      </div>
+      <VoiceConsultant
+        greeting={session.greeting}
+        name={session.name}
+        branch={session.branch}
+        onEndSession={endSession}
+      />
     );
   }
 
