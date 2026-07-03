@@ -19,6 +19,7 @@ import {
   normaliseLidJid,
 } from './LidPhoneMappingService';
 import { isLidJid } from '../utils/jid';
+import { messageMatchesKeyword } from '../utils/keywordMatch';
 
 /** Resolve the tenant that owns a WhatsApp session (undefined if none). */
 async function tenantIdForSession(sessionId: string): Promise<unknown> {
@@ -185,16 +186,40 @@ export async function handleBookingMessage(
   // Get booking config (from session cache or fetch new)
   const bookingConfig =
     session.bookingConfig || (await configurationManager.getBookingConfig());
+  // Acceptance/rejection keyword lists stay operator-configurable via the
+  // booking config (dashboard-editable); we only changed HOW they're matched
+  // (whole-word instead of whole-message-equals). Defaults cover the common
+  // English + Romanised-Sinhala replies this user base actually types.
   const acceptanceKeywords = bookingConfig.acceptanceKeywords || [
     'yes',
+    'yeah',
+    'yep',
+    'ya',
     'ow',
-    'y',
+    'ovu',
     'ok',
+    'okay',
+    'sure',
+    'y',
+  ];
+  const rejectionKeywords = bookingConfig.rejectionKeywords || [
+    'no',
+    'nah',
+    'not',
+    'epa',
+    'cancel',
+    'stop',
+    'later',
+    'pasuwa',
+    'no thanks',
   ];
 
   // 1. Awaiting "Yes" to invitation
   if (session.state === BookingInitState.AWAITING_RESPONSE) {
-    if (acceptanceKeywords.includes(cleanText)) {
+    const accepted = messageMatchesKeyword(cleanText, acceptanceKeywords);
+    const rejected =
+      !accepted && messageMatchesKeyword(cleanText, rejectionKeywords);
+    if (accepted) {
       // User accepted — show a date picker for the next DATE_OFFER_DAYS days
       // instead of hard-coding "Tomorrow". This also skips today (index 0) so
       // same-day bookings don't appear without lead time.
@@ -217,12 +242,23 @@ export async function handleBookingMessage(
       dateMenu += `\nReply with the number of your preferred date.`;
       await sendMessage(jid, dateMenu, sessionId);
       return true;
-    } else {
-      // User rejected or said something else
+    } else if (rejected) {
+      // Clear "no" — close the flow politely.
       await sessionStateService.deleteSession(jid, 'booking');
       await sendMessage(
         jid,
         `👍 No problem. You can schedule a visit later using \`!visit\`.`,
+        sessionId,
+      );
+      return true;
+    } else {
+      // Ambiguous reply (a question, a bare time, small talk) — do NOT drop
+      // the booking session. Re-prompt so the customer can still say Yes and
+      // proceed instead of being bounced back to `!visit`. The 30-min session
+      // TTL still cleans up abandoned invitations.
+      await sendMessage(
+        jid,
+        `🙏 Shall I schedule your campus visit?\nReply *Yes* to proceed, or *No* to skip.`,
         sessionId,
       );
       return true;
