@@ -7,6 +7,26 @@ import { resolveTenant, withTenantScope } from '../middleware/tenantContext';
 import { kioskInviteService } from '../../services/KioskInviteService';
 import { resolveActiveSessionId } from '../../services/whatsapp';
 
+// ⚡ Bolt: Precompile keyword regular expressions to avoid recreating arrays
+// and running nested O(M*N) Array.some() with String.includes() on every request.
+const PRECOMPILED_KEYWORDS = Object.entries({
+  jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
+  register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
+  payment: ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
+  booking: ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
+  location: ['address', 'location', 'where', 'branch', 'office', 'map'],
+  services: ['service', 'what do you do', 'help', 'information', 'details'],
+  hello: ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
+  language: ['sinhala', 'english', 'tamil', 'translate'],
+}).map(([category, keywords]): [string, RegExp] => [
+  category,
+  // ⚡ Bolt: No word boundaries (\b) to maintain exact compatibility with String.includes()
+  new RegExp(
+    keywords.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
+    'i',
+  ),
+]);
+
 const router = Router();
 
 router.use(authenticateToken);
@@ -127,21 +147,11 @@ router.get('/questions', async (req, res) => {
       .lean();
 
     const questionCounts: Record<string, number> = {};
-    const keywordsMap: Record<string, string[]> = {
-      jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
-      register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
-      payment: ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
-      booking: ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
-      location: ['address', 'location', 'where', 'branch', 'office', 'map'],
-      services: ['service', 'what do you do', 'help', 'information', 'details'],
-      hello: ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
-      language: ['sinhala', 'english', 'tamil', 'translate'],
-    };
 
     for (const msg of userMessages) {
       const content = msg.content.toLowerCase();
-      for (const [category, keywords] of Object.entries(keywordsMap)) {
-        if (keywords.some((k) => content.includes(k))) {
+      for (const [category, regex] of PRECOMPILED_KEYWORDS) {
+        if (regex.test(content)) {
           questionCounts[category] = (questionCounts[category] || 0) + 1;
           break;
         }
@@ -204,7 +214,9 @@ router.get('/datasets', async (req, res) => {
   try {
     const Dataset = (await import('../../models/Dataset')).default;
 
-    const datasets = await Dataset.find(withTenantScope(req, { isActive: true }))
+    const datasets = await Dataset.find(
+      withTenantScope(req, { isActive: true }),
+    )
       .sort({ updatedAt: -1 })
       .limit(10)
       .lean();

@@ -797,86 +797,101 @@ router.put('/:id', validateObjectId(), async (req: Request, res: Response) => {
  * @route DELETE /api/workflows/:id
  * @desc Delete a workflow
  */
-router.delete('/:id', validateObjectId(), async (req: Request, res: Response) => {
-  try {
-    const workflow = await Workflow.findOneAndDelete(
-      withTenantScope(req, { _id: req.params.id }),
-    );
-    if (!workflow) return res.status(404).json({ error: 'Workflow not found' });
-    res.json({ message: 'Workflow deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to delete workflow' });
-  }
-});
+router.delete(
+  '/:id',
+  validateObjectId(),
+  async (req: Request, res: Response) => {
+    try {
+      const workflow = await Workflow.findOneAndDelete(
+        withTenantScope(req, { _id: req.params.id }),
+      );
+      if (!workflow)
+        return res.status(404).json({ error: 'Workflow not found' });
+      res.json({ message: 'Workflow deleted successfully' });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to delete workflow' });
+    }
+  },
+);
 
 /**
  * @route POST /api/workflows/:id/execute
  * @desc Execute a saved workflow by ID
  */
-router.post('/:id/execute', validateObjectId(), async (req: Request, res: Response) => {
-  try {
-    const workflow = await Workflow.findOne(
-      withTenantScope(req, { _id: req.params.id }),
-    );
-    if (!workflow) return res.status(404).json({ error: 'Workflow not found' });
-    if (!workflow.isActive)
-      return res.status(400).json({ error: 'Workflow is not active' });
+router.post(
+  '/:id/execute',
+  validateObjectId(),
+  async (req: Request, res: Response) => {
+    try {
+      const workflow = await Workflow.findOne(
+        withTenantScope(req, { _id: req.params.id }),
+      );
+      if (!workflow)
+        return res.status(404).json({ error: 'Workflow not found' });
+      if (!workflow.isActive)
+        return res.status(400).json({ error: 'Workflow is not active' });
 
-    const { triggerData } = req.body;
-    const { logs, output, duration } = await executeGraph(
-      workflow.nodes as any[],
-      workflow.edges as any[],
-      triggerData || {
-        message: 'Manual trigger',
-        timestamp: new Date().toISOString(),
-      },
-      req.tenant?._id ? String(req.tenant._id) : undefined,
-    );
+      const { triggerData } = req.body;
+      const { logs, output, duration } = await executeGraph(
+        workflow.nodes as any[],
+        workflow.edges as any[],
+        triggerData || {
+          message: 'Manual trigger',
+          timestamp: new Date().toISOString(),
+        },
+        req.tenant?._id ? String(req.tenant._id) : undefined,
+      );
 
-    workflow.lastRunAt = new Date();
-    workflow.runCount += 1;
-    await workflow.save();
+      workflow.lastRunAt = new Date();
+      workflow.runCount += 1;
+      await workflow.save();
 
-    res.json({
-      success: true,
-      executionId: `exec_${Date.now()}`,
-      workflowId: workflow._id,
-      duration,
-      logs,
-      output,
-    });
-  } catch (error) {
-    console.error('Error executing workflow:', error);
-    res.status(500).json({ error: 'Failed to execute workflow' });
-  }
-});
+      res.json({
+        success: true,
+        executionId: `exec_${Date.now()}`,
+        workflowId: workflow._id,
+        duration,
+        logs,
+        output,
+      });
+    } catch (error) {
+      console.error('Error executing workflow:', error);
+      res.status(500).json({ error: 'Failed to execute workflow' });
+    }
+  },
+);
 
 /**
  * @route POST /api/workflows/:id/duplicate
  * @desc Duplicate a workflow
  */
-router.post('/:id/duplicate', validateObjectId(), async (req: Request, res: Response) => {
-  try {
-    const original = await Workflow.findOne(
-      withTenantScope(req, { _id: req.params.id }),
-    );
-    if (!original) return res.status(404).json({ error: 'Workflow not found' });
+router.post(
+  '/:id/duplicate',
+  validateObjectId(),
+  async (req: Request, res: Response) => {
+    try {
+      const original = await Workflow.findOne(
+        withTenantScope(req, { _id: req.params.id }),
+      );
+      if (!original)
+        return res.status(404).json({ error: 'Workflow not found' });
 
-    const tid = tenantIdOf(req);
-    const duplicate = new Workflow({
-      name: `${original.name} (Copy)`,
-      description: original.description,
-      nodes: original.nodes,
-      edges: original.edges,
-      metadata: original.metadata,
-      version: original.version,
-      ...(tid ? { tenantId: tid } : {}),
-    });
-    await duplicate.save();
-    res.status(201).json(duplicate);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to duplicate workflow' });
-  }
-});
+      const tid = tenantIdOf(req);
+      const duplicate = new Workflow({
+        name: `${original.name} (Copy)`,
+        description: original.description,
+        nodes: original.nodes,
+        edges: original.edges,
+        metadata: original.metadata,
+        version: original.version,
+        ...(tid ? { tenantId: tid } : {}),
+      });
+      await duplicate.save();
+      res.status(201).json(duplicate);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to duplicate workflow' });
+    }
+  },
+);
 
 export default router;

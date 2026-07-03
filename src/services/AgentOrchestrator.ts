@@ -388,10 +388,7 @@ export class AgentOrchestrator {
 
   private budgetReasonToOutcome(
     r:
-      | 'per_conversation_cap'
-      | 'daily_token_cap'
-      | 'daily_cost_cap'
-      | undefined,
+      'per_conversation_cap' | 'daily_token_cap' | 'daily_cost_cap' | undefined,
   ): OrchestratorOutcome['reason'] {
     if (r === 'per_conversation_cap') return 'budget_per_conversation';
     if (r === 'daily_token_cap') return 'budget_daily_tokens';

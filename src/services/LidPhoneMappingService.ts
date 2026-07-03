@@ -3,10 +3,7 @@ import ChatMessage from '../models/ChatMessage';
 import { extractRealPhone, isLidJid } from '../utils/jid';
 
 export type LidPhoneMappingSource =
-  | 'message'
-  | 'phone_number_share'
-  | 'chat_metadata'
-  | 'manual';
+  'message' | 'phone_number_share' | 'chat_metadata' | 'manual';
 
 export function normaliseLidJid(
   value: string | null | undefined,

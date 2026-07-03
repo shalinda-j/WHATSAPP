@@ -166,12 +166,10 @@ router.post('/telegram/:tenantSlug', webhookRateLimit, async (req, res) => {
     if (!conn) return res.status(404).json({ error: 'connection_not_found' });
 
     const expectedSecret = (conn.config as any)?.webhookSecret as
-      | string
-      | undefined;
+      string | undefined;
     if (expectedSecret) {
       const got = req.headers['x-telegram-bot-api-secret-token'] as
-        | string
-        | undefined;
+        string | undefined;
       if (!got || got !== expectedSecret) {
         return res.status(401).json({ error: 'bad_secret' });
       }
@@ -298,8 +296,7 @@ async function metaWebhookIngest(
       channel,
     });
     const appSecret = (conn?.credentials as any)?.appSecret as
-      | string
-      | undefined;
+      string | undefined;
     // In production an unsigned Meta webhook is unverifiable — any attacker who
     // knows the URL could inject fake messages. Refuse rather than silently
     // skip the HMAC check. In development we still allow it so local testing
@@ -314,8 +311,7 @@ async function metaWebhookIngest(
     }
     if (appSecret) {
       const sigHeader = req.headers['x-hub-signature-256'] as
-        | string
-        | undefined;
+        string | undefined;
       if (!sigHeader) {
         console.warn(`[${channel}] Missing X-Hub-Signature-256 from Meta`);
         return res.status(401).json({ error: 'missing_signature' });
@@ -578,8 +574,7 @@ router.post('/whatsapp-calling', metaEventRateLimit, async (req, res) => {
     const appSecret = await liveCallSettings.getAppSecret();
     if (appSecret) {
       const sigHeader = req.headers['x-hub-signature-256'] as
-        | string
-        | undefined;
+        string | undefined;
       const bodyStr =
         typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
       const expected =

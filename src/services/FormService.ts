@@ -576,9 +576,7 @@ export class FormService {
         whatsappJid: rawJid,
         data,
         status: 'new',
-        ...((tpl as any)?.tenantId
-          ? { tenantId: (tpl as any).tenantId }
-          : {}),
+        ...((tpl as any)?.tenantId ? { tenantId: (tpl as any).tenantId } : {}),
       });
 
       await submission.save();
@@ -587,17 +585,21 @@ export class FormService {
       // Notify any subscribed webhooks that a form was submitted.
       // Fire-and-forget so a slow/failing webhook never blocks submission
       // (mirrors LeadService/BookingService idiom). Never throws.
-      WebhookService.triggerWebhook('form.submitted', {
-        submissionId: String(submission._id),
-        formId: String(formId),
-        templateName: (tpl as any)?.name || '',
-        data,
-        phone: normalizedPhone,
-        tenantId: (tpl as any)?.tenantId
-          ? String((tpl as any).tenantId)
-          : undefined,
-        timestamp: new Date().toISOString(),
-      }, (tpl as any)?.tenantId).catch(() => {
+      WebhookService.triggerWebhook(
+        'form.submitted',
+        {
+          submissionId: String(submission._id),
+          formId: String(formId),
+          templateName: (tpl as any)?.name || '',
+          data,
+          phone: normalizedPhone,
+          tenantId: (tpl as any)?.tenantId
+            ? String((tpl as any).tenantId)
+            : undefined,
+          timestamp: new Date().toISOString(),
+        },
+        (tpl as any)?.tenantId,
+      ).catch(() => {
         /* fire-and-forget webhook; failures are logged upstream */
       });
 

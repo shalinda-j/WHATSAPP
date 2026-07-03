@@ -148,8 +148,7 @@ export async function resolveTenant(
     // timestamp. Skipped when authenticateToken hasn't populated req.user
     // (resolveTenant is occasionally used on public endpoints).
     const timeoutMinutes = (tenant as any).sessionTimeoutMinutes as
-      | number
-      | undefined;
+      number | undefined;
     const authReq = req as AuthRequest & { user?: { iat?: number } };
     if (timeoutMinutes && timeoutMinutes > 0 && authReq.user?.iat) {
       const issuedAt = Number(authReq.user.iat) * 1000;
