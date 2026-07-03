@@ -137,8 +137,17 @@ export async function registerCoreAgents(): Promise<void> {
 
   let activatedCount = 0;
   for (const agentName of CONVERSATIONAL_AGENTS) {
+    // Activate any conversational agent that isn't already autonomous. These
+    // are always-on inbound-chat agents: in 'approval' mode every reply is
+    // queued and the customer hears nothing until a human approves it, which
+    // reads as "the agents don't work". We catch BOTH the fresh 'disabled'
+    // state and the accidental 'approval' default (a config created via the
+    // schema default before this fix) so a live deployment self-heals on the
+    // next boot. Operator-invoked agents (campaign_generator, segmentation,
+    // follow_up) are deliberately NOT in this list and keep their approval
+    // workflow for outbound.
     const result = await AgentConfig.updateOne(
-      { name: agentName, mode: 'disabled' },
+      { name: agentName, mode: { $ne: 'autonomous' } },
       { $set: { mode: 'autonomous', isActive: true } },
     );
     if (result.modifiedCount > 0) {
@@ -146,9 +155,13 @@ export async function registerCoreAgents(): Promise<void> {
       console.log(`✅ Agent '${agentName}' activated → autonomous mode`);
     }
   }
+  // Always resync in-memory config from Mongo after the activation pass, even
+  // when activatedCount is 0 (agents already autonomous from a previous boot).
+  // forceReload is cheap and guarantees findBestAgent() sees the DB truth
+  // without waiting out the 60s registry cache after a restart.
+  await agentRegistry.forceReload();
   if (activatedCount > 0) {
-    // Reload registry so in-memory mode reflects the DB update immediately.
-    await agentRegistry.forceReload();
+    console.log(`🤖 Activated ${activatedCount} conversational agent(s).`);
   }
 
   console.log(

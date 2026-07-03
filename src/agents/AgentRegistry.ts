@@ -81,7 +81,21 @@ export class AgentRegistry {
       }
       this.lastConfigLoad = Date.now();
     } catch (err) {
-      console.error('AgentRegistry.loadConfigs failed:', err);
+      // Do NOT advance lastConfigLoad — leaving it stale means the next
+      // findBestAgent()/getForced() call retries the load instead of caching
+      // this failure for 60s. Any agents that already had a config from a
+      // previous successful load keep it (the assignment loop simply didn't
+      // run), so a transient DB blip degrades gracefully rather than wiping
+      // every agent. Surface which agents are currently unhydrated so a
+      // boot-time DB failure is visible instead of looking like "no agents".
+      const unhydrated = Array.from(this.agents.entries())
+        .filter(([, e]) => !e.config)
+        .map(([name]) => name);
+      console.error(
+        `AgentRegistry.loadConfigs failed (will retry on next dispatch). ` +
+          `Unhydrated agents: ${unhydrated.join(', ') || '(none)'}`,
+        err,
+      );
     }
   }
 

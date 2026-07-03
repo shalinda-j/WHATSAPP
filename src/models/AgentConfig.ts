@@ -39,7 +39,11 @@ const AgentConfigSchema = new Schema(
     mode: {
       type: String,
       enum: ['autonomous', 'approval', 'disabled'],
-      default: 'approval',
+      // Safe default: an agent created outside the bootstrap path (e.g. via the
+      // admin API) starts DISABLED rather than silently queuing every reply for
+      // approval. 'approval' as a default meant a stray config quietly held
+      // back all of an agent's outbound with no operator ever notified.
+      default: 'disabled',
       index: true,
     },
     currentPromptVersion: { type: Number, default: 1 },

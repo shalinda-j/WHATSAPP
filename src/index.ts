@@ -1147,7 +1147,12 @@ onMessage(async (message, sock, sessionId) => {
     }
 
     // 2. Check if user is in lead registration flow
-    const handledByLead = await handleLeadMessage(jid, text, sessionId);
+    const handledByLead = await handleLeadMessage(
+      jid,
+      text,
+      sessionId,
+      defaultTenantId || undefined,
+    );
     if (handledByLead) {
       console.log('   📝 Handled by LeadService');
       return;

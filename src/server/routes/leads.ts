@@ -126,11 +126,6 @@ router.get('/', async (req, res) => {
     } = req.query;
 
     const query: any = {};
-    // Tenant scoping: tenantId is auto-created and back-filled on boot
-    // by TenantBootstrapService, so this is safe for legacy deployments.
-    if (req.tenant?._id) {
-      query.tenantId = req.tenant._id;
-    }
 
     if (status) query.status = status;
     if (jobVacancyType) query.jobVacancyType = jobVacancyType;
@@ -150,10 +145,18 @@ router.get('/', async (req, res) => {
       ];
     }
 
-    const total = await Lead.countDocuments(query);
+    // BUGFIX: use the legacy-tolerant tenant scope (matches leads with this
+    // tenantId OR no tenantId) instead of a raw `{ tenantId }` equality match.
+    // A raw match silently hid every lead captured over WhatsApp whose Session
+    // had no tenantId (i.e. the field is absent), so the CRM/Leads list showed
+    // 0 even though the leads existed. /stats, /export and /:id already use
+    // this pattern — the main list was the odd one out.
+    const scopedQuery = withTenantScope(req, query);
+
+    const total = await Lead.countDocuments(scopedQuery);
     // .lean() drops Mongoose's per-doc getters/virtuals/proto chain — fine
     // for a read-only paginated list and noticeably cheaper at high volume.
-    const leads = await Lead.find(query)
+    const leads = await Lead.find(scopedQuery)
       .sort({ registeredAt: -1 })
       .skip((Number(page) - 1) * Number(limit))
       .limit(Number(limit))

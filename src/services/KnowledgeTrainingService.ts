@@ -261,6 +261,7 @@ export class KnowledgeTrainingService {
         existing.confidence = Math.min(1.0, existing.confidence + 0.1);
         existing.usageCount += 1;
         await existing.save();
+        this.invalidateCache();
         return true;
       }
 
@@ -284,6 +285,9 @@ export class KnowledgeTrainingService {
       });
 
       this.autoLearnCount++;
+      // Bust caches so the freshly auto-learned entry reaches live agents on
+      // the next message instead of waiting out the 60s config-cache TTL.
+      this.invalidateCache();
       console.log(
         `[KnowledgeTraining] Auto-learned: "${userMessage.substring(
           0,
@@ -525,6 +529,17 @@ export class KnowledgeTrainingService {
   private invalidateCache(): void {
     this.knowledgeCache.clear();
     this.lastCacheRefresh = 0;
+    // BUGFIX (real-time KB): the AI reads the dataset knowledge base through
+    // ConfigurationManagerService.getAIKnowledgeBase(), which caches for 60s.
+    // Clearing only the local (unused) map above left the AI serving a stale
+    // KB for up to a minute after any add/update/delete/auto-learn. Bust the
+    // config cache too so the very next inbound message rebuilds the KB fresh
+    // — this is what makes newly-added knowledge reach live agents instantly.
+    try {
+      configurationManager.clearCache();
+    } catch (err) {
+      console.error('[KnowledgeTraining] clearCache failed:', err);
+    }
   }
 
   private detectLanguage(text: string): 'en' | 'si' | 'ta' | 'hi' | 'all' {

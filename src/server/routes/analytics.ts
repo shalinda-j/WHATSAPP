@@ -346,7 +346,7 @@ router.get('/bookings', async (req, res) => {
   try {
     const { year, month } = req.query as { year?: string; month?: string };
 
-    const query: Record<string, any> = {};
+    const baseFilter: Record<string, any> = {};
     if (year && month) {
       const y = parseInt(year, 10);
       const m = parseInt(month, 10) - 1; // 0-indexed
@@ -355,19 +355,15 @@ router.get('/bookings', async (req, res) => {
       // month edges whenever the server isn't running UTC.
       const start = new Date(Date.UTC(y, m, 1));
       const end = new Date(Date.UTC(y, m + 1, 0, 23, 59, 59, 999));
-      query.date = { $gte: start, $lte: end };
+      baseFilter.date = { $gte: start, $lte: end };
     }
 
-    // Tenant scope: only this tenant's bookings (plus legacy rows with no
-    // tenantId, so single-tenant / pre-migration data still shows up).
-    const tenantId = req.tenant?._id;
-    if (tenantId) {
-      query.$or = [
-        { tenantId },
-        { tenantId: { $exists: false } },
-        { tenantId: null },
-      ];
-    }
+    // Tenant scope via the shared helper: matches this tenant's bookings plus
+    // legacy rows with no tenantId (single-tenant / pre-migration data). Using
+    // withTenantScope keeps this consistent with every other route and, unlike
+    // the old inline `if (tenantId)` guard, never silently returns ALL tenants'
+    // bookings when tenant resolution is missing.
+    const query = withTenantScope(req, baseFilter);
 
     const bookings = await Booking.find(query).sort({ date: 1 }).lean();
     res.json({ bookings });
@@ -480,17 +476,7 @@ router.post('/bookings', async (req, res) => {
 router.patch('/bookings/:id', async (req, res) => {
   try {
     const { status, notes, type, time, location } = req.body;
-    const tid = req.tenant?._id;
-    const scope: Record<string, any> = tid
-      ? {
-          _id: req.params.id,
-          $or: [
-            { tenantId: tid },
-            { tenantId: { $exists: false } },
-            { tenantId: null },
-          ],
-        }
-      : { _id: req.params.id };
+    const scope = withTenantScope(req, { _id: req.params.id });
     const booking = await Booking.findOneAndUpdate(
       scope,
       {
@@ -514,17 +500,7 @@ router.patch('/bookings/:id', async (req, res) => {
 
 router.delete('/bookings/:id', async (req, res) => {
   try {
-    const tid = req.tenant?._id;
-    const scope: Record<string, any> = tid
-      ? {
-          _id: req.params.id,
-          $or: [
-            { tenantId: tid },
-            { tenantId: { $exists: false } },
-            { tenantId: null },
-          ],
-        }
-      : { _id: req.params.id };
+    const scope = withTenantScope(req, { _id: req.params.id });
     const deleted = await Booking.findOneAndDelete(scope);
     if (!deleted) {
       return res.status(404).json({ error: 'Booking not found' });

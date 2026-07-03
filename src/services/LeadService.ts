@@ -4,9 +4,43 @@ import { CRMService } from './CRMService';
 import { WebhookService } from './WebhookService';
 import Lead from '../models/Lead';
 import Session from '../models/Session';
+import Tenant from '../models/Tenant';
 import sessionStateService from './SessionStateService';
 import { conversionService } from './ConversionService';
 import { normalisePhoneDigits } from './LidPhoneMappingService';
+
+/**
+ * Resolve the tenant a WhatsApp-captured lead belongs to. Preference order:
+ *   1. the tenant that owns the WhatsApp Session (explicit)
+ *   2. the caller-supplied defaultTenantId (index.ts module-level default)
+ *   3. the `default` tenant looked up from Mongo (single-tenant deployments)
+ *
+ * Cached so we don't hit Mongo on every registration. Returning a real
+ * tenantId (instead of leaving the field undefined) keeps the lead visible to
+ * the tenant-scoped CRM/Leads list AND correctly isolated once >1 tenant
+ * exists. Best-effort — returns undefined if no tenant can be resolved, in
+ * which case the lead is still created (the list read is legacy-tolerant).
+ */
+let cachedDefaultTenantId: string | null = null;
+async function resolveLeadTenantId(
+  sessionTenantId?: unknown,
+  defaultTenantId?: string,
+): Promise<unknown | undefined> {
+  if (sessionTenantId) return sessionTenantId;
+  if (defaultTenantId) return defaultTenantId;
+  if (cachedDefaultTenantId) return cachedDefaultTenantId;
+  try {
+    const t = await Tenant.findOne({ slug: 'default' }).select('_id').lean();
+    const id = (t as { _id?: unknown } | null)?._id;
+    if (id) {
+      cachedDefaultTenantId = String(id);
+      return cachedDefaultTenantId;
+    }
+  } catch {
+    /* tenant lookup is best-effort — lead is still created without it */
+  }
+  return undefined;
+}
 
 // Extended Lead Data Interface
 interface LeadData {
@@ -199,6 +233,7 @@ export async function handleLeadMessage(
   jid: string,
   text: string,
   sessionId: string,
+  defaultTenantId?: string,
 ): Promise<boolean> {
   const session = await getLeadSession(jid);
   if (!session || session.state === LeadState.IDLE) return false;
@@ -455,13 +490,13 @@ export async function handleLeadMessage(
         // No CV or skip - proceed to save with empty cvUrl
         session.data.cvUrl = '';
         await saveLeadSession(jid, session);
-        await saveLeadRegistration(jid, session, sessionId);
+        await saveLeadRegistration(jid, session, sessionId, defaultTenantId);
         return true;
       } else if (cleanText.toLowerCase() === 'done') {
         // CV uploaded - proceed to save
         session.data.cvUrl = 'uploaded';
         await saveLeadSession(jid, session);
-        await saveLeadRegistration(jid, session, sessionId);
+        await saveLeadRegistration(jid, session, sessionId, defaultTenantId);
         return true;
       } else {
         await sendMessage(
@@ -483,6 +518,7 @@ async function saveLeadRegistration(
   jid: string,
   session: UserLeadSession,
   sessionId: string,
+  defaultTenantId?: string,
 ): Promise<void> {
   await sendTyping(jid, sessionId);
 
@@ -499,7 +535,15 @@ async function saveLeadRegistration(
     const sess = await Session.findOne({ sessionId })
       .select('tenantId')
       .lean<{ tenantId?: unknown }>();
-    const leadTenantId = sess?.tenantId;
+    // BUGFIX: the WhatsApp Session upsert doesn't stamp tenantId, so
+    // sess.tenantId is almost always undefined. Fall back to the process
+    // default tenant (threaded from index.ts) and finally to a `default`
+    // tenant lookup, so every WhatsApp-captured lead is tenant-attributed
+    // and lands under the tenant the CRM/Leads dashboard reads.
+    const leadTenantId = await resolveLeadTenantId(
+      sess?.tenantId,
+      defaultTenantId,
+    );
 
     // Create lead in database
     const leadData: Record<string, unknown> = {
