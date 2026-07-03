@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import * as path from 'path';
+import { isDigitalOceanOrigin } from './corsOrigins';
 
 // Routes
 import authRoutes from './routes/auth';
@@ -94,6 +95,12 @@ const corsOptions = {
     // Normalise so "https://foo.com" and "https://foo.com/" both match.
     const normalised = origin.replace(/\/$/, '');
     if (allowedOrigins.includes(normalised)) {
+      callback(null, true);
+    } else if (isDigitalOceanOrigin(normalised)) {
+      // Allow the app's own DigitalOcean App Platform origin even when
+      // ALLOWED_ORIGINS wasn't set on the deployment (config drift from
+      // .do/app.yaml). Mirrors the Socket.io handshake rule so REST and
+      // real-time share one policy; auth still gates real access.
       callback(null, true);
     } else {
       console.warn(`⚠️ CORS blocked request from: ${origin}`);

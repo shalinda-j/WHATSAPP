@@ -2,6 +2,7 @@ import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { ACTUAL_JWT_SECRET } from './jwt-secret';
+import { isDigitalOceanOrigin } from './corsOrigins';
 
 let io: Server;
 
@@ -32,6 +33,16 @@ export const initSocket = (server: HttpServer) => {
         if (!origin) return callback(null, isDev);
         const normalised = origin.replace(/\/$/, '');
         if (allowedOrigins.includes(normalised)) return callback(null, true);
+        // Fallback: always allow the app's own DigitalOcean App Platform
+        // origin. The admin panel is served BY this same service, so its
+        // Socket.io handshake carries the *.ondigitalocean.app origin.
+        // ALLOWED_ORIGINS is *supposed* to list it, but the deployed env
+        // drifted from .do/app.yaml (the var was never set on the live app),
+        // which silently blocked every real-time dashboard update — live
+        // chat, session status, QR, agent traces. The JWT auth middleware
+        // below still gates actual access, so allowing the platform origin
+        // here is safe and self-heals the config drift.
+        if (isDigitalOceanOrigin(normalised)) return callback(null, true);
         console.warn(`⚠️ Socket CORS blocked origin: ${origin}`);
         return callback(null, false);
       },
