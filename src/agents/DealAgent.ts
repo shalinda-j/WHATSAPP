@@ -202,16 +202,21 @@ export class DealAgent implements IAgent {
       });
     }
 
-    // Hint payload that downstream code (booking flow integration, Phase 2)
-    // can consume from the trace. shouldStartBookingFlow + preferredTimeHint
-    // are intentionally NOT auto-acted upon yet — the existing BookingService
-    // flow has its own state machine and we don't want two writers.
-    if (parsed.shouldStartBookingFlow || parsed.preferredTimeHint) {
+    // Booking readiness is derived from BOTH signals, not just the flaky
+    // shouldStartBookingFlow boolean: in the field the model set
+    // dealStage='ready_to_book' and then "confirmed" the booking itself in
+    // free text WITHOUT flipping shouldStartBookingFlow — so keying only on the
+    // boolean left the customer with a fabricated confirmation and no real
+    // booking. Treating 'ready_to_book' as ready guarantees the hand-off to the
+    // deterministic date picker (index.ts consumes this side effect).
+    const bookingReady =
+      parsed.shouldStartBookingFlow || parsed.dealStage === 'ready_to_book';
+    if (bookingReady || parsed.preferredTimeHint) {
       sideEffects.push({
         kind: 'memory.write',
         payload: {
           tag: 'deal.booking_intent',
-          shouldStartBookingFlow: parsed.shouldStartBookingFlow,
+          shouldStartBookingFlow: bookingReady,
           preferredTimeHint: parsed.preferredTimeHint,
         },
       });
@@ -225,7 +230,7 @@ export class DealAgent implements IAgent {
     // deal.booking_intent side effect) then drives the real booking + real code
     // that lands on the Appointment Calendar.
     let replyText = sanitizeBookingReply(parsed.reply);
-    if (parsed.shouldStartBookingFlow || !replyText.trim()) {
+    if (bookingReady || !replyText.trim()) {
       replyText = bookingHandoffMessage(ctx.language);
     }
 
