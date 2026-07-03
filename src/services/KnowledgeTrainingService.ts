@@ -244,7 +244,10 @@ export class KnowledgeTrainingService {
       // provided, tolerating legacy rows without a tenantId).
       const existingFilter: any = {
         question: {
-          $regex: new RegExp(`^${escapeRegex(userMessage.substring(0, 50))}`, 'i'),
+          $regex: new RegExp(
+            `^${escapeRegex(userMessage.substring(0, 50))}`,
+            'i',
+          ),
         },
       };
       if (tenantId) {

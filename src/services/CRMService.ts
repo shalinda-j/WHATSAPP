@@ -15,11 +15,7 @@ function escapeRegex(str: string): string {
 function buildTenantFilter(tenantId?: string): Record<string, unknown> {
   if (!tenantId) return {};
   return {
-    $or: [
-      { tenantId },
-      { tenantId: { $exists: false } },
-      { tenantId: null },
-    ],
+    $or: [{ tenantId }, { tenantId: { $exists: false } }, { tenantId: null }],
   };
 }
 
@@ -217,7 +213,10 @@ export class CRMService {
       : {};
     // Resolve the tenant-scoped contact first so we never touch another
     // tenant's related rows when the id belongs to a different tenant.
-    const contact = await Contact.findOneAndDelete({ _id: id, ...tenantClause });
+    const contact = await Contact.findOneAndDelete({
+      _id: id,
+      ...tenantClause,
+    });
     if (!contact) return null;
     // Cascade only after confirming ownership: delete related activities and
     // unset the contact reference on this tenant's deals.

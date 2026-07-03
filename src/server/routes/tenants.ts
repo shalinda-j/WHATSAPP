@@ -1,9 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import {
-  authenticateToken,
-  requireSuperAdmin,
-} from '../middleware/auth';
+import { authenticateToken, requireSuperAdmin } from '../middleware/auth';
 import Tenant from '../../models/Tenant';
 
 const router = Router();

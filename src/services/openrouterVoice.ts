@@ -33,8 +33,7 @@ const STT_MODEL = process.env.OPENROUTER_STT_MODEL || 'openai/whisper-1';
 // Clean, un-dated slug. The previous default carried a '-2025-12-15' date
 // suffix that OpenRouter rejects with 400 (model not found), which made the
 // kiosk TTS silently fall back to robotic Google Free TTS on every turn.
-const TTS_MODEL =
-  process.env.OPENROUTER_TTS_MODEL || 'openai/gpt-4o-mini-tts';
+const TTS_MODEL = process.env.OPENROUTER_TTS_MODEL || 'openai/gpt-4o-mini-tts';
 
 /** The active OpenRouter provider's API key from Config, or null when none. */
 export async function getOpenRouterApiKey(): Promise<string | null> {
@@ -256,7 +255,8 @@ function voiceForModel(model: string, configured?: string): string {
   const isGeminiTts = /gemini/i.test(model) && /tts/i.test(model);
   if (isGeminiTts) {
     // Empty or an OpenAI voice (e.g. the default 'alloy') → use a Gemini voice.
-    if (!v || OPENAI_TTS_VOICES.has(v.toLowerCase())) return GEMINI_DEFAULT_VOICE;
+    if (!v || OPENAI_TTS_VOICES.has(v.toLowerCase()))
+      return GEMINI_DEFAULT_VOICE;
     return v;
   }
   // OpenAI-style TTS: require an OpenAI voice; otherwise default to alloy.

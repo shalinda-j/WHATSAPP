@@ -90,7 +90,8 @@ export class TelegramAdapter implements IChannelAdapter {
     // Seed the in-memory offset from the persisted value so a crash/redeploy
     // does not re-deliver updates we already processed.
     const savedOffset = Number((conn.config as any)?.telegramOffset);
-    const seededOffset = Number.isFinite(savedOffset) && savedOffset > 0 ? savedOffset : 0;
+    const seededOffset =
+      Number.isFinite(savedOffset) && savedOffset > 0 ? savedOffset : 0;
 
     const aborter = new AbortController();
     const state: TelegramConnectionState = {

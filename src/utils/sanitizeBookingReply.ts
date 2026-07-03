@@ -29,15 +29,19 @@ function isFabricatedCodeLine(line: string): boolean {
 
 export function sanitizeBookingReply(reply: string): string {
   if (!reply) return reply;
-  const kept = reply.split(/\r?\n/).filter((line) => !isFabricatedCodeLine(line));
-  return kept
-    .join('\n')
-    // Nuke any inline "voice consult code: 1234" that survived on a mixed line.
-    .replace(
-      /(voice\s*consult\s*code|kiosk\s*code|consult\s*code)\s*[:#\-]?\s*\d{3,6}/gi,
-      '',
-    )
-    .replace(/[ \t]{2,}/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+  const kept = reply
+    .split(/\r?\n/)
+    .filter((line) => !isFabricatedCodeLine(line));
+  return (
+    kept
+      .join('\n')
+      // Nuke any inline "voice consult code: 1234" that survived on a mixed line.
+      .replace(
+        /(voice\s*consult\s*code|kiosk\s*code|consult\s*code)\s*[:#\-]?\s*\d{3,6}/gi,
+        '',
+      )
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  );
 }

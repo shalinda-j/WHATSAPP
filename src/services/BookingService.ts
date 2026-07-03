@@ -24,9 +24,7 @@ import { messageMatchesKeyword } from '../utils/keywordMatch';
 /** Resolve the tenant that owns a WhatsApp session (undefined if none). */
 async function tenantIdForSession(sessionId: string): Promise<unknown> {
   try {
-    const sess = await Session.findOne({ sessionId })
-      .select('tenantId')
-      .lean();
+    const sess = await Session.findOne({ sessionId }).select('tenantId').lean();
     return (sess as { tenantId?: unknown } | null)?.tenantId ?? undefined;
   } catch {
     return undefined;
@@ -443,7 +441,10 @@ async function finalizeBooking(
 
     const conflict = sameDay.some((b: any) => {
       if (typeof b.time === 'string' && /^\d{1,2}:\d{2}/.test(b.time)) {
-        return b.time === targetTimeStr || parseInt(b.time.split(':')[0], 10) === targetHour;
+        return (
+          b.time === targetTimeStr ||
+          parseInt(b.time.split(':')[0], 10) === targetHour
+        );
       }
       return b.date ? new Date(b.date).getHours() === targetHour : false;
     });
@@ -516,17 +517,21 @@ async function finalizeBooking(
       });
 
       // Notify any subscribed webhooks that a booking was confirmed.
-      WebhookService.triggerWebhook('booking.created', {
-        id: booking._id,
-        clientName: booking.clientName,
-        clientPhone: booking.clientPhone,
-        date: booking.date,
-        time: booking.time,
-        type: booking.type,
-        location: booking.location,
-        sessionId,
-        timestamp: new Date(),
-      }, bookingTenantId).catch((err) =>
+      WebhookService.triggerWebhook(
+        'booking.created',
+        {
+          id: booking._id,
+          clientName: booking.clientName,
+          clientPhone: booking.clientPhone,
+          date: booking.date,
+          time: booking.time,
+          type: booking.type,
+          location: booking.location,
+          sessionId,
+          timestamp: new Date(),
+        },
+        bookingTenantId,
+      ).catch((err) =>
         console.error('booking.created webhook trigger failed:', err),
       );
 
@@ -548,7 +553,9 @@ async function finalizeBooking(
           sessionId,
           source: 'whatsapp',
         })
-        .catch((err) => console.error('recordConversion(booking) failed:', err));
+        .catch((err) =>
+          console.error('recordConversion(booking) failed:', err),
+        );
 
       // Auto-issue a kiosk voice-consult code tied to this visit. Best-effort
       // and awaited only so the code can be included in the confirmation below

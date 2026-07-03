@@ -13,12 +13,7 @@
  * Personalisation / Tone) but aren't enforced semantically.
  */
 export type SkillCategory =
-  | 'sales'
-  | 'marketing'
-  | 'support'
-  | 'personalisation'
-  | 'tone'
-  | 'other';
+  'sales' | 'marketing' | 'support' | 'personalisation' | 'tone' | 'other';
 
 export interface IAgentSkill extends Document {
   tenantId: mongoose.Types.ObjectId;

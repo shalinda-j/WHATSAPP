@@ -99,7 +99,9 @@ class ConversionService {
         (input.kind === 'lead_registered' || input.kind === 'booking_created')
       ) {
         const corrKind =
-          input.kind === 'lead_registered' ? 'lead_converted' : 'booking_created';
+          input.kind === 'lead_registered'
+            ? 'lead_converted'
+            : 'booking_created';
         await campaignService
           .correlateConversion(tenantId, phoneNumber, corrKind, input.jid)
           .catch(() => undefined);
