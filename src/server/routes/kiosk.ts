@@ -45,6 +45,8 @@ import { CRMService } from '../../services/CRMService';
 import Config from '../../models/Config';
 import FormTemplate from '../../models/FormTemplate';
 import KioskInvite, { IKioskCollected } from '../../models/KioskInvite';
+import Lead from '../../models/Lead';
+import ChatMessage from '../../models/ChatMessage';
 
 const router = Router();
 
@@ -313,9 +315,102 @@ function buildContactUpdate(c: IKioskCollected): Record<string, any> {
 // field at a time, repeats back each captured value to confirm, reads courses/
 // fees ONLY from the dataset KB, and announces completion once personal+course+
 // payment(paid) are confirmed.
+/**
+ * Load the visitor's real journey so the consultant picks up EXACTLY where the
+ * WhatsApp chat left off — their Lead profile (interests captured in the funnel)
+ * plus the last few WhatsApp turns. Injected into the model input so the AI
+ * "reviews what they need" instead of starting cold, and so the context is
+ * present even if the load balancer's implicit history read misses (e.g. a
+ * tenantId/JID shape mismatch between how WhatsApp stored it and how the kiosk
+ * reads it). Every read is best-effort — any failure yields an empty string and
+ * the consult still runs.
+ */
+async function buildCustomerContext(
+  invite: any,
+  jid: string,
+  tenantId?: string,
+): Promise<string> {
+  const phone = String(invite?.phone || '').replace(/\D/g, '');
+  // Match on the last 9 digits so +94/0-prefixed and bare-local forms all hit.
+  const tail = phone.slice(-9);
+  const parts: string[] = [];
+
+  // 1. Lead profile — what they told us they want during the WhatsApp funnel.
+  try {
+    if (tail) {
+      const base: Record<string, unknown> = {
+        phoneNumber: { $regex: new RegExp(`${tail}$`) },
+      };
+      const filter = tenantId
+        ? {
+            ...base,
+            $or: [
+              { tenantId },
+              { tenantId: { $exists: false } },
+              { tenantId: null },
+            ],
+          }
+        : base;
+      const lead: any = await Lead.findOne(filter)
+        .select(
+          'fullName interestedCountry jobVacancyType experienceYears status',
+        )
+        .lean();
+      if (lead) {
+        const bits = [
+          lead.fullName ? `නම ${lead.fullName}` : '',
+          lead.interestedCountry ? `රට ${lead.interestedCountry}` : '',
+          lead.jobVacancyType ? `රැකියාව/පාඨමාලාව ${lead.jobVacancyType}` : '',
+          lead.experienceYears ? `පළපුරුද්ද ${lead.experienceYears}` : '',
+        ].filter(Boolean);
+        if (bits.length) parts.push(`Lead පැතිකඩ: ${bits.join(', ')}`);
+      }
+    }
+  } catch {
+    /* best-effort */
+  }
+
+  // 2. Recent WhatsApp turns — their own questions/interests before the visit.
+  try {
+    const orConds: any[] = [{ userId: jid }];
+    if (tail) orConds.push({ userId: { $regex: new RegExp(tail) } });
+    const msgs: any[] = await ChatMessage.find({ $or: orConds })
+      .sort({ timestamp: -1 })
+      .limit(10)
+      .select('role content')
+      .lean();
+    if (msgs.length) {
+      const lines = msgs
+        .reverse()
+        .map((m) => {
+          const who = m.role === 'assistant' ? 'Bot' : 'Customer';
+          const txt = String(m.content || '')
+            .replace(/\s+/g, ' ')
+            .slice(0, 160);
+          return txt ? `${who}: ${txt}` : '';
+        })
+        .filter(Boolean);
+      if (lines.length) {
+        parts.push(`WhatsApp සංවාද ඉතිහාසය (recent):\n${lines.join('\n')}`);
+      }
+    }
+  } catch {
+    /* best-effort */
+  }
+
+  if (parts.length === 0) return '';
+  return (
+    `(SYSTEM පාරිභෝගික පසුබිම — මෙම පුද්ගලයා දැනටමත් WhatsApp හරහා අප සමඟ කතා කර ඇත. ` +
+    `පහත විස්තර හොඳින් කියවා, ඔවුන්ට අවශ්‍ය දේ තේරුම් ගෙන, ඒ අනුව පෞද්ගලීකෘතව උපදෙස් දෙන්න. ` +
+    `නැවත මුල සිට සියල්ල අසන්න එපා — ඔවුන් දැනටමත් කී දේ මතක තබාගෙන ඉදිරියට යන්න.):\n` +
+    parts.join('\n\n')
+  );
+}
+
 function buildConsultModelInput(
   userText: string,
   collected: IKioskCollected,
+  customerContext = '',
 ): string {
   const p = collected.personal || {};
   const co = collected.course || {};
@@ -350,7 +445,8 @@ function buildConsultModelInput(
     `(4) නම, ජංගම අංකය, NIC, පාඨමාලාව, සහ ගෙවීම (ගෙවා ඇත) යන සියල්ල තහවුරු වූ පසු ලියාපදිංචිය සම්පූර්ණ බව පැහැදිලිව දන්වා ගෙවීම තහවුරු කරන ලෙස ඉල්ලන්න. ` +
     `(5) මිනිසෙකු මෙන් උණුසුම්ව, කාරුණිකව, සානුකම්පිතව කතා කරන්න — පරිශීලකයාගේ හැඟීම් පිළිගෙන, දිරිගන්වමින්, ස්වාභාවික කතාබහක් ලෙස කෙටියෙන් පිළිතුරු දෙන්න. යාන්ත්‍රික/රොබෝ ස්වරයක් නොවේ. (Respond warmly, empathetically and human — acknowledge feelings, be encouraging, natural and concise, never robotic.))`;
 
-  return `${appendSinhalaInstruction(userText)}\n\n${stateBlock}`;
+  const ctxBlock = customerContext ? `${customerContext}\n\n` : '';
+  return `${appendSinhalaInstruction(userText)}\n\n${ctxBlock}${stateBlock}`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -489,7 +585,19 @@ router.post(
       // (personality + KB + history). Provider is the operator-configured
       // KIOSK_AI_PROVIDER mapped through PROVIDER_TYPE_TO_OVERRIDE (null = no
       // override → unchanged load-balancer behaviour).
-      const modelInput = buildConsultModelInput(transcript, currentCollected);
+      // Pull the visitor's WhatsApp journey + Lead profile so the consultant
+      // continues their thread and consults on what THEY actually need — the
+      // core of "connect the chat history to the Consulting Assistant".
+      const customerContext = await buildCustomerContext(
+        invite,
+        jid,
+        kiosk.tenantId,
+      );
+      const modelInput = buildConsultModelInput(
+        transcript,
+        currentCollected,
+        customerContext,
+      );
       const providerOverride = await resolveKioskProviderOverride();
       let reply = '';
       try {
