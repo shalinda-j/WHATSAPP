@@ -6,7 +6,8 @@ export type VoiceProvider =
   | 'google-cloud'
   | 'gemini-tts'
   | 'openai'
-  | 'elevenlabs';
+  | 'elevenlabs'
+  | 'openrouter';
 export type VoiceMode = 'voice-only' | 'text-only' | 'voice-and-text';
 
 export interface IVoiceConfig {
@@ -57,6 +58,7 @@ const VoiceConfigSchema = new Schema<IVoiceConfig>(
         'gemini-tts',
         'openai',
         'elevenlabs',
+        'openrouter',
       ],
       default: 'google-free',
     },

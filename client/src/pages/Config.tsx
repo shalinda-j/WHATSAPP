@@ -96,7 +96,8 @@ interface VoiceConfigData {
     | 'google-cloud'
     | 'gemini-tts'
     | 'openai'
-    | 'elevenlabs';
+    | 'elevenlabs'
+    | 'openrouter';
   apiKey?: string;
   hasApiKey?: boolean;
   googleApiKey?: string;
@@ -104,12 +105,9 @@ interface VoiceConfigData {
   voiceId?: string;
   isActive?: boolean;
   mode: 'voice-only' | 'text-only' | 'voice-and-text';
-  ttsModel?:
-    | 'tts-1'
-    | 'tts-1-hd'
-    | 'eleven_multilingual_v2'
-    | 'eleven_monolingual_v1'
-    | 'eleven_turbo_v2';
+  // Free-form: OpenAI/ElevenLabs use fixed slugs, but OpenRouter accepts any
+  // namespaced model (e.g. "openai/gpt-4o-mini-tts", "google/gemini-...-tts").
+  ttsModel?: string;
 }
 
 // Helper to extract error message from axios errors
@@ -524,6 +522,7 @@ export default function Config() {
         'gemini-tts': 'Gemini TTS',
         openai: 'OpenAI TTS',
         elevenlabs: 'ElevenLabs',
+        openrouter: 'OpenRouter TTS',
       };
       setVoiceMessage({
         type: 'success',
@@ -576,7 +575,11 @@ export default function Config() {
       apiKey: '',
       googleApiKey: '',
       ttsModel:
-        providerName === 'elevenlabs' ? 'eleven_multilingual_v2' : 'tts-1',
+        providerName === 'elevenlabs'
+          ? 'eleven_multilingual_v2'
+          : providerName === 'openrouter'
+            ? 'openai/gpt-4o-mini-tts'
+            : 'tts-1',
       voiceId:
         providerName === 'google-cloud'
           ? 'en-US-Neural2-F'
@@ -584,7 +587,9 @@ export default function Config() {
             ? 'Kore'
             : providerName === 'elevenlabs'
               ? ''
-              : 'nova',
+              : providerName === 'openrouter'
+                ? 'alloy'
+                : 'nova',
     };
   };
 
@@ -2235,6 +2240,117 @@ export default function Config() {
                     onClick={() => handleSaveVoiceProvider('elevenlabs')}
                     disabled={voiceSaving}
                     className="mt-6 w-full flex items-center justify-center px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition disabled:opacity-50"
+                  >
+                    <Save className="h-4 w-4 mr-2" /> Save & Activate
+                  </button>
+                </div>
+
+                {/* OpenRouter TTS Card */}
+                <div
+                  className={`bg-white shadow-lg rounded-xl border-2 transition-all p-6 flex flex-col ${
+                    activeVoiceProvider === 'openrouter'
+                      ? 'border-indigo-500 shadow-indigo-100'
+                      : 'border-gray-200'
+                  }`}
+                >
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="font-bold text-lg text-gray-800">
+                        OpenRouter TTS
+                      </h3>
+                      <p className="text-xs text-gray-500">
+                        Any OpenRouter voice model · reuses your chat key
+                      </p>
+                    </div>
+                    {activeVoiceProvider === 'openrouter' && (
+                      <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-1 rounded-full uppercase flex items-center">
+                        <Activity className="w-3 h-3 mr-1" /> Active
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Response Mode
+                      </label>
+                      <select
+                        value={getProviderConfig('openrouter').mode}
+                        onChange={(e) =>
+                          updateProviderConfig('openrouter', {
+                            mode: e.target.value as VoiceConfigData['mode'],
+                          })
+                        }
+                        className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      >
+                        <option value="voice-and-text">Voice & Text</option>
+                        <option value="voice-only">Voice Only</option>
+                        <option value="text-only">Text Only</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        API Key{' '}
+                        <span className="text-xs font-normal text-gray-400">
+                          (optional — falls back to your OpenRouter chat key)
+                        </span>
+                      </label>
+                      <input
+                        type="password"
+                        value={getProviderConfig('openrouter').apiKey || ''}
+                        onChange={(e) =>
+                          updateProviderConfig('openrouter', {
+                            apiKey: e.target.value,
+                          })
+                        }
+                        placeholder="sk-or-v1-…"
+                        className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        TTS Model
+                      </label>
+                      <input
+                        type="text"
+                        value={
+                          getProviderConfig('openrouter').ttsModel ||
+                          'openai/gpt-4o-mini-tts'
+                        }
+                        onChange={(e) =>
+                          updateProviderConfig('openrouter', {
+                            ttsModel: e.target.value,
+                          })
+                        }
+                        placeholder="openai/gpt-4o-mini-tts"
+                        className="w-full p-2 border border-gray-300 rounded font-mono text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      />
+                      <p className="mt-1 text-xs text-gray-400">
+                        Any OpenRouter audio/speech model slug, e.g.{' '}
+                        <code>openai/gpt-4o-mini-tts</code> or{' '}
+                        <code>google/gemini-2.5-flash-tts-preview</code>.
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Voice
+                      </label>
+                      <input
+                        type="text"
+                        value={getProviderConfig('openrouter').voiceId || 'alloy'}
+                        onChange={(e) =>
+                          updateProviderConfig('openrouter', {
+                            voiceId: e.target.value,
+                          })
+                        }
+                        placeholder="alloy"
+                        className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleSaveVoiceProvider('openrouter')}
+                    disabled={voiceSaving}
+                    className="mt-6 w-full flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition disabled:opacity-50"
                   >
                     <Save className="h-4 w-4 mr-2" /> Save & Activate
                   </button>

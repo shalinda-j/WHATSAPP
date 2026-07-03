@@ -21,6 +21,7 @@
  */
 import axios from 'axios';
 import Config from '../models/Config';
+import VoiceConfig from '../models/VoiceConfig';
 import { withTimeout } from './withTimeout';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
@@ -59,20 +60,53 @@ export async function getOpenRouterApiKey(): Promise<string | null> {
 /**
  * Resolve the TTS model + voice + key for OpenRouter speech synthesis.
  *
- * Precedence (so the operator can set the TTS model from the admin "Add Model"
- * section WITHOUT touching env or code):
- *   1. A Config provider row of type 'openrouter-tts' (added via Add Model):
+ * Precedence (so the operator can configure OpenRouter TTS entirely from the
+ * dashboard WITHOUT touching env or code):
+ *   1. The active Voice Provider row (VoiceConfig provider='openrouter'):
+ *        ttsModel -> model, voiceId -> voice, apiKey -> key. This is what the
+ *        "Voice Provider → OpenRouter" card writes, so picking OpenRouter as the
+ *        voice provider and typing a model/voice there Just Works.
+ *   2. A legacy Config provider row of type 'openrouter-tts' (Add Model):
  *        aiModel -> model, value -> voice, apiKey -> key.
- *   2. env OPENROUTER_TTS_MODEL / OPENROUTER_TTS_VOICE.
- *   3. Built-in defaults.
- * The key falls back to the chat OpenRouter provider's key when the TTS row
- * doesn't carry its own, so adding just a model row is enough.
+ *   3. env OPENROUTER_TTS_MODEL / OPENROUTER_TTS_VOICE.
+ *   4. Built-in defaults.
+ * The key falls back to the chat OpenRouter provider's key when neither carries
+ * its own, so adding just a model is enough.
  */
+// OpenAI-native TTS slugs — if one leaks in as an OpenRouter model (e.g. the
+// VoiceConfig schema default 'tts-1'), ignore it: OpenRouter needs a namespaced
+// slug like 'openai/gpt-4o-mini-tts' and would 400 on a bare 'tts-1'.
+const OPENAI_NATIVE_TTS = new Set(['tts-1', 'tts-1-hd']);
+
 export async function getOpenRouterVoiceSettings(): Promise<{
   apiKey: string | null;
   model: string;
   voice: string;
 }> {
+  // 1. Active Voice Provider row (the "OpenRouter" voice card).
+  let vcModel: string | undefined;
+  let vcVoice: string | undefined;
+  let vcKey: string | undefined;
+  try {
+    const vc = await VoiceConfig.findOne({
+      isActive: true,
+      provider: 'openrouter',
+    }).sort({ updatedAt: -1 });
+    // apiKey decrypts via the schema getter (same as elsewhere).
+    const v = vc as unknown as {
+      ttsModel?: string;
+      voiceId?: string;
+      apiKey?: string;
+    } | null;
+    const m = v?.ttsModel?.trim();
+    vcModel = m && !OPENAI_NATIVE_TTS.has(m) ? m : undefined;
+    vcVoice = v?.voiceId?.trim() || undefined;
+    vcKey = v?.apiKey?.trim() || undefined;
+  } catch {
+    /* fall through to the legacy row / env / defaults */
+  }
+
+  // 2. Legacy 'openrouter-tts' Config provider row (Add Model section).
   let rowModel: string | undefined;
   let rowVoice: string | undefined;
   let rowKey: string | undefined;
@@ -93,11 +127,12 @@ export async function getOpenRouterVoiceSettings(): Promise<{
   } catch {
     /* fall through to env/defaults */
   }
-  const apiKey = rowKey || (await getOpenRouterApiKey());
+
+  const apiKey = vcKey || rowKey || (await getOpenRouterApiKey());
   return {
     apiKey: apiKey || null,
-    model: rowModel || TTS_MODEL,
-    voice: rowVoice || process.env.OPENROUTER_TTS_VOICE || 'alloy',
+    model: vcModel || rowModel || TTS_MODEL,
+    voice: vcVoice || rowVoice || process.env.OPENROUTER_TTS_VOICE || 'alloy',
   };
 }
 
