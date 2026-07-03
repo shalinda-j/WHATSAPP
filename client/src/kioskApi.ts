@@ -17,11 +17,14 @@ const KIOSK_TOKEN_KEY = 'kioskToken';
 // Mirror the admin api baseURL so both hit the same backend origin.
 const API_URL = import.meta.env.VITE_API_URL || '';
 
+// NOTE: no instance-level `Content-Type` default. The JSON endpoints
+// (/session, /convert, /enroll) send plain objects, for which axios auto-sets
+// application/json; the voice /consult sends FormData, for which axios must set
+// `multipart/form-data` WITH its boundary. A forced `application/json` default
+// broke the multipart upload — the server's multer saw no file and returned
+// 400 "No speech or text was provided" on every voice turn.
 const kioskApi: AxiosInstance = axios.create({
   baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
 // Attach the kiosk token (when present) as x-kiosk-token. No admin bearer.
@@ -29,6 +32,16 @@ kioskApi.interceptors.request.use((config) => {
   const token = sessionStorage.getItem(KIOSK_TOKEN_KEY);
   if (token) {
     config.headers['x-kiosk-token'] = token;
+  }
+  // Defence-in-depth: if anything ever pins a Content-Type, strip it for
+  // FormData bodies so the browser sets the multipart boundary itself.
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    const h = config.headers as unknown as {
+      delete?: (k: string) => void;
+      [k: string]: unknown;
+    };
+    if (typeof h.delete === 'function') h.delete('Content-Type');
+    else delete h['Content-Type'];
   }
   return config;
 });
