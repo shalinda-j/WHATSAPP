@@ -194,18 +194,58 @@ export async function openrouterTranscribe(
   return text;
 }
 
+// OpenAI /audio/speech voice ids. A Gemini TTS model rejects these (and vice
+// versa), which is the real cause of the kiosk's 400s: the saved voice was the
+// OpenAI default 'alloy' while the model was a Gemini TTS model.
+const OPENAI_TTS_VOICES = new Set([
+  'alloy',
+  'echo',
+  'fable',
+  'onyx',
+  'nova',
+  'shimmer',
+  'ash',
+  'ballad',
+  'coral',
+  'sage',
+  'verse',
+]);
+// Warm, multilingual Gemini voice (covers Sinhala/Tamil/Hindi) — the one the
+// Gemini TTS card recommends. Used when a Gemini model has no valid voice set.
+const GEMINI_DEFAULT_VOICE = 'Sulafat';
+
+/**
+ * Pick a voice that's valid for the model's family so OpenRouter doesn't 400 on
+ * a cross-family voice id. Gemini TTS models use capitalised names (Sulafat,
+ * Kore, Puck, …); OpenAI TTS models use lowercase ids (alloy, nova, …).
+ */
+function voiceForModel(model: string, configured?: string): string {
+  const v = (configured || '').trim();
+  const isGeminiTts = /gemini/i.test(model) && /tts/i.test(model);
+  if (isGeminiTts) {
+    // Empty or an OpenAI voice (e.g. the default 'alloy') → use a Gemini voice.
+    if (!v || OPENAI_TTS_VOICES.has(v.toLowerCase())) return GEMINI_DEFAULT_VOICE;
+    return v;
+  }
+  // OpenAI-style TTS: require an OpenAI voice; otherwise default to alloy.
+  if (!v || !OPENAI_TTS_VOICES.has(v.toLowerCase())) return 'alloy';
+  return v;
+}
+
 /** Synthesize speech via OpenRouter's /audio/speech. Returns audio bytes. Throws on failure. */
 export async function openrouterSpeak(
   text: string,
   voice?: string,
 ): Promise<Buffer> {
-  // Resolve model + voice + key from the admin-configured 'openrouter-tts'
-  // provider row (Add Model section), falling back to env/defaults.
+  // Resolve model + voice + key from the active Voice Provider row (or the
+  // legacy openrouter-tts row / env / defaults).
   const settings = await getOpenRouterVoiceSettings();
   if (!settings.apiKey) throw new Error('OpenRouter provider not configured');
 
   const model = settings.model;
-  const chosenVoice = voice || settings.voice;
+  // Auto-correct the voice to the model's family so a saved 'alloy' on a Gemini
+  // model (the field bug) doesn't 400.
+  const chosenVoice = voiceForModel(model, voice || settings.voice);
   const body = {
     model,
     input: text,
