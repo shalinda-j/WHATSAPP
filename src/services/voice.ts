@@ -278,6 +278,10 @@ export async function transcribeAudio(
 export async function transcribeAudioWithLanguage(
   audioBuffer: Buffer,
   mimeType?: string,
+  // ISO-639-1 hint (e.g. 'si'). Whisper auto-detect mis-fires on short, noisy
+  // kiosk clips (it hallucinated Arabic/garbled Sinhala in the field); a hint
+  // pins the expected language so Sinhala is transcribed as Sinhala.
+  languageHint?: string,
 ): Promise<TranscriptionResult> {
   let config = null;
   try {
@@ -312,7 +316,7 @@ export async function transcribeAudioWithLanguage(
   if (!text) {
     try {
       console.log('   🎙️ Trying OpenRouter STT...');
-      text = await openrouterTranscribe(audioBuffer, mimeType);
+      text = await openrouterTranscribe(audioBuffer, mimeType, languageHint);
       if (text)
         console.log(`   ✅ OpenRouter STT: "${text.substring(0, 60)}..."`);
     } catch (err: any) {

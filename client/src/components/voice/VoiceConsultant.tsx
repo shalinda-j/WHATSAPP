@@ -68,6 +68,15 @@ const MIN_SPEECH_MS = 350;
 // Hard cap on a single utterance so a stuck-open mic can't record forever.
 const MAX_UTTERANCE_MS = 20000;
 
+// ── Barge-in (interrupt the assistant while it's speaking) ───────────────────
+// While the assistant is talking we keep watching the mic; if the visitor
+// starts speaking we cut the assistant off and listen. The threshold is
+// deliberately HIGHER than SILENCE_RMS so the assistant's own audio (residual
+// echo, even after the browser's echo cancellation) doesn't self-trigger.
+const BARGE_IN_RMS = 0.07;
+// Require this much continuous speech before we interrupt (avoids a cough/click).
+const BARGE_IN_MS = 280;
+
 function pickSupportedMimeType(): string | undefined {
   if (
     typeof MediaRecorder === 'undefined' ||
@@ -121,6 +130,12 @@ export default function VoiceConsultant({
   const lastVoiceRef = useRef(0);
   const mountedRef = useRef(true);
 
+  // Barge-in: the AbortController for the currently-playing reply + a separate
+  // VAD loop that watches for the visitor talking over it.
+  const speakAbortRef = useRef<AbortController | null>(null);
+  const bargeRafRef = useRef<number | null>(null);
+  const bargeSpeechStartRef = useRef(0);
+
   const setPhase = useCallback((s: ConsultState) => {
     phaseRef.current = s;
     setState(s);
@@ -163,9 +178,51 @@ export default function VoiceConsultant({
     return () => {
       mountedRef.current = false;
       sessionActiveRef.current = false;
+      speakAbortRef.current?.abort();
       teardownAudio();
     };
   }, [teardownAudio]);
+
+  // ── Barge-in watchers ───────────────────────────────────────────────────────
+  const stopBargeInWatch = useCallback(() => {
+    if (bargeRafRef.current !== null) {
+      cancelAnimationFrame(bargeRafRef.current);
+      bargeRafRef.current = null;
+    }
+    bargeSpeechStartRef.current = 0;
+  }, []);
+
+  // While the reply plays, watch the mic; if the visitor speaks over it for
+  // BARGE_IN_MS, abort playback (→ playBase64Audio resolves → the loop re-arms
+  // the mic and captures what they're saying).
+  const startBargeInWatch = useCallback((ctrl: AbortController) => {
+    const analyser = analyserRef.current;
+    if (!analyser) return;
+    bargeSpeechStartRef.current = 0;
+    const buf = new Uint8Array(analyser.fftSize);
+    const tick = (): void => {
+      if (ctrl.signal.aborted || phaseRef.current !== 'speaking') return;
+      analyser.getByteTimeDomainData(buf);
+      let sumSq = 0;
+      for (let i = 0; i < buf.length; i++) {
+        const v = (buf[i] - 128) / 128;
+        sumSq += v * v;
+      }
+      const rms = Math.sqrt(sumSq / buf.length);
+      const now = performance.now();
+      if (rms > BARGE_IN_RMS) {
+        if (!bargeSpeechStartRef.current) bargeSpeechStartRef.current = now;
+        else if (now - bargeSpeechStartRef.current > BARGE_IN_MS) {
+          ctrl.abort(); // visitor is talking over the assistant → cut it off
+          return;
+        }
+      } else {
+        bargeSpeechStartRef.current = 0;
+      }
+      bargeRafRef.current = requestAnimationFrame(tick);
+    };
+    bargeRafRef.current = requestAnimationFrame(tick);
+  }, []);
 
   // ── Send one captured utterance to the backend ───────────────────────────────
   const sendAudio = useCallback(
@@ -189,10 +246,18 @@ export default function VoiceConsultant({
 
         if (data.audioBase64 && data.mime) {
           setPhase('speaking');
+          // Barge-in: play with an AbortController and watch the mic so the
+          // visitor can talk over the assistant and cut it off.
+          const ctrl = new AbortController();
+          speakAbortRef.current = ctrl;
+          startBargeInWatch(ctrl);
           try {
-            await playBase64Audio(data.audioBase64, data.mime);
+            await playBase64Audio(data.audioBase64, data.mime, ctrl.signal);
           } catch {
             // Autoplay/codec failure shouldn't break the loop.
+          } finally {
+            stopBargeInWatch();
+            speakAbortRef.current = null;
           }
         }
       } catch (err) {
@@ -395,17 +460,19 @@ export default function VoiceConsultant({
   // ── End the hands-free session (tap again) ───────────────────────────────────
   const stopSession = useCallback(() => {
     sessionActiveRef.current = false;
+    speakAbortRef.current?.abort();
+    stopBargeInWatch();
     teardownAudio();
     setLevel(0);
     setPhase('idle');
-  }, [setPhase, teardownAudio]);
+  }, [setPhase, teardownAudio, stopBargeInWatch]);
 
   const active = state !== 'idle';
   const statusLabel: Record<ConsultState, string> = {
     idle: 'Tap to start talking',
     listening: 'Listening… just speak',
     processing: 'Thinking…',
-    speaking: 'Speaking…',
+    speaking: 'Speaking… (talk to interrupt)',
   };
 
   // Orb scales gently with the live mic level while listening.

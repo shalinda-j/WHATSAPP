@@ -10,25 +10,50 @@
  * and also resolves quietly if playback is blocked or errors, so a kiosk loop
  * can always advance to the next turn. The object URL is always revoked.
  *
+ * Pass an AbortSignal to support barge-in: aborting pauses playback immediately
+ * and resolves the promise, so the caller can re-arm the mic and let the visitor
+ * talk over the assistant.
+ *
  * @param base64 Raw base64 string (no data: URI prefix).
  * @param mime   MIME type for the Blob, e.g. "audio/wav" or "audio/mpeg".
+ * @param signal Optional AbortSignal — abort to stop playback (barge-in).
  */
 export async function playBase64Audio(
   base64: string,
   mime: string,
+  signal?: AbortSignal,
 ): Promise<void> {
   return new Promise<void>((resolve) => {
     let url: string | null = null;
+    let audioEl: HTMLAudioElement | null = null;
 
     const cleanup = (): void => {
+      if (signal) signal.removeEventListener('abort', onAbort);
       if (url) {
         URL.revokeObjectURL(url);
         url = null;
       }
     };
 
+    const onAbort = (): void => {
+      // Barge-in: stop the assistant mid-sentence.
+      if (audioEl) {
+        try {
+          audioEl.pause();
+        } catch {
+          /* ignore */
+        }
+      }
+      cleanup();
+      resolve();
+    };
+
     try {
       if (!base64) {
+        resolve();
+        return;
+      }
+      if (signal?.aborted) {
         resolve();
         return;
       }
@@ -42,7 +67,9 @@ export async function playBase64Audio(
       const blob = new Blob([bytes], { type: mime || 'audio/mpeg' });
 
       url = URL.createObjectURL(blob);
-      const audioEl = new Audio(url);
+      audioEl = new Audio(url);
+
+      if (signal) signal.addEventListener('abort', onAbort, { once: true });
 
       audioEl.onended = (): void => {
         cleanup();

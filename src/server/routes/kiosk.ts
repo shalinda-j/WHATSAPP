@@ -443,7 +443,7 @@ function buildConsultModelInput(
     `(2) පරිශීලකයා දෙන සෑම අගයක්ම නැවත කියවා "${'මෙය හරිද?'}" ලෙස තහවුරු කරගන්න. ` +
     `(3) පාඨමාලා, මට්ටම් සහ ගාස්තු පිළිබඳ විස්තර දැනුම් පදනමෙන් (dataset knowledge base) පමණක් ලබා දෙන්න — කිසිවක් මනක්කල්පිත නොකරන්න. ` +
     `(4) නම, ජංගම අංකය, NIC, පාඨමාලාව, සහ ගෙවීම (ගෙවා ඇත) යන සියල්ල තහවුරු වූ පසු ලියාපදිංචිය සම්පූර්ණ බව පැහැදිලිව දන්වා ගෙවීම තහවුරු කරන ලෙස ඉල්ලන්න. ` +
-    `(5) මිනිසෙකු මෙන් උණුසුම්ව, කාරුණිකව, සානුකම්පිතව කතා කරන්න — පරිශීලකයාගේ හැඟීම් පිළිගෙන, දිරිගන්වමින්, ස්වාභාවික කතාබහක් ලෙස කෙටියෙන් පිළිතුරු දෙන්න. යාන්ත්‍රික/රොබෝ ස්වරයක් නොවේ. (Respond warmly, empathetically and human — acknowledge feelings, be encouraging, natural and concise, never robotic.))`;
+    `(5) පළමුව පරිශීලකයාගේ හැඟීම් (emotion) හඳුනාගන්න — කනස්සල්ල, බය, කලකිරීම, ව්‍යාකූලත්වය, උද්යෝගය, සතුට ආදිය — ඔවුන්ගේ වචන හා ස්වරයෙන්. ඉන්පසු ඒ හැඟීමට **ගැලපෙන ලෙස** ප්‍රතිචාර දක්වන්න: කනස්සල්ලෙන් නම් සන්සුන් කර සහතික වන්න; ව්‍යාකූල නම් ඉවසීමෙන් සරලව පැහැදිලි කරන්න; උද්යෝගී නම් ඒ සතුට බෙදාගන්න; කලකිරී නම් අවංකව සමාව අයැද විසඳුමක් දෙන්න. පිළිතුර ආරම්භ කරන්නේ ඔවුන්ගේ හැඟීම පිළිගැනීමෙන් (කෙටියෙන්). මිනිසෙකු මෙන් උණුසුම්ව, සානුකම්පිතව, ස්වාභාවිකව — කිසිසේත් යාන්ත්‍රික/රොබෝ ස්වරයක් නොවේ. (FIRST detect the visitor's emotion from their words/tone — worry, fear, frustration, confusion, excitement, joy — then react to THAT emotion: reassure if worried, explain patiently if confused, share the joy if excited, apologise and fix if upset. Open by briefly acknowledging how they feel. Warm, empathetic, human, never robotic.))`;
 
   const ctxBlock = customerContext ? `${customerContext}\n\n` : '';
   return `${appendSinhalaInstruction(userText)}\n\n${ctxBlock}${stateBlock}`;
@@ -521,6 +521,10 @@ router.post(
           const stt = await transcribeAudioWithLanguage(
             req.file.buffer,
             req.file.mimetype,
+            // Sinhala-first branch: pin the STT language so short/noisy clips
+            // are transcribed as Sinhala instead of the model auto-detecting a
+            // wrong language (it hallucinated Arabic/garbled text in the field).
+            'si',
           );
           transcript = (stt?.text || '').trim();
         } catch (err: any) {
@@ -631,45 +635,54 @@ router.post(
         console.warn('⚠️ /consult TTS failed:', err?.message || err);
       }
 
-      // ── 5. Per-turn enrollment-field extraction → deep $set-merge ─────────
-      // Extract ONLY newly-mentioned fields from THIS utterance; a parse/timeout
-      // failure returns null and is tolerated. Merge into KioskInvite.collected
-      // (dotted $set so siblings survive), recompute `completed`, then mirror the
-      // captured values onto the CRM Contact. Each step is independently wrapped.
-      let collected: IKioskCollected = mergeCollected(currentCollected, null);
-      let completed = computeCompleted(collected);
-      try {
-        const extract = await extractEnrollmentFields(transcript);
-        if (extract) {
-          collected = mergeCollected(currentCollected, extract);
-          completed = computeCompleted(collected);
+      // ── 5. Respond NOW so the visitor hears the reply fast ────────────────
+      // Enrollment-field extraction + auto-convert are extra LLM/DB calls that
+      // used to block this response (~1–3s of extra "thinking"). We send the
+      // reply + audio immediately with the PRE-turn collected state; the newly
+      // captured fields + any conversion surface on the visitor's NEXT turn.
+      const preCollected = mergeCollected(currentCollected, null);
+      res.json({
+        transcript,
+        reply,
+        audioBase64,
+        mime,
+        converted: invite?.status === 'converted',
+        collected: preCollected,
+        completed: computeCompleted(preCollected),
+      });
+
+      // ── 6. Background: extraction → deep $set-merge → CRM mirror → auto-
+      // convert. Fully self-contained + error-swallowing so a failure never
+      // touches the already-sent response.
+      void (async () => {
+        try {
+          const extract = await extractEnrollmentFields(transcript);
+          if (!extract) return;
+          const merged = mergeCollected(currentCollected, extract);
           const dotted = buildCollectedDottedSet(extract);
+          let latestInvite: any = invite;
           if (Object.keys(dotted).length > 0) {
+            const done = computeCompleted(merged);
             try {
               const updated = await KioskInvite.findByIdAndUpdate(
                 kiosk.inviteId,
-                { $set: { ...dotted, completed } },
+                { $set: { ...dotted, completed: done } },
                 { new: true },
               ).lean();
-              if (updated) {
-                invite = updated;
-                collected =
-                  (updated.collected as IKioskCollected) || collected;
-                completed = computeCompleted(collected);
-              }
+              if (updated) latestInvite = updated;
             } catch (err: any) {
               console.warn(
                 '⚠️ /consult collected $set failed:',
                 err?.message || err,
               );
             }
-
-            // Mirror onto the CRM Contact (best-effort, tenant-scoped).
-            const contactId = invite?.contactId
-              ? String(invite.contactId)
+            const contactId = latestInvite?.contactId
+              ? String(latestInvite.contactId)
               : '';
             if (contactId) {
-              const contactUpdate = buildContactUpdate(collected);
+              const contactUpdate = buildContactUpdate(
+                (latestInvite?.collected as IKioskCollected) || merged,
+              );
               if (Object.keys(contactUpdate).length > 0) {
                 try {
                   await CRMService.updateContact(
@@ -686,37 +699,25 @@ router.post(
               }
             }
           }
-        }
-      } catch (err: any) {
-        console.warn('⚠️ /consult extraction failed:', err?.message || err);
-      }
 
-      // ── 6. Payment-gated, idempotent auto-convert ─────────────────────────
-      // Convert ONLY when every required field is captured AND payment is
-      // confirmed paid (completed===true) AND the visitor signals a clear
-      // commitment/confirmation this turn. markConverted is idempotent.
-      let converted = invite?.status === 'converted';
-      try {
-        if (
-          completed &&
-          !converted &&
-          (await detectConversion(transcript, reply))
-        ) {
-          converted = await kioskInviteService.markConverted(kiosk.inviteId);
+          // Payment-gated, idempotent auto-convert.
+          const finalCompleted = computeCompleted(
+            (latestInvite?.collected as IKioskCollected) || merged,
+          );
+          if (
+            finalCompleted &&
+            latestInvite?.status !== 'converted' &&
+            (await detectConversion(transcript, reply))
+          ) {
+            await kioskInviteService.markConverted(kiosk.inviteId);
+          }
+        } catch (err: any) {
+          console.warn(
+            '⚠️ /consult background extraction/convert failed:',
+            err?.message || err,
+          );
         }
-      } catch (err: any) {
-        console.warn('⚠️ /consult auto-convert failed:', err?.message || err);
-      }
-
-      res.json({
-        transcript,
-        reply,
-        audioBase64,
-        mime,
-        converted,
-        collected,
-        completed,
-      });
+      })();
     } catch (err: any) {
       console.error('❌ /api/kiosk/consult error:', err?.message || err);
       res.status(500).json({ error: 'Consultation failed' });
