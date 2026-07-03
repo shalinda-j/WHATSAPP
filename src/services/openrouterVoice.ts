@@ -30,8 +30,11 @@ const TIMEOUT = Number(process.env.AI_REQUEST_TIMEOUT_MS) || 45000;
 // Doc-confirmed OpenRouter audio slugs (env-overridable). whisper-1 covers
 // ~99 languages incl. Sinhala; gpt-4o-mini-tts is the OpenAI-compatible TTS.
 const STT_MODEL = process.env.OPENROUTER_STT_MODEL || 'openai/whisper-1';
+// Clean, un-dated slug. The previous default carried a '-2025-12-15' date
+// suffix that OpenRouter rejects with 400 (model not found), which made the
+// kiosk TTS silently fall back to robotic Google Free TTS on every turn.
 const TTS_MODEL =
-  process.env.OPENROUTER_TTS_MODEL || 'openai/gpt-4o-mini-tts-2025-12-15';
+  process.env.OPENROUTER_TTS_MODEL || 'openai/gpt-4o-mini-tts';
 
 /** The active OpenRouter provider's API key from Config, or null when none. */
 export async function getOpenRouterApiKey(): Promise<string | null> {
@@ -201,26 +204,59 @@ export async function openrouterSpeak(
   const settings = await getOpenRouterVoiceSettings();
   if (!settings.apiKey) throw new Error('OpenRouter provider not configured');
 
+  const model = settings.model;
+  const chosenVoice = voice || settings.voice;
   const body = {
-    model: settings.model,
+    model,
     input: text,
-    voice: voice || settings.voice,
+    voice: chosenVoice,
     response_format: 'mp3',
   };
   const apiKey = settings.apiKey;
-  const res = await withTimeout(
-    axios.post(`${OPENROUTER_BASE}/audio/speech`, body, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      responseType: 'arraybuffer',
-      timeout: TIMEOUT,
-    }),
-    TIMEOUT,
-    'openrouter-tts',
-  );
-  const buf = Buffer.from(res.data);
-  if (!buf.length) throw new Error('OpenRouter TTS returned empty audio');
-  return buf;
+  try {
+    const res = await withTimeout(
+      axios.post(`${OPENROUTER_BASE}/audio/speech`, body, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        responseType: 'arraybuffer',
+        timeout: TIMEOUT,
+      }),
+      TIMEOUT,
+      'openrouter-tts',
+    );
+    const buf = Buffer.from(res.data);
+    if (!buf.length) throw new Error('OpenRouter TTS returned empty audio');
+    return buf;
+  } catch (err: unknown) {
+    // Surface OpenRouter's REAL reason. The response is an arraybuffer (we
+    // asked for one), so an error body arrives as bytes — decode it to text so
+    // the log shows the actual message (bad model slug, unsupported endpoint,
+    // invalid voice, no credits, …) instead of a bare "status code 400".
+    const e = err as {
+      response?: { status?: number; data?: unknown };
+      message?: string;
+    };
+    let detail = e?.message || 'unknown error';
+    const data = e?.response?.data;
+    if (data) {
+      try {
+        const s = Buffer.isBuffer(data)
+          ? data.toString('utf8')
+          : data instanceof ArrayBuffer
+            ? Buffer.from(data).toString('utf8')
+            : typeof data === 'string'
+              ? data
+              : JSON.stringify(data);
+        if (s && s.trim()) detail = s.slice(0, 600);
+      } catch {
+        /* keep the message-based detail */
+      }
+    }
+    console.warn(
+      `   ⚠️ OpenRouter TTS ${e?.response?.status ?? ''} — model="${model}" voice="${chosenVoice}": ${detail}`,
+    );
+    throw err instanceof Error ? err : new Error(detail);
+  }
 }
