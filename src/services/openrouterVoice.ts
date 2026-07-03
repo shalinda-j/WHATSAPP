@@ -214,6 +214,38 @@ const OPENAI_TTS_VOICES = new Set([
 // Gemini TTS card recommends. Used when a Gemini model has no valid voice set.
 const GEMINI_DEFAULT_VOICE = 'Sulafat';
 
+/** True for Google Gemini text-to-speech models (e.g. gemini-3.1-flash-tts). */
+function isGeminiTtsModel(model: string): boolean {
+  return /gemini/i.test(model) && /tts/i.test(model);
+}
+
+/**
+ * Wrap raw little-endian PCM16 samples in a minimal 44-byte WAV header so a
+ * browser <audio>/AudioContext can play them. Gemini TTS (via OpenRouter's
+ * `response_format:"pcm"`) returns headerless PCM at 24 kHz, 16-bit, mono.
+ */
+function pcm16ToWav(pcm: Buffer, sampleRate = 24000, channels = 1): Buffer {
+  const bitsPerSample = 16;
+  const blockAlign = (channels * bitsPerSample) / 8;
+  const byteRate = sampleRate * blockAlign;
+  const dataSize = pcm.length;
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + dataSize, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16); // PCM fmt chunk size
+  header.writeUInt16LE(1, 20); // audio format = PCM
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(dataSize, 40);
+  return Buffer.concat([header, pcm]);
+}
+
 /**
  * Pick a voice that's valid for the model's family so OpenRouter doesn't 400 on
  * a cross-family voice id. Gemini TTS models use capitalised names (Sulafat,
@@ -243,14 +275,18 @@ export async function openrouterSpeak(
   if (!settings.apiKey) throw new Error('OpenRouter provider not configured');
 
   const model = settings.model;
+  const isGemini = isGeminiTtsModel(model);
   // Auto-correct the voice to the model's family so a saved 'alloy' on a Gemini
   // model (the field bug) doesn't 400.
   const chosenVoice = voiceForModel(model, voice || settings.voice);
+  // Gemini TTS on OpenRouter ONLY accepts response_format="pcm" (raw 24kHz/16-bit
+  // mono) — asking for mp3 returns 400. OpenAI-style models keep mp3.
+  const responseFormat = isGemini ? 'pcm' : 'mp3';
   const body = {
     model,
     input: text,
     voice: chosenVoice,
-    response_format: 'mp3',
+    response_format: responseFormat,
   };
   const apiKey = settings.apiKey;
   try {
@@ -268,7 +304,9 @@ export async function openrouterSpeak(
     );
     const buf = Buffer.from(res.data);
     if (!buf.length) throw new Error('OpenRouter TTS returned empty audio');
-    return buf;
+    // Gemini returns headerless PCM — wrap it in a WAV container so the kiosk
+    // browser can play it (detectAudioMime sees RIFF/WAVE → audio/wav).
+    return isGemini ? pcm16ToWav(buf) : buf;
   } catch (err: unknown) {
     // Surface OpenRouter's REAL reason. The response is an arraybuffer (we
     // asked for one), so an error body arrives as bytes — decode it to text so
