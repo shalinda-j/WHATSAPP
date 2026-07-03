@@ -17,7 +17,11 @@
 
 import { transcribeAudio as openaiTranscribeAudio } from './openai';
 import { transcribeAudio as geminiTranscribeAudio } from './gemini';
-import { openrouterTranscribe, openrouterSpeak } from './openrouterVoice';
+import {
+  openrouterTranscribe,
+  openrouterSpeak,
+  getOpenRouterApiKey,
+} from './openrouterVoice';
 import { getAudioUrl } from 'google-tts-api';
 import OpenAI from 'openai';
 import axios from 'axios';
@@ -805,8 +809,16 @@ export async function generateSpeech(
   const voiceId = config?.voiceId || '';
   const model = config?.ttsModel || 'tts-1';
 
+  // When an OpenRouter provider is configured it becomes THE voice engine and we
+  // drop the free Google TTS fallback entirely — the operator explicitly wanted
+  // the robotic free voice permanently removed. Deployments WITHOUT OpenRouter
+  // keep the free fallback so they always have some voice.
+  const hasOpenRouter = await getOpenRouterApiKey()
+    .then((k) => Boolean(k))
+    .catch(() => false);
+
   console.log(
-    `   🔊 TTS request — primary: ${primaryProvider}, lang: ${lang}, text length: ${text.length}`,
+    `   🔊 TTS request — primary: ${primaryProvider}, lang: ${lang}, text length: ${text.length}, openRouter: ${hasOpenRouter}`,
   );
 
   // ── Build provider waterfall ─────────────────────────────────────────────────
@@ -861,8 +873,9 @@ export async function generateSpeech(
     });
   }
 
-  // 5. Google Free TTS — primary (when explicitly selected)
-  if (primaryProvider === 'google-free') {
+  // 5. Google Free TTS — primary (when explicitly selected). Suppressed when
+  // OpenRouter is configured (free voice permanently removed).
+  if (primaryProvider === 'google-free' && !hasOpenRouter) {
     waterfall.push({
       name: 'Google Free TTS (primary)',
       fn: () => ttsGoogleFree(text, lang),
@@ -910,8 +923,11 @@ export async function generateSpeech(
     });
   }
 
-  // Google Free TTS — last resort when not already primary
-  if (primaryProvider !== 'google-free') {
+  // Google Free TTS — last resort ONLY when OpenRouter isn't configured. With
+  // OpenRouter set up, the operator wants the robotic free voice gone entirely:
+  // if OpenRouter (and any paid provider) fails, the turn degrades to text
+  // rather than falling back to the free voice.
+  if (primaryProvider !== 'google-free' && !hasOpenRouter) {
     waterfall.push({
       name: 'Google Free TTS (last resort)',
       fn: () => ttsGoogleFree(text, lang),
