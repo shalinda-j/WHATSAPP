@@ -170,6 +170,42 @@ export async function startBookingFlow(
 }
 
 /**
+ * Jump straight to the date picker, skipping the "Reply Yes" invitation.
+ *
+ * Used when booking intent is already established upstream — e.g. the
+ * DealAgent hands a warm, ready-to-book conversation over to the deterministic
+ * booking flow. Routing here (rather than letting an LLM "confirm" a booking
+ * and mint a fake code in free text) is what GUARANTEES the appointment
+ * actually lands on the Appointment Calendar with a REAL kiosk code, because
+ * the date→time selection ends in finalizeBooking().
+ */
+export async function startBookingDatePicker(
+  jid: string,
+  sessionId: string,
+): Promise<void> {
+  const bookingConfig = await configurationManager.getBookingConfig();
+  const today = new Date();
+  const candidateDates: string[] = [];
+  for (let d = 1; d <= DATE_OFFER_DAYS; d++) {
+    candidateDates.push(addDays(today, d).toISOString());
+  }
+  const session: UserSession = {
+    state: BookingInitState.SELECTING_DATE,
+    bookingConfig,
+    availableDates: candidateDates,
+  };
+  await saveBookingSession(jid, session);
+
+  let dateMenu = `📅 *Choose a Date*\n\nAvailable dates:\n\n`;
+  candidateDates.forEach((iso, idx) => {
+    dateMenu += `${idx + 1}️⃣ *${format(new Date(iso), 'EEEE, MMMM do')}*\n`;
+  });
+  dateMenu += `\nReply with the number of your preferred date.`;
+  await sendTyping(jid, sessionId);
+  await sendMessage(jid, dateMenu, sessionId);
+}
+
+/**
  * Handle incoming messages for users in the booking flow
  * Returns true if the message was consumed, false if it should propagate
  */
@@ -220,27 +256,9 @@ export async function handleBookingMessage(
     const rejected =
       !accepted && messageMatchesKeyword(cleanText, rejectionKeywords);
     if (accepted) {
-      // User accepted — show a date picker for the next DATE_OFFER_DAYS days
-      // instead of hard-coding "Tomorrow". This also skips today (index 0) so
-      // same-day bookings don't appear without lead time.
-      session.state = BookingInitState.SELECTING_DATE;
-      session.bookingConfig = bookingConfig;
-
-      const today = new Date();
-      const candidateDates: string[] = [];
-      for (let d = 1; d <= DATE_OFFER_DAYS; d++) {
-        candidateDates.push(addDays(today, d).toISOString());
-      }
-      session.availableDates = candidateDates;
-      await saveBookingSession(jid, session);
-
-      // Build date menu
-      let dateMenu = `📅 *Choose a Date*\n\nAvailable dates:\n\n`;
-      candidateDates.forEach((iso, idx) => {
-        dateMenu += `${idx + 1}️⃣ *${format(new Date(iso), 'EEEE, MMMM do')}*\n`;
-      });
-      dateMenu += `\nReply with the number of your preferred date.`;
-      await sendMessage(jid, dateMenu, sessionId);
+      // User accepted — jump straight to the date picker (skips today for
+      // lead time). Shared with the DealAgent hand-off path.
+      await startBookingDatePicker(jid, sessionId);
       return true;
     } else if (rejected) {
       // Clear "no" — close the flow politely.

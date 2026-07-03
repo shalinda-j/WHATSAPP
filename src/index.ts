@@ -45,8 +45,10 @@ import { DEFAULT_COUNTRY_CODE, COUNTRY_INTERESTS } from './config/brand';
 import {
   handleBookingMessage,
   startBookingFlow,
+  startBookingDatePicker,
   handleSpecificDateRequest,
 } from './services/BookingService';
+import { sanitizeBookingReply } from './utils/sanitizeBookingReply';
 import {
   handleLeadMessage,
   startLeadRegistration,
@@ -1294,11 +1296,16 @@ onMessage(async (message, sock, sessionId) => {
           );
           if (bookingIntent) {
             console.log(
-              `   📅 DealAgent flagged booking intent — starting BookingService flow for ${jid}`,
+              `   📅 DealAgent flagged booking intent — jumping to the date picker for ${jid}`,
             );
-            startBookingFlow(jid, sessionId).catch((err) =>
+            // Go straight to the date picker (not the "Reply Yes" invitation):
+            // the DealAgent already established intent conversationally. This is
+            // the deterministic path that ends in a REAL Booking on the
+            // Appointment Calendar + a REAL kiosk code — the agent itself never
+            // "books" or invents a code.
+            startBookingDatePicker(jid, sessionId).catch((err) =>
               console.error(
-                '   ❌ Failed to start booking flow from DealAgent signal:',
+                '   ❌ Failed to start date picker from DealAgent signal:',
                 err,
               ),
             );
@@ -1505,6 +1512,12 @@ onMessage(async (message, sock, sessionId) => {
         console.log('   ⚠️ Empty response from AI, sent fallback message');
         return;
       }
+
+      // GUARDRAIL: the generic AI can also hallucinate a kiosk / voice-consult
+      // code (it sees real ones in history/KB and imitates them). Strip any
+      // fabricated code before sending — real codes only ever come from
+      // BookingService's own confirmation, never this free-text path.
+      response = sanitizeBookingReply(response);
 
       // Final outbound polish — guarantee clean, on-brand WhatsApp text for
       // every customer message (collapse stray markdown, trim, cap length).

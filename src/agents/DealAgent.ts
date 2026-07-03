@@ -5,6 +5,25 @@ import { aiLoadBalancer } from '../services/AILoadBalancer';
 import Lead from '../models/Lead';
 import { DEAL_AGENT_V1_PROMPT } from './prompts/deal-agent-v1';
 import { withOperatorPersona } from './composeSystemPrompt';
+import { sanitizeBookingReply } from '../utils/sanitizeBookingReply';
+
+/**
+ * Neutral, code-free hand-off line shown right before the deterministic date
+ * picker takes over. We never let the model's own "confirmation" text through
+ * on a booking turn — it fabricated codes and false "you're booked" claims in
+ * the field. The real confirmation + kiosk code come from BookingService.
+ */
+function bookingHandoffMessage(lang?: string): string {
+  switch (lang) {
+    case 'ta':
+      return '👍 சரி! உங்கள் வருகைக்கு ஒரு தேதியைத் தேர்ந்தெடுக்கலாம் 👇';
+    case 'en':
+      return "👍 Great! Let's pick a date for your visit 👇";
+    case 'si':
+    default:
+      return '👍 හොඳයි! ඔබගේ visit එකට දිනයක් තෝරමු 👇';
+  }
+}
 
 const BOOKING_INTENT_TOKENS = [
   'book',
@@ -198,12 +217,24 @@ export class DealAgent implements IAgent {
       });
     }
 
+    // GUARDRAIL: the model must never mint a kiosk/voice-consult code or claim
+    // "you're booked" in free text — only BookingService can persist a Booking
+    // and issue a real code. Strip any fabricated code the model wrote. On a
+    // booking hand-off we discard the model's confirmation entirely and show a
+    // neutral CTA; the deterministic date picker (started by index.ts from the
+    // deal.booking_intent side effect) then drives the real booking + real code
+    // that lands on the Appointment Calendar.
+    let replyText = sanitizeBookingReply(parsed.reply);
+    if (parsed.shouldStartBookingFlow || !replyText.trim()) {
+      replyText = bookingHandoffMessage(ctx.language);
+    }
+
     const tokensUsed = raw.inputTokens + raw.outputTokens;
     return {
       agentName: this.name,
       promptVersion,
       confidence: await this.canHandle(ctx),
-      outbound: { text: parsed.reply },
+      outbound: { text: replyText },
       outcome: 'pending',
       tokensUsed,
       costUsd: tokensUsed * COST_PER_TOKEN,
