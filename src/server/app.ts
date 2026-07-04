@@ -43,6 +43,8 @@ import exportsRouter from './routes/exports';
 import kioskRouter from './routes/kiosk';
 import voiceRouter from './routes/voice';
 import kioskAdminRouter from './routes/kiosk-admin';
+import apiKeysRouter from './routes/apiKeys';
+import integrationsRouter from './routes/integrations';
 import { resolveTenant } from './middleware/tenantContext';
 
 import mongoose from 'mongoose';
@@ -238,6 +240,10 @@ app.use('/api/kiosk', kioskRouter);
 // Admin-only STT utility + kiosk invite issuance.
 app.use('/api/voice', authenticateToken, voiceRouter);
 app.use('/api/kiosk-admin', authenticateToken, resolveTenant, kioskAdminRouter);
+// Integration API: apiKeys router self-guards (JWT+tenant, dashboard-managed);
+// integrations router self-guards per-route with the long-lived X-Api-Key.
+app.use('/api/api-keys', apiKeysRouter);
+app.use('/api/integrations', integrationsRouter);
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));

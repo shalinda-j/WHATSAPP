@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Send,
 } from 'lucide-react';
+import ApiKeysPanel from '../components/ApiKeysPanel';
 
 type WebhookCategory = 'data' | 'ops';
 type WebhookFormat = 'generic' | 'slack' | 'discord';
@@ -141,6 +142,9 @@ export default function Webhooks() {
           <RefreshCw className="w-5 h-5" />
         </button>
       </header>
+
+      {/* Integration API keys (pull) — for a custom CRM */}
+      <ApiKeysPanel />
 
       {/* Create Form */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8">
