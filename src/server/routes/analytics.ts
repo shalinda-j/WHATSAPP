@@ -9,6 +9,21 @@ import { resolveActiveSessionId } from '../../services/whatsapp';
 
 const router = Router();
 
+// Precompile regexes for analytics categories (performance optimization)
+// Recreating arrays and iterating with Array.some() + String.includes()
+// in the request loop adds CPU overhead for large result sets.
+const CATEGORY_REGEX: Record<string, RegExp> = {
+  jobs: /(job|work|employment|vacancy|hire|recruit|jobs)/i,
+  register: /(register|apply|sign up|join|cv|registration)/i,
+  payment: /(payment|pay|salary|wage|bank|account)/i,
+  booking: /(book|visit|appointment|schedule|meeting|time)/i,
+  location: /(address|location|where|branch|office|map)/i,
+  services: /(service|what do you do|help|information|details)/i,
+  hello: /(hello|hi|hey|good morning|good afternoon)/i,
+  language: /(sinhala|english|tamil|translate)/i,
+};
+const PRECOMPILED_CATEGORIES = Object.entries(CATEGORY_REGEX);
+
 router.use(authenticateToken);
 router.use(resolveTenant);
 
@@ -127,21 +142,12 @@ router.get('/questions', async (req, res) => {
       .lean();
 
     const questionCounts: Record<string, number> = {};
-    const keywordsMap: Record<string, string[]> = {
-      jobs: ['job', 'work', 'employment', 'vacancy', 'hire', 'recruit', 'jobs'],
-      register: ['register', 'apply', 'sign up', 'join', 'cv', 'registration'],
-      payment: ['payment', 'pay', 'salary', 'wage', 'bank', 'account'],
-      booking: ['book', 'visit', 'appointment', 'schedule', 'meeting', 'time'],
-      location: ['address', 'location', 'where', 'branch', 'office', 'map'],
-      services: ['service', 'what do you do', 'help', 'information', 'details'],
-      hello: ['hello', 'hi', 'hey', 'good morning', 'good afternoon'],
-      language: ['sinhala', 'english', 'tamil', 'translate'],
-    };
 
     for (const msg of userMessages) {
-      const content = msg.content.toLowerCase();
-      for (const [category, keywords] of Object.entries(keywordsMap)) {
-        if (keywords.some((k) => content.includes(k))) {
+      // No need to toLowerCase() here since the regex uses the 'i' flag
+      const content = msg.content;
+      for (const [category, regex] of PRECOMPILED_CATEGORIES) {
+        if (regex.test(content)) {
           questionCounts[category] = (questionCounts[category] || 0) + 1;
           break;
         }
@@ -204,7 +210,9 @@ router.get('/datasets', async (req, res) => {
   try {
     const Dataset = (await import('../../models/Dataset')).default;
 
-    const datasets = await Dataset.find(withTenantScope(req, { isActive: true }))
+    const datasets = await Dataset.find(
+      withTenantScope(req, { isActive: true }),
+    )
       .sort({ updatedAt: -1 })
       .limit(10)
       .lean();
