@@ -164,29 +164,45 @@ export async function openrouterTranscribe(
 ): Promise<string> {
   const apiKey = await getOpenRouterApiKey();
   if (!apiKey) throw new Error('OpenRouter provider not configured');
+  const base64 = audioBuffer.toString('base64');
+  const format = mimeToFormat(mimeType);
 
-  const body: Record<string, unknown> = {
-    input_audio: {
-      data: audioBuffer.toString('base64'),
-      format: mimeToFormat(mimeType),
-    },
-    model: STT_MODEL,
+  const attempt = async (lang?: string): Promise<string> => {
+    const body: Record<string, unknown> = {
+      input_audio: { data: base64, format },
+      model: STT_MODEL,
+    };
+    if (lang && /^[a-z]{2}$/i.test(lang)) body.language = lang;
+    const res = await withTimeout(
+      axios.post(`${OPENROUTER_BASE}/audio/transcriptions`, body, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: TIMEOUT,
+      }),
+      TIMEOUT,
+      'openrouter-stt',
+    );
+    return String(res.data?.text || '').trim();
   };
-  // ISO-639-1 hint improves accuracy; omit for auto-detect.
-  if (language && /^[a-z]{2}$/i.test(language)) body.language = language;
 
-  const res = await withTimeout(
-    axios.post(`${OPENROUTER_BASE}/audio/transcriptions`, body, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      timeout: TIMEOUT,
-    }),
-    TIMEOUT,
-    'openrouter-stt',
-  );
-  const text = String(res.data?.text || '').trim();
+  let text = '';
+  try {
+    text = await attempt(language);
+  } catch (err) {
+    // Some languages aren't accepted by the whisper provider (e.g. 'si' → 400).
+    // Retry once WITHOUT the hint (auto-detect) so a bad hint never blanks the
+    // transcript. Only retry when a hint was actually set.
+    if (language) {
+      console.warn(
+        `   ⚠️ OpenRouter STT with language='${language}' failed; retrying auto-detect.`,
+      );
+      text = await attempt(undefined);
+    } else {
+      throw err;
+    }
+  }
   // Throw (rather than return '') so the caller's waterfall logs a real
   // failure and deterministically moves to the next provider, instead of
   // silently treating "no transcript" like "OpenRouter not configured".

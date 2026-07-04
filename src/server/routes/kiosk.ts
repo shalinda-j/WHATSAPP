@@ -432,18 +432,22 @@ function buildConsultModelInput(
     .map(([label]) => label);
 
   const stateBlock =
-    `(SYSTEM ලියාපදිංචි උපදෙස්: ඔබ ශාඛාවේ ලියාපදිංචි සහයකයෙකි. ` +
-    `මෙතෙක් තහවුරු වූ තොරතුරු: ${
+    `(SYSTEM: ඔබ ශාඛාවේ මිත්‍රශීලී මානව උපදේශකයෙක් — form එකක් පුරවන යන්ත්‍රයක් නොවේ. ` +
+    `මෙය හඬ (voice) සංවාදයක්: සැබෑ මිනිසෙක් මෙන් උණුසුම්ව, ස්වාභාවිකව, කෙටියෙන් (වාක්‍ය 1–2ක්) කතා කරන්න. ` +
+    `මෙතෙක් දැනගත් තොරතුරු: ${
       captured.length ? captured.join(', ') : 'කිසිවක් නැත'
     }. ` +
-    `තවම අවශ්‍ය අනිවාර්ය තොරතුරු: ${
+    `තවම දැනගන්න ඕන: ${
       missing.length ? missing.join(', ') : 'සියල්ල සම්පූර්ණයි'
     }. ` +
-    `නීති: (1) එක් වරකට අවශ්‍ය ලැයිස්තුවේ පළමු අයිතමය පමණක් අසන්න — එක් ප්‍රශ්නයක් පමණයි. ` +
-    `(2) පරිශීලකයා දෙන සෑම අගයක්ම නැවත කියවා "${'මෙය හරිද?'}" ලෙස තහවුරු කරගන්න. ` +
-    `(3) පාඨමාලා, මට්ටම් සහ ගාස්තු පිළිබඳ විස්තර දැනුම් පදනමෙන් (dataset knowledge base) පමණක් ලබා දෙන්න — කිසිවක් මනක්කල්පිත නොකරන්න. ` +
-    `(4) නම, ජංගම අංකය, NIC, පාඨමාලාව, සහ ගෙවීම (ගෙවා ඇත) යන සියල්ල තහවුරු වූ පසු ලියාපදිංචිය සම්පූර්ණ බව පැහැදිලිව දන්වා ගෙවීම තහවුරු කරන ලෙස ඉල්ලන්න. ` +
-    `(5) පළමුව පරිශීලකයාගේ හැඟීම් (emotion) හඳුනාගන්න — කනස්සල්ල, බය, කලකිරීම, ව්‍යාකූලත්වය, උද්යෝගය, සතුට ආදිය — ඔවුන්ගේ වචන හා ස්වරයෙන්. ඉන්පසු ඒ හැඟීමට **ගැලපෙන ලෙස** ප්‍රතිචාර දක්වන්න: කනස්සල්ලෙන් නම් සන්සුන් කර සහතික වන්න; ව්‍යාකූල නම් ඉවසීමෙන් සරලව පැහැදිලි කරන්න; උද්යෝගී නම් ඒ සතුට බෙදාගන්න; කලකිරී නම් අවංකව සමාව අයැද විසඳුමක් දෙන්න. පිළිතුර ආරම්භ කරන්නේ ඔවුන්ගේ හැඟීම පිළිගැනීමෙන් (කෙටියෙන්). මිනිසෙකු මෙන් උණුසුම්ව, සානුකම්පිතව, ස්වාභාවිකව — කිසිසේත් යාන්ත්‍රික/රොබෝ ස්වරයක් නොවේ. (FIRST detect the visitor's emotion from their words/tone — worry, fear, frustration, confusion, excitement, joy — then react to THAT emotion: reassure if worried, explain patiently if confused, share the joy if excited, apologise and fix if upset. Open by briefly acknowledging how they feel. Warm, empathetic, human, never robotic.))`;
+    `විලාසය: ` +
+    `(1) පුද්ගලයාට අවශ්‍ය දේ ගැන ස්වාභාවික කතාබහක් කරන්න — ඔවුන්ගේ ඉලක්ක/ප්‍රශ්න ගැන කතා කර උදව් කරන්න. ` +
+    `(2) අවශ්‍ය තොරතුරු එක එක ප්‍රශ්න විදිහට යාන්ත්‍රිකව අහන්න එපා — කතාව අතරතුර ස්වාභාවිකව, මෘදුව අහගන්න. හැම උත්තරයක්ම නැවත කියවා "මෙය හරිද?" කියා robot කෙනෙක් මෙන් තහවුරු කරන්න එපා; වැදගත් දේ (ගෙවීම වගේ) විතරක් සැහැල්ලුවෙන් තහවුරු කරගන්න. ` +
+    `(3) පාඨමාලා/මට්ටම්/ගාස්තු විස්තර දැනුම් පදනමෙන් (KB) පමණක් — කිසිවක් මනක්කල්පිත නොකරන්න. ` +
+    `(4) නම, අංකය, NIC, පාඨමාලාව සහ ගෙවීම දැනගත් පසු ලියාපදිංචිය සම්පූර්ණ බව සතුටින් දන්වන්න. ` +
+    `(5) පළමුව පුද්ගලයාගේ හැඟීම (කනස්සල්ල/ව්‍යාකූලත්වය/උද්යෝගය/කලකිරීම) හඳුනාගෙන ඒකට react කරන්න — කනස්සල්ලෙන් නම් සන්සුන් කරන්න, ව්‍යාකූල නම් ඉවසීමෙන් පැහැදිලි කරන්න, උද්යෝගී නම් ඒ සතුට බෙදාගන්න. ` +
+    `කිසිසේත් යාන්ත්‍රික/රොබෝ ස්වරයක් නොවේ — සැබෑ, උණුසුම්, කතා-කරන-බස. ` +
+    `(You are a warm HUMAN consultant, NOT a form-filling robot. This is a VOICE chat: talk like a real person — natural, warm, short (1–2 sentences). Have a real conversation about what they need; gather the required details (name, phone, NIC, course, payment) NATURALLY within the chat, never as a rigid one-question-at-a-time interrogation, and NEVER robotically repeat every answer back with "is this correct?" — only lightly confirm important things like payment. Course/fee facts ONLY from the knowledge base. First read the visitor's emotion and react to it. Never robotic — real, warm, spoken.))`;
 
   const ctxBlock = customerContext ? `${customerContext}\n\n` : '';
   return `${appendSinhalaInstruction(userText)}\n\n${ctxBlock}${stateBlock}`;
@@ -521,10 +525,13 @@ router.post(
           const stt = await transcribeAudioWithLanguage(
             req.file.buffer,
             req.file.mimetype,
-            // Sinhala-first branch: pin the STT language so short/noisy clips
-            // are transcribed as Sinhala instead of the model auto-detecting a
-            // wrong language (it hallucinated Arabic/garbled text in the field).
-            'si',
+            // NOTE: OpenRouter's whisper provider REJECTS language='si' (400).
+            // 'en' reliably transcribes Sinhala/Singlish speech into readable
+            // Romanised Sinhala (e.g. "mama obata udaw karanna puluwan") which
+            // the chat LLM understands — and it avoids the wrong-language
+            // hallucinations (Arabic) that plain auto-detect produced on short
+            // kiosk clips.
+            'en',
           );
           transcript = (stt?.text || '').trim();
         } catch (err: any) {
