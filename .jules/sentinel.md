@@ -9,3 +9,8 @@
 **Vulnerability:** A simple string comparison (`!==`) was used to validate the `WEBHOOK_SECRET` against the incoming payload secret in the webhook inbound endpoint.
 **Learning:** Simple string comparison can expose the application to timing attacks, where an attacker can theoretically guess the secret character by character by measuring the time it takes for the comparison to fail.
 **Prevention:** Use `crypto.timingSafeEqual` with a constant-time comparison algorithm (such as SHA-256 hashes of the strings) to ensure that comparisons always take the same amount of time, regardless of whether they succeed or fail.
+
+## 2024-05-11 - [Mass Assignment Vulnerability in Webhook Routes]
+**Vulnerability:** The webhook creation and update routes in `src/server/routes/webhooks.ts` directly spread `req.body` (using `...req.body`) into a new Mongoose model or update query.
+**Learning:** Using the spread operator or directly passing `req.body` into ORM methods allows attackers to overwrite or assign sensitive fields (such as `tenantId` or internal tracking flags) that they shouldn't have access to, leading to Mass Assignment (Over-Posting) vulnerabilities.
+**Prevention:** Always explicitly extract, sanitize, and assign only the allowed fields from the request body when creating or updating database records. Never trust `req.body` blindly in database operations.
