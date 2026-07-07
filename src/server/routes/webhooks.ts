@@ -166,12 +166,10 @@ router.post('/telegram/:tenantSlug', webhookRateLimit, async (req, res) => {
     if (!conn) return res.status(404).json({ error: 'connection_not_found' });
 
     const expectedSecret = (conn.config as any)?.webhookSecret as
-      | string
-      | undefined;
+      string | undefined;
     if (expectedSecret) {
       const got = req.headers['x-telegram-bot-api-secret-token'] as
-        | string
-        | undefined;
+        string | undefined;
       if (!got || got !== expectedSecret) {
         return res.status(401).json({ error: 'bad_secret' });
       }
@@ -298,8 +296,7 @@ async function metaWebhookIngest(
       channel,
     });
     const appSecret = (conn?.credentials as any)?.appSecret as
-      | string
-      | undefined;
+      string | undefined;
     // In production an unsigned Meta webhook is unverifiable — any attacker who
     // knows the URL could inject fake messages. Refuse rather than silently
     // skip the HMAC check. In development we still allow it so local testing
@@ -314,8 +311,7 @@ async function metaWebhookIngest(
     }
     if (appSecret) {
       const sigHeader = req.headers['x-hub-signature-256'] as
-        | string
-        | undefined;
+        string | undefined;
       if (!sigHeader) {
         console.warn(`[${channel}] Missing X-Hub-Signature-256 from Meta`);
         return res.status(401).json({ error: 'missing_signature' });
@@ -578,8 +574,7 @@ router.post('/whatsapp-calling', metaEventRateLimit, async (req, res) => {
     const appSecret = await liveCallSettings.getAppSecret();
     if (appSecret) {
       const sigHeader = req.headers['x-hub-signature-256'] as
-        | string
-        | undefined;
+        string | undefined;
       const bodyStr =
         typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
       const expected =
@@ -676,10 +671,19 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const tid = tenantIdOf(req);
-    const webhook = new (Webhook as any)({
-      ...req.body,
-      ...(tid ? { tenantId: tid } : {}),
-    });
+    const { name, url, events, secret, isActive, category, format } = req.body;
+    const webhookData: Record<string, any> = {
+      name,
+      url,
+      events,
+      isActive,
+      category,
+      format,
+    };
+    if (secret !== undefined) webhookData.secret = secret;
+    if (tid) webhookData.tenantId = tid;
+
+    const webhook = new (Webhook as any)(webhookData);
     await webhook.save();
     res.status(201).json(redactWebhook(webhook));
   } catch (error: any) {
@@ -690,19 +694,30 @@ router.post('/', async (req, res) => {
 // Update webhook (tenant-scoped: a tenant can only update its own webhooks)
 router.put('/:id', async (req, res) => {
   try {
+    const { name, url, events, secret, isActive, category, format } = req.body;
+    const updateData: Record<string, any> = {};
+
+    if (name !== undefined) updateData.name = name;
+    if (url !== undefined) updateData.url = url;
+    if (events !== undefined) updateData.events = events;
+    if (isActive !== undefined) updateData.isActive = isActive;
+    if (category !== undefined) updateData.category = category;
+    if (format !== undefined) updateData.format = format;
+
     // Never overwrite a stored secret with an empty/blank value (edit forms
     // come back with the secret redacted, so an omitted/blank secret must
     // PRESERVE the existing one rather than wipe it).
-    const body = { ...req.body };
     if (
-      Object.prototype.hasOwnProperty.call(body, 'secret') &&
-      (typeof body.secret !== 'string' || body.secret.trim() === '')
+      secret !== undefined &&
+      typeof secret === 'string' &&
+      secret.trim() !== ''
     ) {
-      delete body.secret;
+      updateData.secret = secret;
     }
+
     const webhook = await (Webhook as any).findOneAndUpdate(
       withTenantScope(req, { _id: req.params.id }),
-      body,
+      { $set: updateData },
       { new: true },
     );
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
