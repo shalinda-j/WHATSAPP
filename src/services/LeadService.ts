@@ -621,6 +621,36 @@ async function saveLeadRegistration(
           crmContactId: crmContact._id,
         });
         console.log('✅ CRM contact linked:', crmContact._id);
+
+        // Connect the funnel to the CRM pipeline: a registered lead IS a deal
+        // (stage 'new') + a logged activity, so the Deals / Activities /
+        // Dashboard tabs fill from real bot activity instead of staying empty.
+        // Fire-and-forget — never block registration on it.
+        const dealTitle = `${session.data.fullName || 'WhatsApp lead'}${
+          session.data.jobVacancyType
+            ? ` – ${session.data.jobVacancyType}`
+            : ''
+        }`;
+        const scope = leadTenantId ? { tenantId: leadTenantId } : {};
+        CRMService.createDeal({
+          title: dealTitle,
+          description: session.data.interestedCountry
+            ? `Country: ${session.data.interestedCountry}`
+            : undefined,
+          stage: 'new',
+          contact: crmContact._id,
+          sessionId,
+          ...scope,
+        }).catch((e) => console.error('auto-createDeal failed:', e));
+        CRMService.createActivity({
+          type: 'whatsapp',
+          title: 'Registered via WhatsApp',
+          description: dealTitle,
+          contact: crmContact._id,
+          status: 'completed',
+          sessionId,
+          ...scope,
+        }).catch((e) => console.error('auto-createActivity failed:', e));
       }
     } catch (crmError) {
       console.error('⚠️ CRM sync error (non-critical):', crmError);

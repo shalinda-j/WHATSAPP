@@ -11,6 +11,8 @@ import sessionStateService from './SessionStateService';
 import Booking from '../models/Booking';
 import Session from '../models/Session';
 import { agentReflectionService } from './AgentReflectionService';
+import { CRMService } from './CRMService';
+import { Contact } from '../models/CRM';
 import { conversionService } from './ConversionService';
 import { kioskInviteService } from './KioskInviteService';
 import {
@@ -536,6 +538,28 @@ async function finalizeBooking(
       agentReflectionService
         .correlateBookingOutcome(jid, booking._id, 'created')
         .catch((err) => console.error('correlateBookingOutcome failed:', err));
+
+      // Log the visit as a CRM Activity (a dated meeting) so it surfaces under
+      // Activities + the dashboard's "Upcoming Activities". Best-effort contact
+      // link by phone; fire-and-forget so it never delays confirmation.
+      (async () => {
+        const contact = await Contact.findOne({
+          $or: [{ phone: callerPhone }, { whatsappNumber: callerPhone }],
+        })
+          .select('_id')
+          .lean()
+          .catch(() => null);
+        await CRMService.createActivity({
+          type: 'meeting',
+          title: `Campus visit – ${eventTitle}`,
+          description: `${callerName || callerPhone} · ${campusLocation}`,
+          dueDate: appointmentDate,
+          status: 'pending',
+          sessionId,
+          ...(contact ? { contact: (contact as { _id: unknown })._id } : {}),
+          ...(bookingTenantId ? { tenantId: bookingTenantId } : {}),
+        });
+      })().catch((e) => console.error('auto-createActivity(booking) failed:', e));
 
       // CONVERSION: a confirmed campus-visit booking is a customer-conversion
       // moment on the path to enrolment. Record + attribute (fire & forget).
