@@ -141,8 +141,12 @@ export default function ChatInterface() {
   // matches what the operator is staring at.
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportSession, setExportSession] = useState<SessionFilter>('all');
-  const [exportMonth, setExportMonth] = useState<string>(() =>
-    new Date().toISOString().slice(0, 7),
+  // Date-wise window (YYYY-MM-DD). Default: this month's 1st → today.
+  const [exportFrom, setExportFrom] = useState<string>(
+    () => new Date().toISOString().slice(0, 8) + '01',
+  );
+  const [exportTo, setExportTo] = useState<string>(() =>
+    new Date().toISOString().slice(0, 10),
   );
   // Default OFF: most operators downloading this export want a clean list
   // of dialable numbers. Rows with no resolved phone (LIDs we have not
@@ -165,7 +169,8 @@ export default function ChatInterface() {
 
   const openExportModal = () => {
     setExportSession(sessionFilter);
-    setExportMonth(new Date().toISOString().slice(0, 7));
+    setExportFrom(new Date().toISOString().slice(0, 8) + '01');
+    setExportTo(new Date().toISOString().slice(0, 10));
     setExportIncludeUnresolved(false);
     setShowExportModal(true);
   };
@@ -178,7 +183,14 @@ export default function ChatInterface() {
       if (exportSession && exportSession !== 'all') {
         params.set('sessionId', exportSession);
       }
-      if (exportMonth) params.set('month', exportMonth);
+      if (exportFrom) params.set('from', exportFrom);
+      if (exportTo) {
+        // `to` is exclusive ($lt) on the server — bump one day so the whole
+        // picked end-date is included.
+        const t = new Date(exportTo + 'T00:00:00Z');
+        t.setUTCDate(t.getUTCDate() + 1);
+        params.set('to', t.toISOString().slice(0, 10));
+      }
       if (!exportIncludeUnresolved) params.set('includeUnresolved', 'false');
       const res = await api.get(
         `/api/export/chat-numbers.csv?${params.toString()}`,
@@ -192,7 +204,8 @@ export default function ChatInterface() {
       if (exportSession && exportSession !== 'all') {
         fnameParts.push(sessionLabel(exportSession).replace(/\s+/g, '_'));
       }
-      if (exportMonth) fnameParts.push(exportMonth);
+      if (exportFrom || exportTo)
+        fnameParts.push(`${exportFrom || 'all'}_${exportTo || 'now'}`);
       link.setAttribute('download', `${fnameParts.join('-')}.csv`);
       document.body.appendChild(link);
       link.click();
@@ -579,7 +592,7 @@ export default function ChatInterface() {
               <button
                 onClick={openExportModal}
                 className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"
-                title="Export real phone numbers (device + month)"
+                title="Export real phone numbers (device + date range)"
               >
                 <Download className="h-3.5 w-3.5" />
               </button>
@@ -1177,7 +1190,7 @@ export default function ChatInterface() {
               </button>
             </div>
             <p className="text-sm text-gray-500 mb-5">
-              Inbound chats scoped to a device and calendar month. The CSV
+              Inbound chats scoped to a device and date range. The CSV
               includes phone when available, raw LID when unresolved, country,
               last message, message count, and matched contact name.
             </p>
@@ -1202,19 +1215,35 @@ export default function ChatInterface() {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">
-                  Month
-                </label>
-                <input
-                  type="month"
-                  value={exportMonth}
-                  onChange={(e) => setExportMonth(e.target.value)}
-                  disabled={exporting}
-                  className="w-full p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none disabled:opacity-50"
-                />
-                <p className="mt-1 text-[11px] text-gray-400">
-                  Leave blank to export all-time numbers.
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    From
+                  </label>
+                  <input
+                    type="date"
+                    value={exportFrom}
+                    max={exportTo || undefined}
+                    onChange={(e) => setExportFrom(e.target.value)}
+                    disabled={exporting}
+                    className="w-full p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    To
+                  </label>
+                  <input
+                    type="date"
+                    value={exportTo}
+                    min={exportFrom || undefined}
+                    onChange={(e) => setExportTo(e.target.value)}
+                    disabled={exporting}
+                    className="w-full p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none disabled:opacity-50"
+                  />
+                </div>
+                <p className="col-span-2 mt-1 text-[11px] text-gray-400">
+                  Clear both to export all-time numbers.
                 </p>
               </div>
 
