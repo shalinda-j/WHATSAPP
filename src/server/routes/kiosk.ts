@@ -47,6 +47,7 @@ import FormTemplate from '../../models/FormTemplate';
 import KioskInvite, { IKioskCollected } from '../../models/KioskInvite';
 import Lead from '../../models/Lead';
 import ChatMessage from '../../models/ChatMessage';
+import { Contact } from '../../models/CRM';
 
 const router = Router();
 
@@ -330,8 +331,17 @@ async function buildCustomerContext(
   jid: string,
   tenantId?: string,
 ): Promise<string> {
-  const phone = String(invite?.phone || '').replace(/\D/g, '');
-  // Match on the last 9 digits so +94/0-prefixed and bare-local forms all hit.
+  // Resolve the visitor's real phone: invite.phone → linked Contact → JID digits.
+  let phone = String(invite?.phone || '').replace(/\D/g, '');
+  if (!phone && invite?.contactId) {
+    const c: any = await Contact.findById(invite.contactId)
+      .select('phone whatsappNumber')
+      .lean()
+      .catch(() => null);
+    phone = String(c?.phone || c?.whatsappNumber || '').replace(/\D/g, '');
+  }
+  if (!phone) phone = String(jid || '').replace(/\D/g, '');
+  // Match on the last 9 digits so +94 / 0-prefixed / bare-local all hit.
   const tail = phone.slice(-9);
   const parts: string[] = [];
 
@@ -372,8 +382,16 @@ async function buildCustomerContext(
 
   // 2. Recent WhatsApp turns — their own questions/interests before the visit.
   try {
-    const orConds: any[] = [{ userId: jid }];
-    if (tail) orConds.push({ userId: { $regex: new RegExp(tail) } });
+    const orConds: any[] = [];
+    // Only match the JID directly when it's a real WhatsApp JID (has '@') — an
+    // admin-issued code carries no JID, so `jid` is the inviteId (matches none).
+    if (jid && jid.includes('@')) orConds.push({ userId: jid });
+    if (tail) {
+      const re = new RegExp(tail);
+      orConds.push({ userId: { $regex: re } }); // phone-backed JIDs
+      orConds.push({ 'metadata.realPhone': { $regex: re } }); // @lid privacy JIDs
+    }
+    if (orConds.length === 0) return '';
     const msgs: any[] = await ChatMessage.find({ $or: orConds })
       .sort({ timestamp: -1 })
       .limit(10)
@@ -398,6 +416,9 @@ async function buildCustomerContext(
     /* best-effort */
   }
 
+  console.log(
+    `🧠 kiosk context: phone=${tail || '-'} parts=${parts.length}`,
+  );
   if (parts.length === 0) return '';
   return (
     `(SYSTEM පාරිභෝගික පසුබිම — මෙම පුද්ගලයා දැනටමත් WhatsApp හරහා අප සමඟ කතා කර ඇත. ` +
