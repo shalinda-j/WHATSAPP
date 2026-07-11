@@ -1,6 +1,7 @@
 import { useState, memo } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { BRAND } from '../brand';
 import {
   LayoutDashboard,
   Database,
@@ -229,7 +230,7 @@ export default function Layout() {
       {/* Mobile Header */}
       <div className="md:hidden fixed top-0 w-full bg-gray-900 text-white z-50 px-4 h-14 flex items-center justify-between shadow-lg border-b border-gray-700">
         <div className="flex items-center">
-          <img src="/360ai.png" alt="360ai" className="h-8" />
+          <img src={BRAND.logo} alt={BRAND.name} className="h-8" />
         </div>
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -256,18 +257,17 @@ export default function Layout() {
       >
         {/* Logo */}
         <div className="hidden md:flex h-16 items-center px-4 border-b border-gray-700/50">
-          <img src="/360ai.png" alt="360ai" className="h-10" />
+          <img src={BRAND.logo} alt={BRAND.name} className="h-10" />
           <div className="ml-2">
-            <div className="text-xs text-gray-400 leading-tight">WhatsApp</div>
             <div className="text-xs text-gray-400 leading-tight font-medium">
-              Bot System
+              {BRAND.product}
             </div>
           </div>
         </div>
 
         {/* Mobile header space */}
         <div className="md:hidden h-14 border-b border-gray-700/50 flex items-center px-4">
-          <img src="/360ai.png" alt="360ai" className="h-8" />
+          <img src={BRAND.logo} alt={BRAND.name} className="h-8" />
         </div>
 
         {/* Navigation */}

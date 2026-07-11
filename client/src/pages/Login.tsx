@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../config';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Lock, User, Shield } from 'lucide-react';
+import { BRAND } from '../brand';
 
 export default function Login() {
   const { login, token } = useAuth();
@@ -66,7 +67,7 @@ export default function Login() {
           <div className="px-8 py-8">
             {/* Logo */}
             <div className="flex flex-col items-center mb-8">
-              <img src="/360ai-b.png" alt="360ai" className="h-16 mb-3" />
+              <img src={BRAND.logoLarge} alt={BRAND.name} className="h-16 mb-3" />
               <div className="flex items-center gap-2 mt-1">
                 <Shield className="h-4 w-4 text-green-500" />
                 <span className="text-xs text-gray-500 font-medium">
@@ -165,7 +166,7 @@ export default function Login() {
           {/* Footer */}
           <div className="px-8 py-4 bg-gray-50 border-t border-gray-100 text-center">
             <p className="text-xs text-gray-400">
-              &copy; {new Date().getFullYear()} 360ai — All In One AI Solutions
+              &copy; {new Date().getFullYear()} {BRAND.name} — {BRAND.tagline}
             </p>
           </div>
         </div>
