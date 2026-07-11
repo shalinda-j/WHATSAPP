@@ -68,6 +68,7 @@ import { usageResetService } from './services/UsageResetService';
 import { agentOrchestrator } from './services/AgentOrchestrator';
 import { agentReflectionService } from './services/AgentReflectionService';
 import { registerCoreAgents } from './agents/bootstrap';
+import { isAiPaused, loadAiPaused } from './services/aiPause';
 import { registerCoreChannels, channelRouter } from './channels';
 import { classifyIntent } from './services/IntentClassifierService';
 import { HumanizerService } from './services/HumanizerService';
@@ -349,6 +350,9 @@ async function startServer() {
 
       // Start agent self-improvement scheduler (approval expiry + nightly promotion)
       agentReflectionService.start();
+
+      // Restore the AI pause kill-switch state (survives restarts mid-incident).
+      await loadAiPaused();
 
       // Register specialist agents and seed their initial prompts
       await registerCoreAgents();
@@ -1139,6 +1143,14 @@ onMessage(async (message, sock, sessionId) => {
       );
     } catch (dbErr) {
       console.error('   ❌ Failed to save user message:', dbErr);
+    }
+
+    // Global kill-switch: operator paused the bot (e.g. a reply loop). The
+    // inbound message is already saved + shown in Live Chat above; skip ALL
+    // automated handling so a human takes over. The device stays connected.
+    if (isAiPaused()) {
+      console.log('   ⏸️ AI auto-reply paused — skipping automated handling');
+      return;
     }
 
     // 1. Check if user is in a booking flow

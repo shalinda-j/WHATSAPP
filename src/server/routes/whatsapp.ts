@@ -4,6 +4,7 @@ import {
   connectToWhatsApp,
 } from '../../services/whatsapp';
 import { authenticateToken } from '../middleware/auth';
+import { isAiPaused, setAiPaused } from '../../services/aiPause';
 
 const router = Router();
 
@@ -22,6 +23,14 @@ router.get('/status', async (req, res) => {
 
 // Admin only actions
 router.use(authenticateToken);
+
+// AI kill-switch: pause/resume the bot's automated replies without
+// disconnecting the device (e.g. to break a reply loop). Global, instant.
+router.get('/ai-pause', (_req, res) => res.json({ paused: isAiPaused() }));
+router.post('/ai-pause', async (req, res) => {
+  const paused = await setAiPaused(Boolean(req.body?.paused));
+  res.json({ paused });
+});
 
 router.post('/reconnect', async (req, res) => {
   try {

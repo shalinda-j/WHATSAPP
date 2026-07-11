@@ -134,6 +134,23 @@ export default function ChatInterface() {
   const [toneMode, setToneMode] = useState<ToneMode>('auto');
   const [showToneMenu, setShowToneMenu] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  // Global AI kill-switch. Fetch once; toggle via the header button to pause/
+  // resume the bot's auto-replies (e.g. to break a loop) without disconnecting.
+  const [aiPaused, setAiPaused] = useState(false);
+  useEffect(() => {
+    api
+      .get('/api/whatsapp/ai-pause')
+      .then((r) => setAiPaused(!!r.data?.paused))
+      .catch(() => {});
+  }, []);
+  const toggleAiPause = async () => {
+    try {
+      const r = await api.post('/api/whatsapp/ai-pause', { paused: !aiPaused });
+      setAiPaused(!!r.data?.paused);
+    } catch {
+      alert('Failed to toggle the AI');
+    }
+  };
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Real-number export modal state. Defaults: the currently-selected
@@ -892,6 +909,22 @@ export default function ChatInterface() {
                   )}
                 </div>
 
+                <button
+                  onClick={toggleAiPause}
+                  title={
+                    aiPaused
+                      ? 'AI is paused — click to resume auto-replies'
+                      : 'Stop the AI auto-replies (device stays connected)'
+                  }
+                  className={`px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                    aiPaused
+                      ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  <Bot className="h-4 w-4" />
+                  {aiPaused ? 'AI Paused' : 'Stop AI'}
+                </button>
                 <button
                   onClick={() => setShowInfo(!showInfo)}
                   className="p-2 hover:bg-gray-100 rounded-lg text-gray-500"
