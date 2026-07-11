@@ -100,7 +100,12 @@ const LeadSchema = new (mongoose as any).Schema({
   // the dormant window; this dedicated field lets analytics distinguish a
   // real inbound interaction from an automated follow-up touch.
   lastFollowUpAt: { type: Date },
+  // timestamps:true auto-bumps updatedAt on updateOne/findOneAndUpdate too (not
+  // just insert), so agent status/notes edits surface in the /api/integrations
+  // ?updatedSince incremental sync. Existing `updatedAt`/`registeredAt` fields
+  // are respected.
 });
+LeadSchema.set('timestamps', true);
 
 // Indexes for search and filtering
 LeadSchema.index({ fullName: 'text', phoneNumber: 'text', email: 'text' });

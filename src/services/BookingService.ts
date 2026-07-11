@@ -272,16 +272,12 @@ export async function handleBookingMessage(
       );
       return true;
     } else {
-      // Ambiguous reply (a question, a bare time, small talk) — do NOT drop
-      // the booking session. Re-prompt so the customer can still say Yes and
-      // proceed instead of being bounced back to `!visit`. The 30-min session
-      // TTL still cleans up abandoned invitations.
-      await sendMessage(
-        jid,
-        `🙏 Shall I schedule your campus visit?\nReply *Yes* to proceed, or *No* to skip.`,
-        sessionId,
-      );
-      return true;
+      // Ambiguous reply (a question, small talk, a bare time). Do NOT consume
+      // it: keep the AWAITING_RESPONSE session so a later "Yes" still books, but
+      // return false so THIS message falls through to the AI / `!` commands.
+      // (Returning true here trapped every non-yes/no message until the 30-min
+      // TTL expired — the customer couldn't ask anything or run a command.)
+      return false;
     }
   }
 
@@ -543,9 +539,25 @@ async function finalizeBooking(
       // Activities + the dashboard's "Upcoming Activities". Best-effort contact
       // link by phone; fire-and-forget so it never delays confirmation.
       (async () => {
-        const contact = await Contact.findOne({
+        const phoneMatch = {
           $or: [{ phone: callerPhone }, { whatsappNumber: callerPhone }],
-        })
+        };
+        const contact = await Contact.findOne(
+          bookingTenantId
+            ? {
+                $and: [
+                  phoneMatch,
+                  {
+                    $or: [
+                      { tenantId: bookingTenantId },
+                      { tenantId: { $exists: false } },
+                      { tenantId: null },
+                    ],
+                  },
+                ],
+              }
+            : phoneMatch,
+        )
           .select('_id')
           .lean()
           .catch(() => null);

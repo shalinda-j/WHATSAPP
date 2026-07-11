@@ -103,6 +103,11 @@ const ContactSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now },
 } as any);
 
+// Auto-bump updatedAt on updateOne/findOneAndUpdate (the pre('save') hook only
+// covers .save()), so CRMService.updateContact edits surface in the
+// /api/integrations ?updatedSince incremental sync.
+ContactSchema.set('timestamps', true);
+
 ContactSchema.index({
   name: 'text',
   firstName: 'text',

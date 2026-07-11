@@ -33,6 +33,15 @@ describe('sanitizeBookingReply — strips fabricated kiosk codes', () => {
     expect(sanitizeBookingReply(withTime)).toBe(withTime);
   });
 
+  it('keeps legitimate content that only looks code-ish', () => {
+    // A "voice consultation" offer with NO code must survive.
+    const offer = 'We offer a free voice consultation with our senior advisor.';
+    expect(sanitizeBookingReply(offer)).toBe(offer);
+    // Address/reference codes are not kiosk codes.
+    const addr = 'Our office postal code is 10100 and the area code is 011.';
+    expect(sanitizeBookingReply(addr)).toBe(addr);
+  });
+
   it('handles empty input', () => {
     expect(sanitizeBookingReply('')).toBe('');
   });

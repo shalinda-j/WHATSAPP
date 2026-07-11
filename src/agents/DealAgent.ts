@@ -230,16 +230,21 @@ export class DealAgent implements IAgent {
     // deal.booking_intent side effect) then drives the real booking + real code
     // that lands on the Appointment Calendar.
     let replyText = sanitizeBookingReply(parsed.reply);
-    if (bookingReady || !replyText.trim()) {
+    if (bookingReady) {
       replyText = bookingHandoffMessage(ctx.language);
     }
+    // Only show the booking CTA when the date picker will actually start
+    // (bookingReady). If the sanitizer blanked a NON-booking reply, emit no
+    // outbound so the orchestrator falls back to the AI — a booking CTA with no
+    // picker (shouldStartBookingFlow=false) would dead-end the customer.
+    const outbound = replyText.trim() ? { text: replyText } : null;
 
     const tokensUsed = raw.inputTokens + raw.outputTokens;
     return {
       agentName: this.name,
       promptVersion,
       confidence: await this.canHandle(ctx),
-      outbound: { text: replyText },
+      outbound,
       outcome: 'pending',
       tokensUsed,
       costUsd: tokensUsed * COST_PER_TOKEN,

@@ -42,7 +42,10 @@ export const initSocket = (server: HttpServer) => {
         // chat, session status, QR, agent traces. The JWT auth middleware
         // below still gates actual access, so allowing the platform origin
         // here is safe and self-heals the config drift.
-        if (isDigitalOceanOrigin(normalised)) return callback(null, true);
+        // Self-heal ONLY when ALLOWED_ORIGINS is unset (drift); once set, the
+        // explicit list wins and this broad *.ondigitalocean.app match is off.
+        if (envOrigins.length === 0 && isDigitalOceanOrigin(normalised))
+          return callback(null, true);
         console.warn(`⚠️ Socket CORS blocked origin: ${origin}`);
         return callback(null, false);
       },

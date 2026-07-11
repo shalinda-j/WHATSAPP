@@ -17,13 +17,28 @@
 
 function isFabricatedCodeLine(line: string): boolean {
   const l = line.toLowerCase();
+  // A fabricated code line needs an actual 3–6 digit code AND code-issuing
+  // context. Without the digit guard we deleted legit prose: an offer line
+  // "free voice consultation" (no code) and address lines "postal code 10100" /
+  // "area code 011" were stripped whole. Only strip when BOTH are present.
+  const hasNum = /\d{3,6}/.test(l);
   if (line.includes('🔢')) return true;
-  if (/voice\s*consult/.test(l)) return true;
-  if (/consult\s*code/.test(l)) return true;
-  // A "kiosk ... code" instruction line (real one comes from BookingService).
+  // "voice consultation" (a legit service offer) must survive → strip only when
+  // an actual code number rides along, e.g. "Voice Consult Code: 1234".
+  if (hasNum && /voice[\s-]*consult/.test(l)) return true;
+  if (hasNum && /consult\s*code/.test(l)) return true;
+  // The kiosk-code instruction line that accompanies a fabricated code — it may
+  // itself carry no digit ("type this code at the kiosk"), so no hasNum guard.
   if (l.includes('kiosk') && l.includes('code')) return true;
-  // "code: 1234", "code - 4024", "code #9883" etc.
-  if (/\bcode\b[^0-9a-z]{0,8}\d{3,6}\b/.test(l)) return true;
+  // "code: 1234", "your code is 4024" etc. — a bare fabricated code. EXCLUDE
+  // address/reference-code prose (postal/area/zip/country/dialing/PIN/NIC code)
+  // which legitimately reads "postal code 10100" / "area code 011".
+  if (
+    /\bcode\b[^0-9a-z]{0,8}\d{3,6}\b/.test(l) &&
+    !/(postal|zip|area|country|dial|region|pin|nic)\s*code/.test(l)
+  ) {
+    return true;
+  }
   return false;
 }
 

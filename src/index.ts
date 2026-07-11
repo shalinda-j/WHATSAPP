@@ -1536,6 +1536,15 @@ onMessage(async (message, sock, sessionId) => {
       // Pure-code + fail-safe: never blanks a non-empty reply.
       response = messageQuality.clean(response);
 
+      // Re-check empty: sanitizeBookingReply above can strip a reply down to ''
+      // (e.g. a single hallucinated-code line). The guard at ~1518 ran BEFORE
+      // that strip, so without this we'd send an empty message/TTS. Fall back.
+      if (!response || response.trim() === '') {
+        response =
+          '🙏 කරුණාකර නැවත උත්සාහ කරන්න. ඔබේ ප්‍රශ්නය මට තේරුම් ගන්න බැරි විය.';
+        console.log('   ⚠️ Reply blanked by sanitizer — using fallback');
+      }
+
       // [NEW] 2. Save BOT Response to DB
       try {
         const savedBotMsg = await ChatMessage.create({

@@ -387,12 +387,32 @@ async function buildCustomerContext(
     // admin-issued code carries no JID, so `jid` is the inviteId (matches none).
     if (jid && jid.includes('@')) orConds.push({ userId: jid });
     if (tail) {
-      const re = new RegExp(tail);
-      orConds.push({ userId: { $regex: re } }); // phone-backed JIDs
-      orConds.push({ 'metadata.realPhone': { $regex: re } }); // @lid privacy JIDs
+      // userId is a JID (digits then @s.whatsapp.net/@lid) → anchor the tail
+      // before '@'; metadata.realPhone is bare digits → anchor at the end. This
+      // avoids a longer number matching the 9-digit tail as a mid-string substring.
+      orConds.push({ userId: { $regex: new RegExp(`${tail}@`) } }); // phone-backed JIDs
+      orConds.push({ 'metadata.realPhone': { $regex: new RegExp(`${tail}$`) } }); // @lid privacy JIDs
     }
     if (orConds.length === 0) return '';
-    const msgs: any[] = await ChatMessage.find({ $or: orConds })
+    // Tenant-scope the lookup (legacy-tolerant) — same as the Lead query above.
+    // Without it, two tenants whose customers share a phone tail would leak each
+    // other's WhatsApp turns into the consultant prompt.
+    const phoneOr = { $or: orConds };
+    const msgFilter = tenantId
+      ? {
+          $and: [
+            phoneOr,
+            {
+              $or: [
+                { tenantId },
+                { tenantId: { $exists: false } },
+                { tenantId: null },
+              ],
+            },
+          ],
+        }
+      : phoneOr;
+    const msgs: any[] = await ChatMessage.find(msgFilter)
       .sort({ timestamp: -1 })
       .limit(10)
       .select('role content')

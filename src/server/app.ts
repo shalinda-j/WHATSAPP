@@ -98,11 +98,12 @@ const corsOptions = {
     const normalised = origin.replace(/\/$/, '');
     if (allowedOrigins.includes(normalised)) {
       callback(null, true);
-    } else if (isDigitalOceanOrigin(normalised)) {
-      // Allow the app's own DigitalOcean App Platform origin even when
-      // ALLOWED_ORIGINS wasn't set on the deployment (config drift from
-      // .do/app.yaml). Mirrors the Socket.io handshake rule so REST and
-      // real-time share one policy; auth still gates real access.
+    } else if (envOrigins.length === 0 && isDigitalOceanOrigin(normalised)) {
+      // Self-heal ONLY when ALLOWED_ORIGINS is unset (config drift from
+      // .do/app.yaml): allow the app's own *.ondigitalocean.app origin. Once
+      // ALLOWED_ORIGINS is configured, the explicit list above is authoritative
+      // and this broad suffix match is disabled (don't trust the whole shared
+      // DO subdomain namespace). Mirrors the Socket.io rule; auth still gates.
       callback(null, true);
     } else {
       console.warn(`⚠️ CORS blocked request from: ${origin}`);

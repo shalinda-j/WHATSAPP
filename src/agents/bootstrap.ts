@@ -137,17 +137,13 @@ export async function registerCoreAgents(): Promise<void> {
 
   let activatedCount = 0;
   for (const agentName of CONVERSATIONAL_AGENTS) {
-    // Activate any conversational agent that isn't already autonomous. These
-    // are always-on inbound-chat agents: in 'approval' mode every reply is
-    // queued and the customer hears nothing until a human approves it, which
-    // reads as "the agents don't work". We catch BOTH the fresh 'disabled'
-    // state and the accidental 'approval' default (a config created via the
-    // schema default before this fix) so a live deployment self-heals on the
-    // next boot. Operator-invoked agents (campaign_generator, segmentation,
-    // follow_up) are deliberately NOT in this list and keep their approval
-    // workflow for outbound.
+    // Activate ONLY conversational agents still in the fresh 'disabled' state
+    // (the schema default is 'disabled', so a newly-created config is caught
+    // here). We must NOT touch 'approval' — that is a deliberate operator choice
+    // to human-review this agent's replies; flipping it to autonomous on every
+    // boot would silently disable the review gate they set.
     const result = await AgentConfig.updateOne(
-      { name: agentName, mode: { $ne: 'autonomous' } },
+      { name: agentName, mode: 'disabled' },
       { $set: { mode: 'autonomous', isActive: true } },
     );
     if (result.modifiedCount > 0) {

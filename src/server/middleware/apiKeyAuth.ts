@@ -62,16 +62,23 @@ export function requireApiKey(...requiredScopes: ApiKeyScope[]) {
         return;
       }
 
-      if (keyDoc.tenantId) {
-        const tenant = await Tenant.findById(keyDoc.tenantId);
-        if (tenant) {
-          if ((tenant as ITenant).status === 'suspended') {
-            res.status(403).json({ error: 'tenant_suspended' });
-            return;
-          }
-          req.tenant = tenant;
-        }
+      // Fail CLOSED: a tenant-scoped key whose tenant can't be resolved must be
+      // rejected — never fall through to next() with req.tenant undefined, or
+      // withTenantScope would return EVERY tenant's rows to this key.
+      if (!keyDoc.tenantId) {
+        res.status(403).json({ error: 'key_not_tenant_scoped' });
+        return;
       }
+      const tenant = await Tenant.findById(keyDoc.tenantId);
+      if (!tenant) {
+        res.status(403).json({ error: 'tenant_not_found' });
+        return;
+      }
+      if ((tenant as ITenant).status === 'suspended') {
+        res.status(403).json({ error: 'tenant_suspended' });
+        return;
+      }
+      req.tenant = tenant;
 
       req.apiKey = { id: String(keyDoc._id), name: keyDoc.name, scopes };
       // Best-effort usage stamp — never block the request on it.
