@@ -1,4 +1,4 @@
-import { useState, useRef, type ChangeEvent } from 'react';
+import { useState, useRef, useEffect, type ChangeEvent } from 'react';
 import {
   Upload,
   Send,
@@ -14,8 +14,16 @@ import {
   ChevronUp,
   Phone,
   Download,
+  Smartphone,
 } from 'lucide-react';
-import { api as _api, API_URL } from '../config';
+import { api, API_URL } from '../config';
+
+interface DeviceSession {
+  sessionId: string;
+  sessionName?: string;
+  status: string;
+  phoneNumber?: string;
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface ProgressLine {
@@ -135,6 +143,32 @@ const BulkSender = () => {
 
   const abortRef = useRef<AbortController | null>(null);
 
+  // ── Sending device ───────────────────────────────────────────────────────
+  // The backend used to fall back to a 'default' session that doesn't exist on
+  // multi-device deployments — every send silently went nowhere. Load the real
+  // devices and REQUIRE a connected one.
+  const [devices, setDevices] = useState<DeviceSession[]>([]);
+  const [selectedDevice, setSelectedDevice] = useState<string>('');
+  useEffect(() => {
+    api
+      .get('/api/sessions')
+      .then((res) => {
+        const list: DeviceSession[] = Array.isArray(res.data)
+          ? res.data
+          : res.data?.sessions || [];
+        setDevices(list);
+        const firstConnected = list.find((s) => s.status === 'connected');
+        if (firstConnected) setSelectedDevice(firstConnected.sessionId);
+      })
+      .catch(() => {
+        setStatusMsg({
+          type: 'error',
+          msg: 'Could not load devices — refresh the page',
+        });
+      });
+  }, []);
+  const connectedDevices = devices.filter((s) => s.status === 'connected');
+
   // ── Media file handling ──────────────────────────────────────────────────
   const handleMediaChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
@@ -229,6 +263,13 @@ const BulkSender = () => {
       });
       return;
     }
+    if (!selectedDevice) {
+      setStatusMsg({
+        type: 'error',
+        msg: 'No connected device selected — connect a device on the Linked Devices page first',
+      });
+      return;
+    }
 
     setIsSending(true);
     setProgress({ current: 0, total: recipients.length });
@@ -244,6 +285,7 @@ const BulkSender = () => {
     formData.append('recipients', JSON.stringify(recipients));
     formData.append('message', message);
     formData.append('delay', delay.toString());
+    formData.append('sessionId', selectedDevice);
     if (mediaFile) formData.append('media', mediaFile);
 
     // Get auth token from localStorage (same as axios api instance uses)
@@ -404,6 +446,38 @@ const BulkSender = () => {
             <h2 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <FileText className="h-5 w-5 text-indigo-500" /> Message Content
             </h2>
+
+            {/* Sending device */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
+                <Smartphone className="h-4 w-4 text-indigo-500" /> Send from
+                device
+              </label>
+              {connectedDevices.length === 0 ? (
+                <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">
+                  No connected device. Connect one on the{' '}
+                  <a href="/sessions" className="underline font-medium">
+                    Linked Devices
+                  </a>{' '}
+                  page first.
+                </div>
+              ) : (
+                <select
+                  value={selectedDevice}
+                  onChange={(e) => setSelectedDevice(e.target.value)}
+                  className="w-full text-sm border border-gray-300 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                >
+                  {connectedDevices.map((d) => (
+                    <option key={d.sessionId} value={d.sessionId}>
+                      {d.sessionName || d.sessionId}
+                      {d.phoneNumber
+                        ? ` (+${d.phoneNumber.split(':')[0].split('@')[0]})`
+                        : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
 
             {/* Message textarea */}
             <div className="mb-4">
@@ -830,10 +904,10 @@ const BulkSender = () => {
         )}
         <button
           onClick={handleSend}
-          disabled={isSending || recipients.length === 0}
+          disabled={isSending || recipients.length === 0 || !selectedDevice}
           className={`flex items-center gap-2 px-6 py-3 text-base font-semibold rounded-xl shadow-sm text-white transition
                         ${
-                          isSending || recipients.length === 0
+                          isSending || recipients.length === 0 || !selectedDevice
                             ? 'bg-indigo-300 cursor-not-allowed'
                             : 'bg-indigo-600 hover:bg-indigo-700 hover:shadow-md'
                         }`}

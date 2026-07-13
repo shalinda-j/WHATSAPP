@@ -1,5 +1,10 @@
 import { Router } from 'express';
 import multer from 'multer';
+import {
+  getSocket,
+  sendMessageDetailed,
+  sendMediaMessage,
+} from '../../services/whatsapp';
 import { bulkSenderService } from '../../services/BulkSenderService';
 import { authenticateToken } from '../middleware/auth';
 import { resolveTenant } from '../middleware/tenantContext';
@@ -83,6 +88,17 @@ router.post(
       const delayMs = (Number(delay) || 5) * 1000;
       const sid = sessionId || 'default';
 
+      // Refuse up-front when the target device isn't connected. Previously the
+      // frontend sent no sessionId, this fell back to 'default' (a session that
+      // doesn't exist on multi-device deployments), the Humanizer queued every
+      // message for a socket that never comes, and the ignored boolean made the
+      // UI report "✅ sent" while nothing was ever delivered.
+      if (!getSocket(sid)) {
+        return res.status(400).json({
+          error: `Device '${sid}' is not connected. Select a connected device and try again.`,
+        });
+      }
+
       // Compliance gate: tenant-wide quiet hours block the ENTIRE batch,
       // mirroring CampaignService.tickSender which returns { sent: 0 } while
       // the tenant's quiet-hours window is active. Refuse up-front rather than
@@ -136,8 +152,6 @@ router.post(
             else if (req.file.mimetype.startsWith('audio/')) type = 'audio';
             else if (req.file.mimetype.startsWith('video/')) type = 'video';
 
-            const { sendMediaMessage } =
-              await import('../../services/whatsapp');
             const sent = await sendMediaMessage(
               jid,
               req.file.buffer,
@@ -154,8 +168,13 @@ router.post(
                 'WhatsApp not connected — scan the QR code first',
               );
           } else {
-            const { sendMessage } = await import('../../services/whatsapp');
-            await sendMessage(jid, message, sid);
+            // Check delivery. The old `sendMessage` boolean was ignored, so a
+            // dead/disconnected session counted every message as success.
+            const { delivered } = await sendMessageDetailed(jid, message, sid);
+            if (!delivered)
+              throw new Error(
+                'Device disconnected — message queued for retry, not sent',
+              );
           }
 
           result.success++;
