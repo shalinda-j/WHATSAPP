@@ -1,5 +1,7 @@
+import axios from 'axios';
 import { proto, downloadMediaMessage } from '@whiskeysockets/baileys';
 import { describeMediaContent } from './gemini';
+import { getOpenRouterApiKey } from './openrouterVoice';
 
 /**
  * Media understanding for inbound WhatsApp messages.
@@ -49,6 +51,53 @@ const PROMPTS: Record<IncomingMediaKind, string> = {
   sticker:
     'A customer sent this sticker in our WhatsApp business chat. In one short sentence, describe what the sticker shows and the emotion or intent it conveys. Return only that sentence.',
 };
+
+// ── OpenRouter multimodal fallback ───────────────────────────────────────────
+// Production deployments often have ONLY an OpenRouter key (no direct Gemini
+// key), and describeMediaContent silently returns '' on MISSING_API_KEY — so
+// image/PDF reading was dead in prod. This fallback routes the same analysis
+// through OpenRouter's multimodal chat API (verified live: image_url + file
+// parts on google/gemini-2.5-flash). Video isn't supported here — Gemini-direct
+// remains the only video path.
+const OPENROUTER_VISION_MODEL =
+  process.env.OPENROUTER_VISION_MODEL || 'google/gemini-2.5-flash';
+
+async function describeViaOpenRouter(
+  base64Data: string,
+  mimeType: string,
+  instruction: string,
+): Promise<string> {
+  const apiKey = await getOpenRouterApiKey();
+  if (!apiKey) return '';
+
+  const dataUrl = `data:${mimeType};base64,${base64Data}`;
+  let part: Record<string, unknown>;
+  if (mimeType === 'application/pdf') {
+    part = { type: 'file', file: { filename: 'document.pdf', file_data: dataUrl } };
+  } else if (mimeType.startsWith('image/')) {
+    part = { type: 'image_url', image_url: { url: dataUrl } };
+  } else {
+    return ''; // video/other — not supported via OpenRouter
+  }
+
+  const res = await axios.post(
+    'https://openrouter.ai/api/v1/chat/completions',
+    {
+      model: OPENROUTER_VISION_MODEL,
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: instruction }, part] },
+      ],
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      timeout: 90_000,
+    },
+  );
+  return String(res.data?.choices?.[0]?.message?.content ?? '').trim();
+}
 
 const unwrap = (msg: any): any => {
   // Iteratively peel nested wrappers (e.g. a view-once INSIDE an ephemeral
@@ -179,9 +228,10 @@ export async function analyzeIncomingMedia(
     return result;
   }
 
+  const base64 = buffer.toString('base64');
   try {
     result.description = await describeMediaContent(
-      buffer.toString('base64'),
+      base64,
       media.mimeType,
       PROMPTS[media.kind],
     );
@@ -190,6 +240,28 @@ export async function analyzeIncomingMedia(
       `   ⚠️ Gemini ${media.kind} analysis failed:`,
       err?.message || err,
     );
+  }
+
+  // Gemini unavailable (no key) or failed → OpenRouter multimodal fallback.
+  if (!result.description) {
+    try {
+      result.description = await describeViaOpenRouter(
+        base64,
+        media.mimeType,
+        PROMPTS[media.kind],
+      );
+      if (result.description) {
+        console.log(
+          `   🖼️ ${media.kind} analyzed via OpenRouter fallback (${OPENROUTER_VISION_MODEL})`,
+        );
+      }
+    } catch (err: any) {
+      console.error(
+        `   ⚠️ OpenRouter ${media.kind} analysis failed:`,
+        err?.response?.status ?? '',
+        err?.message || err,
+      );
+    }
   }
 
   return result;
