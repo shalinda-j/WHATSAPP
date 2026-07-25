@@ -296,6 +296,9 @@ router.patch(
           });
         }
         update.permissions = permissions;
+        // Mark the role as operator-owned so the boot seeder stops refreshing
+        // it from the preset and can never undo this edit on the next deploy.
+        update.customised = true;
       }
 
       if (Object.keys(update).length === 0) {
