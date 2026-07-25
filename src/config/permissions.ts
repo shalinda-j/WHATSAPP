@@ -342,6 +342,10 @@ export const ROLE_PRESETS: RolePreset[] = [
       'dashboard.view',
       'chat.view',
       'chat.send',
+      // Read-only device list. The device picker is shared by Live Chat, the
+      // CRM and the dashboard, so without it those pages can't scope by
+      // device — it grants no control over the sessions themselves.
+      'sessions.view',
       'crm.view',
       'crm.edit',
       'followup.view',
@@ -358,6 +362,7 @@ export const ROLE_PRESETS: RolePreset[] = [
       'Runs campaigns, segments and content. Reads CRM but does not edit customer records.',
     permissions: [
       'dashboard.view',
+      'sessions.view',
       'crm.view',
       'crm.export',
       'channels.manage',
@@ -377,6 +382,7 @@ export const ROLE_PRESETS: RolePreset[] = [
     permissions: [
       'dashboard.view',
       'chat.view',
+      'sessions.view',
       'crm.view',
       'followup.view',
       'calendar.view',

@@ -23,12 +23,44 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle 401/403 responses - redirect to login
+/**
+ * Auth-failure responses that should end the session, as opposed to a plain
+ * "you can't do that" which the calling page handles itself.
+ *
+ * This distinction became load-bearing with role-based permissions: a 403
+ * carrying `permission_denied` is a NORMAL response for a user whose role
+ * doesn't cover an endpoint. Treating every 403 as an expired session logged
+ * those users straight back out — a Support Agent would sign in, land on the
+ * dashboard (which fetches /api/sessions and /api/config), get a 403 from
+ * both, and be bounced to the login screen as if their password were wrong.
+ */
+const ACCOUNT_FAILURE_CODES = new Set([
+  'account_disabled',
+  'account_not_found',
+  'not_authenticated',
+]);
+
+/** Endpoints that run BEFORE a session exists — never force a redirect. */
+const PRE_AUTH_PATHS = ['/api/auth/login', '/api/auth/setup'];
+
+// Handle auth failures - redirect to login
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error.response?.status;
-    if (status === 401 || status === 403) {
+    const url: string = error.config?.url ?? '';
+    const code = error.response?.data?.error;
+
+    // The login form shows its own message (bad credentials, disabled
+    // account); redirecting from here would wipe it off the screen.
+    if (PRE_AUTH_PATHS.some((p) => url.includes(p))) {
+      return Promise.reject(error);
+    }
+
+    // 401 always means the token is missing/expired/invalid.
+    // 403 only ends the session when the ACCOUNT is the problem; a
+    // permission denial leaves the user signed in on the page they're on.
+    if (status === 401 || (status === 403 && ACCOUNT_FAILURE_CODES.has(code))) {
       handleAuthFailure();
     }
     return Promise.reject(error);

@@ -15,6 +15,13 @@ export interface IRole extends Document {
   permissions: string[];
   isSystem: boolean;
   /**
+   * True once an operator has edited a built-in role's permissions. The boot
+   * seeder refreshes un-customised system roles so a release that adds a new
+   * permission reaches existing installs, and leaves customised ones alone so
+   * it never undoes somebody's deliberate change.
+   */
+  customised?: boolean;
+  /**
    * Privilege ordering. A user can never create or modify an account whose
    * role outranks their own, which is what prevents a manager from minting
    * an administrator for themselves.
@@ -33,6 +40,7 @@ const RoleSchema = new Schema(
     description: { type: String },
     permissions: [{ type: String }],
     isSystem: { type: Boolean, default: false },
+    customised: { type: Boolean, default: false },
     rank: { type: Number, default: 20 },
     // Custom roles belong to a tenant; seeded system roles are global (unset)
     // so every tenant shares one definition of 'admin'.

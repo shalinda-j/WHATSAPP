@@ -58,24 +58,45 @@ export function invalidatePermissionCache(adminId?: string): void {
   else cache.clear();
 }
 
-/** Seed the built-in roles. Idempotent — safe to run on every boot. */
+/**
+ * Seed the built-in roles. Idempotent — safe to run on every boot.
+ *
+ * A role the operator has never edited is refreshed from the preset, so a
+ * release that adds a permission (or a new feature area) reaches installs
+ * that were seeded by an earlier version. Once someone edits a built-in
+ * role the `customised` flag is set and the seeder stops touching its
+ * permissions — an upgrade must never silently undo a deliberate change.
+ */
 export async function ensureSystemRoles(): Promise<void> {
   for (const preset of ROLE_PRESETS) {
-    await Role.updateOne(
-      { key: preset.key, tenantId: { $exists: false } },
-      {
-        // Only identity + rank are re-asserted every boot. `name`,
-        // `description` and `permissions` go in $setOnInsert so an operator's
-        // edits to a system role survive restarts instead of being reset.
-        $set: { key: preset.key, isSystem: true, rank: preset.rank },
-        $setOnInsert: {
-          name: preset.name,
-          description: preset.description,
-          permissions: preset.permissions,
-        },
-      },
-      { upsert: true },
-    );
+    const existing = (await Role.findOne({
+      key: preset.key,
+      tenantId: { $exists: false },
+    }).lean()) as unknown as IRole | null;
+
+    if (!existing) {
+      await Role.create({
+        key: preset.key,
+        name: preset.name,
+        description: preset.description,
+        permissions: preset.permissions,
+        isSystem: true,
+        rank: preset.rank,
+        customised: false,
+      });
+      continue;
+    }
+
+    const update: Record<string, unknown> = {
+      isSystem: true,
+      rank: preset.rank,
+    };
+    if (!existing.customised) {
+      update.name = preset.name;
+      update.description = preset.description;
+      update.permissions = preset.permissions;
+    }
+    await Role.updateOne({ _id: existing._id }, { $set: update });
   }
   invalidatePermissionCache();
 }

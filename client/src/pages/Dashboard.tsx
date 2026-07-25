@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../config';
+import { useAuth } from '../context/AuthContext';
+import { PERM } from '../permissions';
 import { io } from 'socket.io-client';
 import {
   RefreshCw,
@@ -54,6 +56,14 @@ const WHATS_NEW_VERSION = '0.8.0';
 const WHATS_NEW_STORAGE_KEY = `whats-new-dismissed-v${WHATS_NEW_VERSION}`;
 
 export default function Dashboard() {
+  // The dashboard aggregates panels from several feature areas, so a
+  // lower-privilege role legitimately can't see all of it. Skip the fetches
+  // they aren't allowed to make instead of firing requests that come back
+  // 403 and leaving the panels stuck on "Loading...".
+  const { can } = useAuth();
+  const canSeeSessions = can(PERM.sessionsView);
+  const canSeeProviders = can(PERM.config);
+
   const [sessions, setSessions] = useState<Session[]>([]);
   const [noSessions, setNoSessions] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -70,6 +80,12 @@ export default function Dashboard() {
   };
 
   const fetchSessions = async () => {
+    if (!canSeeSessions) {
+      setSessions([]);
+      setNoSessions(false);
+      setLoading(false);
+      return;
+    }
     try {
       const res = await api.get('/api/sessions');
       const list: Session[] = res.data.sessions || [];
@@ -106,6 +122,11 @@ export default function Dashboard() {
   };
 
   const fetchAIProviders = async () => {
+    if (!canSeeProviders) {
+      setAiProviders([]);
+      setAiLoading(false);
+      return;
+    }
     try {
       const res = await api.get('/api/config');
       if (Array.isArray(res.data)) {
@@ -147,7 +168,10 @@ export default function Dashboard() {
       clearInterval(interval);
       socket.disconnect();
     };
-  }, []);
+    // Re-run once the permission list resolves, so the panels this account
+    // IS allowed to see still load on a slow /me.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canSeeSessions, canSeeProviders]);
 
   const handleCreateSession = async () => {
     const name = prompt('Enter a name for this device (e.g. Support Phone):');
