@@ -425,6 +425,21 @@ async function startServer() {
         await import('./services/TenantBootstrapService');
       const { tenant: defaultTenant } = await ensureDefaultTenantAndMigrate();
       defaultTenantId = String(defaultTenant._id);
+
+      // Seed the built-in staff roles (Super Admin / Administrator / Manager
+      // / Support Agent / Marketing / Viewer). Idempotent, and it only
+      // $setOnInsert's the permission lists so an operator's edits to a role
+      // survive restarts. Failure is non-fatal: PermissionService falls back
+      // to the in-code presets when the collection is empty.
+      try {
+        const { ensureSystemRoles } =
+          await import('./services/PermissionService');
+        await ensureSystemRoles();
+        console.log('✅ Staff roles ready');
+      } catch (err) {
+        console.error('⚠️ Could not seed staff roles:', err);
+      }
+
       await channelRouter.startAll(String(defaultTenant._id));
 
       // Start channel adapters for EVERY tenant that has active/pending

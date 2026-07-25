@@ -11,6 +11,7 @@ import {
 } from '../middleware/auth';
 import { strictRateLimit } from '../middleware/rateLimit';
 import { ACTUAL_JWT_SECRET } from '../jwt-secret';
+import { resolveIdentity } from '../../services/PermissionService';
 
 const router = Router();
 
@@ -92,6 +93,10 @@ router.post('/setup', strictRateLimit, async (req, res) => {
       username,
       passwordHash: hashedPassword,
       role: SUPER_ADMIN_ROLE,
+      // Stamp the RBAC field too so the first account resolves through the
+      // same path as every account created from the Users page afterwards.
+      roleKey: SUPER_ADMIN_ROLE,
+      status: 'active',
     });
 
     await newAdmin.save();
@@ -126,6 +131,24 @@ router.post('/login', strictRateLimit, async (req, res) => {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
+    // A disabled employee keeps their account and history but cannot sign in.
+    // Checked after the password so a wrong password never reveals that the
+    // username exists but is suspended.
+    if (admin.status === 'disabled') {
+      return res.status(403).json({
+        message: 'This account has been disabled. Contact an administrator.',
+        error: 'ACCOUNT_DISABLED',
+      });
+    }
+
+    // Best-effort last-seen stamp for the staff list; never block the login.
+    Admin.updateOne(
+      { _id: admin._id },
+      { $set: { lastLoginAt: new Date() } },
+    ).catch((err) => {
+      console.error('Failed to stamp lastLoginAt:', err);
+    });
+
     const token = jwt.sign(
       {
         id: admin._id,
@@ -144,8 +167,46 @@ router.post('/login', strictRateLimit, async (req, res) => {
   }
 });
 
-router.get('/me', authenticateToken, (req: AuthRequest, res) => {
-  res.json(req.user);
+/**
+ * Identity + effective permissions for the signed-in account.
+ *
+ * The permission list is resolved from the DATABASE on every call rather than
+ * read out of the JWT, so a role change takes effect on the user's next page
+ * load instead of whenever their 24h token expires. The frontend uses this
+ * to decide which nav entries and routes to show.
+ */
+router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const identity = req.user?.id ? await resolveIdentity(req.user.id) : null;
+    if (!identity) {
+      // The token is valid but the account is gone (deleted mid-session).
+      return res
+        .status(401)
+        .json({ ...req.user, error: 'account_not_found', permissions: [] });
+    }
+    if (identity.status === 'disabled') {
+      return res
+        .status(403)
+        .json({ error: 'account_disabled', permissions: [] });
+    }
+    res.json({
+      ...req.user,
+      id: identity.id,
+      username: identity.username,
+      role: identity.roleKey,
+      roleKey: identity.roleKey,
+      roleName: identity.roleName,
+      fullName: identity.fullName ?? '',
+      email: identity.email ?? '',
+      jobTitle: identity.jobTitle ?? '',
+      permissions: identity.permissions,
+    });
+  } catch (err: any) {
+    console.error('GET /api/auth/me failed:', err);
+    // Degrade to the token's own claims rather than logging the user out on a
+    // transient database hiccup.
+    res.json({ ...req.user, permissions: [] });
+  }
 });
 
 export default router;

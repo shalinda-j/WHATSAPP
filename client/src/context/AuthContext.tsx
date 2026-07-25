@@ -1,10 +1,18 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../config';
+import { hasPermission, type PermissionKey } from '../permissions';
 
 interface User {
   id: string;
   username: string;
   role: string;
+  roleKey?: string;
+  roleName?: string;
+  fullName?: string;
+  email?: string;
+  jobTitle?: string;
+  /** Effective permissions, resolved server-side on every /me call. */
+  permissions?: string[];
 }
 
 interface AuthContextType {
@@ -13,6 +21,12 @@ interface AuthContextType {
   login: (token: string) => void;
   logout: () => void;
   loading: boolean;
+  /** Effective permission list (empty until /me resolves). */
+  permissions: string[];
+  /** Permission check — the one helper the whole UI gates on. */
+  can: (permission: PermissionKey) => boolean;
+  /** True when the user holds at least one of the listed permissions. */
+  canAny: (...permissions: PermissionKey[]) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -66,8 +80,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, [token]);
 
+  const permissions = user?.permissions ?? [];
+  const can = (permission: PermissionKey) =>
+    hasPermission(permissions, permission);
+  const canAny = (...list: PermissionKey[]) =>
+    list.some((p) => hasPermission(permissions, p));
+
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, loading }}>
+    <AuthContext.Provider
+      value={{ user, token, login, logout, loading, permissions, can, canAny }}
+    >
       {children}
     </AuthContext.Provider>
   );

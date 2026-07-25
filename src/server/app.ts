@@ -45,6 +45,9 @@ import voiceRouter from './routes/voice';
 import kioskAdminRouter from './routes/kiosk-admin';
 import apiKeysRouter from './routes/apiKeys';
 import integrationsRouter from './routes/integrations';
+import usersRouter from './routes/users';
+import rolesRouter from './routes/roles';
+import { requireAnyPermission } from './middleware/permissions';
 import { resolveTenant } from './middleware/tenantContext';
 
 import mongoose from 'mongoose';
@@ -190,22 +193,110 @@ app.use(auditLog);
 app.use('/api/auth', authRoutes);
 app.use('/api/webhooks', webhookRouter); // Webhooks manage their own security
 
+// Staff accounts + roles. Both routers self-guard per route
+// (users.view to read, users.manage to mutate).
+app.use('/api/users', usersRouter);
+app.use('/api/roles', rolesRouter);
+
 // Protected Routes
-app.use('/api/datasets', authenticateToken, datasetRoutes);
-app.use('/api/sessions', authenticateToken, sessionsRouter);
-app.use('/api/config', authenticateToken, configRouter);
-app.use('/api/configs', authenticateToken, configsRouter);
-app.use('/api/voice-config', authenticateToken, voiceConfigRouter);
-app.use('/api/whatsapp', authenticateToken, whatsappRouter);
-app.use('/api/system', authenticateToken, systemRouter);
-app.use('/api/bulk', authenticateToken, bulkRouter);
-app.use('/api/companies', authenticateToken, companiesRouter);
-app.use('/api/marketing', authenticateToken, marketingRouter);
-app.use('/api/leads', authenticateToken, leadsRouter);
-app.use('/api/analytics', authenticateToken, analyticsRouter);
-app.use('/api/crm', authenticateToken, crmRouter);
-app.use('/api/chat', authenticateToken, chatRouter);
-app.use('/api/workflows', authenticateToken, workflowRouter);
+//
+// Each mount carries the permission(s) that unlock the feature, so a role
+// without them gets a 403 from the API — not just a hidden nav entry. The
+// gates are deliberately coarse (one per feature area, matching the nav);
+// finer-grained checks live inside the routers that need them.
+//
+// requireAnyPermission is used where a router serves both a read view and
+// its edit actions: the router's own handlers still gate the writes.
+app.use(
+  '/api/datasets',
+  authenticateToken,
+  requireAnyPermission('datasets.manage'),
+  datasetRoutes,
+);
+app.use(
+  '/api/sessions',
+  authenticateToken,
+  requireAnyPermission('sessions.view', 'sessions.manage'),
+  sessionsRouter,
+);
+app.use(
+  '/api/config',
+  authenticateToken,
+  requireAnyPermission('config.manage'),
+  configRouter,
+);
+app.use(
+  '/api/configs',
+  authenticateToken,
+  requireAnyPermission('config.manage'),
+  configsRouter,
+);
+app.use(
+  '/api/voice-config',
+  authenticateToken,
+  requireAnyPermission('voice.view', 'voice.manage'),
+  voiceConfigRouter,
+);
+app.use(
+  '/api/whatsapp',
+  authenticateToken,
+  requireAnyPermission('chat.view', 'sessions.view', 'sessions.manage'),
+  whatsappRouter,
+);
+app.use(
+  '/api/system',
+  authenticateToken,
+  requireAnyPermission('system.manage'),
+  systemRouter,
+);
+app.use(
+  '/api/bulk',
+  authenticateToken,
+  requireAnyPermission('bulk.send'),
+  bulkRouter,
+);
+app.use(
+  '/api/companies',
+  authenticateToken,
+  requireAnyPermission('crm.view'),
+  companiesRouter,
+);
+app.use(
+  '/api/marketing',
+  authenticateToken,
+  requireAnyPermission('campaigns.view', 'campaigns.manage', 'insights.view'),
+  marketingRouter,
+);
+app.use(
+  '/api/leads',
+  authenticateToken,
+  requireAnyPermission('crm.view'),
+  leadsRouter,
+);
+app.use(
+  '/api/analytics',
+  authenticateToken,
+  requireAnyPermission('dashboard.view', 'insights.view'),
+  analyticsRouter,
+);
+app.use(
+  '/api/crm',
+  authenticateToken,
+  requireAnyPermission('crm.view'),
+  crmRouter,
+);
+app.use(
+  '/api/chat',
+  authenticateToken,
+  requireAnyPermission('chat.view'),
+  chatRouter,
+);
+app.use(
+  '/api/workflows',
+  authenticateToken,
+  requireAnyPermission('workflows.manage'),
+  workflowRouter,
+);
 // PUBLIC default-form route for the bot — MUST be registered BEFORE the
 // authenticated `/api/forms` mount below. Express matches in order, so this
 // exact-path GET serves /api/forms/default without a token, while every other
@@ -213,8 +304,18 @@ app.use('/api/workflows', authenticateToken, workflowRouter);
 // `app.use('/api/forms/default', next)` bypass was dead code: it sat AFTER the
 // authenticated mount, which had already 401'd unauthenticated callers.)
 app.get('/api/forms/default', standardRateLimit, defaultFormHandler);
-app.use('/api/forms', authenticateToken, formsRouter);
-app.use('/api/knowledge', authenticateToken, knowledgeRouter);
+app.use(
+  '/api/forms',
+  authenticateToken,
+  requireAnyPermission('forms.manage'),
+  formsRouter,
+);
+app.use(
+  '/api/knowledge',
+  authenticateToken,
+  requireAnyPermission('knowledge.manage', 'datasets.manage'),
+  knowledgeRouter,
+);
 app.use('/api/call-agent', callAgentRouter);
 app.use('/api/agents', agentsRouter);
 app.use('/api/channels', channelsRouter);
@@ -230,9 +331,21 @@ app.use('/api/campaigns', campaignsRouter);
 app.use('/api/segments', segmentsRouter);
 app.use('/api/tenants', tenantsRouter);
 app.use('/api/marketing-insights', marketingInsightsRouter);
-app.use('/api/audit', authenticateToken, resolveTenant, auditRouter);
+app.use(
+  '/api/audit',
+  authenticateToken,
+  requireAnyPermission('audit.view'),
+  resolveTenant,
+  auditRouter,
+);
 app.use('/api/sla', authenticateToken, resolveTenant, slaRouter);
-app.use('/api/export', authenticateToken, resolveTenant, exportsRouter);
+app.use(
+  '/api/export',
+  authenticateToken,
+  requireAnyPermission('crm.export', 'chat.export'),
+  resolveTenant,
+  exportsRouter,
+);
 
 // Kiosk: PUBLIC router — no authenticateToken here. It enforces its own
 // short-lived kiosk-token middleware (x-kiosk-token / Bearer) on the
