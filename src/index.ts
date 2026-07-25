@@ -1102,6 +1102,9 @@ onMessage(async (message, sock, sessionId) => {
         content: text,
         // Stamp the tenant so chat-derived exports/analytics scope correctly.
         tenantId: defaultTenantId || undefined,
+        // WhatsApp's own id — lets the history back-fill recognise a message
+        // it already saw live instead of storing it a second time.
+        waMessageId: message.key?.id || undefined,
         read: false, // User messages start as unread by admin
         metadata: {
           sessionId,

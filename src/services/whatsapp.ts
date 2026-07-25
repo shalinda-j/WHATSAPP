@@ -27,6 +27,10 @@ import {
   rememberLidPhoneMapping,
 } from './LidPhoneMappingService';
 import { BRAND_NAME } from '../config/brand';
+import {
+  isHistorySyncEnabled,
+  queueHistorySync,
+} from './ChatHistorySyncService';
 
 // Set FFmpeg path
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
@@ -202,7 +206,15 @@ export class WhatsAppSessionManager {
         defaultQueryTimeoutMs: undefined,
         keepAliveIntervalMs: 30000,
         retryRequestDelayMs: 1000,
-        syncFullHistory: false,
+        // Pull the device's existing chat history on pairing so the admin
+        // Live Chat shows conversations that pre-date the bot. The history
+        // lands on 'messaging-history.set' (persist-only, never the reply
+        // chain). Set WHATSAPP_SYNC_FULL_HISTORY=false to opt back out.
+        //
+        // NOTE: WhatsApp only ships history to a NEWLY LINKED device —
+        // flipping this on does not back-fill an already-paired session;
+        // that device has to be unlinked and re-scanned.
+        syncFullHistory: isHistorySyncEnabled(),
         markOnlineOnConnect: false,
       });
 
@@ -470,9 +482,41 @@ export class WhatsAppSessionManager {
         contacts.forEach(rememberContactMapping);
       });
 
-      sock.ev.on('messaging-history.set', ({ contacts }) => {
-        contacts.forEach(rememberContactMapping);
-      });
+      // History sync. WhatsApp ships the device's existing chat history here
+      // when a session is newly linked (gated by `syncFullHistory` above).
+      //
+      // Two deliberate properties:
+      //   1. Historical messages are persisted ONLY — they never enter the
+      //      messageHandlers chain, so pairing a device cannot make the bot
+      //      reply to years-old conversations.
+      //   2. Writes are queued per session and keyed on WhatsApp's message
+      //      id, so repeated batches are idempotent.
+      sock.ev.on(
+        'messaging-history.set',
+        ({ contacts, messages, isLatest }) => {
+          contacts.forEach(rememberContactMapping);
+
+          // Historical messages from @lid chats still teach us the LID→phone
+          // mapping, which is what makes old chats resolve to a real number
+          // in the chat list and the exports.
+          for (const msg of messages ?? []) {
+            if (!isLidJid(msg.key?.remoteJid)) continue;
+            rememberLidPhoneMapping({
+              sessionId,
+              lidJid: msg.key.remoteJid,
+              phoneJid:
+                extractPhoneJidFromMessage(msg) ??
+                extractPhoneFromText(getMessageText(msg)),
+              source: 'chat_metadata',
+            }).catch((err) => {
+              console.error('Failed to store history LID mapping:', err);
+            });
+          }
+
+          if (!isHistorySyncEnabled()) return;
+          void queueHistorySync(sessionId, messages ?? [], isLatest);
+        },
+      );
 
       // Baileys emits this when WhatsApp shares the real phone number for a
       // privacy LID. Persist it so old CRM contacts can be exported with a
