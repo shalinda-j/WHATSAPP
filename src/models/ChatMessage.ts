@@ -13,10 +13,19 @@ export interface IChatMessage {
   mediaUrl?: string;
   timestamp: Date;
   read?: boolean; // Track if message has been seen by admin
+  /**
+   * WhatsApp's own message id (`key.id`). Stamped by the live ingest and by
+   * the history back-fill so a message that arrives through both paths
+   * upserts onto one row instead of duplicating. Absent on rows written
+   * before this field existed.
+   */
+  waMessageId?: string;
   questionCategory?: string;
   questionKeywords?: string[];
   metadata?: {
     sessionId?: string;
+    /** Where the row came from — 'history_sync' marks a back-filled message. */
+    source?: string;
     intent?: string;
     buyingSignal?: 'High' | 'Medium' | 'Low' | 'None';
     isBooking?: boolean;
@@ -60,10 +69,15 @@ const ChatMessageSchema = new Schema({
   mediaUrl: { type: String },
   timestamp: { type: Date, default: Date.now, index: true },
   read: { type: Boolean, default: false, index: true }, // Track if message has been seen by admin
+  // Sparse + unique: only rows that carry WhatsApp's message id participate,
+  // so legacy rows (no id) are unaffected while the history back-fill gets a
+  // hard guarantee it can never insert the same message twice.
+  waMessageId: { type: String, index: true, unique: true, sparse: true },
   questionCategory: { type: String, index: true },
   questionKeywords: [{ type: String }],
   metadata: {
     sessionId: { type: String },
+    source: { type: String },
     intent: { type: String },
     buyingSignal: {
       type: String,

@@ -24,10 +24,61 @@ router.use(authenticateToken);
 router.use(resolveTenant);
 
 /**
+ * Conversation-list paging.
+ *
+ * The list used to be hard-capped at 100 rows, so operators with more than
+ * 100 chats simply could not reach the older conversations — the sidebar
+ * stopped scrolling at 100 with no indication that anything was missing.
+ * The endpoint is now pageable (`?limit=&skip=`) and reports the true
+ * `total`, so the UI can keep loading until every stored conversation is
+ * on screen.
+ */
+export const DEFAULT_CONVERSATION_LIMIT = 200;
+export const MAX_CONVERSATION_LIMIT = 1000;
+
+/**
+ * Parse `limit` / `skip` (alias `offset`) off the query string.
+ * - `limit=all` (or `0`) means "as many as one request may return".
+ * - Anything unparsable falls back to the default; negatives clamp to 0.
+ */
+export function parseConversationPaging(query: {
+  limit?: unknown;
+  skip?: unknown;
+  offset?: unknown;
+}): { limit: number; skip: number } {
+  const rawLimit = query.limit;
+  let limit = DEFAULT_CONVERSATION_LIMIT;
+  if (typeof rawLimit === 'string' || typeof rawLimit === 'number') {
+    const asString = String(rawLimit).trim().toLowerCase();
+    if (asString === 'all' || asString === 'max') {
+      limit = MAX_CONVERSATION_LIMIT;
+    } else if (asString !== '') {
+      const parsed = Number(asString);
+      if (Number.isFinite(parsed)) {
+        limit = parsed <= 0 ? MAX_CONVERSATION_LIMIT : Math.floor(parsed);
+      }
+    }
+  }
+  limit = Math.min(Math.max(limit, 1), MAX_CONVERSATION_LIMIT);
+
+  const rawSkip = query.skip ?? query.offset;
+  let skip = 0;
+  if (typeof rawSkip === 'string' || typeof rawSkip === 'number') {
+    const parsed = Number(String(rawSkip).trim());
+    if (Number.isFinite(parsed) && parsed > 0) skip = Math.floor(parsed);
+  }
+
+  return { limit, skip };
+}
+
+/**
  * GET /api/chat/conversations
  * Get list of unique conversations with last message and unread count.
  * Optional `?sessionId=X` scopes the result to a specific device when an
  * operator wants to see only one WhatsApp session's chats at a time.
+ * Optional `?limit=&skip=` pages through the full list (see
+ * parseConversationPaging). The response carries `total` / `hasMore` so the
+ * client can keep fetching until nothing is left.
  */
 router.get('/conversations', async (req: AuthRequest, res: Response) => {
   try {
@@ -38,14 +89,20 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
         ? req.query.sessionId
         : null;
 
+    const { limit, skip } = parseConversationPaging(
+      req.query as Record<string, unknown>,
+    );
+
     const baseMatch: Record<string, unknown> = {};
     if (sessionId) baseMatch['metadata.sessionId'] = sessionId;
     const scopedMatch = withTenantScope(req, baseMatch);
     const hasMatchStage =
       Boolean(sessionId) || Object.keys(scopedMatch).length > 0;
 
-    // Aggregate to get unique users with their last message
-    const conversations = await ChatMessage.aggregate([
+    // Aggregate to get unique users with their last message. $facet returns
+    // the requested page AND the total conversation count in a single pass,
+    // so paging never costs a second full scan.
+    const faceted = (await ChatMessage.aggregate([
       ...(hasMatchStage ? [{ $match: scopedMatch }] : []),
       {
         $sort: { timestamp: -1 },
@@ -58,29 +115,46 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
         },
       },
       {
-        $sort: { 'lastMessage.timestamp': -1 },
-      },
-      {
-        $limit: 100,
-      },
-    ]);
-
-    // Get unread counts (messages from user that haven't been read by admin)
-    const unreadCounts = await ChatMessage.aggregate([
-      {
-        $match: withTenantScope(req, {
-          role: 'user',
-          read: { $ne: true },
-          ...(sessionId ? { 'metadata.sessionId': sessionId } : {}),
-        }),
-      },
-      {
-        $group: {
-          _id: '$userId',
-          unreadCount: { $sum: 1 },
+        $facet: {
+          rows: [
+            { $sort: { 'lastMessage.timestamp': -1 } },
+            { $skip: skip },
+            { $limit: limit },
+          ],
+          meta: [{ $count: 'total' }],
         },
       },
-    ]);
+    ])) as Array<{
+      rows: any[];
+      meta: Array<{ total?: number }>;
+    }>;
+
+    const conversations = faceted[0]?.rows ?? [];
+    const total = faceted[0]?.meta?.[0]?.total ?? conversations.length;
+    const pageUserIds = conversations.map((c: any) => c._id);
+
+    // Get unread counts (messages from user that haven't been read by admin).
+    // Scoped to the userIds on this page — the full-collection version was
+    // pure waste once the list became pageable.
+    const unreadCounts =
+      pageUserIds.length === 0
+        ? []
+        : await ChatMessage.aggregate([
+            {
+              $match: withTenantScope(req, {
+                role: 'user',
+                read: { $ne: true },
+                userId: { $in: pageUserIds },
+                ...(sessionId ? { 'metadata.sessionId': sessionId } : {}),
+              }),
+            },
+            {
+              $group: {
+                _id: '$userId',
+                unreadCount: { $sum: 1 },
+              },
+            },
+          ]);
 
     // Create a map of unread counts
     const unreadMap = new Map(
@@ -249,7 +323,13 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
       };
     });
 
-    res.json({ conversations: formattedConversations });
+    res.json({
+      conversations: formattedConversations,
+      total,
+      limit,
+      skip,
+      hasMore: skip + formattedConversations.length < total,
+    });
   } catch (error) {
     console.error('Error fetching conversations:', error);
     res.status(500).json({ error: 'Failed to fetch conversations' });

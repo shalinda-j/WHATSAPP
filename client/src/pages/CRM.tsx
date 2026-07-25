@@ -33,6 +33,7 @@ import {
   ChevronRight,
   Briefcase,
   KeyRound,
+  Filter,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -343,6 +344,31 @@ export default function CRM() {
   const debouncedContactSearch = useDebounce(contactSearch, 300);
   const [contactTypeFilter] = useState('');
   const [showContactModal, setShowContactModal] = useState(false);
+
+  // ---- Contacts export filter panel ------------------------------------
+  // The Export CSV button used to dump every contact with no way to narrow
+  // the sheet. It now opens a filter panel: a date/time window on a chosen
+  // date field, plus the usual CRM attributes, with a live matching-row
+  // count so the operator knows what they're about to download.
+  const [showContactExport, setShowContactExport] = useState(false);
+  const [contactExport, setContactExport] = useState({
+    dateField: 'createdAt',
+    // datetime-local values ('YYYY-MM-DDTHH:mm') in the operator's timezone;
+    // converted to absolute ISO instants before hitting the API.
+    from: '',
+    to: '',
+    status: '',
+    type: '',
+    source: '',
+    priority: '',
+    search: '',
+    optedOut: 'all',
+  });
+  const [contactExportCount, setContactExportCount] = useState<number | null>(
+    null,
+  );
+  const [contactExportCounting, setContactExportCounting] = useState(false);
+  const [contactExportBusy, setContactExportBusy] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   // Result of issuing a "Pasyala" kiosk code for a contact. When set, a small
   // modal shows the operator the freshly-issued 4-digit code (also sent to the
@@ -1119,16 +1145,137 @@ export default function CRM() {
     }
   };
 
-  const handleExportContactsCSV = () => {
-    const date = new Date().toISOString().split('T')[0];
+  /**
+   * Format a Date for an <input type="datetime-local"> value — local clock,
+   * minute precision, no timezone suffix (which the control rejects).
+   */
+  const toLocalInputValue = (d: Date): string => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
+      d.getDate(),
+    )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  /**
+   * Convert a datetime-local value to an absolute ISO instant. The control
+   * hands back the operator's *local* wall clock, so we let Date parse it as
+   * local and serialise to UTC — that way "1 July 00:00" means 00:00 where
+   * the operator sits, not 00:00 UTC.
+   */
+  const localInputToIso = (value: string): string | null => {
+    if (!value) return null;
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  };
+
+  /** One-click windows for the export panel. */
+  const applyContactExportRange = (
+    key: 'today' | '7d' | '30d' | 'month' | 'lastMonth' | 'all',
+  ) => {
+    const now = new Date();
+    const startOfDay = (d: Date) =>
+      new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0);
+    const endOfDay = (d: Date) =>
+      new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59);
+
+    let from: Date | null = null;
+    let to: Date | null = endOfDay(now);
+    if (key === 'today') from = startOfDay(now);
+    else if (key === '7d') {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 6);
+      from = startOfDay(d);
+    } else if (key === '30d') {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 29);
+      from = startOfDay(d);
+    } else if (key === 'month') {
+      from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0);
+    } else if (key === 'lastMonth') {
+      from = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0);
+      to = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59);
+    } else {
+      to = null;
+    }
+
+    setContactExport((prev) => ({
+      ...prev,
+      from: from ? toLocalInputValue(from) : '',
+      to: to ? toLocalInputValue(to) : '',
+    }));
+  };
+
+  /** Query string shared by the preview count and the actual download. */
+  const buildContactExportParams = (): URLSearchParams => {
     const params = new URLSearchParams();
     appendSessionScope(params);
-    const qs = params.toString();
-    return downloadCsv(
-      `/api/export/contacts.csv${qs ? `?${qs}` : ''}`,
-      `crm-contacts-${date}.csv`,
-    );
+    params.set('dateField', contactExport.dateField);
+    const from = localInputToIso(contactExport.from);
+    const to = localInputToIso(contactExport.to);
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    if (contactExport.status) params.set('status', contactExport.status);
+    if (contactExport.type) params.set('type', contactExport.type);
+    if (contactExport.source) params.set('source', contactExport.source);
+    if (contactExport.priority) params.set('priority', contactExport.priority);
+    if (contactExport.search.trim())
+      params.set('search', contactExport.search.trim());
+    if (contactExport.optedOut !== 'all')
+      params.set('optedOut', contactExport.optedOut);
+    return params;
   };
+
+  const openContactExport = () => {
+    setContactExportCount(null);
+    setShowContactExport(true);
+  };
+
+  const runContactExport = async () => {
+    if (contactExportBusy) return;
+    setContactExportBusy(true);
+    try {
+      const params = buildContactExportParams();
+      const namePart =
+        contactExport.from || contactExport.to
+          ? `${(contactExport.from || 'any').slice(0, 10)}_${(
+              contactExport.to || 'now'
+            ).slice(0, 10)}`
+          : new Date().toISOString().split('T')[0];
+      await downloadCsv(
+        `/api/export/contacts.csv?${params.toString()}`,
+        `crm-contacts-${namePart}.csv`,
+      );
+      setShowContactExport(false);
+    } finally {
+      setContactExportBusy(false);
+    }
+  };
+
+  // Live "N contacts match" preview. Debounced by the 350ms timer so typing
+  // in the search box doesn't fire a request per keystroke.
+  useEffect(() => {
+    if (!showContactExport) return;
+    let cancelled = false;
+    setContactExportCounting(true);
+    const t = setTimeout(async () => {
+      try {
+        const params = buildContactExportParams();
+        const res = await api.get(
+          `/api/export/contacts.count?${params.toString()}`,
+        );
+        if (!cancelled) setContactExportCount(res.data?.total ?? 0);
+      } catch {
+        if (!cancelled) setContactExportCount(null);
+      } finally {
+        if (!cancelled) setContactExportCounting(false);
+      }
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showContactExport, contactExport, sessionFilter]);
 
   const getCategoryLabel = (cat: string) => {
     const labels: Record<string, string> = {
@@ -1370,9 +1517,9 @@ export default function CRM() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={handleExportContactsCSV}
+            onClick={openContactExport}
             className="flex items-center gap-2 px-4 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition"
-            title="Download all contacts as CSV"
+            title="Export contacts as CSV — filter by date/time window, status, type and more"
           >
             <Download className="h-5 w-5" /> Export CSV
           </button>
@@ -2759,6 +2906,300 @@ export default function CRM() {
       {activeTab === 'deals' && renderDeals()}
       {activeTab === 'leads' && renderLeads()}
       {activeTab === 'activities' && renderActivities()}
+
+      {/* Contacts export — filter panel (date/time window + attributes) */}
+      {showContactExport && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Filter className="h-5 w-5 text-blue-600" />
+                <div>
+                  <h3 className="text-lg font-bold text-gray-800">
+                    Export contacts
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Filter by date &amp; time, then download the CSV
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowContactExport(false)}
+                className="p-2 rounded-lg hover:bg-gray-100 text-gray-400"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Date axis */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                  Date field
+                </label>
+                <select
+                  value={contactExport.dateField}
+                  onChange={(e) =>
+                    setContactExport((p) => ({
+                      ...p,
+                      dateField: e.target.value,
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value="createdAt">Created date</option>
+                  <option value="updatedAt">Last updated</option>
+                  <option value="lastContact">Last contacted</option>
+                  <option value="nextFollowUp">Next follow-up</option>
+                </select>
+              </div>
+
+              {/* Quick ranges */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                  Quick range
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {(
+                    [
+                      ['today', 'Today'],
+                      ['7d', 'Last 7 days'],
+                      ['30d', 'Last 30 days'],
+                      ['month', 'This month'],
+                      ['lastMonth', 'Last month'],
+                      ['all', 'All time'],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => applyContactExportRange(key)}
+                      className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Explicit date + time window */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                    From (date &amp; time)
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={contactExport.from}
+                    onChange={(e) =>
+                      setContactExport((p) => ({ ...p, from: e.target.value }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                    To (date &amp; time)
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={contactExport.to}
+                    onChange={(e) =>
+                      setContactExport((p) => ({ ...p, to: e.target.value }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-400 -mt-2">
+                Times use this computer&apos;s timezone. Leave both empty to
+                export every contact.
+              </p>
+
+              {/* Attribute filters */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={contactExport.status}
+                    onChange={(e) =>
+                      setContactExport((p) => ({
+                        ...p,
+                        status: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="">Any status</option>
+                    {[
+                      'new',
+                      'contacted',
+                      'interested',
+                      'not_interested',
+                      'converted',
+                      'follow_up',
+                      'active',
+                      'inactive',
+                      'churned',
+                    ].map((s) => (
+                      <option key={s} value={s}>
+                        {s.replace('_', ' ')}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                    Type
+                  </label>
+                  <select
+                    value={contactExport.type}
+                    onChange={(e) =>
+                      setContactExport((p) => ({ ...p, type: e.target.value }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="">Any type</option>
+                    {['lead', 'prospect', 'customer', 'partner', 'vendor'].map(
+                      (t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                    Source
+                  </label>
+                  <select
+                    value={contactExport.source}
+                    onChange={(e) =>
+                      setContactExport((p) => ({
+                        ...p,
+                        source: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="">Any source</option>
+                    {[
+                      'website',
+                      'whatsapp',
+                      'referral',
+                      'social_media',
+                      'cold_call',
+                      'event',
+                      'manual',
+                      'other',
+                    ].map((s) => (
+                      <option key={s} value={s}>
+                        {s.replace('_', ' ')}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                    Priority
+                  </label>
+                  <select
+                    value={contactExport.priority}
+                    onChange={(e) =>
+                      setContactExport((p) => ({
+                        ...p,
+                        priority: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="">Any priority</option>
+                    {['low', 'medium', 'high'].map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                    Search
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Name, phone, email, company"
+                    value={contactExport.search}
+                    onChange={(e) =>
+                      setContactExport((p) => ({
+                        ...p,
+                        search: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                    Opt-out
+                  </label>
+                  <select
+                    value={contactExport.optedOut}
+                    onChange={(e) =>
+                      setContactExport((p) => ({
+                        ...p,
+                        optedOut: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="all">Include everyone</option>
+                    <option value="exclude">Exclude opted-out</option>
+                    <option value="only">Only opted-out</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Live match count */}
+              <div className="rounded-xl bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-800">
+                {contactExportCounting ? (
+                  'Counting matching contacts…'
+                ) : contactExportCount === null ? (
+                  'Match count unavailable — the download will still apply the filters.'
+                ) : (
+                  <>
+                    <strong>{contactExportCount.toLocaleString()}</strong>{' '}
+                    contact{contactExportCount === 1 ? '' : 's'} match this
+                    filter.
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="p-5 border-t border-gray-100 flex gap-3">
+              <button
+                onClick={() => setShowContactExport(false)}
+                className="flex-1 px-4 py-3 border border-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={runContactExport}
+                disabled={contactExportBusy || contactExportCount === 0}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Download className="h-4 w-4" />
+                {contactExportBusy ? 'Preparing…' : 'Download CSV'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Pasyala code result modal */}
       {pasyalaCode && (

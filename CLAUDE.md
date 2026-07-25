@@ -180,6 +180,23 @@ Sessions are stored in MongoDB with auth state. Key behaviors:
 - Logout (401) clears state and restarts for new QR
 - `deletedSessions` set prevents auto-restart of deleted sessions
 
+### Chat history sync
+
+`syncFullHistory` is ON by default (`WHATSAPP_SYNC_FULL_HISTORY=false` opts
+out). WhatsApp delivers the device's existing history on
+`messaging-history.set`, and `ChatHistorySyncService` persists it as
+ChatMessage rows so the admin Live Chat shows conversations that pre-date the
+bot.
+
+- History is **persist-only** — it never enters `messageHandlers`, so pairing
+  a device can't make the bot reply to old conversations.
+- Rows are marked `read: true` (history must not inflate unread badges) and
+  carry `waMessageId` + `metadata.source = 'history_sync'`.
+- Writes are keyed on `waMessageId` (sparse-unique) and queued per session,
+  so repeated batches are idempotent.
+- WhatsApp only ships history to a **newly linked** device — enabling the flag
+  does not back-fill an already-paired session; unlink and re-scan it.
+
 ## Message Flow
 
 ```
@@ -226,6 +243,7 @@ Key log markers:
 - `🎤` Voice processing
 - `📅` Booking flow
 - `📝` Lead/Form flow
+- `📚` Chat history sync
 
 ## TypeScript Patterns
 

@@ -78,6 +78,243 @@ export function resolveContactExportPhone(
   return '';
 }
 
+/* -------------------------------------------------------------------------
+ * Contact-export filtering (date/time window + attribute filters)
+ * ---------------------------------------------------------------------- */
+
+/** Date fields a contact export may be windowed on. */
+export const CONTACT_EXPORT_DATE_FIELDS = [
+  'createdAt',
+  'updatedAt',
+  'lastContact',
+  'nextFollowUp',
+] as const;
+
+export type ContactExportDateField =
+  (typeof CONTACT_EXPORT_DATE_FIELDS)[number];
+
+/** Whitelist the caller-supplied date field; anything else → createdAt. */
+export function resolveContactDateField(raw: unknown): ContactExportDateField {
+  const value = typeof raw === 'string' ? raw.trim() : '';
+  return (CONTACT_EXPORT_DATE_FIELDS as readonly string[]).includes(value)
+    ? (value as ContactExportDateField)
+    : 'createdAt';
+}
+
+/**
+ * Parse one edge of an export window into a Date.
+ *
+ * Accepted shapes, in order of specificity:
+ *   YYYY-MM-DD          → UTC start (00:00:00.000) / end (23:59:59.999) of day
+ *   YYYY-MM             → UTC start / end of the calendar month
+ *   YYYY-MM-DDTHH:mm    → that minute in UTC; the `end` edge covers the whole
+ *                         minute (…:59.999) so a picked end-time is inclusive
+ *   any ISO-8601 string → parsed as-is (offsets like `+05:30` / `Z` honoured)
+ *
+ * Naive (zone-less) inputs are read as UTC on purpose — the rest of the
+ * export layer windows in UTC, and the admin UI sends fully-qualified ISO
+ * timestamps so the operator's local pick maps to the exact instant.
+ *
+ * Returns null for empty / unparsable input so callers can skip the clause.
+ */
+export function parseExportDateBoundary(
+  raw: unknown,
+  edge: 'start' | 'end',
+): Date | null {
+  if (typeof raw !== 'string') return null;
+  const value = raw.trim();
+  if (value === '') return null;
+
+  // YYYY-MM
+  if (/^\d{4}-\d{2}$/.test(value)) {
+    const [y, m] = value.split('-').map(Number);
+    return edge === 'start'
+      ? new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0))
+      : new Date(Date.UTC(y, m, 1, 0, 0, 0, 0) - 1);
+  }
+
+  // YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    if (Number.isNaN(parsed.getTime())) return null;
+    if (edge === 'end') parsed.setUTCHours(23, 59, 59, 999);
+    return parsed;
+  }
+
+  // YYYY-MM-DDTHH:mm(:ss) with no timezone designator → treat as UTC.
+  const naive = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(:\d{2})?$/.exec(value);
+  if (naive) {
+    const seconds = naive[3] ?? (edge === 'end' ? ':59' : ':00');
+    const millis = edge === 'end' && !naive[3] ? '.999' : '.000';
+    const parsed = new Date(`${naive[1]}T${naive[2]}${seconds}${millis}Z`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/**
+ * Build the Mongo range operator for a date window. Returns null when
+ * neither edge is usable, and swaps the edges when the operator picks them
+ * backwards (a reversed range would otherwise silently return zero rows).
+ */
+export function buildExportDateRange(
+  fromRaw: unknown,
+  toRaw: unknown,
+): { $gte?: Date; $lte?: Date } | null {
+  let from = parseExportDateBoundary(fromRaw, 'start');
+  let to = parseExportDateBoundary(toRaw, 'end');
+  if (!from && !to) return null;
+  if (from && to && from.getTime() > to.getTime()) {
+    // Re-parse rather than swap the Dates: each edge carries its own
+    // day-rounding (start → 00:00:00.000, end → 23:59:59.999), so swapping
+    // the parsed values would hand back a window shifted by a day.
+    from = parseExportDateBoundary(toRaw, 'start');
+    to = parseExportDateBoundary(fromRaw, 'end');
+  }
+  const range: { $gte?: Date; $lte?: Date } = {};
+  if (from) range.$gte = from;
+  if (to) range.$lte = to;
+  return range;
+}
+
+/** Escape regex metacharacters so a search term can't inject a pattern. */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Merge filter clauses without one `$or` clobbering another — the tenant
+ * scope, the device scope and the free-text search each need their own.
+ */
+function combineFilters(
+  base: Record<string, unknown>,
+  ...clauses: Array<Record<string, unknown>>
+): Record<string, unknown> {
+  const nonEmpty = clauses.filter((c) => Object.keys(c).length > 0);
+  if (nonEmpty.length === 0) return base;
+  if (nonEmpty.length === 1) return { ...base, ...nonEmpty[0] };
+  return { ...base, $and: nonEmpty };
+}
+
+export type ContactExportQuery = {
+  tenantId?: string | null;
+  sessionId?: string | null;
+  status?: unknown;
+  type?: unknown;
+  source?: unknown;
+  priority?: unknown;
+  tags?: unknown;
+  search?: unknown;
+  dateField?: unknown;
+  from?: unknown;
+  to?: unknown;
+  /** 'exclude' drops opted-out contacts; 'only' keeps just those. */
+  optedOut?: unknown;
+};
+
+/**
+ * Compile the Contacts-export filter panel into a Mongo query. Pure so the
+ * date-window and clause-merging behaviour is unit-testable without a DB.
+ */
+export function buildContactExportFilter(params: ContactExportQuery): {
+  filter: Record<string, unknown>;
+  dateField: ContactExportDateField;
+} {
+  const dateField = resolveContactDateField(params.dateField);
+  const base: Record<string, unknown> = {};
+
+  const str = (v: unknown): string =>
+    typeof v === 'string' ? v.trim() : v == null ? '' : String(v).trim();
+
+  if (str(params.status)) base.status = str(params.status);
+  if (str(params.type)) base.type = str(params.type);
+  if (str(params.source)) base.source = str(params.source);
+  if (str(params.priority)) base.priority = str(params.priority);
+
+  const tags = (Array.isArray(params.tags) ? params.tags : [params.tags])
+    .flatMap((t) => str(t).split(','))
+    .map((t) => t.trim())
+    .filter(Boolean);
+  if (tags.length > 0) base.tags = { $in: tags };
+
+  const optedOut = str(params.optedOut).toLowerCase();
+  if (optedOut === 'exclude' || optedOut === 'false')
+    base.optedOut = { $ne: true };
+  else if (optedOut === 'only' || optedOut === 'true') base.optedOut = true;
+
+  const range = buildExportDateRange(params.from, params.to);
+  if (range) base[dateField] = range;
+
+  // Legacy-tolerant scopes: rows created before tenantId / sessionId existed
+  // must still export, otherwise old contacts silently vanish from the sheet.
+  const tenantId = str(params.tenantId);
+  const tenantClause: Record<string, unknown> = tenantId
+    ? {
+        $or: [
+          { tenantId: new mongoose.Types.ObjectId(tenantId) },
+          { tenantId: { $exists: false } },
+          { tenantId: null },
+        ],
+      }
+    : {};
+
+  const sessionId = str(params.sessionId);
+  const sessionClause: Record<string, unknown> =
+    sessionId && sessionId !== 'all'
+      ? { $or: [{ sessionId }, { sessionId: { $exists: false } }] }
+      : {};
+
+  const search = str(params.search);
+  const searchClause: Record<string, unknown> = search
+    ? {
+        $or: [
+          { name: { $regex: escapeRegex(search), $options: 'i' } },
+          { firstName: { $regex: escapeRegex(search), $options: 'i' } },
+          { lastName: { $regex: escapeRegex(search), $options: 'i' } },
+          { email: { $regex: escapeRegex(search), $options: 'i' } },
+          { phone: { $regex: escapeRegex(search), $options: 'i' } },
+          { whatsappNumber: { $regex: escapeRegex(search), $options: 'i' } },
+          { company: { $regex: escapeRegex(search), $options: 'i' } },
+        ],
+      }
+    : {};
+
+  return {
+    filter: combineFilters(base, tenantClause, sessionClause, searchClause),
+    dateField,
+  };
+}
+
+/**
+ * Filename that records what the sheet actually contains — which date axis
+ * was used, the window, and the device scope. Operators keep several of
+ * these side by side, so `crm-contacts-2026-07-01_2026-07-25.csv` beats a
+ * folder full of `crm-contacts-<today>.csv`.
+ */
+export function buildContactExportFilename(
+  dateField: ContactExportDateField,
+  fromRaw: unknown,
+  toRaw: unknown,
+  sessionId?: unknown,
+): string {
+  const parts: string[] = ['crm-contacts'];
+  if (typeof sessionId === 'string' && sessionId && sessionId !== 'all') {
+    parts.push(sessionId);
+  }
+  const from = parseExportDateBoundary(fromRaw, 'start');
+  const to = parseExportDateBoundary(toRaw, 'end');
+  if (from || to) {
+    if (dateField !== 'createdAt') parts.push(dateField);
+    const fmt = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : 'any');
+    parts.push(`${fmt(from)}_${fmt(to)}`);
+  } else {
+    parts.push(new Date().toISOString().slice(0, 10));
+  }
+  return `${parts.join('-')}.csv`;
+}
+
 /**
  * Streamable export endpoints. The current implementation materialises the
  * full result into memory before serialising — fine for ≤50k rows on a
@@ -151,22 +388,62 @@ router.get('/leads.csv', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Translate the request's query string into the contact-export filter.
+ * Shared by /contacts.csv and /contacts.count so the preview count the
+ * operator sees in the filter panel always matches the downloaded sheet.
+ */
+function contactExportFilterFromRequest(req: Request) {
+  const tenant = (req as any).tenant;
+  return buildContactExportFilter({
+    tenantId: tenant?._id ? String(tenant._id) : null,
+    sessionId:
+      typeof req.query.sessionId === 'string' ? req.query.sessionId : null,
+    status: req.query.status,
+    type: req.query.type,
+    source: req.query.source,
+    priority: req.query.priority,
+    tags: req.query.tags,
+    search: req.query.search,
+    dateField: req.query.dateField,
+    from: req.query.from,
+    to: req.query.to,
+    optedOut: req.query.optedOut,
+  });
+}
+
+/**
+ * GET /api/export/contacts.count
+ *
+ * Row count for the current filter selection — lets the export panel show
+ * "N contacts match" before the operator commits to a download. Same filter
+ * compiler as /contacts.csv, so the number is never a lie.
+ */
+router.get('/contacts.count', async (req: Request, res: Response) => {
+  try {
+    const { filter, dateField } = contactExportFilterFromRequest(req);
+    const total = await (Contact as any).countDocuments(filter);
+    res.json({
+      total,
+      dateField,
+      capped: total > MAX_EXPORT_ROWS,
+      maxRows: MAX_EXPORT_ROWS,
+    });
+  } catch (err: any) {
+    console.error('contacts.count failed:', err);
+    res.status(500).json({ error: err?.message ?? 'count_failed' });
+  }
+});
+
 router.get('/contacts.csv', async (req: Request, res: Response) => {
   try {
-    const tenant = (req as any).tenant;
-    const filter: Record<string, unknown> = {};
-    if (tenant?._id) {
-      filter.$or = [
-        { tenantId: new mongoose.Types.ObjectId(String(tenant._id)) },
-        { tenantId: { $exists: false } },
-      ];
-    }
-    if (req.query.status) filter.status = String(req.query.status);
-    if (req.query.type) filter.type = String(req.query.type);
+    const { filter, dateField } = contactExportFilterFromRequest(req);
 
     const rows = (await (Contact as any)
       .find(filter)
-      .sort({ updatedAt: -1 })
+      // Sort on the field the window was applied to, so a date-filtered
+      // sheet reads newest-first along the same axis the operator picked.
+      .sort({ [dateField]: -1 })
       .limit(MAX_EXPORT_ROWS)
       .lean()) as any[];
 
@@ -244,7 +521,12 @@ router.get('/contacts.csv', async (req: Request, res: Response) => {
     res
       .set(
         csvDownloadHeaders(
-          `crm-contacts-${new Date().toISOString().slice(0, 10)}.csv`,
+          buildContactExportFilename(
+            dateField,
+            req.query.from,
+            req.query.to,
+            req.query.sessionId,
+          ),
         ),
       )
       .send(csv);
