@@ -108,8 +108,28 @@ function detectLanguage(text: string): string {
   return 'en';
 }
 
+/**
+ * Conversation-list paging. The sidebar used to render whatever the backend
+ * returned in one shot \u2014 and the backend hard-capped that at 100, so chat
+ * 101 and older were unreachable no matter how far the operator scrolled.
+ * We now pull one page at a time and keep going (on scroll, on demand, or
+ * automatically while searching) until every stored conversation is loaded.
+ */
+const CONVERSATION_PAGE_SIZE = 200;
+/** Hard stop for the "load everything" loop so a runaway can't hang the tab. */
+const CONVERSATION_LOAD_ALL_CAP = 20000;
+
 export default function ChatInterface() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  // Total conversations the server holds for the current device scope, and
+  // whether more pages remain beyond what's loaded. `conversationsRef` lets
+  // the async page-loader read the current list length without re-creating
+  // itself on every state change (same stale-closure trap as the socket).
+  const [conversationTotal, setConversationTotal] = useState(0);
+  const [hasMoreConversations, setHasMoreConversations] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadingMoreRef = useRef(false);
+  const conversationsRef = useRef<Conversation[]>([]);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   // Refs mirror selectedUser + sessionFilter so the long-lived socket
   // listener always reads the *current* values instead of capturing the
@@ -256,6 +276,9 @@ export default function ChatInterface() {
   useEffect(() => {
     sessionFilterRef.current = sessionFilter;
   }, [sessionFilter]);
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
 
   useEffect(() => {
     const API_URL = import.meta.env.VITE_API_URL || window.location.origin;
@@ -320,6 +343,9 @@ export default function ChatInterface() {
                 new Date(a.lastMessage?.timestamp || 0).getTime(),
             );
         } else {
+          // Brand-new conversation — it isn't part of any fetched page, so
+          // the server-side total grows with it.
+          setConversationTotal((t) => t + 1);
           return [
             {
               userId: data.userId,
@@ -380,25 +406,115 @@ export default function ChatInterface() {
     }
   };
 
+  // Tag each row with its detected language once, on arrival.
+  const decorateConversations = (rows: Conversation[]): Conversation[] =>
+    rows.map((c) => ({
+      ...c,
+      detectedLanguage: c.lastMessage
+        ? detectLanguage(c.lastMessage.content)
+        : 'en',
+    }));
+
+  const conversationParams = (skip: number): string => {
+    const params = new URLSearchParams();
+    if (sessionFilter && sessionFilter !== 'all') {
+      params.set('sessionId', sessionFilter);
+    }
+    params.set('limit', String(CONVERSATION_PAGE_SIZE));
+    params.set('skip', String(skip));
+    return params.toString();
+  };
+
   const fetchConversations = async () => {
     setLoading(true);
     try {
-      const params =
-        sessionFilter && sessionFilter !== 'all'
-          ? `?sessionId=${encodeURIComponent(sessionFilter)}`
-          : '';
-      const res = await api.get(`/api/chat/conversations${params}`);
-      const convs = (res.data.conversations || []).map((c: Conversation) => ({
-        ...c,
-        detectedLanguage: c.lastMessage
-          ? detectLanguage(c.lastMessage.content)
-          : 'en',
-      }));
+      const res = await api.get(
+        `/api/chat/conversations?${conversationParams(0)}`,
+      );
+      const convs = decorateConversations(res.data.conversations || []);
       setConversations(convs);
+      setConversationTotal(
+        typeof res.data.total === 'number' ? res.data.total : convs.length,
+      );
+      // Older backends don't send `hasMore`; fall back to "a full page came
+      // back" so the operator still gets a Load-more affordance.
+      setHasMoreConversations(
+        typeof res.data.hasMore === 'boolean'
+          ? res.data.hasMore
+          : convs.length >= CONVERSATION_PAGE_SIZE,
+      );
     } catch (error) {
       console.error('Failed to fetch conversations:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * Append the next page. Returns true when still more remain afterwards,
+   * so the load-everything loop below can drive it without touching state.
+   * Deduplicates by userId because the socket may have inserted a row that
+   * the server also returns on this page.
+   */
+  const loadMoreConversations = async (): Promise<boolean> => {
+    if (loadingMoreRef.current) return false;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      const skip = conversationsRef.current.length;
+      const res = await api.get(
+        `/api/chat/conversations?${conversationParams(skip)}`,
+      );
+      const incoming = decorateConversations(res.data.conversations || []);
+
+      let merged: Conversation[] = [];
+      setConversations((prev) => {
+        const seen = new Set(prev.map((c) => c.userId));
+        merged = [...prev, ...incoming.filter((c) => !seen.has(c.userId))];
+        return merged;
+      });
+
+      const total =
+        typeof res.data.total === 'number' ? res.data.total : merged.length;
+      setConversationTotal(total);
+      const more =
+        typeof res.data.hasMore === 'boolean'
+          ? res.data.hasMore
+          : incoming.length >= CONVERSATION_PAGE_SIZE;
+      // Never keep asking when the server stopped returning new rows —
+      // that would spin forever on a backend without paging support.
+      const stillMore = more && incoming.length > 0;
+      setHasMoreConversations(stillMore);
+      return stillMore;
+    } catch (error) {
+      console.error('Failed to load more conversations:', error);
+      setHasMoreConversations(false);
+      return false;
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  };
+
+  /** Pull every remaining page (bounded), used by "Load all" and by search. */
+  const loadAllConversations = async () => {
+    let guard = 0;
+    while (guard < CONVERSATION_LOAD_ALL_CAP / CONVERSATION_PAGE_SIZE) {
+      guard += 1;
+      const more = await loadMoreConversations();
+      if (!more) break;
+    }
+  };
+
+  /**
+   * Infinite scroll: once the operator is within ~200px of the bottom of the
+   * list, pull the next page. This is what makes "scroll past 100" work.
+   */
+  const handleConversationScroll = (e: React.UIEvent<HTMLDivElement>): void => {
+    if (!hasMoreConversations || loadingMoreRef.current) return;
+    const el = e.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) {
+      void loadMoreConversations();
     }
   };
 
@@ -446,6 +562,16 @@ export default function ChatInterface() {
     // Refetch when the operator switches device scope.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionFilter]);
+
+  // Search filters the *loaded* rows, so a term that only matches an older
+  // chat would look like "no results" while pages are still unfetched. Pull
+  // the rest in the background the moment the operator starts typing.
+  useEffect(() => {
+    if (!searchQuery.trim()) return;
+    if (!hasMoreConversations || loadingMoreRef.current) return;
+    void loadAllConversations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, hasMoreConversations]);
 
   useEffect(() => {
     if (selectedUser) fetchMessages(selectedUser);
@@ -619,8 +745,17 @@ export default function ChatInterface() {
               >
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
-              <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
-                {conversations.length}
+              <span
+                className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium"
+                title={
+                  conversationTotal > conversations.length
+                    ? `${conversations.length} of ${conversationTotal} conversations loaded — scroll down or press "Load all"`
+                    : `${conversations.length} conversations`
+                }
+              >
+                {conversationTotal > conversations.length
+                  ? `${conversations.length}/${conversationTotal}`
+                  : conversations.length}
               </span>
             </div>
           </div>
@@ -714,8 +849,12 @@ export default function ChatInterface() {
           </div>
         </div>
 
-        {/* Conversation List */}
-        <div className="flex-1 overflow-y-auto">
+        {/* Conversation List — paged: scrolling to the bottom pulls the next
+            page so every stored chat is reachable, not just the first 100. */}
+        <div
+          className="flex-1 overflow-y-auto"
+          onScroll={handleConversationScroll}
+        >
           {loading ? (
             <div className="flex items-center justify-center h-32">
               <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-green-500"></div>
@@ -723,7 +862,9 @@ export default function ChatInterface() {
           ) : filteredConversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-32 text-gray-400">
               <MessageSquare className="h-10 w-10 mb-2 opacity-30" />
-              <p className="text-sm">No conversations</p>
+              <p className="text-sm">
+                {loadingMore ? 'Searching older chats…' : 'No conversations'}
+              </p>
             </div>
           ) : (
             filteredConversations.map((conv) => {
@@ -822,6 +963,45 @@ export default function ChatInterface() {
               );
             })
           )}
+
+          {/* Paging footer — scrolling already auto-loads, these are the
+              explicit escape hatches (and the "everything is loaded" note). */}
+          {!loading && (hasMoreConversations || loadingMore) && (
+            <div className="p-3 flex flex-col items-center gap-2 border-t border-gray-100 bg-gray-50">
+              {loadingMore ? (
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-green-500" />
+                  Loading older chats…
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={() => void loadMoreConversations()}
+                    className="w-full py-2 text-xs font-semibold text-green-700 bg-white border border-green-200 rounded-lg hover:bg-green-50"
+                  >
+                    Load older chats
+                  </button>
+                  <button
+                    onClick={() => void loadAllConversations()}
+                    className="text-[10px] text-gray-500 hover:text-gray-700 underline"
+                  >
+                    Load all
+                    {conversationTotal > conversations.length
+                      ? ` (${conversationTotal - conversations.length} more)`
+                      : ''}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+          {!loading &&
+            !hasMoreConversations &&
+            !loadingMore &&
+            conversations.length > 0 && (
+              <div className="py-3 text-center text-[10px] text-gray-400">
+                All {conversations.length} conversations loaded
+              </div>
+            )}
         </div>
       </div>
 
