@@ -174,7 +174,12 @@ async function detectConversion(
 function detectAudioMime(buf: Buffer): string {
   if (!buf || buf.length < 3) return 'audio/mpeg';
   // RIFF....WAVE → WAV (Gemini TTS path returns WAV)
-  if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46) {
+  if (
+    buf[0] === 0x52 &&
+    buf[1] === 0x49 &&
+    buf[2] === 0x46 &&
+    buf[3] === 0x46
+  ) {
     return 'audio/wav';
   }
   // "ID3" tag → MP3
@@ -182,7 +187,10 @@ function detectAudioMime(buf: Buffer): string {
     return 'audio/mpeg';
   }
   // MPEG audio frame sync 0xFF 0xFB / 0xF3 / 0xF2 → MP3 (Google-free path)
-  if (buf[0] === 0xff && (buf[1] === 0xfb || buf[1] === 0xf3 || buf[1] === 0xf2)) {
+  if (
+    buf[0] === 0xff &&
+    (buf[1] === 0xfb || buf[1] === 0xf3 || buf[1] === 0xf2)
+  ) {
     return 'audio/mpeg';
   }
   return 'audio/mpeg';
@@ -391,7 +399,9 @@ async function buildCustomerContext(
       // before '@'; metadata.realPhone is bare digits → anchor at the end. This
       // avoids a longer number matching the 9-digit tail as a mid-string substring.
       orConds.push({ userId: { $regex: new RegExp(`${tail}@`) } }); // phone-backed JIDs
-      orConds.push({ 'metadata.realPhone': { $regex: new RegExp(`${tail}$`) } }); // @lid privacy JIDs
+      orConds.push({
+        'metadata.realPhone': { $regex: new RegExp(`${tail}$`) },
+      }); // @lid privacy JIDs
     }
     if (orConds.length === 0) return '';
     // Tenant-scope the lookup (legacy-tolerant) — same as the Lead query above.
@@ -436,9 +446,7 @@ async function buildCustomerContext(
     /* best-effort */
   }
 
-  console.log(
-    `🧠 kiosk context: phone=${tail || '-'} parts=${parts.length}`,
-  );
+  console.log(`🧠 kiosk context: phone=${tail || '-'} parts=${parts.length}`);
   if (parts.length === 0) return '';
   return (
     `(SYSTEM පාරිභෝගික පසුබිම — මෙම පුද්ගලයා දැනටමත් WhatsApp හරහා අප සමඟ කතා කර ඇත. ` +
@@ -664,7 +672,8 @@ router.post(
         reply = '';
       }
       if (!reply || /no ai services are configured/i.test(reply)) {
-        reply = 'සමාවන්න, මට මේ මොහොතේ පිළිතුරු දීමට නොහැකි විය. නැවත උත්සාහ කරන්න.';
+        reply =
+          'සමාවන්න, මට මේ මොහොතේ පිළිතුරු දීමට නොහැකි විය. නැවත උත්සාහ කරන්න.';
       }
 
       // ── 4. OpenRouter TTS → base64 (+ magic-byte mime). Never fatal. ──────

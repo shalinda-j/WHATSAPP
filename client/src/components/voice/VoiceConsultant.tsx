@@ -109,7 +109,9 @@ export default function VoiceConsultant({
   const [reply, setReply] = useState<string>('');
   const [converted, setConverted] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [micBlocked, setMicBlocked] = useState<boolean>(false);
+  // Write-only: every setMicBlocked(true) is paired with a setError() carrying
+  // the operator-facing explanation, so the flag itself is never rendered.
+  const [, setMicBlocked] = useState<boolean>(false);
   // Live mic level (0..1) so the orb reacts to the speaker's voice.
   const [level, setLevel] = useState<number>(0);
 
@@ -135,6 +137,17 @@ export default function VoiceConsultant({
   const speakAbortRef = useRef<AbortController | null>(null);
   const bargeRafRef = useRef<number | null>(null);
   const bargeSpeechStartRef = useRef(0);
+
+  // The hands-free loop is mutually recursive: sendAudio/endUtterance re-arm
+  // the mic via beginListening, beginListening drives the VAD monitor, and the
+  // monitor re-schedules itself each frame. Reaching a `const` callback from a
+  // closure declared ABOVE it is a temporal-dead-zone hazard (and what the
+  // react-hooks/immutability rule flags), so the back-edges go through these
+  // refs instead. Each ref is re-pointed at the latest callback below, which
+  // also means the recursion always calls the current closure rather than a
+  // stale capture.
+  const beginListeningRef = useRef<() => void>(() => {});
+  const monitorRef = useRef<() => void>(() => {});
 
   const setPhase = useCallback((s: ConsultState) => {
     phaseRef.current = s;
@@ -271,16 +284,13 @@ export default function VoiceConsultant({
       } finally {
         // Resume the hands-free loop (unless the visitor ended the session).
         if (mountedRef.current && sessionActiveRef.current) {
-          beginListening();
+          beginListeningRef.current();
         } else if (mountedRef.current) {
           setPhase('idle');
         }
       }
     },
-    // beginListening is declared below; it's stable (useCallback) so referencing
-    // it here via the hoisted binding is safe.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [setPhase],
+    [setPhase, startBargeInWatch, stopBargeInWatch],
   );
 
   // ── Finish the current utterance → recorder.stop() → onstop → sendAudio ──────
@@ -291,10 +301,9 @@ export default function VoiceConsultant({
       try {
         recorder.stop(); // fires onstop
       } catch {
-        if (sessionActiveRef.current) beginListening();
+        if (sessionActiveRef.current) beginListeningRef.current();
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stopRaf]);
 
   // ── The VAD monitor: reads the analyser each frame, ends the utterance on
@@ -338,7 +347,7 @@ export default function VoiceConsultant({
       return;
     }
 
-    rafRef.current = requestAnimationFrame(monitor);
+    rafRef.current = requestAnimationFrame(() => monitorRef.current());
   }, [endUtterance]);
 
   // ── Arm a fresh listening turn on the already-open stream ────────────────────
@@ -380,7 +389,7 @@ export default function VoiceConsultant({
         void sendAudio(blob, blobType);
       } else if (sessionActiveRef.current) {
         // Stopped without speech (shouldn't normally happen) — keep listening.
-        beginListening();
+        beginListeningRef.current();
       }
     };
 
@@ -395,9 +404,16 @@ export default function VoiceConsultant({
       return;
     }
     setPhase('listening');
-    rafRef.current = requestAnimationFrame(monitor);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [monitor, sendAudio, setPhase, teardownAudio]);
+    rafRef.current = requestAnimationFrame(() => monitorRef.current());
+  }, [sendAudio, setPhase, teardownAudio]);
+
+  // Keep the recursion back-edges pointing at the freshest closures.
+  useEffect(() => {
+    beginListeningRef.current = beginListening;
+  }, [beginListening]);
+  useEffect(() => {
+    monitorRef.current = monitor;
+  }, [monitor]);
 
   // ── Start the hands-free session (one tap) ───────────────────────────────────
   const startSession = useCallback(async () => {
@@ -476,8 +492,7 @@ export default function VoiceConsultant({
   };
 
   // Orb scales gently with the live mic level while listening.
-  const orbScale =
-    state === 'listening' ? 1 + Math.min(0.35, level * 4) : 1;
+  const orbScale = state === 'listening' ? 1 + Math.min(0.35, level * 4) : 1;
 
   const orbState =
     state === 'processing'
@@ -587,7 +602,9 @@ export default function VoiceConsultant({
                 <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-emerald-100">
                   <User className="h-3.5 w-3.5" /> You
                 </div>
-                <p className="text-base leading-snug sm:text-lg">{transcript}</p>
+                <p className="text-base leading-snug sm:text-lg">
+                  {transcript}
+                </p>
               </div>
             )}
             {reply && (
@@ -661,7 +678,10 @@ export default function VoiceConsultant({
           <p className="flex h-7 items-center justify-center gap-1 text-lg font-medium text-slate-200 sm:text-xl">
             <span>{statusLabel[state]}</span>
             {state === 'processing' && (
-              <span aria-hidden="true" className="ml-1 inline-flex items-end gap-1">
+              <span
+                aria-hidden="true"
+                className="ml-1 inline-flex items-end gap-1"
+              >
                 {[0, 150, 300].map((d) => (
                   <span
                     key={d}

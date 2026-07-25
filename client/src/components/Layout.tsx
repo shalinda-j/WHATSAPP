@@ -64,7 +64,11 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { to: '/crm', icon: Briefcase, label: 'CRM' },
       { to: '/follow-up', icon: UserCheck, label: 'Follow-up Manager' },
-      { to: '/consulting-assistant', icon: Headphones, label: 'Consulting Assistant AI' },
+      {
+        to: '/consulting-assistant',
+        icon: Headphones,
+        label: 'Consulting Assistant AI',
+      },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
     ],
   },

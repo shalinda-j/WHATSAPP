@@ -114,10 +114,7 @@ export class WebhookService {
       const andClauses: Record<string, unknown>[] = [
         { $or: [{ events: event }, { events: '*' }] },
         {
-          $or: [
-            { category: { $ne: 'ops' } },
-            { category: { $exists: false } },
-          ],
+          $or: [{ category: { $ne: 'ops' } }, { category: { $exists: false } }],
         },
       ];
       if (tenantClause) andClauses.push(tenantClause);

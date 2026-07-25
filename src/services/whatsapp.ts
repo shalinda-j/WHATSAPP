@@ -1248,9 +1248,7 @@ export function getSocket(sessionId = 'default'): WASocket | undefined {
  * when no session is up at all. Lets admin-panel send paths work in
  * multi-device deployments where the 'default' session doesn't exist.
  */
-export function resolveActiveSessionId(
-  preferred = 'default',
-): string | null {
+export function resolveActiveSessionId(preferred = 'default'): string | null {
   // Prefer the requested session only when it's actually connected — a stale
   // socket that's mid-reconnect would otherwise be picked and the send would
   // silently fail.

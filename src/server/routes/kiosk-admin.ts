@@ -45,7 +45,10 @@ router.post('/invite', async (req: Request, res: Response) => {
       expiresAt: invite?.expiresAt,
     });
   } catch (err) {
-    console.error('❌ Kiosk invite issue failed:', (err as any)?.message || err);
+    console.error(
+      '❌ Kiosk invite issue failed:',
+      (err as any)?.message || err,
+    );
     res.status(500).json({ error: 'Failed to issue kiosk code' });
   }
 });
@@ -109,8 +112,7 @@ router.get('/invites', async (req: Request, res: Response) => {
       const composedName = `${contact?.firstName || ''} ${
         contact?.lastName || ''
       }`.trim();
-      const name =
-        contact?.name || composedName || `Guest ${inv.code}`;
+      const name = contact?.name || composedName || `Guest ${inv.code}`;
 
       const phone = inv.phone || contact?.phone || '';
 

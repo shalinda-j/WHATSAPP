@@ -600,8 +600,8 @@ export default function FormBuilder() {
                               </option>
                             </select>
                             <p className="mt-1 text-[11px] text-gray-400">
-                              When set, options are loaded from your Datasets and
-                              override the manual list above.
+                              When set, options are loaded from your Datasets
+                              and override the manual list above.
                             </p>
                           </div>
                         </div>

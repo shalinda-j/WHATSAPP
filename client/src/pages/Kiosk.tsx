@@ -33,9 +33,8 @@ function errorStatus(err: unknown): number | undefined {
 }
 
 function errorMessage(err: unknown): string | undefined {
-  return (
-    err as { response?: { data?: { error?: string } } } | undefined
-  )?.response?.data?.error;
+  return (err as { response?: { data?: { error?: string } } } | undefined)
+    ?.response?.data?.error;
 }
 
 export default function Kiosk() {
@@ -54,7 +53,9 @@ export default function Kiosk() {
     (digit: string) => {
       setError(null);
       setCode((prev) =>
-        prev.length >= CODE_LENGTH ? prev : (prev + digit).slice(0, CODE_LENGTH),
+        prev.length >= CODE_LENGTH
+          ? prev
+          : (prev + digit).slice(0, CODE_LENGTH),
       );
     },
     [setCode],
@@ -112,8 +113,7 @@ export default function Kiosk() {
   }, []);
 
   const dots = useMemo(
-    () =>
-      Array.from({ length: CODE_LENGTH }).map((_, i) => i < code.length),
+    () => Array.from({ length: CODE_LENGTH }).map((_, i) => i < code.length),
     [code.length],
   );
 

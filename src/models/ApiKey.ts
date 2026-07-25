@@ -18,10 +18,7 @@ import crypto from 'crypto';
  *    req.tenant from it so every integration read is isolated to that tenant.
  */
 export type ApiKeyScope =
-  | 'read:leads'
-  | 'read:contacts'
-  | 'read:bookings'
-  | 'read:all';
+  'read:leads' | 'read:contacts' | 'read:bookings' | 'read:all';
 
 export interface IApiKey extends Document {
   tenantId?: mongoose.Types.ObjectId;

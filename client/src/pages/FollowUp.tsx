@@ -568,7 +568,11 @@ export default function FollowUp() {
                             {isOverdue ? 'Overdue: ' : 'Follow up: '}
                             {new Date(c.nextFollowUp).toLocaleDateString(
                               'en-US',
-                              { month: 'short', day: 'numeric', timeZone: 'UTC' },
+                              {
+                                month: 'short',
+                                day: 'numeric',
+                                timeZone: 'UTC',
+                              },
                             )}
                           </p>
                         )}
@@ -682,7 +686,8 @@ export default function FollowUp() {
                       Scheduled dates are saved here. Automatic follow-up
                       messages only send when the Follow-up agent is enabled
                       (Agents &rarr; Follow-up &rarr; Autonomous or Approval).
-                      The manual &ldquo;Send WhatsApp&rdquo; button always works.
+                      The manual &ldquo;Send WhatsApp&rdquo; button always
+                      works.
                     </p>
                   </div>
                   <input

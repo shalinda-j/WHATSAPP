@@ -95,11 +95,7 @@ class LeadScoringService {
     if (!tenantId) return { phoneNumber };
     return {
       phoneNumber,
-      $or: [
-        { tenantId },
-        { tenantId: { $exists: false } },
-        { tenantId: null },
-      ],
+      $or: [{ tenantId }, { tenantId: { $exists: false } }, { tenantId: null }],
     };
   }
 

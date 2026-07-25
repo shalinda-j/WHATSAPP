@@ -374,9 +374,8 @@ app.get('/health', async (req, res) => {
       // without needing a live kiosk session. `hasKey` is a boolean — it never
       // exposes the key itself.
       try {
-        const { getOpenRouterVoiceSettings } = await import(
-          '../services/openrouterVoice'
-        );
+        const { getOpenRouterVoiceSettings } =
+          await import('../services/openrouterVoice');
         const v = await getOpenRouterVoiceSettings();
         health.voice = {
           openrouterTts: {

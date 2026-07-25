@@ -23,7 +23,7 @@ itself allow two tenants to share a `sessionId`.
 
 ## Deferred: full per-tenant uniqueness (planned migration)
 
-Making `sessionId` unique *per tenant* is an architecture migration, not a
+Making `sessionId` unique _per tenant_ is an architecture migration, not a
 surgical edit, and is **deliberately deferred** to avoid introducing
 regressions. It requires all of:
 

@@ -73,7 +73,10 @@ async function describeViaOpenRouter(
   const dataUrl = `data:${mimeType};base64,${base64Data}`;
   let part: Record<string, unknown>;
   if (mimeType === 'application/pdf') {
-    part = { type: 'file', file: { filename: 'document.pdf', file_data: dataUrl } };
+    part = {
+      type: 'file',
+      file: { filename: 'document.pdf', file_data: dataUrl },
+    };
   } else if (mimeType.startsWith('image/')) {
     part = { type: 'image_url', image_url: { url: dataUrl } };
   } else {
@@ -147,7 +150,8 @@ export function detectIncomingMedia(
   }
 
   const doc =
-    msg.documentMessage ?? msg.documentWithCaptionMessage?.message?.documentMessage;
+    msg.documentMessage ??
+    msg.documentWithCaptionMessage?.message?.documentMessage;
   if (doc) {
     return {
       kind: 'document',

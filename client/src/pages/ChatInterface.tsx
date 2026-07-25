@@ -375,7 +375,6 @@ export default function ChatInterface() {
     // selectedUser/sessionFilter changes (we use refs inside the handler),
     // so we don't churn the websocket every time the operator switches
     // tabs or scopes. Previously this reconnected on every selection.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchSessions = async () => {
@@ -1247,8 +1246,11 @@ export default function ChatInterface() {
                               msg.metadata.sentimentLabel !== 'neutral' && (
                                 <span
                                   className={`text-[9px] px-1.5 py-0.5 rounded-full ${
-                                    (SENTIMENT_BADGE[msg.metadata.sentimentLabel] || SENTIMENT_BADGE.neutral)
-                                      .className
+                                    (
+                                      SENTIMENT_BADGE[
+                                        msg.metadata.sentimentLabel
+                                      ] || SENTIMENT_BADGE.neutral
+                                    ).className
                                   }`}
                                   title={
                                     msg.metadata.sentimentScore !== undefined
@@ -1257,8 +1259,11 @@ export default function ChatInterface() {
                                   }
                                 >
                                   {
-                                    (SENTIMENT_BADGE[msg.metadata.sentimentLabel] || SENTIMENT_BADGE.neutral)
-                                      .label
+                                    (
+                                      SENTIMENT_BADGE[
+                                        msg.metadata.sentimentLabel
+                                      ] || SENTIMENT_BADGE.neutral
+                                    ).label
                                   }
                                 </span>
                               )}
@@ -1403,9 +1408,9 @@ export default function ChatInterface() {
               </button>
             </div>
             <p className="text-sm text-gray-500 mb-5">
-              Inbound chats scoped to a device and date range. The CSV
-              includes phone when available, raw LID when unresolved, country,
-              last message, message count, and matched contact name.
+              Inbound chats scoped to a device and date range. The CSV includes
+              phone when available, raw LID when unresolved, country, last
+              message, message count, and matched contact name.
             </p>
 
             <div className="space-y-4">

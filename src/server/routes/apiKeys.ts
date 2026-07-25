@@ -1,6 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
-import { resolveTenant, withTenantScope, tenantIdOf } from '../middleware/tenantContext';
+import {
+  resolveTenant,
+  withTenantScope,
+  tenantIdOf,
+} from '../middleware/tenantContext';
 import ApiKey, {
   generateRawApiKey,
   hashApiKey,

@@ -15,12 +15,7 @@ import {
 } from 'lucide-react';
 
 type Category =
-  | 'sales'
-  | 'marketing'
-  | 'support'
-  | 'personalisation'
-  | 'tone'
-  | 'other';
+  'sales' | 'marketing' | 'support' | 'personalisation' | 'tone' | 'other';
 
 interface ExampleSnippet {
   input: string;

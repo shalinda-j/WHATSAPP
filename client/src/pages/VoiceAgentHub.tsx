@@ -32,13 +32,16 @@ import {
 interface VoiceConfigData {
   _id?: string;
   provider:
-    | 'google-free'
-    | 'google-cloud'
-    | 'gemini-tts'
-    | 'openai'
-    | 'elevenlabs';
+    'google-free' | 'google-cloud' | 'gemini-tts' | 'openai' | 'elevenlabs';
   apiKey?: string;
   googleApiKey?: string;
+  /**
+   * The server redacts stored keys: GET returns these booleans instead of the
+   * raw values, so "is this provider configured?" must be read from them and
+   * only fall back to the (legacy) raw fields.
+   */
+  hasApiKey?: boolean;
+  hasGoogleApiKey?: boolean;
   voiceId?: string;
   isActive: boolean;
   mode: 'voice-only' | 'text-only' | 'voice-and-text';
@@ -479,10 +482,7 @@ export default function VoiceAgentHub() {
     // already-configured provider — requiring re-entry every save was the
     // regression. An empty field on an already-configured provider means
     // "keep the existing key".
-    const existing = getProviderConfig(providerName) as VoiceConfigData & {
-      hasApiKey?: boolean;
-      hasGoogleApiKey?: boolean;
-    };
+    const existing = getProviderConfig(providerName);
     const hasKey = existing.hasApiKey ?? !!existing.apiKey;
     const hasGoogleKey = existing.hasGoogleApiKey ?? !!existing.googleApiKey;
     if (providerInfo.requiresApiKey && !editFormData.apiKey && !hasKey) {
@@ -589,9 +589,7 @@ export default function VoiceAgentHub() {
   // `.apiKey` alone always reads empty for a configured provider — falling back
   // to the raw field keeps older responses working.
   const providerHasApiKey = (providerName: string): boolean => {
-    const c = getProviderConfig(providerName) as VoiceConfigData & {
-      hasApiKey?: boolean;
-    };
+    const c = getProviderConfig(providerName);
     return c.hasApiKey ?? !!c.apiKey;
   };
 
@@ -924,9 +922,9 @@ export default function VoiceAgentHub() {
                 // API keys are redacted by the server (GET returns
                 // hasApiKey/hasGoogleApiKey booleans, not the raw key); fall
                 // back to the legacy raw field for older responses.
-                const hasApiKey = (config as any).hasApiKey ?? !!config.apiKey;
+                const hasApiKey = config.hasApiKey ?? !!config.apiKey;
                 const hasGoogleApiKey =
-                  (config as any).hasGoogleApiKey ?? !!config.googleApiKey;
+                  config.hasGoogleApiKey ?? !!config.googleApiKey;
 
                 return (
                   <div
@@ -1675,9 +1673,9 @@ export default function VoiceAgentHub() {
                     from a CRM contact (the{' '}
                     <span className="font-semibold">Issue Pasyala code</span>{' '}
                     action), then type that 4-digit code into the kiosk below.
-                    This embeds <span className="font-mono">/kiosk</span> exactly
-                    as branch visitors see it. Microphone capture needs HTTPS or
-                    localhost; the text box always works.
+                    This embeds <span className="font-mono">/kiosk</span>{' '}
+                    exactly as branch visitors see it. Microphone capture needs
+                    HTTPS or localhost; the text box always works.
                   </div>
                 </div>
 

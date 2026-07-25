@@ -67,7 +67,11 @@ export default function Login() {
           <div className="px-8 py-8">
             {/* Logo */}
             <div className="flex flex-col items-center mb-8">
-              <img src={BRAND.logoLarge} alt={BRAND.name} className="h-16 mb-3" />
+              <img
+                src={BRAND.logoLarge}
+                alt={BRAND.name}
+                className="h-16 mb-3"
+              />
               <div className="flex items-center gap-2 mt-1">
                 <Shield className="h-4 w-4 text-green-500" />
                 <span className="text-xs text-gray-500 font-medium">

@@ -116,18 +116,15 @@ export async function markContactOptedOut(
       }
     : phoneClause;
 
-  const res = await (Contact as any).updateMany(
-    filter,
-    {
-      $set: {
-        optedOut: true,
-        optedOutAt: new Date(),
-        optedOutReason: reason ?? `${channel}_stop_keyword`,
-        optedOutChannel: channel,
-        whatsappOptIn: false,
-      },
+  const res = await (Contact as any).updateMany(filter, {
+    $set: {
+      optedOut: true,
+      optedOutAt: new Date(),
+      optedOutReason: reason ?? `${channel}_stop_keyword`,
+      optedOutChannel: channel,
+      whatsappOptIn: false,
     },
-  );
+  });
   return res?.modifiedCount ?? 0;
 }
 

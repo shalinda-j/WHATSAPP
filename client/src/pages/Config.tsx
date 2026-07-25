@@ -777,9 +777,10 @@ export default function Config() {
                 )}
                 {formData.providerType === 'openrouter-tts' && (
                   <p className="mt-1 text-xs text-gray-500">
-                    OpenRouter TTS model used by the AI Voice Consultant (kiosk).
-                    e.g. <code>openai/gpt-4o-mini-tts</code>. Leave the API Key
-                    blank to reuse your OpenRouter chat provider&apos;s key.
+                    OpenRouter TTS model used by the AI Voice Consultant
+                    (kiosk). e.g. <code>openai/gpt-4o-mini-tts</code>. Leave the
+                    API Key blank to reuse your OpenRouter chat provider&apos;s
+                    key.
                   </p>
                 )}
               </div>
@@ -1631,7 +1632,9 @@ export default function Config() {
                     <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
                       <span className="text-xs text-gray-500 inline-flex items-center gap-1">
                         <ShieldAlert className="h-3 w-3" /> Key:{' '}
-                        {c.hasApiKey || c.apiKey ? 'set (encrypted)' : 'missing'}
+                        {c.hasApiKey || c.apiKey
+                          ? 'set (encrypted)'
+                          : 'missing'}
                       </span>
                       <div className="flex items-center gap-2">
                         <button
@@ -2336,7 +2339,9 @@ export default function Config() {
                       </label>
                       <input
                         type="text"
-                        value={getProviderConfig('openrouter').voiceId || 'alloy'}
+                        value={
+                          getProviderConfig('openrouter').voiceId || 'alloy'
+                        }
                         onChange={(e) =>
                           updateProviderConfig('openrouter', {
                             voiceId: e.target.value,

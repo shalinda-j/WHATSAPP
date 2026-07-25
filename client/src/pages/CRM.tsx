@@ -172,12 +172,7 @@ interface LeadRegistration {
     uploadedAt: Date;
   }[];
   status:
-    | 'new'
-    | 'reviewed'
-    | 'contacted'
-    | 'interviewed'
-    | 'accepted'
-    | 'rejected';
+    'new' | 'reviewed' | 'contacted' | 'interviewed' | 'accepted' | 'rejected';
   notes?: string;
   registeredAt: Date;
   score?: {
@@ -1689,7 +1684,8 @@ export default function CRM() {
         {contactsTotalPages > 1 && (
           <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-t">
             <p className="text-sm text-gray-500">
-              Page {contactsPage} of {contactsTotalPages} ({contactsTotal} total)
+              Page {contactsPage} of {contactsTotalPages} ({contactsTotal}{' '}
+              total)
             </p>
             <div className="flex gap-2">
               <button
@@ -2415,9 +2411,7 @@ export default function CRM() {
                     <td className="px-6 py-4">
                       {(() => {
                         const tier = (lead.score?.tier || 'cold') as
-                          | 'hot'
-                          | 'warm'
-                          | 'cold';
+                          'hot' | 'warm' | 'cold';
                         const cfg = leadTierConfig[tier];
                         return (
                           <span
@@ -2485,10 +2479,9 @@ export default function CRM() {
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
                         <a
-                          href={`https://wa.me/${(lead.phoneNumber || '').replace(
-                            /[^0-9]/g,
-                            '',
-                          )}`}
+                          href={`https://wa.me/${(
+                            lead.phoneNumber || ''
+                          ).replace(/[^0-9]/g, '')}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"

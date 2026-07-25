@@ -4,6 +4,7 @@ How the bot converts a WhatsApp message into a booked customer, and how the
 operator's **AI Personality** layer merges into both working types.
 
 > The two "working types":
+>
 > - **Type A — Live conversation agents** (inbound, real-time): convert a chatting visitor.
 > - **Type B — Automation / operator agents** (outbound, background): campaigns, segmentation, follow-up.
 >
@@ -83,13 +84,13 @@ flowchart TD
 
 ## 4. The 5-step conversion playbook (applied on every conversation)
 
-| Step | Name | What the bot does |
-|------|------|-------------------|
-| 1 | **CONNECT** | Greet warmly in the customer's language, mirror tone |
-| 2 | **UNDERSTAND** | Ask ONE focused qualifying question (country/job/skills/timeline) |
-| 3 | **VALUE** | Tie their goal to how you help — sell the outcome, never invent prices |
-| 4 | **LOWER THE BARRIER** | Position the FREE, no-obligation campus visit as the next step |
-| 5 | **CALL TO ACTION** | End with ONE easy CTA ("shall I check available dates?" / `!book`) |
+| Step | Name                  | What the bot does                                                      |
+| ---- | --------------------- | ---------------------------------------------------------------------- |
+| 1    | **CONNECT**           | Greet warmly in the customer's language, mirror tone                   |
+| 2    | **UNDERSTAND**        | Ask ONE focused qualifying question (country/job/skills/timeline)      |
+| 3    | **VALUE**             | Tie their goal to how you help — sell the outcome, never invent prices |
+| 4    | **LOWER THE BARRIER** | Position the FREE, no-obligation campus visit as the next step         |
+| 5    | **CALL TO ACTION**    | End with ONE easy CTA ("shall I check available dates?" / `!book`)     |
 
 **Persuasion principles:** reciprocity · risk-reversal · commitment & consistency ·
 social proof (only if true) · scarcity (only if true). **Never:** fake urgency,
@@ -97,5 +98,5 @@ invented prices/vacancies/testimonials, or pressure.
 
 ---
 
-*Source: `src/index.ts`, `src/services/AgentOrchestrator.ts`, `src/agents/*`,
-`src/agents/composeSystemPrompt.ts`, `src/config/companies/index.ts`.*
+_Source: `src/index.ts`, `src/services/AgentOrchestrator.ts`, `src/agents/*`,
+`src/agents/composeSystemPrompt.ts`, `src/config/companies/index.ts`._

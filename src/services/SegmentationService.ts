@@ -206,11 +206,12 @@ export class SegmentationService {
     orGroups: SegmentRule[][] | undefined,
   ): boolean {
     if (!orGroups) return false;
-    return orGroups.some((g) =>
-      Array.isArray(g) &&
-      g.some(
-        (r) => typeof r?.field === 'string' && r.field.startsWith('lead.'),
-      ),
+    return orGroups.some(
+      (g) =>
+        Array.isArray(g) &&
+        g.some(
+          (r) => typeof r?.field === 'string' && r.field.startsWith('lead.'),
+        ),
     );
   }
 
@@ -242,8 +243,7 @@ export class SegmentationService {
 
     const allRules: SegmentRule[] = (segment.rules ?? []) as SegmentRule[];
     const orGroups: SegmentRule[][] | undefined = segment.or as
-      | SegmentRule[][]
-      | undefined;
+      SegmentRule[][] | undefined;
 
     if (SegmentationService.orGroupsHaveLeadScope(orGroups)) {
       console.warn(

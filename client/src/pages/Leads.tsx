@@ -527,10 +527,9 @@ export default function Leads() {
                     <td className="px-8 py-5">
                       <div className="flex items-center justify-end gap-2">
                         <a
-                          href={`https://wa.me/${(lead.phoneNumber || '').replace(
-                            /[^0-9]/g,
-                            '',
-                          )}`}
+                          href={`https://wa.me/${(
+                            lead.phoneNumber || ''
+                          ).replace(/[^0-9]/g, '')}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-2.5 text-green-600 bg-green-50 hover:bg-green-600 hover:text-white rounded-xl transition duration-300 shadow-sm"
@@ -865,10 +864,9 @@ export default function Leads() {
             <div className="px-8 py-6 bg-gray-50/80 border-t border-gray-100 flex flex-col sm:flex-row gap-4 justify-between items-center">
               <div className="flex gap-2">
                 <a
-                  href={`https://wa.me/${(selectedLead.phoneNumber || '').replace(
-                    /[^0-9]/g,
-                    '',
-                  )}`}
+                  href={`https://wa.me/${(
+                    selectedLead.phoneNumber || ''
+                  ).replace(/[^0-9]/g, '')}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-2xl font-bold shadow-lg shadow-green-200 hover:bg-green-700 hover:-translate-y-0.5 transition active:translate-y-0"
