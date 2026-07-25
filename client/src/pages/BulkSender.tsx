@@ -907,7 +907,9 @@ const BulkSender = () => {
           disabled={isSending || recipients.length === 0 || !selectedDevice}
           className={`flex items-center gap-2 px-6 py-3 text-base font-semibold rounded-xl shadow-sm text-white transition
                         ${
-                          isSending || recipients.length === 0 || !selectedDevice
+                          isSending ||
+                          recipients.length === 0 ||
+                          !selectedDevice
                             ? 'bg-indigo-300 cursor-not-allowed'
                             : 'bg-indigo-600 hover:bg-indigo-700 hover:shadow-md'
                         }`}

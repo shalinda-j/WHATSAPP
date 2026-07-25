@@ -579,15 +579,19 @@ async function saveLeadRegistration(
 
     // Notify any subscribed webhooks that a new lead was captured.
     // Fire-and-forget so a slow/failing webhook never blocks registration.
-    WebhookService.triggerWebhook('lead.created', {
-      id: lead._id,
-      name: session.data.fullName,
-      phone: session.data.phoneNumber,
-      country: session.data.interestedCountry,
-      jobType: session.data.jobVacancyType,
-      sessionId,
-      timestamp: new Date(),
-    }, leadTenantId).catch((err) =>
+    WebhookService.triggerWebhook(
+      'lead.created',
+      {
+        id: lead._id,
+        name: session.data.fullName,
+        phone: session.data.phoneNumber,
+        country: session.data.interestedCountry,
+        jobType: session.data.jobVacancyType,
+        sessionId,
+        timestamp: new Date(),
+      },
+      leadTenantId,
+    ).catch((err) =>
       console.error('lead.created webhook trigger failed:', err),
     );
 
@@ -627,9 +631,7 @@ async function saveLeadRegistration(
         // Dashboard tabs fill from real bot activity instead of staying empty.
         // Fire-and-forget — never block registration on it.
         const dealTitle = `${session.data.fullName || 'WhatsApp lead'}${
-          session.data.jobVacancyType
-            ? ` – ${session.data.jobVacancyType}`
-            : ''
+          session.data.jobVacancyType ? ` – ${session.data.jobVacancyType}` : ''
         }`;
         const scope = leadTenantId ? { tenantId: leadTenantId } : {};
         CRMService.createDeal({

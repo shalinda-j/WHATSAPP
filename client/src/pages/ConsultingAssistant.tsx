@@ -260,11 +260,14 @@ export default function ConsultingAssistant() {
                       </td>
                       <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
                         {inv.createdAt
-                          ? new Date(inv.createdAt).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })
+                          ? new Date(inv.createdAt).toLocaleDateString(
+                              'en-US',
+                              {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                              },
+                            )
                           : '—'}
                       </td>
                     </tr>

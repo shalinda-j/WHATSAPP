@@ -97,11 +97,7 @@ async function main(): Promise<void> {
   const filter = {
     $and: [
       {
-        $or: [
-          { phone: { $exists: false } },
-          { phone: null },
-          { phone: '' },
-        ],
+        $or: [{ phone: { $exists: false } }, { phone: null }, { phone: '' }],
       },
       {
         $or: [

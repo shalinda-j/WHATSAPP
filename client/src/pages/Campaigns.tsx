@@ -25,12 +25,7 @@ interface CampaignRow {
   name: string;
   description?: string;
   status:
-    | 'draft'
-    | 'scheduled'
-    | 'running'
-    | 'paused'
-    | 'completed'
-    | 'cancelled';
+    'draft' | 'scheduled' | 'running' | 'paused' | 'completed' | 'cancelled';
   channels: string[];
   trigger: { kind: string; scheduledAt?: string };
   variants: CampaignVariant[];

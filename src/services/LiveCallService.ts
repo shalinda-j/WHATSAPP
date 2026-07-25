@@ -46,11 +46,7 @@ export type LiveCallMode = 'reject-reply' | 'live-answer';
  * waterfall: Gemini → Google Cloud → OpenAI → ElevenLabs → Google Free).
  */
 export type CallTtsModel =
-  | 'auto'
-  | 'gemini'
-  | 'openai'
-  | 'elevenlabs'
-  | 'google';
+  'auto' | 'gemini' | 'openai' | 'elevenlabs' | 'google';
 
 export interface IncomingCallContext {
   callId: string;

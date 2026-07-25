@@ -40,7 +40,15 @@ async function getBookedHoursFromDb(
     // (UTC midnight), so local setHours() on a non-UTC host would shift the
     // window and either miss same-day bookings or pull in adjacent days.
     const dayStart = new Date(
-      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0),
+      Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth(),
+        date.getUTCDate(),
+        0,
+        0,
+        0,
+        0,
+      ),
     );
     const dayEnd = new Date(
       Date.UTC(

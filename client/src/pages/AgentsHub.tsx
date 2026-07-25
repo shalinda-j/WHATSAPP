@@ -46,12 +46,7 @@ interface HubResponse {
 }
 
 type SkillCategory =
-  | 'sales'
-  | 'marketing'
-  | 'support'
-  | 'personalisation'
-  | 'tone'
-  | 'other';
+  'sales' | 'marketing' | 'support' | 'personalisation' | 'tone' | 'other';
 
 interface Skill {
   _id: string;

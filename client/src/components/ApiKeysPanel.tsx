@@ -112,8 +112,8 @@ export default function ApiKeysPanel() {
       {freshKey && (
         <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
           <div className="flex items-center gap-2 text-emerald-800 font-semibold text-sm mb-2">
-            <ShieldCheck className="w-4 h-4" /> Copy this key now — it won&apos;t
-            be shown again
+            <ShieldCheck className="w-4 h-4" /> Copy this key now — it
+            won&apos;t be shown again
           </div>
           <div className="flex items-stretch gap-2">
             <code className="flex-1 break-all rounded bg-white border border-emerald-200 px-3 py-2 font-mono text-sm text-gray-800">
@@ -135,7 +135,10 @@ export default function ApiKeysPanel() {
       )}
 
       {/* Create form */}
-      <form onSubmit={create} className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+      <form
+        onSubmit={create}
+        className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6"
+      >
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -235,7 +238,7 @@ export default function ApiKeysPanel() {
           <code>updatedSince</code> next time for incremental sync.
         </p>
         <pre className="overflow-x-auto rounded bg-gray-900 text-gray-100 text-xs p-3">
-{`curl -H "X-Api-Key: wbk_..." \\
+          {`curl -H "X-Api-Key: wbk_..." \\
   "${base}/api/integrations/leads?limit=100&updatedSince=2026-07-01T00:00:00Z"
 
 # also: /api/integrations/contacts  and  /api/integrations/bookings

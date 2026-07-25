@@ -1,7 +1,28 @@
 import { messageMatchesKeyword } from '../utils/keywordMatch';
 
-const ACCEPT = ['yes', 'yeah', 'yep', 'ya', 'ow', 'ovu', 'ok', 'okay', 'sure', 'y'];
-const REJECT = ['no', 'nah', 'not', 'epa', 'cancel', 'stop', 'later', 'pasuwa', 'no thanks'];
+const ACCEPT = [
+  'yes',
+  'yeah',
+  'yep',
+  'ya',
+  'ow',
+  'ovu',
+  'ok',
+  'okay',
+  'sure',
+  'y',
+];
+const REJECT = [
+  'no',
+  'nah',
+  'not',
+  'epa',
+  'cancel',
+  'stop',
+  'later',
+  'pasuwa',
+  'no thanks',
+];
 
 describe('messageMatchesKeyword — booking acceptance detection', () => {
   it('accepts a bare "yes"', () => {
@@ -11,16 +32,18 @@ describe('messageMatchesKeyword — booking acceptance detection', () => {
   it('accepts a natural-language yes with extra words (the field bug)', () => {
     // The exact reply from the reported screenshot that used to be misread as
     // a rejection because the old check required the whole message to be "yes".
-    expect(messageMatchesKeyword('Yes 9.30 vage anna hithan inna', ACCEPT)).toBe(
-      true,
-    );
+    expect(
+      messageMatchesKeyword('Yes 9.30 vage anna hithan inna', ACCEPT),
+    ).toBe(true);
     expect(messageMatchesKeyword('ok sure lets do it', ACCEPT)).toBe(true);
     expect(messageMatchesKeyword('ovu mata enna puluwan', ACCEPT)).toBe(true);
   });
 
   it('does not treat these as acceptance', () => {
     // No acceptance token present.
-    expect(messageMatchesKeyword('what time is available?', ACCEPT)).toBe(false);
+    expect(messageMatchesKeyword('what time is available?', ACCEPT)).toBe(
+      false,
+    );
     expect(messageMatchesKeyword('no', ACCEPT)).toBe(false);
   });
 

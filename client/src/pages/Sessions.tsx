@@ -16,11 +16,7 @@ interface Session {
   sessionId: string;
   sessionName: string;
   status:
-    | 'connecting'
-    | 'connected'
-    | 'disconnected'
-    | 'scan_qr'
-    | 'reconnecting';
+    'connecting' | 'connected' | 'disconnected' | 'scan_qr' | 'reconnecting';
   qr?: string;
   phoneNumber?: string;
   updatedAt: string;

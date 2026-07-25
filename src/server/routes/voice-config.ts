@@ -127,7 +127,11 @@ router.post('/toggle', async (req: Request, res: Response) => {
     const { isActive } = req.body;
     await VoiceConfig.updateMany({}, { $set: { isActive } });
     const configs = await VoiceConfig.find().sort({ updatedAt: -1 });
-    res.json({ success: true, isActive, configs: configs.map(redactVoiceConfig) });
+    res.json({
+      success: true,
+      isActive,
+      configs: configs.map(redactVoiceConfig),
+    });
   } catch (error) {
     res.status(500).json({ error: 'Failed to toggle voice agent' });
   }

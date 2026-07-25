@@ -375,9 +375,9 @@ async function startServer() {
                 .filter((m) => m.role !== 'system')
                 .slice(-10)
                 .map((m) => ({
-                role: m.role as 'user' | 'assistant' | 'system',
-                content: m.content,
-              })),
+                  role: m.role as 'user' | 'assistant' | 'system',
+                  content: m.content,
+                })),
             )
             .catch(
               () =>
@@ -983,8 +983,8 @@ onMessage(async (message, sock, sessionId) => {
       return;
     }
 
-    let messageType: 'text' | 'voice' | 'image' | 'video' | 'document' | 'sticker' =
-      'text';
+    let messageType:
+      'text' | 'voice' | 'image' | 'video' | 'document' | 'sticker' = 'text';
     let detectedVoiceLanguage: string | null = null;
 
     // Helper to extract audio message from various wrappers
@@ -1082,7 +1082,11 @@ onMessage(async (message, sock, sessionId) => {
       // when enrolment language appears) so the funnel can rank hot leads.
       // Fire-and-forget — must never block or break the reply path.
       leadScoringService
-        .scoreInbound(jid.replace(/@.*/, ''), text, defaultTenantId || undefined)
+        .scoreInbound(
+          jid.replace(/@.*/, ''),
+          text,
+          defaultTenantId || undefined,
+        )
         .catch((err) => console.error('   ⚠️ leadScoring failed:', err));
       // WhatsApp push name — store on the message so the chat list can
       // render a human-readable label even when the userId is a Linked-ID

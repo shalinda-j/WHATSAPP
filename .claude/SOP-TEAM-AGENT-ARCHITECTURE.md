@@ -244,12 +244,13 @@ Tester → Orchestrator: "Tests passed, approved"
 - Quality assurance reporting
 
 **Testing Matrix**:
-| Test Type | Scope | Tools |
-|-----------|-------|-------|
-| Unit Tests | Individual functions | Jest |
-| Integration Tests | API endpoints | Jest + Supertest |
-| E2E Tests | Full workflows | Playwright |
-| Performance Tests | Load, stress | k6, Artillery |
+
+| Test Type         | Scope                | Tools            |
+| ----------------- | -------------------- | ---------------- |
+| Unit Tests        | Individual functions | Jest             |
+| Integration Tests | API endpoints        | Jest + Supertest |
+| E2E Tests         | Full workflows       | Playwright       |
+| Performance Tests | Load, stress         | k6, Artillery    |
 
 ### 3.5 Planner Agent (Architect)
 

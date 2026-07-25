@@ -144,9 +144,14 @@ export default function Calendar() {
       const startOfToday = new Date(new Date().setHours(0, 0, 0, 0));
       const seen = new Set<string>();
       const upcoming = merged
-        .filter((b) => b && new Date(b.date) >= startOfToday && b.status !== 'cancelled')
+        .filter(
+          (b) =>
+            b && new Date(b.date) >= startOfToday && b.status !== 'cancelled',
+        )
         .filter((b) => {
-          const id = String((b as { _id?: string })._id ?? `${b.date}-${b.clientPhone}`);
+          const id = String(
+            (b as { _id?: string })._id ?? `${b.date}-${b.clientPhone}`,
+          );
           if (seen.has(id)) return false;
           seen.add(id);
           return true;
@@ -176,7 +181,10 @@ export default function Calendar() {
       );
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `bookings-${year}-${String(month).padStart(2, '0')}.csv`);
+      link.setAttribute(
+        'download',
+        `bookings-${year}-${String(month).padStart(2, '0')}.csv`,
+      );
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -195,7 +203,7 @@ export default function Calendar() {
   // mount (it spans the current + next real month).
   useEffect(() => {
     fetchUpcoming();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (message) {
