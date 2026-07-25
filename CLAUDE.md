@@ -95,12 +95,33 @@ npm run start
    - `resolveTenant` middleware: `X-Tenant-Slug` header → JWT `tenantId` → `default` fallback; auto-creates the `default` tenant so single-tenant deployments keep working
    - Migration script: `npx ts-node src/scripts/migrate-tenant-id.ts [--dry-run] [--slug=default]` backfills `tenantId` on every legacy collection
 
-9. **Marketing pipeline**
-   - `MarketingCampaign` / `ContactSegment` / `CampaignExecution` models
-   - `SegmentRuleCompiler` — pure compile-rules-to-Mongo function (12 unit tests)
-   - `CampaignService.launch` — honours `segmentId` via `SegmentationService.materialise`, falls back to broadcast
-   - `CampaignService.tickSender` — 30s interval, per-campaign rate limit, quiet hours, single-writer guard (queued → sending → sent)
-   - `FollowUpScheduler` — 5-min interval, picks dormant Leads (`updatedAt < now − 5d`), gated on `AgentConfig.find({name:'follow_up'}).mode`
+9. **Users, roles & permissions (RBAC)**
+   - `src/config/permissions.ts` — the single source of truth: a flat catalogue
+     of `area.action` keys plus the seeded role presets (Super Admin,
+     Administrator, Manager, Support Agent, Marketing, Viewer)
+   - `Role` model — presets are seeded on boot (`ensureSystemRoles`) and are
+     editable; operators can add custom roles per tenant
+   - `Admin` model gains `roleKey`, `permissions[]` (per-user extras),
+     `status`, `fullName`, `email`, `jobTitle`, `lastLoginAt`
+   - `PermissionService.resolveIdentity()` resolves effective permissions from
+     the DB on every request (5s cache) — never from the JWT, so a role change
+     applies on the user's next click instead of at token expiry
+   - `requirePermission()` / `requireAnyPermission()` gate the routers in
+     `app.ts`; the frontend mirrors the keys in `client/src/permissions.ts` to
+     hide nav entries and guard routes (`useAuth().can(...)`)
+   - Escalation guards: rank ordering (you can't touch an account or role at or
+     above your own level) + grant containment (you can't hand out a permission
+     you don't hold), plus last-admin and self-delete protection
+   - Back-compat: an admin with no `roleKey` and no `tenantId` resolves as a
+     super admin, matching the pre-RBAC `requireSuperAdmin()` rule
+
+10. **Marketing pipeline**
+
+- `MarketingCampaign` / `ContactSegment` / `CampaignExecution` models
+- `SegmentRuleCompiler` — pure compile-rules-to-Mongo function (12 unit tests)
+- `CampaignService.launch` — honours `segmentId` via `SegmentationService.materialise`, falls back to broadcast
+- `CampaignService.tickSender` — 30s interval, per-campaign rate limit, quiet hours, single-writer guard (queued → sending → sent)
+- `FollowUpScheduler` — 5-min interval, picks dormant Leads (`updatedAt < now − 5d`), gated on `AgentConfig.find({name:'follow_up'}).mode`
 
 ### Key Services
 
@@ -160,6 +181,17 @@ commandDispatcher.register(new NewCommand());
 
 1. Create router in `src/server/routes/`
 2. Register in `src/server/app.ts` with `authenticateToken` middleware
+3. Gate it with `requirePermission('area.action')` (or `requireAnyPermission`)
+
+### Add a Permission
+
+1. Add the entry to `PERMISSIONS` in `src/config/permissions.ts` (key, label,
+   group) — the role editor UI picks it up automatically
+2. Add it to whichever `ROLE_PRESETS` should hold it
+3. Gate the route in `src/server/app.ts`
+4. If a nav item / page depends on it, add the key to
+   `client/src/permissions.ts` and set `permission` on the nav item in
+   `Layout.tsx` + the `<Guarded>` wrapper in `App.tsx`
 
 ## Environment Variables
 

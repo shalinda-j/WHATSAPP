@@ -1,9 +1,11 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { lazy, Suspense } from 'react';
+import { ShieldOff } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
+import { PERM, type PermissionKey } from './permissions';
 
 // Login stays eager — it's the entry point and renders before bundles load.
 import Login from './pages/Login';
@@ -37,6 +39,7 @@ const ContentStudio = lazy(() => import('./pages/ContentStudio'));
 const AuditLog = lazy(() => import('./pages/AuditLog'));
 const Kiosk = lazy(() => import('./pages/Kiosk'));
 const ConsultingAssistant = lazy(() => import('./pages/ConsultingAssistant'));
+const Users = lazy(() => import('./pages/Users'));
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   const { token, loading } = useAuth();
@@ -49,6 +52,61 @@ const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   if (!token) return <Navigate to="/login" />;
   return children;
 };
+
+/**
+ * Route-level permission gate. Typing a URL directly must not reach a page
+ * the account has no access to — the sidebar hides the link, this stops the
+ * deep link, and the API refuses the data. Renders an explanation rather
+ * than a redirect so the user understands why, instead of being bounced to
+ * the dashboard with no feedback.
+ */
+const RequirePermission = ({
+  permission,
+  children,
+}: {
+  permission: PermissionKey;
+  children: ReactNode;
+}) => {
+  const { can, loading } = useAuth();
+  if (loading) return <RouteSpinner />;
+  if (can(permission)) return children;
+  return (
+    <div className="flex flex-col items-center justify-center py-24 text-center px-6">
+      <div className="h-14 w-14 rounded-full bg-amber-100 flex items-center justify-center mb-4">
+        <ShieldOff className="h-7 w-7 text-amber-600" />
+      </div>
+      <h2 className="text-lg font-bold text-gray-800">
+        You don&apos;t have access to this page
+      </h2>
+      <p className="text-sm text-gray-500 mt-1 max-w-md">
+        Your role doesn&apos;t include the{' '}
+        <code className="px-1 py-0.5 bg-gray-100 rounded text-xs">
+          {permission}
+        </code>{' '}
+        permission. Ask an administrator if you need it.
+      </p>
+      <Link
+        to="/dashboard"
+        className="mt-5 px-5 py-2.5 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700"
+      >
+        Back to dashboard
+      </Link>
+    </div>
+  );
+};
+
+/** Wrap a lazy page in its Suspense boundary + permission gate. */
+const Guarded = ({
+  permission,
+  children,
+}: {
+  permission: PermissionKey;
+  children: ReactNode;
+}) => (
+  <RequirePermission permission={permission}>
+    <Suspense fallback={<RouteSpinner />}>{children}</Suspense>
+  </RequirePermission>
+);
 
 function RouteSpinner() {
   return (
@@ -84,201 +142,209 @@ function AppRoutes() {
         <Route
           path="dashboard"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.dashboard}>
               <Dashboard />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="crm"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.crmView}>
               <CRM />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="chat"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.chatView}>
               <ChatInterface />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="calendar"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.calendar}>
               <Calendar />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="follow-up"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.followup}>
               <FollowUp />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="datasets"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.datasets}>
               <Datasets />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="webhooks"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.webhooks}>
               <Webhooks />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="config"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.config}>
               <Config />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="bulk-message"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.bulkSend}>
               <BulkSender />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="system"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.system}>
               <SystemMaintenance />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="voice-agent-hub"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.voiceView}>
               <VoiceAgentHub />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="sessions"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.sessionsView}>
               <Sessions />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="form-builder"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.forms}>
               <FormBuilder />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="agents"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.agentsView}>
               <AgentsHub />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="agents/approvals"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.agentsApprove}>
               <ApprovalQueue />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="agents/traces"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.agentsView}>
               <AgentTraces />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="agents/:name"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.agentsView}>
               <AgentDetail />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="channels"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.channels}>
               <Channels />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="campaigns"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.campaignsView}>
               <Campaigns />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="segments"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.segments}>
               <Segments />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="marketing-insights"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.insights}>
               <MarketingInsights />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="content-studio"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.content}>
               <ContentStudio />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="tenants"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.tenants}>
               <Tenants />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="audit"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.audit}>
               <AuditLog />
-            </Suspense>
+            </Guarded>
           }
         />
         <Route
           path="consulting-assistant"
           element={
-            <Suspense fallback={<RouteSpinner />}>
+            <Guarded permission={PERM.consulting}>
               <ConsultingAssistant />
-            </Suspense>
+            </Guarded>
+          }
+        />
+        <Route
+          path="users"
+          element={
+            <Guarded permission={PERM.usersView}>
+              <Users />
+            </Guarded>
           }
         />
         {/* Legacy redirects */}

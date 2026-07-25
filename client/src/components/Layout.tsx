@@ -31,7 +31,9 @@ import {
   Wand2,
   ShieldAlert,
   Headphones,
+  UsersRound,
 } from 'lucide-react';
+import { PERM, type PermissionKey } from '../permissions';
 
 interface NavItem {
   to: string;
@@ -39,6 +41,12 @@ interface NavItem {
   label: string;
   badge?: string;
   badgeColor?: string;
+  /**
+   * Permission that unlocks this entry. An item with no `permission` is
+   * visible to every signed-in account. The link is only a UX affordance —
+   * the same permission gates the API, so hiding it is not the boundary.
+   */
+  permission?: PermissionKey;
 }
 
 interface NavSection {
@@ -49,63 +57,182 @@ interface NavSection {
 const NAV_SECTIONS: NavSection[] = [
   {
     title: 'Overview',
-    items: [{ to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' }],
+    items: [
+      {
+        to: '/dashboard',
+        icon: LayoutDashboard,
+        label: 'Dashboard',
+        permission: PERM.dashboard,
+      },
+    ],
   },
   {
     title: 'Communication',
     items: [
-      { to: '/chat', icon: MessageSquare, label: 'Live Chat' },
-      { to: '/sessions', icon: Smartphone, label: 'Linked Devices' },
-      { to: '/bulk-message', icon: Megaphone, label: 'Bulk Messaging' },
+      {
+        to: '/chat',
+        icon: MessageSquare,
+        label: 'Live Chat',
+        permission: PERM.chatView,
+      },
+      {
+        to: '/sessions',
+        icon: Smartphone,
+        label: 'Linked Devices',
+        permission: PERM.sessionsView,
+      },
+      {
+        to: '/bulk-message',
+        icon: Megaphone,
+        label: 'Bulk Messaging',
+        permission: PERM.bulkSend,
+      },
     ],
   },
   {
     title: 'CRM & Sales',
     items: [
-      { to: '/crm', icon: Briefcase, label: 'CRM' },
-      { to: '/follow-up', icon: UserCheck, label: 'Follow-up Manager' },
+      { to: '/crm', icon: Briefcase, label: 'CRM', permission: PERM.crmView },
+      {
+        to: '/follow-up',
+        icon: UserCheck,
+        label: 'Follow-up Manager',
+        permission: PERM.followup,
+      },
       {
         to: '/consulting-assistant',
         icon: Headphones,
         label: 'Consulting Assistant AI',
+        permission: PERM.consulting,
       },
-      { to: '/calendar', icon: Calendar, label: 'Calendar' },
+      {
+        to: '/calendar',
+        icon: Calendar,
+        label: 'Calendar',
+        permission: PERM.calendar,
+      },
     ],
   },
   {
     title: 'AI & Automation',
     items: [
-      { to: '/voice-agent-hub', icon: AudioLines, label: 'Voice Agent' },
-      { to: '/form-builder', icon: FileText, label: 'Form Builder' },
-      { to: '/datasets', icon: Database, label: 'Datasets' },
-      { to: '/webhooks', icon: Globe, label: 'Webhooks' },
+      {
+        to: '/voice-agent-hub',
+        icon: AudioLines,
+        label: 'Voice Agent',
+        permission: PERM.voiceView,
+      },
+      {
+        to: '/form-builder',
+        icon: FileText,
+        label: 'Form Builder',
+        permission: PERM.forms,
+      },
+      {
+        to: '/datasets',
+        icon: Database,
+        label: 'Datasets',
+        permission: PERM.datasets,
+      },
+      {
+        to: '/webhooks',
+        icon: Globe,
+        label: 'Webhooks',
+        permission: PERM.webhooks,
+      },
     ],
   },
   {
     title: 'Agents',
     items: [
-      { to: '/agents', icon: Bot, label: 'Agents Hub' },
-      { to: '/agents/approvals', icon: Inbox, label: 'Approval Queue' },
-      { to: '/agents/traces', icon: Search, label: 'Traces' },
+      {
+        to: '/agents',
+        icon: Bot,
+        label: 'Agents Hub',
+        permission: PERM.agentsView,
+      },
+      {
+        to: '/agents/approvals',
+        icon: Inbox,
+        label: 'Approval Queue',
+        permission: PERM.agentsApprove,
+      },
+      {
+        to: '/agents/traces',
+        icon: Search,
+        label: 'Traces',
+        permission: PERM.agentsView,
+      },
     ],
   },
   {
     title: 'Marketing',
     items: [
-      { to: '/channels', icon: Radio, label: 'Channels' },
-      { to: '/campaigns', icon: Megaphone, label: 'Campaigns' },
-      { to: '/segments', icon: Users, label: 'Segments' },
-      { to: '/content-studio', icon: Wand2, label: 'Content Studio' },
-      { to: '/marketing-insights', icon: LineChart, label: 'Insights' },
+      {
+        to: '/channels',
+        icon: Radio,
+        label: 'Channels',
+        permission: PERM.channels,
+      },
+      {
+        to: '/campaigns',
+        icon: Megaphone,
+        label: 'Campaigns',
+        permission: PERM.campaignsView,
+      },
+      {
+        to: '/segments',
+        icon: Users,
+        label: 'Segments',
+        permission: PERM.segments,
+      },
+      {
+        to: '/content-studio',
+        icon: Wand2,
+        label: 'Content Studio',
+        permission: PERM.content,
+      },
+      {
+        to: '/marketing-insights',
+        icon: LineChart,
+        label: 'Insights',
+        permission: PERM.insights,
+      },
     ],
   },
   {
     title: 'System',
     items: [
-      { to: '/tenants', icon: Building2, label: 'Tenants' },
-      { to: '/audit', icon: ShieldAlert, label: 'Audit Log' },
-      { to: '/config', icon: Settings, label: 'Configuration' },
-      { to: '/system', icon: Cpu, label: 'System Health' },
+      {
+        to: '/users',
+        icon: UsersRound,
+        label: 'Users & Roles',
+        permission: PERM.usersView,
+      },
+      {
+        to: '/tenants',
+        icon: Building2,
+        label: 'Tenants',
+        permission: PERM.tenants,
+      },
+      {
+        to: '/audit',
+        icon: ShieldAlert,
+        label: 'Audit Log',
+        permission: PERM.audit,
+      },
+      {
+        to: '/config',
+        icon: Settings,
+        label: 'Configuration',
+        permission: PERM.config,
+      },
+      {
+        to: '/system',
+        icon: Cpu,
+        label: 'System Health',
+        permission: PERM.system,
+      },
     ],
   },
 ];
@@ -203,7 +330,7 @@ const NavSection = memo(function NavSection({
 });
 
 export default function Layout() {
-  const { logout } = useAuth();
+  const { logout, can, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -228,6 +355,18 @@ export default function Layout() {
   };
 
   const activePath = location.pathname;
+
+  // Hide what this account can't reach. While /me is still in flight we show
+  // nothing rather than everything — flashing links the user is about to lose
+  // reads as a bug, and the wait is one request long.
+  const visibleSections = loading
+    ? []
+    : NAV_SECTIONS.map((section) => ({
+        ...section,
+        items: section.items.filter(
+          (item) => !item.permission || can(item.permission),
+        ),
+      })).filter((section) => section.items.length > 0);
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden">
@@ -276,7 +415,7 @@ export default function Layout() {
 
         {/* Navigation */}
         <div className="flex-1 overflow-y-auto py-3 px-2 space-y-2 scrollbar-thin scrollbar-thumb-gray-700">
-          {NAV_SECTIONS.map((section) => (
+          {visibleSections.map((section) => (
             <NavSection
               key={section.title}
               section={section}
