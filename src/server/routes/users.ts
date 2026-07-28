@@ -16,6 +16,14 @@ import {
   normaliseRoleKey,
   sanitisePermissions,
 } from '../../config/permissions';
+import LoginEvent from '../../models/LoginEvent';
+import {
+  buildLoginHistoryFilter,
+  describeOutcome,
+  describeUserAgent,
+} from '../../services/LoginHistoryService';
+import { parseExportDateBoundary } from './exports';
+import { toCsv, csvDownloadHeaders } from '../utils/csv';
 import {
   buildIdentity,
   findRole,
@@ -165,6 +173,189 @@ router.get(
   },
 );
 
+/* -------------------------------------------------------------------------
+ * Login history
+ * ---------------------------------------------------------------------- */
+
+/** Shared query → filter translation for the history list, stats and CSV. */
+function loginHistoryFilterFromRequest(req: PermissionRequest) {
+  const actor = req.identity!;
+  return buildLoginHistoryFilter({
+    adminId: req.query.userId,
+    username: req.query.username,
+    outcome: req.query.outcome,
+    failuresOnly: String(req.query.failuresOnly ?? '') === 'true',
+    from: parseExportDateBoundary(req.query.from, 'start'),
+    to: parseExportDateBoundary(req.query.to, 'end'),
+    // Super admins (no tenant binding) see every workspace's attempts;
+    // a tenant-bound operator only sees their own.
+    tenantId: actor.tenantId ?? null,
+  });
+}
+
+type LoginRow = {
+  _id: unknown;
+  adminId?: unknown;
+  username: string;
+  outcome: string;
+  ip?: string;
+  userAgent?: string;
+  roleKey?: string;
+  createdAt: Date;
+};
+
+function serialiseLoginRow(row: LoginRow) {
+  return {
+    id: String(row._id),
+    userId: row.adminId ? String(row.adminId) : null,
+    username: row.username,
+    outcome: row.outcome,
+    outcomeLabel: describeOutcome(row.outcome),
+    success: row.outcome === 'success',
+    ip: row.ip ?? '',
+    device: describeUserAgent(row.userAgent),
+    userAgent: row.userAgent ?? '',
+    roleKey: row.roleKey ?? '',
+    at: row.createdAt,
+  };
+}
+
+/**
+ * GET /api/users/login-history
+ *
+ * Every sign-in attempt, newest first — successes AND failures, because a
+ * run of wrong-password rows against one account is the reason to have this
+ * at all. Filters: ?userId= ?username= ?outcome= ?failuresOnly=true
+ * ?from= ?to= with ?page= / ?limit= paging.
+ *
+ * The response also carries a `summary` for the SAME filter (totals, unique
+ * IPs, last success) so the page's stat tiles can never disagree with the
+ * table below them.
+ */
+router.get(
+  '/login-history',
+  requirePermission('users.view'),
+  async (req: PermissionRequest, res: Response) => {
+    try {
+      const filter = loginHistoryFilterFromRequest(req);
+
+      const limit = Math.min(
+        Math.max(parseInt(String(req.query.limit ?? '50'), 10) || 50, 1),
+        200,
+      );
+      const page = Math.max(
+        parseInt(String(req.query.page ?? '1'), 10) || 1,
+        1,
+      );
+
+      const [rows, total, stats] = await Promise.all([
+        LoginEvent.find(filter)
+          .sort({ createdAt: -1 })
+          .skip((page - 1) * limit)
+          .limit(limit)
+          .lean() as unknown as Promise<LoginRow[]>,
+        LoginEvent.countDocuments(filter),
+        LoginEvent.aggregate([
+          { $match: filter },
+          {
+            $group: {
+              _id: null,
+              successes: {
+                $sum: { $cond: [{ $eq: ['$outcome', 'success'] }, 1, 0] },
+              },
+              failures: {
+                $sum: { $cond: [{ $ne: ['$outcome', 'success'] }, 1, 0] },
+              },
+              ips: { $addToSet: '$ip' },
+              lastSuccess: {
+                $max: {
+                  $cond: [{ $eq: ['$outcome', 'success'] }, '$createdAt', null],
+                },
+              },
+            },
+          },
+        ]) as unknown as Promise<
+          Array<{
+            successes: number;
+            failures: number;
+            ips: (string | null)[];
+            lastSuccess: Date | null;
+          }>
+        >,
+      ]);
+
+      const agg = stats[0];
+      res.json({
+        events: rows.map(serialiseLoginRow),
+        total,
+        page,
+        limit,
+        hasMore: page * limit < total,
+        summary: {
+          total,
+          successes: agg?.successes ?? 0,
+          failures: agg?.failures ?? 0,
+          uniqueIps: (agg?.ips ?? []).filter(Boolean).length,
+          lastSuccess: agg?.lastSuccess ?? null,
+        },
+      });
+    } catch (err: any) {
+      console.error('GET /api/users/login-history failed:', err);
+      res.status(500).json({ error: err?.message ?? 'history_failed' });
+    }
+  },
+);
+
+/**
+ * GET /api/users/login-history.csv
+ * The same filtered rows as a spreadsheet, for handing to whoever asked
+ * "who was logged in on the 14th".
+ */
+router.get(
+  '/login-history.csv',
+  requirePermission('users.view'),
+  async (req: PermissionRequest, res: Response) => {
+    try {
+      const filter = loginHistoryFilterFromRequest(req);
+      const rows = (await LoginEvent.find(filter)
+        .sort({ createdAt: -1 })
+        .limit(20_000)
+        .lean()) as unknown as LoginRow[];
+
+      const flat = rows.map((r) => {
+        const row = serialiseLoginRow(r);
+        return {
+          When: row.at,
+          Username: row.username,
+          Outcome: row.outcomeLabel,
+          Role: row.roleKey,
+          IP: row.ip,
+          Device: row.device,
+        };
+      });
+
+      const csv = toCsv(flat, [
+        'When',
+        'Username',
+        'Outcome',
+        'Role',
+        'IP',
+        'Device',
+      ]);
+      res
+        .set(
+          csvDownloadHeaders(
+            `login-history-${new Date().toISOString().slice(0, 10)}.csv`,
+          ),
+        )
+        .send(csv);
+    } catch (err: any) {
+      console.error('GET /api/users/login-history.csv failed:', err);
+      res.status(500).json({ error: err?.message ?? 'export_failed' });
+    }
+  },
+);
+
 /** GET /api/users — the employee list. */
 router.get(
   '/',
@@ -209,7 +400,48 @@ router.get(
       const users = await Promise.all(
         rows.map((row) => toPublicUser(row, actor.rank, actor.id)),
       );
-      res.json({ users, total: users.length, tenantId: tenantId ?? null });
+
+      // One bounded aggregate gives the whole list its recent-activity
+      // columns, instead of a per-row query. 30 days is the window the
+      // employee table summarises; the Login history tab has the full detail.
+      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const activity = (await LoginEvent.aggregate([
+        {
+          $match: {
+            adminId: { $in: rows.map((r) => r._id) },
+            createdAt: { $gte: since },
+          },
+        },
+        {
+          $group: {
+            _id: '$adminId',
+            logins: {
+              $sum: { $cond: [{ $eq: ['$outcome', 'success'] }, 1, 0] },
+            },
+            failed: {
+              $sum: { $cond: [{ $ne: ['$outcome', 'success'] }, 1, 0] },
+            },
+          },
+        },
+      ])) as Array<{ _id: unknown; logins: number; failed: number }>;
+
+      const byUser = new Map(
+        activity.map((a) => [
+          String(a._id),
+          { logins: a.logins, failed: a.failed },
+        ]),
+      );
+      const withActivity = users.map((u) => ({
+        ...u,
+        logins30d: byUser.get(u.id)?.logins ?? 0,
+        failedLogins30d: byUser.get(u.id)?.failed ?? 0,
+      }));
+
+      res.json({
+        users: withActivity,
+        total: withActivity.length,
+        tenantId: tenantId ?? null,
+      });
     } catch (err: any) {
       console.error('GET /api/users failed:', err);
       res.status(500).json({ error: err?.message ?? 'list_failed' });

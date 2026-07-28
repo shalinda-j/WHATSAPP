@@ -14,6 +14,11 @@ import {
   CheckCircle2,
   AlertCircle,
   Lock,
+  History,
+  Download,
+  ShieldAlert,
+  Globe,
+  LogIn,
 } from 'lucide-react';
 
 /**
@@ -41,6 +46,9 @@ interface StaffUser {
   createdAt: string | null;
   isSelf: boolean;
   editable: boolean;
+  /** Rolling 30-day activity, summarised for the list. */
+  logins30d?: number;
+  failedLogins30d?: number;
 }
 
 interface StaffRole {
@@ -62,6 +70,36 @@ interface PermissionDef {
   group: string;
   description?: string;
 }
+
+interface LoginEventRow {
+  id: string;
+  userId: string | null;
+  username: string;
+  outcome: string;
+  outcomeLabel: string;
+  success: boolean;
+  ip: string;
+  device: string;
+  /** Raw header, shown as the tooltip behind the friendly device label. */
+  userAgent: string;
+  roleKey: string;
+  at: string;
+}
+
+interface LoginSummary {
+  total: number;
+  successes: number;
+  failures: number;
+  uniqueIps: number;
+  lastSuccess: string | null;
+}
+
+const OUTCOME_STYLES: Record<string, string> = {
+  success: 'bg-green-50 text-green-700 ring-1 ring-green-200',
+  invalid_password: 'bg-red-50 text-red-700 ring-1 ring-red-200',
+  unknown_user: 'bg-amber-50 text-amber-800 ring-1 ring-amber-200',
+  account_disabled: 'bg-gray-100 text-gray-600 ring-1 ring-gray-200',
+};
 
 type Notice = { type: 'success' | 'error'; text: string } | null;
 
@@ -99,7 +137,7 @@ export default function Users() {
   const { can, user: currentUser } = useAuth();
   const canManage = can(PERM.usersManage);
 
-  const [tab, setTab] = useState<'users' | 'roles'>('users');
+  const [tab, setTab] = useState<'users' | 'roles' | 'history'>('users');
   const [users, setUsers] = useState<StaffUser[]>([]);
   const [roles, setRoles] = useState<StaffRole[]>([]);
   const [catalogue, setCatalogue] = useState<PermissionDef[]>([]);
@@ -117,6 +155,21 @@ export default function Users() {
   // Password reset modal
   const [resetFor, setResetFor] = useState<StaffUser | null>(null);
   const [newPassword, setNewPassword] = useState('');
+
+  // Login history
+  const [history, setHistory] = useState<LoginEventRow[]>([]);
+  const [historySummary, setHistorySummary] = useState<LoginSummary | null>(
+    null,
+  );
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyFilter, setHistoryFilter] = useState({
+    userId: '',
+    outcome: '',
+    from: '',
+    to: '',
+  });
 
   // Role editor
   const [editingRole, setEditingRole] = useState<StaffRole | null>(null);
@@ -157,6 +210,89 @@ export default function Users() {
     const t = setTimeout(load, search ? 300 : 0);
     return () => clearTimeout(t);
   }, [load, search]);
+
+  /** Query string shared by the history table and its CSV download. */
+  const historyParams = useCallback(
+    (page = historyPage) => {
+      const params = new URLSearchParams();
+      if (historyFilter.userId) params.set('userId', historyFilter.userId);
+      if (historyFilter.outcome === 'failures') {
+        params.set('failuresOnly', 'true');
+      } else if (historyFilter.outcome) {
+        params.set('outcome', historyFilter.outcome);
+      }
+      // datetime-local is the operator's wall clock; send an absolute instant
+      // so the server's UTC window matches what they picked.
+      const iso = (v: string) => {
+        if (!v) return '';
+        const d = new Date(v);
+        return Number.isNaN(d.getTime()) ? '' : d.toISOString();
+      };
+      const from = iso(historyFilter.from);
+      const to = iso(historyFilter.to);
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
+      params.set('page', String(page));
+      params.set('limit', '50');
+      return params;
+    },
+    [historyFilter, historyPage],
+  );
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await api.get(
+        `/api/users/login-history?${historyParams().toString()}`,
+      );
+      setHistory(res.data.events ?? []);
+      setHistorySummary(res.data.summary ?? null);
+      setHistoryTotal(res.data.total ?? 0);
+    } catch (err) {
+      flash('error', errorText(err, 'Could not load the login history'));
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [historyParams]);
+
+  useEffect(() => {
+    if (tab !== 'history') return;
+    void loadHistory();
+  }, [tab, loadHistory]);
+
+  const downloadHistoryCsv = async () => {
+    try {
+      const params = historyParams(1);
+      params.delete('page');
+      params.delete('limit');
+      const res = await api.get(
+        `/api/users/login-history.csv?${params.toString()}`,
+        { responseType: 'blob' },
+      );
+      const url = window.URL.createObjectURL(
+        new Blob([res.data], { type: 'text/csv;charset=utf-8;' }),
+      );
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute(
+        'download',
+        `login-history-${new Date().toISOString().slice(0, 10)}.csv`,
+      );
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      flash('error', errorText(err, 'Could not download the history'));
+    }
+  };
+
+  /** Jump from an employee row straight to their own timeline. */
+  const openHistoryFor = (u: StaffUser) => {
+    setHistoryFilter({ userId: u.id, outcome: '', from: '', to: '' });
+    setHistoryPage(1);
+    setTab('history');
+  };
 
   /** Roles this operator is allowed to hand out. */
   const assignableRoles = useMemo(
@@ -363,6 +499,7 @@ export default function Users() {
           [
             ['users', 'Employees', users.length],
             ['roles', 'Roles', roles.length],
+            ['history', 'Login history', historyTotal],
           ] as const
         ).map(([key, label, count]) => (
           <button
@@ -481,10 +618,27 @@ export default function Users() {
                           </span>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-500">
-                          {formatDate(u.lastLoginAt)}
+                          <div>{formatDate(u.lastLoginAt)}</div>
+                          <div className="text-[11px] text-gray-400 mt-0.5">
+                            {u.logins30d ?? 0} sign-in
+                            {(u.logins30d ?? 0) === 1 ? '' : 's'} in 30 days
+                            {(u.failedLogins30d ?? 0) > 0 && (
+                              <span className="text-red-500">
+                                {' '}
+                                · {u.failedLogins30d} failed
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => openHistoryFor(u)}
+                              title="View this employee's login history"
+                              className="p-2 rounded-lg hover:bg-gray-100 text-gray-500"
+                            >
+                              <History className="h-4 w-4" />
+                            </button>
                             {canManage && u.editable ? (
                               <>
                                 <button
@@ -548,6 +702,262 @@ export default function Users() {
             </div>
           </div>
         </>
+      )}
+
+      {tab === 'history' && (
+        <div className="space-y-4">
+          {/* Filters */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                Employee
+              </label>
+              <select
+                value={historyFilter.userId}
+                onChange={(e) => {
+                  setHistoryFilter((f) => ({ ...f, userId: e.target.value }));
+                  setHistoryPage(1);
+                }}
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                <option value="">Everyone</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.fullName || u.username}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                Outcome
+              </label>
+              <select
+                value={historyFilter.outcome}
+                onChange={(e) => {
+                  setHistoryFilter((f) => ({ ...f, outcome: e.target.value }));
+                  setHistoryPage(1);
+                }}
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                <option value="">All attempts</option>
+                <option value="success">Successful only</option>
+                <option value="failures">Failed only</option>
+                <option value="invalid_password">Wrong password</option>
+                <option value="unknown_user">Unknown username</option>
+                <option value="account_disabled">Disabled account</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                From
+              </label>
+              <input
+                type="datetime-local"
+                value={historyFilter.from}
+                onChange={(e) => {
+                  setHistoryFilter((f) => ({ ...f, from: e.target.value }));
+                  setHistoryPage(1);
+                }}
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                To
+              </label>
+              <input
+                type="datetime-local"
+                value={historyFilter.to}
+                onChange={(e) => {
+                  setHistoryFilter((f) => ({ ...f, to: e.target.value }));
+                  setHistoryPage(1);
+                }}
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <button
+                onClick={() => {
+                  setHistoryFilter({
+                    userId: '',
+                    outcome: '',
+                    from: '',
+                    to: '',
+                  });
+                  setHistoryPage(1);
+                }}
+                className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50"
+              >
+                Clear
+              </button>
+              <button
+                onClick={downloadHistoryCsv}
+                title="Download these rows as CSV"
+                className="px-3 py-2 border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50"
+              >
+                <Download className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Summary tiles — computed from the SAME filter as the table */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              {
+                label: 'Sign-ins',
+                value: historySummary?.successes ?? 0,
+                icon: LogIn,
+                tone: 'text-green-600 bg-green-50',
+              },
+              {
+                label: 'Failed attempts',
+                value: historySummary?.failures ?? 0,
+                icon: ShieldAlert,
+                tone: 'text-red-600 bg-red-50',
+              },
+              {
+                label: 'Unique IPs',
+                value: historySummary?.uniqueIps ?? 0,
+                icon: Globe,
+                tone: 'text-blue-600 bg-blue-50',
+              },
+              {
+                label: 'Last sign-in',
+                value: formatDate(historySummary?.lastSuccess ?? null),
+                icon: History,
+                tone: 'text-gray-600 bg-gray-100',
+              },
+            ].map((tile) => (
+              <div
+                key={tile.label}
+                className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex items-center gap-3"
+              >
+                <div className={`p-2 rounded-xl ${tile.tone}`}>
+                  <tile.icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-gray-500">{tile.label}</p>
+                  <p className="font-bold text-gray-800 truncate">
+                    {typeof tile.value === 'number'
+                      ? tile.value.toLocaleString()
+                      : tile.value}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Table */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    {['When', 'User', 'Outcome', 'IP address', 'Device'].map(
+                      (h) => (
+                        <th
+                          key={h}
+                          className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase"
+                        >
+                          {h}
+                        </th>
+                      ),
+                    )}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {historyLoading ? (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-6 py-12 text-center text-gray-400"
+                      >
+                        Loading...
+                      </td>
+                    </tr>
+                  ) : history.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-6 py-12 text-center text-gray-400"
+                      >
+                        No sign-in attempts match this filter
+                      </td>
+                    </tr>
+                  ) : (
+                    history.map((e) => (
+                      <tr key={e.id} className="hover:bg-gray-50 transition">
+                        <td className="px-6 py-3 text-sm text-gray-700 whitespace-nowrap">
+                          {formatDate(e.at)}
+                        </td>
+                        <td className="px-6 py-3">
+                          <p className="text-sm font-medium text-gray-800">
+                            {users.find((u) => u.id === e.userId)?.fullName ||
+                              e.username}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            @{e.username}
+                            {e.roleKey ? ` · ${e.roleKey}` : ''}
+                          </p>
+                        </td>
+                        <td className="px-6 py-3">
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                              OUTCOME_STYLES[e.outcome] ??
+                              'bg-gray-100 text-gray-600'
+                            }`}
+                          >
+                            {e.outcomeLabel}
+                          </span>
+                        </td>
+                        <td className="px-6 py-3 text-sm text-gray-600 font-mono">
+                          {e.ip || '—'}
+                        </td>
+                        <td
+                          className="px-6 py-3 text-sm text-gray-600"
+                          title={e.userAgent}
+                        >
+                          {e.device}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {historyTotal > 50 && (
+              <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-t">
+                <p className="text-sm text-gray-500">
+                  Page {historyPage} of {Math.ceil(historyTotal / 50)} (
+                  {historyTotal.toLocaleString()} attempts)
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
+                    disabled={historyPage === 1}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => setHistoryPage((p) => p + 1)}
+                    disabled={historyPage >= Math.ceil(historyTotal / 50)}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <p className="text-xs text-gray-400">
+            Failed attempts are recorded with the username that was typed —
+            never a password. History is kept for 180 days.
+          </p>
+        </div>
       )}
 
       {tab === 'roles' && (
