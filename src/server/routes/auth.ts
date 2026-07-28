@@ -12,6 +12,7 @@ import {
 import { strictRateLimit } from '../middleware/rateLimit';
 import { ACTUAL_JWT_SECRET } from '../jwt-secret';
 import { resolveIdentity } from '../../services/PermissionService';
+import { recordLoginAttempt } from '../../services/LoginHistoryService';
 
 const router = Router();
 
@@ -122,12 +123,31 @@ router.post('/login', strictRateLimit, async (req, res) => {
 
     const admin = await Admin.findOne({ username });
 
+    // Every branch below records the attempt so the Users → Login history tab
+    // shows failures, not just successes — a run of wrong-password rows
+    // against one account is the signal worth having. Recording is
+    // fire-and-forget: it must never delay or block a sign-in.
+    const noteAttempt = (
+      outcome:
+        'success' | 'invalid_password' | 'unknown_user' | 'account_disabled',
+    ) =>
+      void recordLoginAttempt({
+        username: String(username ?? ''),
+        outcome,
+        adminId: admin?._id,
+        roleKey: admin ? (admin.roleKey ?? admin.role) : undefined,
+        tenantId: admin?.tenantId,
+        req,
+      });
+
     if (!admin) {
+      noteAttempt('unknown_user');
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
     const validPassword = await bcrypt.compare(password, admin.passwordHash);
     if (!validPassword) {
+      noteAttempt('invalid_password');
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
@@ -135,11 +155,14 @@ router.post('/login', strictRateLimit, async (req, res) => {
     // Checked after the password so a wrong password never reveals that the
     // username exists but is suspended.
     if (admin.status === 'disabled') {
+      noteAttempt('account_disabled');
       return res.status(403).json({
         message: 'This account has been disabled. Contact an administrator.',
         error: 'ACCOUNT_DISABLED',
       });
     }
+
+    noteAttempt('success');
 
     // Best-effort last-seen stamp for the staff list; never block the login.
     Admin.updateOne(

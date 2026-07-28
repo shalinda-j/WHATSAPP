@@ -114,6 +114,11 @@ npm run start
      you don't hold), plus last-admin and self-delete protection
    - Back-compat: an admin with no `roleKey` and no `tenantId` resolves as a
      super admin, matching the pre-RBAC `requireSuperAdmin()` rule
+   - **Login history**: `LoginEvent` records every sign-in ATTEMPT (success,
+     wrong password, unknown username, disabled account) with IP + user agent;
+     never a password. 180-day TTL (`LOGIN_HISTORY_RETENTION_DAYS`). Read via
+     `GET /api/users/login-history` (+ `.csv`), surfaced as the third tab on
+     the Users page with filters, summary tiles and per-employee drill-down
 
 10. **Marketing pipeline**
 
