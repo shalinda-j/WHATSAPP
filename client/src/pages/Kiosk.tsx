@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import kioskApi, { setKioskToken, clearKioskToken } from '../kioskApi';
 import VoiceConsultant from '../components/voice/VoiceConsultant';
@@ -18,6 +18,20 @@ import VoiceConsultant from '../components/voice/VoiceConsultant';
  */
 
 const CODE_LENGTH = 4;
+
+/**
+ * Shared keypad styling. `touch-action: manipulation` removes the 300ms tap
+ * delay AND double-tap-to-zoom — on a shared tablet an impatient second tap
+ * used to zoom the page instead of entering a digit, leaving the kiosk stuck
+ * at 2× with no way back. `select-none` stops a long-press turning into a
+ * text-selection handle.
+ */
+const KEY_BASE =
+  'flex aspect-square max-h-20 items-center justify-center rounded-2xl font-bold transition-all select-none hover:-translate-y-0.5 active:scale-95 disabled:hover:translate-y-0 sm:max-h-24';
+const KEY_STYLE = {
+  touchAction: 'manipulation' as const,
+  WebkitTapHighlightColor: 'transparent',
+};
 
 type Step = 'code' | 'consult';
 
@@ -79,6 +93,7 @@ export default function Kiosk() {
       const { data } = await kioskApi.post('/api/kiosk/session', { code });
       const token: string | undefined = data?.token;
       if (!token) {
+        setCode('');
         setError('Could not start a session. Please try again.');
         return;
       }
@@ -91,9 +106,16 @@ export default function Kiosk() {
       setStep('consult');
       setCode('');
     } catch (err) {
+      // Clear the entry on failure. Beyond matching how every phone lock
+      // screen behaves, it's what stops the auto-submit effect below from
+      // re-firing on the same four digits and hammering the endpoint in a
+      // loop once a code is rejected.
+      setCode('');
       const status = errorStatus(err);
       if (status === 404) {
         setError('Invalid or expired code');
+      } else if (status === 429) {
+        setError('Too many attempts. Please wait a moment and try again.');
       } else {
         setError(
           errorMessage(err) || 'Something went wrong. Please try again.',
@@ -112,10 +134,69 @@ export default function Kiosk() {
     setStep('code');
   }, []);
 
+  /**
+   * The kiosk token only lives 30 minutes. When the backend rejects it the
+   * consultant hands control back here, so the visitor lands on the code
+   * screen with an explanation instead of a voice loop that fails silently.
+   */
+  const handleSessionExpired = useCallback(() => {
+    clearKioskToken();
+    setSession({});
+    setCode('');
+    setStep('code');
+    setError('Your session timed out. Please enter your code again.');
+  }, []);
+
   const dots = useMemo(
     () => Array.from({ length: CODE_LENGTH }).map((_, i) => i < code.length),
     [code.length],
   );
+
+  // Keep the submit handler reachable from the keyboard listener without
+  // re-subscribing on every keystroke.
+  const submitRef = useRef(submitCode);
+  useEffect(() => {
+    submitRef.current = submitCode;
+  }, [submitCode]);
+
+  /**
+   * Physical keyboard support. Plenty of these terminals are a laptop or a
+   * tablet with a USB numpad, where the on-screen keypad is the slow way in —
+   * and typing did nothing at all before this.
+   */
+  useEffect(() => {
+    if (step !== 'code') return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        appendDigit(e.key);
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        backspace();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        void submitRef.current();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        clearCode();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [step, appendDigit, backspace, clearCode]);
+
+  /**
+   * Auto-submit on the last digit — the same behaviour as a phone lock screen.
+   * A visitor who has typed all four digits has nothing left to decide, and
+   * the extra "Start" tap was the most common place people hesitated.
+   */
+  useEffect(() => {
+    if (step !== 'code') return;
+    if (code.length !== CODE_LENGTH || submitting) return;
+    const t = setTimeout(() => void submitRef.current(), 180);
+    return () => clearTimeout(t);
+  }, [code, step, submitting]);
 
   if (step === 'consult') {
     // VoiceConsultant owns the full-screen consult experience (its own top bar
@@ -127,12 +208,21 @@ export default function Kiosk() {
         name={session.name}
         branch={session.branch}
         onEndSession={endSession}
+        onSessionExpired={handleSessionExpired}
       />
     );
   }
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950 anim-gradient text-white flex flex-col items-center justify-center px-4 py-10">
+    // 100dvh, not 100vh: on mobile Safari the address bar makes 100vh taller
+    // than the visible area, which pushed the Start button off-screen.
+    <div
+      className="flex min-h-[100dvh] w-full flex-col items-center justify-center overflow-y-auto bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950 anim-gradient px-4 py-8 text-white"
+      style={{
+        paddingTop: 'max(2rem, env(safe-area-inset-top))',
+        paddingBottom: 'max(2rem, env(safe-area-inset-bottom))',
+      }}
+    >
       <div className="w-full max-w-md text-center anim-fade-in-up">
         <div className="text-sm uppercase tracking-[0.3em] text-emerald-400 font-semibold mb-2">
           Welcome
@@ -180,15 +270,17 @@ export default function Kiosk() {
           </div>
         )}
 
-        {/* Numeric keypad */}
-        <div className="grid grid-cols-3 gap-3">
+        {/* Numeric keypad. `aspect-square` is capped by a max height so the
+            grid can't push the Start button off a short (landscape) screen. */}
+        <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
           {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
             <button
               key={d}
               type="button"
               onClick={() => appendDigit(d)}
               disabled={submitting}
-              className="aspect-square rounded-2xl bg-white/10 hover:bg-white/20 active:bg-white/30 text-3xl font-bold transition-all hover:-translate-y-0.5 active:scale-95 disabled:opacity-50 disabled:hover:translate-y-0"
+              style={KEY_STYLE}
+              className={`${KEY_BASE} bg-white/10 text-2xl hover:bg-white/20 active:bg-white/30 disabled:opacity-50 sm:text-3xl`}
             >
               {d}
             </button>
@@ -197,7 +289,8 @@ export default function Kiosk() {
             type="button"
             onClick={clearCode}
             disabled={submitting || code.length === 0}
-            className="aspect-square rounded-2xl bg-white/5 hover:bg-white/15 active:bg-white/25 text-base font-bold uppercase tracking-wide transition-all hover:-translate-y-0.5 active:scale-95 disabled:opacity-40 disabled:hover:translate-y-0"
+            style={KEY_STYLE}
+            className={`${KEY_BASE} bg-white/5 text-sm uppercase tracking-wide hover:bg-white/15 active:bg-white/25 disabled:opacity-40 sm:text-base`}
           >
             Clear
           </button>
@@ -205,7 +298,8 @@ export default function Kiosk() {
             type="button"
             onClick={() => appendDigit('0')}
             disabled={submitting}
-            className="aspect-square rounded-2xl bg-white/10 hover:bg-white/20 active:bg-white/30 text-3xl font-bold transition-all hover:-translate-y-0.5 active:scale-95 disabled:opacity-50 disabled:hover:translate-y-0"
+            style={KEY_STYLE}
+            className={`${KEY_BASE} bg-white/10 text-2xl hover:bg-white/20 active:bg-white/30 disabled:opacity-50 sm:text-3xl`}
           >
             0
           </button>
@@ -213,7 +307,8 @@ export default function Kiosk() {
             type="button"
             onClick={backspace}
             disabled={submitting || code.length === 0}
-            className="aspect-square rounded-2xl bg-white/5 hover:bg-white/15 active:bg-white/25 text-2xl font-bold transition-all hover:-translate-y-0.5 active:scale-95 disabled:opacity-40 disabled:hover:translate-y-0"
+            style={KEY_STYLE}
+            className={`${KEY_BASE} bg-white/5 text-2xl hover:bg-white/15 active:bg-white/25 disabled:opacity-40`}
             aria-label="Backspace"
           >
             ⌫
@@ -224,12 +319,17 @@ export default function Kiosk() {
           type="button"
           onClick={submitCode}
           disabled={!canSubmit}
-          className={`mt-8 w-full rounded-2xl bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 px-6 py-5 text-xl font-black uppercase tracking-wide transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+          style={{ touchAction: 'manipulation' }}
+          className={`mt-6 w-full rounded-2xl bg-emerald-500 px-6 py-4 text-lg font-black uppercase tracking-wide transition-colors hover:bg-emerald-400 active:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-40 sm:mt-8 sm:py-5 sm:text-xl ${
             canSubmit ? 'anim-breathe' : ''
           }`}
         >
           {submitting ? 'Checking…' : 'Start'}
         </button>
+
+        <p className="mt-4 text-xs text-slate-400">
+          You can also type the code on a keyboard — Enter to start.
+        </p>
       </div>
     </div>
   );
