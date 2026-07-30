@@ -3,7 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/x-icon" href="/360ai-i.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      viewport-fit=cover lets env(safe-area-inset-*) resolve to real values on
+      notched phones, which the full-screen kiosk uses to keep its top bar and
+      the Start button clear of the notch and the home indicator. Without it
+      those insets are always 0 and the controls sit under the system UI.
+      Zoom is deliberately left enabled — the admin panel needs it.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <title>Work 360 AI</title>
     <!--
       Stale-bundle self-heal.
@@ -53,11 +63,14 @@
           if (alreadyHealed()) return;
           markHealed();
           console.warn(
-            '[bundle-check] ' + reason + ' — recovering' +
+            '[bundle-check] ' +
+              reason +
+              ' — recovering' +
               (detail ? ' (' + detail + ')' : ''),
           );
           var bust = '_v=' + Date.now();
-          var url = window.location.pathname + '?' + bust + window.location.hash;
+          var url =
+            window.location.pathname + '?' + bust + window.location.hash;
           window.location.replace(url);
         }
 

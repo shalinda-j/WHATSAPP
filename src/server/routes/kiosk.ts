@@ -24,7 +24,7 @@ import multer from 'multer';
 import jwt from 'jsonwebtoken';
 
 import { ACTUAL_JWT_SECRET } from '../jwt-secret';
-import { standardRateLimit } from '../middleware/rateLimit';
+import { standardRateLimit, rateLimit } from '../middleware/rateLimit';
 import { kioskInviteService } from '../../services/KioskInviteService';
 import {
   aiLoadBalancer,
@@ -508,45 +508,65 @@ function buildConsultModelInput(
 // 200: { token, name, branch, greeting }
 // 404: { error }
 // ═══════════════════════════════════════════════════════════════════════════
-router.post('/session', async (req: Request, res: Response) => {
-  try {
-    const code = String(req.body?.code ?? '').trim();
-    if (!code) {
-      res.status(404).json({ error: 'Invalid or expired code' });
-      return;
-    }
-
-    const result = await kioskInviteService.redeem(code);
-    if (!result) {
-      res.status(404).json({ error: 'Invalid or expired code' });
-      return;
-    }
-
-    const { invite, name } = result;
-    const branch = invite?.branch || '';
-    const tenantId = invite?.tenantId ? String(invite.tenantId) : undefined;
-
-    const token = jwt.sign(
-      {
-        role: 'kiosk',
-        inviteId: String(invite._id),
-        tenantId,
-        jid: invite?.jid,
-      } as KioskTokenPayload,
-      ACTUAL_JWT_SECRET,
-      { expiresIn: '30m' },
-    );
-
-    const greeting = `ආයුබෝවන් ${name}! ${
-      branch ? `${branch} ශාඛාවට ` : ''
-    }සාදරයෙන් පිළිගනිමු. පහත බොත්තම එක් වරක් ඔබා, ඔබට අවශ්‍ය දේ කතා කරන්න — මම මිනිසෙකු මෙන් පිළිතුරු දෙන්නම්.`;
-
-    res.json({ token, name, branch, greeting });
-  } catch (err: any) {
-    console.error('❌ /api/kiosk/session error:', err?.message || err);
-    res.status(500).json({ error: 'Failed to start kiosk session' });
-  }
+/**
+ * Brute-force guard for the code-redemption endpoint.
+ *
+ * A kiosk code is 4 digits — 10,000 possibilities — and lives for 7 days by
+ * default (KIOSK_CODE_TTL). This route is PUBLIC and, until this limiter, had
+ * no throttle at all: the whole space could be walked in seconds, and a hit
+ * hands the caller a real session bound to that visitor's WhatsApp thread and
+ * name. 10 tries a minute per IP turns a seconds-long sweep into weeks, and
+ * the shared limiter adds its own escalating block on top.
+ */
+const codeRedeemRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: 'Too many code attempts. Please wait a moment and try again.',
 });
+
+router.post(
+  '/session',
+  codeRedeemRateLimit,
+  async (req: Request, res: Response) => {
+    try {
+      const code = String(req.body?.code ?? '').trim();
+      if (!code) {
+        res.status(404).json({ error: 'Invalid or expired code' });
+        return;
+      }
+
+      const result = await kioskInviteService.redeem(code);
+      if (!result) {
+        res.status(404).json({ error: 'Invalid or expired code' });
+        return;
+      }
+
+      const { invite, name } = result;
+      const branch = invite?.branch || '';
+      const tenantId = invite?.tenantId ? String(invite.tenantId) : undefined;
+
+      const token = jwt.sign(
+        {
+          role: 'kiosk',
+          inviteId: String(invite._id),
+          tenantId,
+          jid: invite?.jid,
+        } as KioskTokenPayload,
+        ACTUAL_JWT_SECRET,
+        { expiresIn: '30m' },
+      );
+
+      const greeting = `ආයුබෝවන් ${name}! ${
+        branch ? `${branch} ශාඛාවට ` : ''
+      }සාදරයෙන් පිළිගනිමු. පහත බොත්තම එක් වරක් ඔබා, ඔබට අවශ්‍ය දේ කතා කරන්න — මම මිනිසෙකු මෙන් පිළිතුරු දෙන්නම්.`;
+
+      res.json({ token, name, branch, greeting });
+    } catch (err: any) {
+      console.error('❌ /api/kiosk/session error:', err?.message || err);
+      res.status(500).json({ error: 'Failed to start kiosk session' });
+    }
+  },
+);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // POST /consult — audio (multipart "audio") OR JSON { text }
@@ -788,6 +808,7 @@ router.post(
 // ═══════════════════════════════════════════════════════════════════════════
 router.post(
   '/convert',
+  standardRateLimit,
   verifyKioskToken,
   async (req: KioskRequest, res: Response) => {
     try {
@@ -811,6 +832,7 @@ router.post(
 // ═══════════════════════════════════════════════════════════════════════════
 router.post(
   '/enroll',
+  standardRateLimit,
   verifyKioskToken,
   async (req: KioskRequest, res: Response) => {
     try {
