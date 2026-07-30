@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import * as path from 'path';
+import * as fs from 'fs';
 import { isDigitalOceanOrigin } from './corsOrigins';
 
 // Routes
@@ -597,13 +598,29 @@ app.use((req, res, next) => {
     return next();
   }
 
-  // For all other paths (real SPA routes like /dashboard, /channels), serve
-  // index.html so React Router takes over. Don't cache — the asset hashes
-  // inside change every deploy.
   // One-shot Clear-Site-Data purge (cookie-gated) + no-store on the HTML.
   // After the first visit the `_bv` cookie suppresses the purge so
   // long-lived immutable caching of hashed assets keeps working.
   applyBundleRecoveryHeaders(req, res);
+
+  // The kiosk is its own document, not a route inside the admin bundle: a
+  // `<link rel="manifest">` is per-document, so this is what lets the walk-up
+  // terminal be installed as its own fullscreen app instead of advertising the
+  // admin panel's manifest. It also keeps the admin bundle out of a tablet that
+  // only ever shows one screen. Falls through to index.html when the client
+  // hasn't been rebuilt yet, so a stale deploy degrades to the in-SPA /kiosk
+  // route rather than 404ing the terminal.
+  if (req.path === '/kiosk' || req.path.startsWith('/kiosk/')) {
+    const kioskHtml = path.join(CLIENT_BUILD_PATH, 'kiosk.html');
+    if (fs.existsSync(kioskHtml)) {
+      res.sendFile(kioskHtml);
+      return;
+    }
+  }
+
+  // For all other paths (real SPA routes like /dashboard, /channels), serve
+  // index.html so React Router takes over. Don't cache — the asset hashes
+  // inside change every deploy.
   res.sendFile(path.join(CLIENT_BUILD_PATH, 'index.html'));
 });
 

@@ -23,6 +23,11 @@
  */
 
 import Dataset from '../models/Dataset';
+import {
+  DEFAULT_KIOSK_PERSONALITY,
+  KIOSK_DATASET_SCOPE,
+  KIOSK_PERSONALITY_KEY,
+} from './KioskDatasetService';
 
 /**
  * Migration: clear `key: ''` left behind by the old POST/PUT logic.
@@ -259,6 +264,20 @@ async function seedConversionDatasets(): Promise<void> {
       description:
         'FAQ the AI draws on (courses, fees, location). EDIT these placeholders with your real details in Admin Panel → Datasets / Knowledge.',
     },
+    {
+      // The branch kiosk's own consultant voice, separate from the WhatsApp
+      // bot's AI_PERSONALITY. Seeded so it is visible and editable in the admin
+      // panel; KioskDatasetService falls back to the same text in code, so the
+      // kiosk works identically whether or not this row exists.
+      key: KIOSK_PERSONALITY_KEY,
+      value: DEFAULT_KIOSK_PERSONALITY,
+      type: 'personality' as const,
+      // Sinhala, matching the kiosk's default reply language.
+      lang: 'si' as const,
+      scope: KIOSK_DATASET_SCOPE,
+      description:
+        'Branch kiosk voice consultant personality (Sinhala). Separate from AI_PERSONALITY, which drives WhatsApp. Edit in Admin Panel → Datasets.',
+    },
   ];
 
   for (const seed of seeds) {
@@ -307,14 +326,19 @@ async function seedConversionDatasets(): Promise<void> {
       // silently reads as undefined and the AI gets no conversion instructions.
       await Dataset.create({
         key: seed.key,
-        content: { en: seed.value },
+        // Written under the seed's own language key. Sinhala-first content
+        // stored under `en` would be read as English by every consumer that
+        // prefers a language.
+        content: { [('lang' in seed && seed.lang) || 'en']: seed.value },
         type: seed.type,
         name: seed.key
           .replace(/_/g, ' ')
           .replace(/\b\w/g, (c) => c.toUpperCase()),
         description: seed.description,
         isActive: true,
-        scope: 'ALL',
+        // 'ALL' unless the seed is scoped to one surface (e.g. the kiosk), which
+        // is what keeps kiosk-only content out of the WhatsApp prompt.
+        scope: ('scope' in seed && seed.scope) || 'ALL',
         category: 'general',
       });
       console.log(`🌱 Seeded Dataset '${seed.key}' with humanized content`);

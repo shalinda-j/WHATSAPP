@@ -31,6 +31,8 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: package-lock.json
 
     - name: Install dependencies
       run: npm install --no-audit --no-fund

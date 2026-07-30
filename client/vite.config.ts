@@ -1,3 +1,4 @@
+import { resolve } from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -25,6 +26,14 @@ export default defineConfig({
     // browser can cache them independently and the per-page route chunks
     // stay small.
     rollupOptions: {
+      // Two documents, two entries. index.html is the admin panel; kiosk.html is
+      // the walk-up branch terminal, which needs its own manifest (a manifest
+      // link is per-document) and pulls in only the kiosk page. Without listing
+      // it here Vite would emit index.html alone and kiosk.html would 404.
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        kiosk: resolve(__dirname, 'kiosk.html'),
+      },
       output: {
         manualChunks: {
           react: ['react', 'react-dom', 'react-router-dom'],

@@ -24,15 +24,29 @@
  * makes `activate` drop the previous generation of caches.
  */
 
-const SW_VERSION = 'v1';
+const SW_VERSION = 'v2';
 const SHELL_CACHE = `w360-shell-${SW_VERSION}`;
 const ASSET_CACHE = `w360-assets-${SW_VERSION}`;
 const STATIC_CACHE = `w360-static-${SW_VERSION}`;
 const EXPECTED_CACHES = [SHELL_CACHE, ASSET_CACHE, STATIC_CACHE];
 
-/** Canonical key for the app shell HTML, whatever SPA route requested it. */
+/**
+ * Canonical keys for the two app shells.
+ *
+ * The app serves two documents: index.html for the admin panel and kiosk.html
+ * for the walk-up terminal (each with its own manifest, so each installs as its
+ * own app). They must be cached under separate keys — one key would mean a visit
+ * to the admin panel overwrites the kiosk's cached shell, and the terminal would
+ * then boot the admin bundle when it went offline.
+ */
 const SHELL_KEY = '/index.html';
+const KIOSK_SHELL_KEY = '/kiosk.html';
 const OFFLINE_URL = '/offline.html';
+
+/** True for paths the server answers with kiosk.html. */
+function isKioskPath(pathname) {
+  return pathname === '/kiosk' || pathname.startsWith('/kiosk/');
+}
 
 /**
  * Files worth having before the first offline load. Deliberately tiny: the
@@ -138,18 +152,20 @@ async function cacheFirst(request) {
  * next load, and fall back to the last good shell (then the offline page) when
  * the device has no connection.
  */
-async function navigateNetworkFirst(request) {
+async function navigateNetworkFirst(request, shellKey) {
   const cache = await caches.open(SHELL_CACHE);
   try {
     const res = await fetch(request);
     if (res && res.ok) {
-      // Store under one canonical key: every SPA route returns the same shell,
-      // so keying by URL would cache the identical HTML dozens of times.
-      await cache.put(SHELL_KEY, res.clone());
+      // Store under one canonical key per document: every admin SPA route
+      // returns the same index.html, so keying by URL would cache identical HTML
+      // dozens of times — but /kiosk returns a DIFFERENT document, which needs
+      // its own key.
+      await cache.put(shellKey, res.clone());
     }
     return res;
   } catch {
-    const shell = await cache.match(SHELL_KEY);
+    const shell = await cache.match(shellKey);
     if (shell) return shell;
     const offline = await caches.match(OFFLINE_URL);
     if (offline) return offline;
@@ -205,7 +221,12 @@ self.addEventListener('fetch', (event) => {
   if (request.headers.get('X-Bundle-Check') === '1') return;
 
   if (request.mode === 'navigate') {
-    event.respondWith(navigateNetworkFirst(request));
+    event.respondWith(
+      navigateNetworkFirst(
+        request,
+        isKioskPath(url.pathname) ? KIOSK_SHELL_KEY : SHELL_KEY,
+      ),
+    );
     return;
   }
 

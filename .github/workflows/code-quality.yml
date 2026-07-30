@@ -1,98 +1,29 @@
 name: Code Quality
 
+# Weekly only, and one job.
+#
+# This workflow used to run four jobs on every push and every PR:
+#   ESLint Analysis   → the same `npm run lint` ci.yml already runs
+#   TypeScript Check  → the same tsc --noEmit / tsc -b ci.yml already runs
+#   Prettier Check    → one command, on its own runner, with its own npm install
+#   Complexity        → two eslint invocations both ending in `|| true`
+#
+# Four runners and four dependency installs per push, to re-run checks that had
+# already passed — plus one that could not fail by construction. On a private
+# repo every one of those minutes is metered. The first three now live as steps
+# inside ci.yml's backend/frontend jobs; the complexity sweep is genuinely
+# advisory, so it runs here once a week instead of on every push.
+
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
   schedule:
-    - cron: '0 6 * * 1'  # Weekly on Mondays at 6 AM
+    - cron: '0 6 * * 1' # Mondays, 06:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: code-quality-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  eslint:
-    name: ESLint Analysis
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20.x
-
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
-
-      # Run the project's own ESLint config. Non-blocking (continue-on-error)
-      # because lint findings are advisory here — the TypeScript job is the hard
-      # gate. Previously this used super-linter@v5 with inputs it doesn't accept
-      # (eslint:/output-format:), so it never produced results.sarif and the
-      # subsequent SARIF upload step failed on every run.
-      - name: Run ESLint
-        run: npm run lint
-        continue-on-error: true
-
-  typescript:
-    name: TypeScript Check
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20.x
-
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
-
-      - name: Type check Backend
-        run: npx tsc --noEmit
-
-      - name: Install Frontend dependencies
-        working-directory: ./client
-        run: npm install --no-audit --no-fund
-
-      # Use `tsc -b` (build mode), NOT `tsc --noEmit`. The client uses a
-      # solution-style tsconfig (references tsconfig.app.json/tsconfig.node.json
-      # with no root files/include), so `tsc --noEmit` type-checks ZERO files and
-      # silently passes even when the client has type errors — they'd only
-      # surface later inside the Docker build. `tsc -b` builds the referenced
-      # projects and actually type-checks them.
-      - name: Type check Frontend
-        working-directory: ./client
-        run: npx tsc -b
-
-  prettier:
-    name: Prettier Check
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20.x
-
-      - name: Install Prettier
-        run: npm install -g prettier
-
-      # Advisory (continue-on-error): the TypeScript job is the hard gate.
-      # .prettierrc now uses endOfLine:"auto" so the uniformly-CRLF repo no
-      # longer trips "Delete ␍" on every file, but formatting drift shouldn't
-      # block merges here.
-      - name: Check Prettier formatting
-        run: prettier --check "**/*.{js,jsx,ts,tsx,json,css,md}"
-        continue-on-error: true
-
   complexity:
     name: Complexity Analysis
     runs-on: ubuntu-latest
@@ -105,12 +36,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20.x
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
 
-      - name: Install complexity tool
-        run: npm install -g eslint-plugin-complexity
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
 
+      # Reports functions over the threshold as a heads-up. `|| true` because
+      # this is a metric to watch, not a merge gate — the repo has known
+      # high-complexity handlers that would otherwise stop the run.
       - name: Analyze complexity
         run: |
-          # Check for files exceeding complexity threshold
-          eslint 'src/**/*.ts' --ext .ts --rule 'complexity: ["error", 15]' --quiet || true
-          eslint 'client/src/**/*.tsx' --ext .tsx --rule 'complexity: ["error", 15]' --quiet || true
+          npx eslint 'src/**/*.ts' --ext .ts --rule 'complexity: ["warn", 15]' || true
+          npx eslint 'client/src/**/*.tsx' --ext .tsx --rule 'complexity: ["warn", 15]' || true

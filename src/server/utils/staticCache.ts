@@ -17,9 +17,17 @@ import path from 'path';
  */
 export const NO_STORE_FILENAMES = [
   'index.html',
+  // The kiosk's own document + manifest. Same reasoning as index.html: fixed
+  // name, contents change every deploy.
+  'kiosk.html',
+  'kiosk.webmanifest',
   'sw.js',
   'manifest.webmanifest',
   'offline.html',
+  // Loaded by both HTML entries to detect a stale bundle. If this one is cached
+  // immutably it can never be corrected — and it is the thing that recovers
+  // browsers stuck on an old build.
+  'bundle-check.js',
 ];
 
 export const NO_STORE_CACHE_CONTROL = 'no-store, must-revalidate';

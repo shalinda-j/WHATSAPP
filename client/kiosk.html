@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="192x192"
+      href="/kiosk-icon-192.png"
+    />
+    <!--
+      A second HTML entry, served for /kiosk (see the SPA fallback in
+      src/server/app.ts). Not a route inside the admin bundle, for three reasons:
+
+      1. Its own manifest — the decisive one. `<link rel="manifest">` is
+         per-DOCUMENT, so a single-document SPA can only ever advertise one
+         installable app. Swapping the link at runtime does not work: Chromium
+         computes installability and fires `beforeinstallprompt` before a route
+         change could swap it, so installing from the kiosk screen would install
+         the admin app under the kiosk's name.
+      2. No admin bootstrapping. The in-SPA route rendered inside AuthProvider,
+         so a public terminal ran the admin auth check on load and sat behind the
+         axios 401 interceptor. This entry has neither. It also loads the kiosk
+         page in the initial payload instead of after a lazy-chunk round-trip —
+         note that the total initial payload is about the same as the admin
+         entry's (react + axios + icons dominate, and the admin routes were
+         already code-split); the win is one less round-trip to first paint, not
+         fewer bytes.
+      3. Its own chrome. `display: fullscreen`, the emerald theme, and the
+         document-level overscroll/selection lockout below belong to the kiosk
+         alone — the admin app must stay `standalone`, scrollable and selectable.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no"
+    />
+    <title>Work 360 Kiosk</title>
+
+    <link rel="manifest" href="/kiosk.webmanifest" />
+    <!-- emerald-950, matching the kiosk's own gradient rather than the admin
+         panel's gray-900, so the status bar blends into this screen. -->
+    <meta name="theme-color" content="#022c22" />
+    <meta name="application-name" content="Work 360 Kiosk" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Kiosk" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <link rel="apple-touch-icon" href="/kiosk-apple-touch-icon.png" />
+
+    <!--
+      Stale-bundle self-heal — see public/bundle-check.js. Same file the admin
+      entry loads; it keys off window.location.pathname, so it compares this
+      document's assets against what the server currently serves for /kiosk.
+    -->
+    <script src="/bundle-check.js"></script>
+
+    <style>
+      /*
+        Two things the kiosk needs before React paints, so a visitor never sees
+        a white flash on a dark terminal or an accidental page-drag:
+
+        - the emerald background, applied to the document itself
+        - overscroll/selection lockout. On a shared tablet a stray swipe used to
+          rubber-band the whole page and a long-press started a text selection;
+          neither is recoverable without a keyboard.
+      */
+      html,
+      body {
+        margin: 0;
+        background: #022c22;
+        overscroll-behavior: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      /* The consultant screen manages its own scrolling; the document must not
+         also scroll, or the two fight on iOS. */
+      body {
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/kiosk-main.tsx"></script>
+  </body>
+</html>

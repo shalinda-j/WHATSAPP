@@ -39,6 +39,7 @@ import {
   extractEnrollmentFields,
   EnrollmentExtract,
 } from '../../services/gemini';
+import { kioskDatasetService } from '../../services/KioskDatasetService';
 import { FormService } from '../../services/FormService';
 import { WebhookService } from '../../services/WebhookService';
 import { CRMService } from '../../services/CRMService';
@@ -480,23 +481,24 @@ function buildConsultModelInput(
     .filter(([, v]) => v === undefined || v === null || v === '')
     .map(([label]) => label);
 
+  // Per-TURN state only. The consultant's personality and style used to be
+  // pasted in here on every utterance; it now lives in the kiosk system prompt
+  // (KioskDatasetService.getPersonality → the KIOSK_PERSONALITY dataset row, or
+  // DEFAULT_KIOSK_PERSONALITY), so an operator can edit the kiosk's voice from
+  // Admin → Datasets without a redeploy — and it stops being restated in every
+  // single message. What genuinely belongs per turn is what has been captured so
+  // far and what is still outstanding.
   const stateBlock =
-    `(SYSTEM: ඔබ ශාඛාවේ මිත්‍රශීලී මානව උපදේශකයෙක් — form එකක් පුරවන යන්ත්‍රයක් නොවේ. ` +
-    `මෙය හඬ (voice) සංවාදයක්: සැබෑ මිනිසෙක් මෙන් උණුසුම්ව, ස්වාභාවිකව, කෙටියෙන් (වාක්‍ය 1–2ක්) කතා කරන්න. ` +
-    `මෙතෙක් දැනගත් තොරතුරු: ${
+    `(SYSTEM: මෙතෙක් දැනගත් තොරතුරු: ${
       captured.length ? captured.join(', ') : 'කිසිවක් නැත'
     }. ` +
     `තවම දැනගන්න ඕන: ${
       missing.length ? missing.join(', ') : 'සියල්ල සම්පූර්ණයි'
     }. ` +
-    `විලාසය: ` +
-    `(1) පුද්ගලයාට අවශ්‍ය දේ ගැන ස්වාභාවික කතාබහක් කරන්න — ඔවුන්ගේ ඉලක්ක/ප්‍රශ්න ගැන කතා කර උදව් කරන්න. ` +
-    `(2) අවශ්‍ය තොරතුරු එක එක ප්‍රශ්න විදිහට යාන්ත්‍රිකව අහන්න එපා — කතාව අතරතුර ස්වාභාවිකව, මෘදුව අහගන්න. හැම උත්තරයක්ම නැවත කියවා "මෙය හරිද?" කියා robot කෙනෙක් මෙන් තහවුරු කරන්න එපා; වැදගත් දේ (ගෙවීම වගේ) විතරක් සැහැල්ලුවෙන් තහවුරු කරගන්න. ` +
-    `(3) පාඨමාලා/මට්ටම්/ගාස්තු විස්තර දැනුම් පදනමෙන් (KB) පමණක් — කිසිවක් මනක්කල්පිත නොකරන්න. ` +
-    `(4) නම, අංකය, NIC, පාඨමාලාව සහ ගෙවීම දැනගත් පසු ලියාපදිංචිය සම්පූර්ණ බව සතුටින් දන්වන්න. ` +
-    `(5) පළමුව පුද්ගලයාගේ හැඟීම (කනස්සල්ල/ව්‍යාකූලත්වය/උද්යෝගය/කලකිරීම) හඳුනාගෙන ඒකට react කරන්න — කනස්සල්ලෙන් නම් සන්සුන් කරන්න, ව්‍යාකූල නම් ඉවසීමෙන් පැහැදිලි කරන්න, උද්යෝගී නම් ඒ සතුට බෙදාගන්න. ` +
-    `කිසිසේත් යාන්ත්‍රික/රොබෝ ස්වරයක් නොවේ — සැබෑ, උණුසුම්, කතා-කරන-බස. ` +
-    `(You are a warm HUMAN consultant, NOT a form-filling robot. This is a VOICE chat: talk like a real person — natural, warm, short (1–2 sentences). Have a real conversation about what they need; gather the required details (name, phone, NIC, course, payment) NATURALLY within the chat, never as a rigid one-question-at-a-time interrogation, and NEVER robotically repeat every answer back with "is this correct?" — only lightly confirm important things like payment. Course/fee facts ONLY from the knowledge base. First read the visitor's emotion and react to it. Never robotic — real, warm, spoken.))`;
+    `අවශ්‍ය තොරතුරු කතාව අතරතුර ස්වාභාවිකව අහගන්න — එකවර ලැයිස්තුවක් අහන්න එපා. ` +
+    `හැම උත්තරයක්ම නැවත කියවා "මෙය හරිද?" කියා තහවුරු කරන්න එපා; ගෙවීම වගේ වැදගත් දේ විතරක් සැහැල්ලුවෙන් තහවුරු කරගන්න. ` +
+    `නම, අංකය, NIC, පාඨමාලාව සහ ගෙවීම දැනගත් පසු ලියාපදිංචිය සම්පූර්ණ බව සතුටින් දන්වන්න. ` +
+    `(Turn state. Gather what's still missing NATURALLY inside the conversation — never as a list, and don't read every answer back for confirmation; only lightly confirm important things like payment. Once name, phone, NIC, course and payment are known, happily confirm the registration is complete.))`;
 
   const ctxBlock = customerContext ? `${customerContext}\n\n` : '';
   return `${appendSinhalaInstruction(userText)}\n\n${ctxBlock}${stateBlock}`;
@@ -668,17 +670,28 @@ router.post(
       // Pull the visitor's WhatsApp journey + Lead profile so the consultant
       // continues their thread and consults on what THEY actually need — the
       // core of "connect the chat history to the Consulting Assistant".
-      const customerContext = await buildCustomerContext(
-        invite,
-        jid,
-        kiosk.tenantId,
+      // Cached for the life of the session. The Lead row and the last ten
+      // WhatsApp messages cannot change while somebody is standing at the
+      // terminal, but this used to re-query both on every single utterance and
+      // rebuild a byte-identical string.
+      const customerContext = await kioskDatasetService.getVisitorProfile(
+        kiosk.inviteId,
+        () => buildCustomerContext(invite, jid, kiosk.tenantId),
       );
       const modelInput = buildConsultModelInput(
         transcript,
         currentCollected,
         customerContext,
       );
-      const providerOverride = await resolveKioskProviderOverride();
+      // The kiosk's OWN brain: its operator-editable personality plus the
+      // handful of knowledge entries that actually bear on what was just said —
+      // not the global 100-entry WhatsApp job-vacancy KB the load balancer would
+      // otherwise assemble. Ranked per turn, because relevance depends on the
+      // utterance.
+      const [providerOverride, kioskSystemContent] = await Promise.all([
+        resolveKioskProviderOverride(),
+        kioskDatasetService.getSystemContent(transcript, kiosk.tenantId),
+      ]);
       let reply = '';
       try {
         reply = await aiLoadBalancer.sendMessage(
@@ -686,6 +699,7 @@ router.post(
           modelInput,
           kiosk.tenantId,
           providerOverride,
+          kioskSystemContent,
         );
       } catch (err: any) {
         console.warn('⚠️ /consult AI reply failed:', err?.message || err);
@@ -813,6 +827,9 @@ router.post(
   async (req: KioskRequest, res: Response) => {
     try {
       await kioskInviteService.markConverted(req.kiosk!.inviteId);
+      // The visit is done — drop the cached visitor profile rather than holding
+      // a stranger's WhatsApp history in memory for the rest of the TTL.
+      kioskDatasetService.invalidateVisitor(req.kiosk!.inviteId);
       res.json({ converted: true });
     } catch (err: any) {
       console.error('❌ /api/kiosk/convert error:', err?.message || err);
@@ -941,6 +958,10 @@ router.post(
       } catch (err: any) {
         console.warn('⚠️ /enroll webhook failed:', err?.message || err);
       }
+
+      // Enrollment complete — same reasoning as /convert: stop holding this
+      // visitor's history in memory.
+      kioskDatasetService.invalidateVisitor(kiosk.inviteId);
 
       res.json({ registered: true, submissionId });
     } catch (err: any) {

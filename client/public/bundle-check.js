@@ -1,0 +1,139 @@
+/* global window, document, sessionStorage, console, fetch, Set */
+
+/**
+ * Stale-bundle self-heal.
+ *
+ * Vite hashes every emitted JS/CSS asset URL. After a deploy, browsers sometimes
+ * still hold a cached HTML document from the previous build that references the
+ * OLD hashes — those assets no longer exist on the server, so loading the page
+ * yields a string of 404s and a "Refused to apply style ... MIME type text/html"
+ * error.
+ *
+ * The server fix prevents the silent-corruption case (assets return a real 404
+ * instead of the SPA shell) and tags the HTML with Cache-Control: no-store going
+ * forward — but it can't retroactively invalidate an HTML the browser already
+ * cached.
+ *
+ * This script runs on every page load. It refetches the current path bypassing
+ * the HTTP cache, compares the asset URLs declared inside the served HTML to the
+ * ones the current document is actually trying to load, and forces a single
+ * reload when they diverge. After that one reload the browser sees the no-store
+ * header and stays current on every future deploy.
+ *
+ * It lives in one file rather than inline in each HTML entry: the app has two
+ * documents now (index.html for the admin panel, kiosk.html for the terminal)
+ * and two copies of logic this subtle would drift. Loaded as a plain
+ * parser-blocking script from <head> so the error listener below is installed
+ * before the bundle <script> tag it is meant to catch.
+ *
+ * The service worker must never answer the fetch below from CacheStorage — see
+ * the X-Bundle-Check bypass in public/sw.js.
+ */
+(function () {
+  // Helper used by both the HTML-drift comparison and the load-error listener so
+  // we never trigger more than one recovery reload per tab.
+  function alreadyHealed() {
+    try {
+      return sessionStorage.getItem('__bundleSelfHealed') === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+  function markHealed() {
+    try {
+      sessionStorage.setItem('__bundleSelfHealed', '1');
+    } catch (_) {
+      /* ignore */
+    }
+  }
+  // Cache-bust reload: changing the URL forces the browser to refetch every
+  // asset without honouring its (possibly corrupt) disk cache. Used instead of
+  // plain reload() so we recover from ERR_CACHE_READ_FAILURE, not just stale
+  // HTML.
+  function recoverReload(reason, detail) {
+    if (alreadyHealed()) return;
+    markHealed();
+    console.warn(
+      '[bundle-check] ' +
+        reason +
+        ' — recovering' +
+        (detail ? ' (' + detail + ')' : ''),
+    );
+    var bust = '_v=' + Date.now();
+    var url = window.location.pathname + '?' + bust + window.location.hash;
+    window.location.replace(url);
+  }
+
+  // ── Asset load-error listener ───────────────────────────────────────────────
+  // Catches errors that fire while the document is loading <script src> and
+  // <link href> tags — including ERR_CACHE_READ_FAILURE (corrupt disk cache),
+  // 404 (a stale hash the HTML-drift check below didn't catch in time), and
+  // network failures. We run in the capture phase so we see the event before app
+  // code attaches its own handlers. Registered immediately because the bundle
+  // <script> tag may fail before our async fetch() completes.
+  window.addEventListener(
+    'error',
+    function (ev) {
+      var t = ev && ev.target;
+      if (!t || t === window) return;
+      var tagName = (t.tagName || '').toUpperCase();
+      if (tagName !== 'SCRIPT' && tagName !== 'LINK') return;
+      var url = t.src || t.href || '';
+      if (url.indexOf('/assets/') === -1) return;
+      recoverReload(
+        'asset load failed',
+        url.split('/').pop() + ' on ' + tagName,
+      );
+    },
+    true,
+  );
+
+  if (alreadyHealed()) return;
+  var ASSET_RE = /\/assets\/[\w.-]+\.(?:js|css)/g;
+  function currentDocAssets() {
+    var hits = new Set();
+    // Read what THIS html is asking the browser to load.
+    var nodes = document.querySelectorAll(
+      'script[src], link[rel="stylesheet"][href], link[rel="modulepreload"][href]',
+    );
+    for (var i = 0; i < nodes.length; i++) {
+      var url =
+        nodes[i].getAttribute('src') || nodes[i].getAttribute('href') || '';
+      if (url.indexOf('/assets/') !== -1) hits.add(url);
+    }
+    return Array.from(hits).sort().join('|');
+  }
+  function freshHtmlAssets(html) {
+    var hits = new Set();
+    var m;
+    while ((m = ASSET_RE.exec(html))) hits.add(m[0]);
+    return Array.from(hits).sort().join('|');
+  }
+  // Bypass the HTTP cache entirely so we see what the SERVER thinks the current
+  // bundle is, not whatever's stuck in disk cache.
+  fetch(window.location.pathname || '/', {
+    cache: 'no-store',
+    credentials: 'same-origin',
+    headers: { 'X-Bundle-Check': '1' },
+  })
+    .then(function (res) {
+      if (!res.ok) return null;
+      return res.text();
+    })
+    .then(function (html) {
+      if (!html) return;
+      var have = currentDocAssets();
+      var want = freshHtmlAssets(html);
+      // Only act on a concrete divergence — never reload if either side parsed
+      // to an empty list. The cache-busting recoverReload() also handles
+      // ERR_CACHE_READ_FAILURE in the common path: refetching with a fresh URL
+      // bypasses the browser's disk cache for every asset.
+      if (have && want && have !== want) {
+        recoverReload('stale HTML detected');
+      }
+    })
+    .catch(function () {
+      // Network blip → let the page proceed; if assets really are missing the
+      // user can hard-refresh manually.
+    });
+})();

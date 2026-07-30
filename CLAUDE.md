@@ -128,9 +128,23 @@ npm run start
 - `CampaignService.tickSender` — 30s interval, per-campaign rate limit, quiet hours, single-writer guard (queued → sending → sent)
 - `FollowUpScheduler` — 5-min interval, picks dormant Leads (`updatedAt < now − 5d`), gated on `AgentConfig.find({name:'follow_up'}).mode`
 
-11. **PWA (installable app + offline shell)**
+11. **PWA (two installable apps + offline shell)**
 
-- `client/public/manifest.webmanifest` — `display: standalone`, gray-900
+- **Two HTML entry points, two manifests, two installable apps.** A
+  `<link rel="manifest">` is per-DOCUMENT, so one SPA document can only ever
+  advertise one app. `client/index.html` → `src/main.tsx` is the admin panel
+  (`manifest.webmanifest`, `display: standalone`, gray-900); `client/kiosk.html`
+  → `src/kiosk-main.tsx` is the walk-up terminal (`kiosk.webmanifest`, `id`/
+  `start_url`/`scope` `/kiosk`, `display: fullscreen`, emerald-950, its own
+  icon set). Both are Vite `rollupOptions.input` entries; the SPA fallback in
+  `app.ts` serves `kiosk.html` for `/kiosk*`.
+- Do **not** try to swap the manifest link at runtime instead: Chromium fires
+  `beforeinstallprompt` before a route change could swap it, so the kiosk screen
+  would install the admin app under the kiosk's name.
+- The kiosk entry has no `AuthProvider` — verified to issue **zero** API calls on
+  load, where the admin document fires `/api/auth/setup-check`. The `/kiosk`
+  route in `App.tsx` remains only as a fallback.
+- `manifest.webmanifest` — `display: standalone`, gray-900
   theme/background (matches the mobile header), 192+512 icons in both `any`
   and `maskable`, shortcuts to Live Chat / CRM / Kiosk
 - `client/public/sw.js` — hand-written service worker, no build plugin. `/api`,
@@ -138,10 +152,15 @@ npm run start
   **network-only**; `/assets/<hash>` is cache-first (hashed ⇒ immutable);
   navigations are network-first with the last good shell then `/offline.html`
   as fallbacks. Bump `SW_VERSION` to drop the previous generation of caches.
-- **It must never intercept the stale-bundle self-heal probe.** `index.html`
-  refetches `/` with `X-Bundle-Check: 1` and compares asset hashes; answering
-  that from CacheStorage either hides a deploy or reload-loops the tab, so the
-  worker returns early on that header.
+  The two documents cache under **separate** shell keys (`/index.html`,
+  `/kiosk.html`) — one key would let an admin visit overwrite the terminal's
+  shell, and the kiosk would then boot the admin bundle offline.
+- **It must never intercept the stale-bundle self-heal probe.**
+  `public/bundle-check.js` (loaded by both documents — one copy, because two
+  copies of that logic drift) refetches the current path with
+  `X-Bundle-Check: 1` and compares asset hashes; answering that from
+  CacheStorage either hides a deploy or reload-loops the tab, so the worker
+  returns early on that header.
 - Updates are **never** applied silently (that would drop a half-written
   campaign or cut a live voice session): a waiting worker surfaces a Reload
   chip via `lib/registerServiceWorker.ts` → `components/PwaPrompts.tsx`, which
@@ -155,6 +174,38 @@ npm run start
 - Icons are generated from the 256px PNG inside `360ai-i.ico`; regenerate them
   only if the brand mark changes (`src/__tests__/Pwa.test.ts` asserts every
   declared size exists on disk).
+
+12. **Kiosk dataset scope + personalisation** (`src/services/KioskDatasetService.ts`)
+
+- The kiosk used to borrow the WhatsApp bot's brain: every consult turn sent the
+  global `AI_PERSONALITY` plus `getKnowledgeBaseForAI()` — **up to 100** entries
+  ordered by `usageCount`, plus every dataset row. On an enrollment terminal that
+  meant a course-fee question arrived alongside a hundred Q&As about job visas.
+- **Scoping reuses existing fields, no new models and no migration.**
+  `Dataset.scope = 'KIOSK'` for kiosk-only rows (`'ALL'` stays shared);
+  `KnowledgeEntry` with category `kiosk` or a `kiosk` tag. With no kiosk-scoped
+  rows it falls back to the shared pool, so the kiosk answers exactly as before
+  until an operator curates.
+- **Relevance-ranked, not dumped.** `rankEntries` scores a 200-row pool against
+  the visitor's actual utterance (question match 3, tag 2, answer 1; confidence
+  and usage only break ties) and sends the top `KIOSK_KB_LIMIT` = 8. The old
+  `usageCount` sort handed the model the most POPULAR entries regardless of what
+  was asked. `tokenize` keeps Sinhala and Tamil, because a `\w+` split throws
+  away most kiosk utterances.
+- **`aiLoadBalancer.sendMessage` takes a 5th arg, `systemContentOverride`.**
+  Without it the kiosk would get its scoped KB _in addition to_ the global one.
+  Falsy behaves exactly as before for every other caller.
+- **Personality is operator-editable.** `KIOSK_PERSONALITY` (dataset, type
+  `personality`, scope `KIOSK`, Sinhala in `content.si`) replaces the directive
+  that was hard-coded in the route; `DEFAULT_KIOSK_PERSONALITY` is the in-code
+  fallback so seeding is optional. `buildConsultModelInput` now carries only
+  per-turn state (captured/missing fields), not the whole personality restated
+  on every utterance.
+- **Caches sized to what they protect**: content 60s (an operator may be editing
+  it); visitor profile 30min, matching the kiosk token — the Lead row and last
+  ten WhatsApp messages cannot change mid-visit, yet were re-read on every
+  utterance to rebuild a byte-identical string. `/convert` and `/enroll` call
+  `invalidateVisitor` so a stranger's history doesn't linger in memory.
 
 ### Key Services
 

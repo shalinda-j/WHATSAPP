@@ -584,13 +584,21 @@ export class AILoadBalancer {
     return `${aiPersonality}\n\n${knowledgeBase}`;
   }
 
-  private async getInitialHistory(tenantId?: string): Promise<AIChatMessage[]> {
+  private async getInitialHistory(
+    tenantId?: string,
+    systemContentOverride?: string | null,
+  ): Promise<AIChatMessage[]> {
     const conversationExamples = await getConversationExamples();
 
     const history: AIChatMessage[] = [
       {
         role: 'system',
-        content: await this.buildSystemContent(tenantId),
+        // With an override supplied there is no point assembling the global
+        // system content just to replace it a few lines later — that read is
+        // the whole 100-entry knowledge base.
+        content:
+          systemContentOverride?.trim() ||
+          (await this.buildSystemContent(tenantId)),
       },
     ];
 
@@ -685,11 +693,19 @@ export class AILoadBalancer {
     }
   }
 
+  /**
+   * @param systemContentOverride Replaces the global system prompt (personality
+   *   + full knowledge base) for this call. The kiosk uses it to supply its own
+   *   scoped, relevance-ranked context — see KioskDatasetService. Without it
+   *   the caller would get the kiosk KB *in addition to* the global one, which
+   *   is worse than either alone. Falsy/blank behaves exactly as before.
+   */
   async sendMessage(
     userId: string,
     message: string,
     tenantId?: string,
     providerOverride?: string | null,
+    systemContentOverride?: string | null,
   ): Promise<string> {
     // Load services with caching (not on every message)
     await this.loadServices();
@@ -730,7 +746,7 @@ export class AILoadBalancer {
         }));
       } else {
         // Initialize with system prompt and examples for THIS request only.
-        history = await this.getInitialHistory(tenantId);
+        history = await this.getInitialHistory(tenantId, systemContentOverride);
         // Persist ONLY the system anchor — never the synthetic few-shot
         // example turns. Those must stay in-memory for the AI's few-shot
         // priming, but persisting them pollutes the shared ConversationHistory
@@ -762,7 +778,12 @@ export class AILoadBalancer {
     // conversations that started before the edit. Previously the system prompt
     // was captured only on a user's FIRST message and persisted forever, so
     // personality changes were silently ignored for every existing chat.
-    const freshSystem = await this.buildSystemContent(tenantId);
+    // A caller-supplied prompt wins, but is still refreshed into slot 0 on every
+    // turn — the kiosk's ranked knowledge changes with each utterance, and the
+    // persisted history holds whatever was relevant to the FIRST one.
+    const freshSystem =
+      systemContentOverride?.trim() ||
+      (await this.buildSystemContent(tenantId));
     if (history.length > 0 && history[0].role === 'system') {
       history[0] = { role: 'system', content: freshSystem };
     } else {

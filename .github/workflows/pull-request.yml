@@ -1,60 +1,76 @@
 name: Pull Request
 
+# One job, no checkout, no Node.
+#
+# This used to be two jobs, each doing `actions/checkout` with `fetch-depth: 0`
+# — a full-history clone of the whole repo — so that one could grep the PR title
+# and the other could count changed files. Both numbers are already in the
+# pull_request event payload, and `changed_files` is exactly what the old
+# `git diff --name-only base..head | wc -l` was reconstructing. So: read the
+# payload, skip the clone, and report both in a single sub-minute job.
+#
+# The large-file check did need a working tree, but it was scanning the whole
+# checkout rather than the diff, so it warned about pre-existing files that had
+# nothing to do with the PR. GitHub already rejects pushes over 100 MB and warns
+# over 50 MB, so that check is dropped rather than reimplemented.
+
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [main, develop]
 
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
-  validation:
-    name: Validate PR
+  pr-checks:
+    name: PR Checks
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Title and size report
+        uses: actions/github-script@v7
         with:
-          fetch-depth: 0
+          script: |
+            const pr = context.payload.pull_request;
+            const title = pr.title || '';
+            const files = pr.changed_files ?? 0;
+            const churn = (pr.additions ?? 0) + (pr.deletions ?? 0);
 
-      - name: Check conventional commits (soft)
-        run: |
-          # Lenient conventional-commits hint — surfaces a warning when the PR
-          # title doesn't start with a known type prefix, but never fails CI.
-          TITLE='${{ github.event.pull_request.title }}'
-          if echo "$TITLE" | grep -qE '^(feat|fix|docs|style|refactor|perf|test|chore|revert|ci|build)(\(.+\))?[:!]'; then
-            echo "✓ PR title follows conventional commits"
-          else
-            echo "::warning::PR title doesn't follow conventional commits format (type: description). This is a hint, not a blocker."
-          fi
+            // Conventional-commits hint. A warning, never a blocker — the merge
+            // queue here squashes with a curated title anyway.
+            const conventional =
+              /^(feat|fix|docs|style|refactor|perf|test|chore|revert|ci|build)(\(.+\))?[:!]/i;
+            if (conventional.test(title)) {
+              core.info(`✓ PR title follows conventional commits: ${title}`);
+            } else {
+              core.warning(
+                `PR title doesn't follow conventional commits (type: description). Hint, not a blocker. Got: ${title}`,
+              );
+            }
 
-      - name: Check for large files
-        run: |
-          find . -type f -size +10M -not -path './node_modules/*' -not -path './client/node_modules/*' | head -n 5
-          if [ $(find . -type f -size +10M -not -path './node_modules/*' -not -path './client/node_modules/*' | wc -l) -gt 0 ]; then
-            echo "::warning::Large files detected in the PR. Consider using Git LFS."
-          fi
+            const size =
+              files < 10 ? 'XS' : files < 30 ? 'S/M' : files < 100 ? 'L' : 'XL';
+            const msg = `${size} — ${files} files changed, ${churn} lines of churn`;
+            if (size === 'XL') {
+              core.warning(`${msg}. Consider splitting this PR.`);
+            } else {
+              core.notice(msg);
+            }
 
-  size-report:
-    name: PR Size Report
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Calculate PR Size
-        run: |
-          FILES_CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | wc -l)
-          echo "Files changed: $FILES_CHANGED"
-
-          if [ $FILES_CHANGED -lt 10 ]; then
-            echo "::notice::Small PR (XS) - $FILES_CHANGED files changed"
-          elif [ $FILES_CHANGED -lt 30 ]; then
-            echo "::notice::Medium PR (S/M) - $FILES_CHANGED files changed"
-          elif [ $FILES_CHANGED -lt 100 ]; then
-            echo "::notice::Large PR (L) - $FILES_CHANGED files changed"
-          else
-            echo "::warning::Extra Large PR (XL) - $FILES_CHANGED files changed. Consider splitting."
-          fi
+            await core.summary
+              .addHeading('PR Checks', 3)
+              .addTable([
+                [
+                  { data: 'Check', header: true },
+                  { data: 'Result', header: true },
+                ],
+                ['Conventional title', conventional.test(title) ? '✅' : '⚠️'],
+                ['Files changed', String(files)],
+                ['Lines changed', String(churn)],
+                ['Size', size],
+              ])
+              .write();
