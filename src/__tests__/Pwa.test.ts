@@ -16,8 +16,10 @@ import {
 
 const PUBLIC_DIR = path.join(__dirname, '../../client/public');
 const MANIFEST_PATH = path.join(PUBLIC_DIR, 'manifest.webmanifest');
+const KIOSK_MANIFEST_PATH = path.join(PUBLIC_DIR, 'kiosk.webmanifest');
 const SW_PATH = path.join(PUBLIC_DIR, 'sw.js');
 const INDEX_HTML = path.join(__dirname, '../../client/index.html');
+const KIOSK_HTML = path.join(__dirname, '../../client/kiosk.html');
 
 interface ManifestIcon {
   src: string;
@@ -27,6 +29,7 @@ interface ManifestIcon {
 }
 
 interface Manifest {
+  id: string;
   name: string;
   short_name: string;
   start_url: string;
@@ -39,8 +42,12 @@ interface Manifest {
 }
 
 const manifest: Manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'));
+const kioskManifest: Manifest = JSON.parse(
+  fs.readFileSync(KIOSK_MANIFEST_PATH, 'utf8'),
+);
 const swSource = fs.readFileSync(SW_PATH, 'utf8');
 const indexHtml = fs.readFileSync(INDEX_HTML, 'utf8');
+const kioskHtml = fs.readFileSync(KIOSK_HTML, 'utf8');
 
 /** Read width/height straight out of a PNG's IHDR chunk. */
 function pngSize(file: string): { width: number; height: number } {
@@ -124,6 +131,101 @@ describe('index.html PWA wiring', () => {
   });
 });
 
+describe('kiosk app manifest', () => {
+  it('is a distinct app identity from the admin panel', () => {
+    // Same origin, two installable apps. `id` is what keeps them apart in the
+    // launcher — share it and installing one replaces the other.
+    expect(kioskManifest.id).toBe('/kiosk');
+    expect(manifest.id).toBe('/');
+    expect(kioskManifest.id).not.toBe(manifest.id);
+    expect(kioskManifest.name).not.toBe(manifest.name);
+  });
+
+  it('launches fullscreen and scoped to the terminal', () => {
+    // fullscreen, not standalone: a walk-up terminal should show no system
+    // chrome at all. Scope keeps a visitor from navigating out of /kiosk into
+    // the admin panel inside the installed app.
+    expect(kioskManifest.display).toBe('fullscreen');
+    expect(kioskManifest.start_url).toBe('/kiosk');
+    expect(kioskManifest.scope).toBe('/kiosk');
+  });
+
+  it('is themed to the kiosk screen, not the admin header', () => {
+    expect(kioskManifest.theme_color).toBe('#022c22');
+    expect(kioskManifest.background_color).toBe('#022c22');
+    expect(kioskManifest.theme_color).not.toBe(manifest.theme_color);
+  });
+
+  it('ships its own icons, visually distinct from the admin set', () => {
+    const srcs = kioskManifest.icons.map((i) => i.src);
+    for (const icon of kioskManifest.icons) {
+      const file = path.join(PUBLIC_DIR, icon.src.replace(/^\//, ''));
+      expect(fs.existsSync(file)).toBe(true);
+      const [w, h] = icon.sizes.split('x').map(Number);
+      expect(pngSize(file)).toEqual({ width: w, height: h });
+    }
+    // Two apps on one home screen with the same icon are indistinguishable, so
+    // the kiosk set must not merely reuse the admin files.
+    for (const adminIcon of manifest.icons) {
+      expect(srcs).not.toContain(adminIcon.src);
+    }
+    for (const purpose of ['any', 'maskable']) {
+      for (const size of ['192x192', '512x512']) {
+        expect(
+          kioskManifest.icons.some(
+            (i) => i.sizes === size && i.purpose === purpose,
+          ),
+        ).toBe(true);
+      }
+    }
+  });
+
+  it('has its own apple-touch-icon', () => {
+    const file = path.join(PUBLIC_DIR, 'kiosk-apple-touch-icon.png');
+    expect(fs.existsSync(file)).toBe(true);
+    expect(pngSize(file)).toEqual({ width: 180, height: 180 });
+  });
+
+  it('does not advertise shortcuts — the terminal has one screen', () => {
+    expect(kioskManifest.shortcuts).toBeUndefined();
+  });
+});
+
+describe('kiosk.html', () => {
+  it('links the kiosk manifest, never the admin one', () => {
+    // The whole reason the kiosk is a second document: a manifest link is
+    // per-document, so this is what makes it separately installable.
+    expect(kioskHtml).toContain('rel="manifest" href="/kiosk.webmanifest"');
+    expect(kioskHtml).not.toContain('/manifest.webmanifest');
+  });
+
+  it('mounts the kiosk-only entry, not the admin app', () => {
+    expect(kioskHtml).toContain('/src/kiosk-main.tsx');
+    expect(kioskHtml).not.toContain('/src/main.tsx');
+  });
+
+  it('carries the kiosk theme colour and safe-area viewport', () => {
+    expect(kioskHtml).toContain(
+      `<meta name="theme-color" content="${kioskManifest.theme_color}" />`,
+    );
+    expect(kioskHtml).toContain('viewport-fit=cover');
+  });
+
+  it('shares one copy of the stale-bundle self-heal script', () => {
+    // Both documents load public/bundle-check.js rather than inlining ~100 lines
+    // of subtle recovery logic twice, which would drift.
+    expect(kioskHtml).toContain('src="/bundle-check.js"');
+    expect(indexHtml).toContain('src="/bundle-check.js"');
+    expect(fs.existsSync(path.join(PUBLIC_DIR, 'bundle-check.js'))).toBe(true);
+    // The probe header has to live with the script now, not in the HTML.
+    const bundleCheck = fs.readFileSync(
+      path.join(PUBLIC_DIR, 'bundle-check.js'),
+      'utf8',
+    );
+    expect(bundleCheck).toContain("'X-Bundle-Check': '1'");
+  });
+});
+
 describe('service worker', () => {
   it('never caches the API, the socket or uploads', () => {
     // The single most damaging thing a worker here could do is serve a stale
@@ -135,11 +237,19 @@ describe('service worker', () => {
   });
 
   it('bypasses the stale-bundle self-heal probe', () => {
-    // index.html refetches '/' with X-Bundle-Check to compare asset hashes.
-    // Answering that from a cache would either hide a deploy or reload-loop
-    // the tab, so the worker has to let it through untouched.
-    expect(indexHtml).toContain("'X-Bundle-Check': '1'");
+    // bundle-check.js refetches the current path with X-Bundle-Check to compare
+    // asset hashes. Answering that from a cache would either hide a deploy or
+    // reload-loop the tab, so the worker has to let it through untouched.
     expect(swSource).toContain("request.headers.get('X-Bundle-Check')");
+  });
+
+  it('caches the two app shells under separate keys', () => {
+    // index.html and kiosk.html are different documents. One shared key would
+    // mean a visit to the admin panel overwrites the kiosk's cached shell, and
+    // the terminal would boot the admin bundle when it went offline.
+    expect(swSource).toContain("const SHELL_KEY = '/index.html'");
+    expect(swSource).toContain("const KIOSK_SHELL_KEY = '/kiosk.html'");
+    expect(swSource).toContain('isKioskPath');
   });
 
   it('ignores non-GET and Range requests', () => {
@@ -180,9 +290,12 @@ describe('static cache-control policy', () => {
     // the critical one: cached immutable, a worker can never be replaced.
     for (const file of [
       'index.html',
+      'kiosk.html',
       'sw.js',
       'manifest.webmanifest',
+      'kiosk.webmanifest',
       'offline.html',
+      'bundle-check.js',
     ]) {
       expect(isNoStoreAsset(`/srv/client/dist/${file}`)).toBe(true);
       expect(cacheControlFor(`/srv/client/dist/${file}`)).toBe(

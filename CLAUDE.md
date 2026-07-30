@@ -128,9 +128,23 @@ npm run start
 - `CampaignService.tickSender` — 30s interval, per-campaign rate limit, quiet hours, single-writer guard (queued → sending → sent)
 - `FollowUpScheduler` — 5-min interval, picks dormant Leads (`updatedAt < now − 5d`), gated on `AgentConfig.find({name:'follow_up'}).mode`
 
-11. **PWA (installable app + offline shell)**
+11. **PWA (two installable apps + offline shell)**
 
-- `client/public/manifest.webmanifest` — `display: standalone`, gray-900
+- **Two HTML entry points, two manifests, two installable apps.** A
+  `<link rel="manifest">` is per-DOCUMENT, so one SPA document can only ever
+  advertise one app. `client/index.html` → `src/main.tsx` is the admin panel
+  (`manifest.webmanifest`, `display: standalone`, gray-900); `client/kiosk.html`
+  → `src/kiosk-main.tsx` is the walk-up terminal (`kiosk.webmanifest`, `id`/
+  `start_url`/`scope` `/kiosk`, `display: fullscreen`, emerald-950, its own
+  icon set). Both are Vite `rollupOptions.input` entries; the SPA fallback in
+  `app.ts` serves `kiosk.html` for `/kiosk*`.
+- Do **not** try to swap the manifest link at runtime instead: Chromium fires
+  `beforeinstallprompt` before a route change could swap it, so the kiosk screen
+  would install the admin app under the kiosk's name.
+- The kiosk entry has no `AuthProvider` — verified to issue **zero** API calls on
+  load, where the admin document fires `/api/auth/setup-check`. The `/kiosk`
+  route in `App.tsx` remains only as a fallback.
+- `manifest.webmanifest` — `display: standalone`, gray-900
   theme/background (matches the mobile header), 192+512 icons in both `any`
   and `maskable`, shortcuts to Live Chat / CRM / Kiosk
 - `client/public/sw.js` — hand-written service worker, no build plugin. `/api`,
@@ -138,10 +152,15 @@ npm run start
   **network-only**; `/assets/<hash>` is cache-first (hashed ⇒ immutable);
   navigations are network-first with the last good shell then `/offline.html`
   as fallbacks. Bump `SW_VERSION` to drop the previous generation of caches.
-- **It must never intercept the stale-bundle self-heal probe.** `index.html`
-  refetches `/` with `X-Bundle-Check: 1` and compares asset hashes; answering
-  that from CacheStorage either hides a deploy or reload-loops the tab, so the
-  worker returns early on that header.
+  The two documents cache under **separate** shell keys (`/index.html`,
+  `/kiosk.html`) — one key would let an admin visit overwrite the terminal's
+  shell, and the kiosk would then boot the admin bundle offline.
+- **It must never intercept the stale-bundle self-heal probe.**
+  `public/bundle-check.js` (loaded by both documents — one copy, because two
+  copies of that logic drift) refetches the current path with
+  `X-Bundle-Check: 1` and compares asset hashes; answering that from
+  CacheStorage either hides a deploy or reload-loops the tab, so the worker
+  returns early on that header.
 - Updates are **never** applied silently (that would drop a half-written
   campaign or cut a live voice session): a waiting worker surfaces a Reload
   chip via `lib/registerServiceWorker.ts` → `components/PwaPrompts.tsx`, which

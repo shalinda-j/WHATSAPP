@@ -122,6 +122,11 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
 
+      {/* Fallback only. /kiosk is normally served as its own document
+          (client/kiosk.html → src/kiosk-main.tsx) so the terminal can be
+          installed as its own fullscreen PWA. This route still catches a
+          client-side navigation inside the admin SPA, and covers a server that
+          hasn't picked up the new build yet. */}
       <Route
         path="/kiosk"
         element={

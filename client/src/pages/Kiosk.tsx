@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import kioskApi, { setKioskToken, clearKioskToken } from '../kioskApi';
 import VoiceConsultant from '../components/voice/VoiceConsultant';
+import { usePwaInstall } from '../hooks/usePwaInstall';
 
 /**
  * Public, full-screen branch-kiosk page.
@@ -151,6 +152,20 @@ export default function Kiosk() {
     () => Array.from({ length: CODE_LENGTH }).map((_, i) => i < code.length),
     [code.length],
   );
+
+  /**
+   * Install-to-home-screen, for the member of staff setting the terminal up.
+   *
+   * kiosk.html carries its own manifest (fullscreen, scoped to /kiosk), so
+   * installing from here gives a genuinely separate app rather than a shortcut
+   * into the admin panel. Deliberately small and low-contrast in a corner:
+   * a visitor walking up to enter a code should never notice it, and it
+   * disappears entirely once the terminal is installed.
+   */
+  const { canPrompt, needsIosInstructions, installed, promptInstall } =
+    usePwaInstall();
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
+  const canOfferInstall = !installed && (canPrompt || needsIosInstructions);
 
   // Keep the submit handler reachable from the keyboard listener without
   // re-subscribing on every keystroke.
@@ -331,6 +346,48 @@ export default function Kiosk() {
           You can also type the code on a keyboard — Enter to start.
         </p>
       </div>
+
+      {canOfferInstall && (
+        <div
+          className="fixed right-3 flex flex-col items-end gap-2"
+          style={{ bottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+        >
+          {showInstallHelp && (
+            <div className="max-w-[15rem] rounded-xl border border-white/15 bg-slate-900/95 p-3 text-left text-xs leading-relaxed text-slate-300 shadow-xl backdrop-blur">
+              <p className="mb-1.5 font-semibold text-white">
+                Install this terminal
+              </p>
+              {needsIosInstructions ? (
+                <p>
+                  In Safari, tap <span className="text-blue-300">Share</span>,
+                  then &ldquo;Add to Home Screen&rdquo;. The kiosk then opens
+                  full-screen with no browser bars.
+                </p>
+              ) : (
+                <p>
+                  Adds the kiosk to this device&rsquo;s home screen and opens it
+                  full-screen, with no browser bars for a visitor to wander out
+                  of.
+                </p>
+              )}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              if (canPrompt) {
+                void promptInstall();
+              } else {
+                setShowInstallHelp((v) => !v);
+              }
+            }}
+            style={KEY_STYLE}
+            className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-200"
+          >
+            Install terminal
+          </button>
+        </div>
+      )}
     </div>
   );
 }
