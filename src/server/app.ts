@@ -49,6 +49,7 @@ import usersRouter from './routes/users';
 import rolesRouter from './routes/roles';
 import { requireAnyPermission } from './middleware/permissions';
 import { resolveTenant } from './middleware/tenantContext';
+import { cacheControlFor } from './utils/staticCache';
 
 import mongoose from 'mongoose';
 import { authenticateToken } from './middleware/auth';
@@ -520,17 +521,20 @@ app.get('/health', async (req, res) => {
 
 // Serve Frontend
 const CLIENT_BUILD_PATH = path.join(__dirname, '../../client/dist');
-// Hashed assets are immutable — safe to cache forever. index.html below is
-// served with no-cache so the browser always learns the new asset hashes
-// after a deploy.
+// Hashed assets are immutable — safe to cache forever. The fixed-name files at
+// the root of the bundle (index.html, sw.js, the manifest, offline.html) change
+// content on every deploy without changing URL, so cacheControlFor() forces
+// no-store on those. See src/server/utils/staticCache.ts — an immutable sw.js
+// is unreplaceable and would freeze the PWA on an old build.
 app.use(
   express.static(CLIENT_BUILD_PATH, {
     maxAge: '1y',
     immutable: true,
     index: false,
     setHeaders: (res, filePath) => {
-      if (filePath.endsWith('index.html')) {
-        res.setHeader('Cache-Control', 'no-store, must-revalidate');
+      const cacheControl = cacheControlFor(filePath);
+      if (cacheControl) {
+        res.setHeader('Cache-Control', cacheControl);
         // Note: the Clear-Site-Data one-shot purge is applied in the
         // SPA fallback below (which has access to req for the cookie
         // check). express.static's setHeaders callback only sees (res,

@@ -15,6 +15,35 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <title>Work 360 AI</title>
+
+    <!--
+      Progressive Web App. The manifest makes the app installable (Android/
+      desktop show an install prompt, iOS installs via the Share sheet) and
+      launches it standalone — no browser chrome, which matters most on the
+      branch kiosk and on a phone used for Live Chat.
+
+      theme-color matches the mobile header (`bg-gray-900`) so the status bar
+      blends into the app's own top bar instead of banding against it. The
+      apple-* metas are the pre-manifest equivalents that iOS still reads.
+    -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#111827" />
+    <meta name="application-name" content="Work 360 AI" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Work 360" />
+    <!--
+      black-translucent draws the app under the status bar, which is why
+      viewport-fit=cover above and the env(safe-area-inset-*) padding in the
+      kiosk / PWA chrome are load-bearing rather than cosmetic.
+    -->
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+
     <!--
       Stale-bundle self-heal.
 
