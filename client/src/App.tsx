@@ -5,6 +5,7 @@ import { ShieldOff } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
+import PwaPrompts from './components/PwaPrompts';
 import { PERM, type PermissionKey } from './permissions';
 
 // Login stays eager — it's the entry point and renders before bundles load.
@@ -368,6 +369,9 @@ function App() {
       <AppErrorBoundary>
         <AuthProvider>
           <AppRoutes />
+          {/* Install / update chrome. Outside AuthProvider's routes so it shows
+              on the login screen too, and it hides itself on /kiosk. */}
+          <PwaPrompts />
         </AuthProvider>
       </AppErrorBoundary>
     </BrowserRouter>

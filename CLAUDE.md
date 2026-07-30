@@ -128,6 +128,34 @@ npm run start
 - `CampaignService.tickSender` — 30s interval, per-campaign rate limit, quiet hours, single-writer guard (queued → sending → sent)
 - `FollowUpScheduler` — 5-min interval, picks dormant Leads (`updatedAt < now − 5d`), gated on `AgentConfig.find({name:'follow_up'}).mode`
 
+11. **PWA (installable app + offline shell)**
+
+- `client/public/manifest.webmanifest` — `display: standalone`, gray-900
+  theme/background (matches the mobile header), 192+512 icons in both `any`
+  and `maskable`, shortcuts to Live Chat / CRM / Kiosk
+- `client/public/sw.js` — hand-written service worker, no build plugin. `/api`,
+  `/socket.io`, `/uploads`, `/health`, non-GET and Range requests are
+  **network-only**; `/assets/<hash>` is cache-first (hashed ⇒ immutable);
+  navigations are network-first with the last good shell then `/offline.html`
+  as fallbacks. Bump `SW_VERSION` to drop the previous generation of caches.
+- **It must never intercept the stale-bundle self-heal probe.** `index.html`
+  refetches `/` with `X-Bundle-Check: 1` and compares asset hashes; answering
+  that from CacheStorage either hides a deploy or reload-loops the tab, so the
+  worker returns early on that header.
+- Updates are **never** applied silently (that would drop a half-written
+  campaign or cut a live voice session): a waiting worker surfaces a Reload
+  chip via `lib/registerServiceWorker.ts` → `components/PwaPrompts.tsx`, which
+  posts `SKIP_WAITING` and reloads on `controllerchange`. `PwaPrompts` also
+  offers install (`hooks/usePwaInstall.ts`, `beforeinstallprompt` + iOS
+  Share-sheet instructions) and hides itself on `/kiosk`.
+- `server/utils/staticCache.ts` forces `no-store` on the fixed-name bundle
+  files (`index.html`, `sw.js`, `manifest.webmanifest`, `offline.html`). An
+  `immutable` `sw.js` can never be replaced — that would freeze the app on an
+  old build until the user cleared site data.
+- Icons are generated from the 256px PNG inside `360ai-i.ico`; regenerate them
+  only if the brand mark changes (`src/__tests__/Pwa.test.ts` asserts every
+  declared size exists on disk).
+
 ### Key Services
 
 | Service                       | Purpose                                  |

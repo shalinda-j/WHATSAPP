@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#111827" />
+    <title>Offline · Work 360 AI</title>
+    <!--
+      Served by the service worker when a navigation fails and no app shell has
+      been cached yet. It has to stand completely alone: no bundle, no fonts, no
+      external CSS — any of those would be exactly as unreachable as the page it
+      is replacing.
+    -->
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: max(1.5rem, env(safe-area-inset-top)) 1.5rem
+          max(1.5rem, env(safe-area-inset-bottom));
+        background: #111827;
+        color: #e5e7eb;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          'Helvetica Neue',
+          Arial,
+          sans-serif;
+        text-align: center;
+      }
+      .card {
+        max-width: 26rem;
+      }
+      img {
+        width: 84px;
+        height: 84px;
+        margin-bottom: 1.5rem;
+      }
+      h1 {
+        margin: 0 0 0.75rem;
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: #fff;
+      }
+      p {
+        margin: 0 0 1.75rem;
+        font-size: 0.95rem;
+        line-height: 1.6;
+        color: #9ca3af;
+      }
+      button {
+        appearance: none;
+        border: 0;
+        width: 100%;
+        padding: 0.9rem 1.5rem;
+        border-radius: 0.9rem;
+        background: #00bf63;
+        color: #062b18;
+        font-size: 1rem;
+        font-weight: 800;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+      button:active {
+        background: #00a856;
+      }
+      .hint {
+        margin: 1rem 0 0;
+        font-size: 0.75rem;
+        color: #6b7280;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <img src="/icon-192.png" alt="Work 360 AI" />
+      <h1>You&rsquo;re offline</h1>
+      <p>
+        Work 360 AI can&rsquo;t reach the server right now. Messages, leads and
+        campaigns need a live connection — reconnect and try again.
+      </p>
+      <button type="button" onclick="location.reload()">Try again</button>
+      <p class="hint">
+        This page reloads automatically when you come back online.
+      </p>
+    </div>
+    <script>
+      // Retry the moment the device reports a connection, so a visitor who
+      // walks back into Wi-Fi range doesn't have to notice this page at all.
+      window.addEventListener('online', function () {
+        location.reload();
+      });
+    </script>
+  </body>
+</html>
