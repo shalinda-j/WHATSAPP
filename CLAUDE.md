@@ -175,6 +175,38 @@ npm run start
   only if the brand mark changes (`src/__tests__/Pwa.test.ts` asserts every
   declared size exists on disk).
 
+12. **Kiosk dataset scope + personalisation** (`src/services/KioskDatasetService.ts`)
+
+- The kiosk used to borrow the WhatsApp bot's brain: every consult turn sent the
+  global `AI_PERSONALITY` plus `getKnowledgeBaseForAI()` — **up to 100** entries
+  ordered by `usageCount`, plus every dataset row. On an enrollment terminal that
+  meant a course-fee question arrived alongside a hundred Q&As about job visas.
+- **Scoping reuses existing fields, no new models and no migration.**
+  `Dataset.scope = 'KIOSK'` for kiosk-only rows (`'ALL'` stays shared);
+  `KnowledgeEntry` with category `kiosk` or a `kiosk` tag. With no kiosk-scoped
+  rows it falls back to the shared pool, so the kiosk answers exactly as before
+  until an operator curates.
+- **Relevance-ranked, not dumped.** `rankEntries` scores a 200-row pool against
+  the visitor's actual utterance (question match 3, tag 2, answer 1; confidence
+  and usage only break ties) and sends the top `KIOSK_KB_LIMIT` = 8. The old
+  `usageCount` sort handed the model the most POPULAR entries regardless of what
+  was asked. `tokenize` keeps Sinhala and Tamil, because a `\w+` split throws
+  away most kiosk utterances.
+- **`aiLoadBalancer.sendMessage` takes a 5th arg, `systemContentOverride`.**
+  Without it the kiosk would get its scoped KB _in addition to_ the global one.
+  Falsy behaves exactly as before for every other caller.
+- **Personality is operator-editable.** `KIOSK_PERSONALITY` (dataset, type
+  `personality`, scope `KIOSK`, Sinhala in `content.si`) replaces the directive
+  that was hard-coded in the route; `DEFAULT_KIOSK_PERSONALITY` is the in-code
+  fallback so seeding is optional. `buildConsultModelInput` now carries only
+  per-turn state (captured/missing fields), not the whole personality restated
+  on every utterance.
+- **Caches sized to what they protect**: content 60s (an operator may be editing
+  it); visitor profile 30min, matching the kiosk token — the Lead row and last
+  ten WhatsApp messages cannot change mid-visit, yet were re-read on every
+  utterance to rebuild a byte-identical string. `/convert` and `/enroll` call
+  `invalidateVisitor` so a stranger's history doesn't linger in memory.
+
 ### Key Services
 
 | Service                       | Purpose                                  |
