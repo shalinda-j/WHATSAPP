@@ -5,6 +5,13 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Rapid merges to main used to leave a build for an older commit running while
+# the next one started. Only the newest main matters, so supersede the older
+# build rather than paying for both.
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
+
 env:
   NODE_VERSION: '20.x'
 
@@ -34,6 +41,8 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: package-lock.json
 
     - name: Install dependencies
       run: npm install --no-audit --no-fund

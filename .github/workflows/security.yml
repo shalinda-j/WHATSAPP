@@ -1,21 +1,46 @@
 name: Security Scan
 
+# Off the per-PR path entirely — this was the single biggest consumer of the
+# repo's metered Actions minutes.
+#
+# What changed and why:
+#
+#  * CodeQL ran a matrix of [javascript, typescript]. Those are not two
+#    analyses: CodeQL resolves both to the same `javascript-typescript`
+#    extractor, so it scanned the identical file set twice and uploaded two
+#    results for the same code. Now one job.
+#  * It also asked for `security-extended, security-and-quality`. Those query
+#    packs roughly triple analysis time, and `security-and-quality` is mostly
+#    maintainability rules that duplicate ESLint. Kept security-extended for the
+#    real vulnerability coverage, dropped the other.
+#  * CodeQL and Trivy ran on every PR push. A deep static analysis on an
+#    in-progress branch tells you nothing you can't learn once the change lands,
+#    so they now run on push to main and weekly.
+#  * Dependency Review only works with GitHub Advanced Security, which is not
+#    available on a private repo on a personal plan. It was burning a runner to
+#    fail instantly on every PR, so it is now gated on the repo being public and
+#    self-skips until that is true.
+
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
   schedule:
-    - cron: '0 0 * * 0' # Weekly on Sundays
+    - cron: '0 0 * * 0' # Sundays, 00:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    # Requires GitHub Advanced Security on private repos. Marked
-    # continue-on-error so it surfaces findings as warnings without
-    # blocking PRs when the feature isn't available on this account.
+    # Requires GitHub Advanced Security, which private repos on personal plans
+    # don't have. Skipped rather than run-and-fail so it stops consuming a
+    # runner; it starts working by itself if the repo ever goes public or GHAS
+    # is enabled.
+    if: github.event.repository.visibility == 'public'
     continue-on-error: true
     steps:
       - name: Checkout
@@ -35,14 +60,9 @@ jobs:
       contents: read
       security-events: write
 
-    strategy:
-      fail-fast: false
-      matrix:
-        language: [javascript, typescript]
-
-    # CodeQL Autobuild fails when the install path can't resolve the
-    # xlsx CDN dep on some runners; the analysis result is still useful
-    # as a warning, so don't block the PR on it.
+    # CodeQL Autobuild can fail when the install path can't resolve the xlsx CDN
+    # dependency on some runners. The analysis is still useful as a warning, so
+    # don't let it fail the run.
     continue-on-error: true
 
     steps:
@@ -50,10 +70,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Initialize CodeQL
+        # One language, not a [javascript, typescript] matrix: CodeQL maps both
+        # onto the `javascript-typescript` extractor, so the old matrix analysed
+        # the same files twice for the same findings.
         uses: github/codeql-action/init@v3
         with:
-          languages: ${{ matrix.language }}
-          queries: security-extended, security-and-quality
+          languages: javascript-typescript
+          queries: security-extended
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3
@@ -61,14 +84,13 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
-          category: '/language:${{matrix.language}}'
+          category: '/language:javascript-typescript'
 
   trivy-scan:
     name: Trivy Scan
     runs-on: ubuntu-latest
-    # Trivy upload requires GitHub code-scanning to be enabled. Without
-    # it the upload step fails even on a clean scan, blocking the PR.
-    # Surface findings as a warning instead.
+    # The SARIF upload needs GitHub code scanning enabled. Without it the upload
+    # fails even on a clean scan, so surface findings as a warning instead.
     continue-on-error: true
     steps:
       - name: Checkout

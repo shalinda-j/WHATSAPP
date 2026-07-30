@@ -3,10 +3,13 @@ name: Issue Management
 on:
   issues:
     types: [opened, edited, labeled, unlabeled, closed]
-  pull_request:
-    types: [opened, edited, labeled, unlabeled, closed]
-  # The stale-cleanup job below is gated on `github.event_name == 'schedule'`,
-  # so without a schedule trigger it could NEVER run. Run it daily.
+  # No `pull_request` trigger. Both jobs below are gated on `issues` or
+  # `schedule`, so PR events spawned a workflow run in which every job
+  # immediately skipped — no work done, but a "Mark Stale Issues" check
+  # attached to each PR, which is pure noise in the checks list.
+  #
+  # The stale-cleanup job is gated on `github.event_name == 'schedule'`, so
+  # without a schedule trigger it could NEVER run. Run it daily.
   schedule:
     - cron: '0 6 * * *'
 
@@ -17,9 +20,8 @@ jobs:
     if: github.event_name == 'issues' && github.event.action == 'opened'
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      # No checkout: the script below only talks to the API, so cloning the repo
+      # was pure setup cost.
       - name: Auto Label
         uses: actions/github-script@v7
         with:

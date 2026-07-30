@@ -1,34 +1,65 @@
 name: CI
 
+# This repo is PRIVATE on a personal account, so every Actions minute is
+# metered against a monthly quota. When that quota is exhausted, jobs fail two
+# seconds after they are created with no runner assigned and no logs — which
+# looks exactly like a broken build but isn't one. So keep the per-push job
+# count low: this workflow is the single hard gate (lint + format + types +
+# tests + build) and the expensive security scans run on main and on a
+# schedule instead of on every PR push. See docs/CI.md.
+
 on:
   push:
-    branches: [main, develop]
+    # `main` is deliberately absent: deploy.yml calls this workflow via
+    # workflow_call on every push to main, so listing main here would run the
+    # entire suite twice for the same commit.
+    branches: [develop]
   pull_request:
     branches: [main, develop]
   workflow_call:
+
+# Force-pushing to a PR branch used to leave the previous run going and start a
+# second full set of jobs alongside it. A superseded run is worthless, so cancel
+# it. Pushes to a real branch are never cancelled, so a main build always
+# finishes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   backend:
     name: Backend Test & Lint
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [20.x]
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js ${{ matrix.node-version }}
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 20.x
+          # Restores ~/.npm between runs. The dependency tree here (baileys and
+          # friends) is large enough that a cold install cost more than the
+          # checks themselves, in every job.
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      # `lint:ci`, not `lint`. The `lint` script passes --fix, so in CI it
+      # silently repaired violations and then reported success — a gate that
+      # fixes what it is meant to be guarding isn't a gate.
       - name: Lint
-        run: npm run lint
+        run: npm run lint:ci
+
+      # Folded in from the old standalone "Prettier Check" job, which spent an
+      # entire runner (plus its own npm install) on one command. Advisory: types
+      # and tests are the hard gate, formatting drift is not.
+      - name: Prettier
+        run: npx prettier --check "**/*.{js,jsx,ts,tsx,json,css,md,html}"
+        continue-on-error: true
 
       - name: Type check
         run: npx tsc --noEmit
@@ -55,12 +86,23 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20.x
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
       - name: Lint
         run: npm run lint
+
+      # `tsc -b`, NOT `tsc --noEmit`. The client uses a solution-style tsconfig
+      # (references tsconfig.app.json / tsconfig.node.json with no root
+      # files/include), so `tsc --noEmit` type-checks ZERO files and passes even
+      # when the client is broken. Moved here from the deleted "TypeScript
+      # Check" job so the client is linted, type-checked and built on one runner
+      # off one install.
+      - name: Type check
+        run: npx tsc -b
 
       - name: Build
         run: npm run build
