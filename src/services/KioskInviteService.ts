@@ -45,6 +45,18 @@ export interface IssueInput {
   branch?: string;
   tenantId?: string;
   sessionId?: string;
+  /**
+   * Visitor's name, for a code issued by hand at the counter.
+   *
+   * The normal path resolves a name from the linked CRM Contact, but a walk-in
+   * has no Contact yet. Seeding it here does two things: the operator's invite
+   * list shows a real name instead of "Guest 4821", and the consultant opens
+   * the conversation already knowing who it is talking to rather than asking
+   * for a name the person just gave the receptionist.
+   */
+  name?: string;
+  /** Course the visitor came in asking about, if the operator already knows. */
+  course?: string;
   /** Link the code back to the Booking it was issued for (visit bookings). */
   bookingId?: string;
   // When false, the code is created but NOT delivered over WhatsApp — the
@@ -56,6 +68,45 @@ export interface IssueInput {
   // code stays valid through the customer's actual visit day even when the
   // appointment is more than a week out.
   expiresAt?: Date;
+}
+
+/**
+ * Build the `collected` seed for a hand-issued code.
+ *
+ * Returns `undefined` when the operator supplied nothing worth seeding, so the
+ * caller can omit the field entirely and let the schema default apply — writing
+ * `{ personal: {} }` instead would be an empty shell that reads as "we have a
+ * personal record" to anything inspecting it.
+ *
+ * Deliberately does NOT seed anything it wasn't given. `computeCompleted()`
+ * treats a present leaf as captured, so inventing a blank value here would make
+ * the consultant skip asking for something it never actually learned.
+ */
+export function buildSeedCollected(input: {
+  name?: string;
+  phone?: string;
+  course?: string;
+}):
+  | { personal?: Record<string, string>; course?: Record<string, string> }
+  | undefined {
+  const personal: Record<string, string> = {};
+  const course: Record<string, string> = {};
+
+  const name = (input.name || '').trim();
+  const mobile = (input.phone || '').trim();
+  const program = (input.course || '').trim();
+
+  if (name) personal.fullName = name;
+  if (mobile) personal.mobile = mobile;
+  if (program) course.program = program;
+
+  const out: {
+    personal?: Record<string, string>;
+    course?: Record<string, string>;
+  } = {};
+  if (Object.keys(personal).length) out.personal = personal;
+  if (Object.keys(course).length) out.course = course;
+  return Object.keys(out).length ? out : undefined;
 }
 
 export interface RedeemResult {
@@ -180,6 +231,16 @@ class KioskInviteService {
         ? input.expiresAt
         : new Date(Date.now() + KIOSK_CODE_TTL_MS);
 
+    // Seed whatever the operator already knows into the same `collected` shape
+    // the consultant fills in turn-by-turn. Only non-empty leaves are written,
+    // so this never creates blank keys that would read as "captured" and stop
+    // the consultant from asking.
+    const seeded = buildSeedCollected({
+      name: input.name,
+      phone,
+      course: input.course,
+    });
+
     let invite: any = null;
     let code = '';
     // Regenerate on the partial-unique collision (another ACTIVE issued code).
@@ -197,6 +258,7 @@ class KioskInviteService {
           status: 'issued',
           sessionId: input.sessionId,
           expiresAt,
+          ...(seeded ? { collected: seeded } : {}),
         } as any);
       } catch (err: any) {
         if (err?.code === 11000) {

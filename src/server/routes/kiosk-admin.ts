@@ -16,33 +16,88 @@ import { Contact } from '../../models/CRM';
 
 const router = Router();
 
+/** Longest a hand-issued code may stay valid. */
+export const MAX_VALID_DAYS = 90;
+
+/**
+ * Turn the form's "valid for N days" into an expiry date.
+ *
+ * Returns `{ expiresAt: undefined }` when the operator didn't choose one, so
+ * `issue()` falls back to its own default TTL — the single place that lifetime
+ * is defined. A walk-in visiting today wants a code that dies today; the 7-day
+ * default only makes sense for a code sent ahead of a visit.
+ */
+export function parseValidDays(raw: unknown): {
+  expiresAt?: Date;
+  error?: string;
+} {
+  if (raw === undefined || raw === null || raw === '') return {};
+  const days = Number(raw);
+  if (!Number.isFinite(days) || days <= 0) {
+    return { error: 'validDays must be a positive number of days' };
+  }
+  if (days > MAX_VALID_DAYS) {
+    return { error: `validDays cannot exceed ${MAX_VALID_DAYS}` };
+  }
+  return { expiresAt: new Date(Date.now() + days * 24 * 60 * 60 * 1000) };
+}
+
 router.post('/invite', async (req: Request, res: Response) => {
   try {
-    const { contactId, phone, sessionId } = (req.body || {}) as {
-      contactId?: string;
-      phone?: string;
-      sessionId?: string;
-    };
+    const body = (req.body || {}) as Record<string, unknown>;
+    const str = (v: unknown): string | undefined =>
+      typeof v === 'string' && v.trim() ? v.trim() : undefined;
 
-    // Need at least one way to resolve the customer.
-    if (!contactId && !phone) {
-      res.status(400).json({ error: 'contactId or phone is required' });
+    const contactId = str(body.contactId);
+    const phone = str(body.phone);
+    const sessionId = str(body.sessionId);
+    const name = str(body.name);
+    const course = str(body.course);
+    const branch = str(body.branch);
+
+    // A walk-in at the counter has no CRM record and may not have given a
+    // number, so a name alone is enough to issue a code. The CRM "Issue code"
+    // button still sends contactId/phone and behaves exactly as before.
+    if (!contactId && !phone && !name) {
+      res
+        .status(400)
+        .json({ error: 'Provide a contact, a phone number, or a name' });
       return;
     }
+
+    const expiry = parseValidDays(body.validDays);
+    if (expiry.error) {
+      res.status(400).json({ error: expiry.error });
+      return;
+    }
+
+    // Only attempt WhatsApp delivery when there's somewhere to deliver TO.
+    // Asking for delivery on a walk-in with no number would silently do
+    // nothing, and the operator would sit waiting for a message to arrive.
+    const wantsDelivery = body.deliver !== false;
 
     const tenantId = req.tenant?._id ? String(req.tenant._id) : undefined;
 
     const { code, invite } = await kioskInviteService.issue({
-      contactId: typeof contactId === 'string' ? contactId : undefined,
-      phone: typeof phone === 'string' ? phone : undefined,
+      contactId,
+      phone,
       tenantId,
-      sessionId: typeof sessionId === 'string' ? sessionId : undefined,
+      sessionId,
+      name,
+      course,
+      branch,
+      deliver: wantsDelivery,
+      expiresAt: expiry.expiresAt,
     });
 
     res.status(201).json({
       code,
       status: invite?.status ?? 'issued',
       expiresAt: invite?.expiresAt,
+      // Tell the operator whether a message actually went out, rather than
+      // leaving them to guess from the absence of an error.
+      delivered: !!(wantsDelivery && invite?.jid),
+      branch: invite?.branch,
     });
   } catch (err) {
     console.error(
@@ -112,7 +167,14 @@ router.get('/invites', async (req: Request, res: Response) => {
       const composedName = `${contact?.firstName || ''} ${
         contact?.lastName || ''
       }`.trim();
-      const name = contact?.name || composedName || `Guest ${inv.code}`;
+      // `collected.personal.fullName` comes either from a hand-issued code
+      // (the operator typed the walk-in's name) or from the consultant hearing
+      // it during the visit. Without this the list showed "Guest 4821" for
+      // every counter-issued code, which is exactly the row an operator most
+      // needs to recognise.
+      const seededName = inv.collected?.personal?.fullName || '';
+      const name =
+        contact?.name || composedName || seededName || `Guest ${inv.code}`;
 
       const phone = inv.phone || contact?.phone || '';
 
