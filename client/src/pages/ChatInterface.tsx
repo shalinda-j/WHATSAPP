@@ -209,6 +209,10 @@ export default function ChatInterface() {
   // a number the operator can sanity-check instead of a leap of faith.
   const [exportCount, setExportCount] = useState<{
     total: number;
+    // How many of those have a dialable number. The CSV drops the rest unless
+    // "include unresolved" is ticked, so showing only `total` made the
+    // downloaded file look like it had lost rows.
+    withPhone: number;
     capped: boolean;
     maxRows: number;
   } | null>(null);
@@ -291,6 +295,7 @@ export default function ChatInterface() {
           if (cancelled) return;
           setExportCount({
             total: res.data?.total ?? 0,
+            withPhone: res.data?.withPhone ?? 0,
             capped: !!res.data?.capped,
             maxRows: res.data?.maxRows ?? 0,
           });
@@ -1627,27 +1632,47 @@ export default function ChatInterface() {
               {countingExport ? (
                 <span className="text-gray-400">Counting…</span>
               ) : exportCount ? (
-                <>
-                  <span className="text-gray-700">
-                    <span className="font-bold text-gray-900">
-                      {exportCount.total.toLocaleString()}
-                    </span>{' '}
-                    contact{exportCount.total === 1 ? '' : 's'} match this
-                    selection
-                  </span>
-                  {exportCount.capped && (
-                    <span className="block mt-1 text-amber-700">
-                      Only the {exportCount.maxRows.toLocaleString()} most
-                      recent will be exported — narrow the range or filter by
-                      device to get the rest.
-                    </span>
-                  )}
-                  {exportCount.total === 0 && (
-                    <span className="block mt-1 text-gray-400">
-                      Nothing to export. Try “All time”, or a different device.
-                    </span>
-                  )}
-                </>
+                (() => {
+                  // What will actually land in the file, given the
+                  // include-unresolved choice. This is the number the operator
+                  // should be reading — `total` alone made a smaller download
+                  // look like lost rows.
+                  const willExport = exportIncludeUnresolved
+                    ? exportCount.total
+                    : exportCount.withPhone;
+                  const missing = exportCount.total - exportCount.withPhone;
+                  return (
+                    <>
+                      <span className="text-gray-700">
+                        <span className="font-bold text-gray-900">
+                          {willExport.toLocaleString()}
+                        </span>{' '}
+                        contact{willExport === 1 ? '' : 's'} will be exported
+                      </span>
+                      {!exportIncludeUnresolved && missing > 0 && (
+                        <span className="block mt-1 text-gray-500">
+                          {exportCount.total.toLocaleString()} people match, but{' '}
+                          {missing.toLocaleString()} have no phone number
+                          resolved yet. Tick the box below to include them as
+                          raw LID rows.
+                        </span>
+                      )}
+                      {exportCount.capped && (
+                        <span className="block mt-1 text-amber-700">
+                          Only the {exportCount.maxRows.toLocaleString()} most
+                          recent will be exported — narrow the range or filter
+                          by device to get the rest.
+                        </span>
+                      )}
+                      {willExport === 0 && (
+                        <span className="block mt-1 text-gray-400">
+                          Nothing to export. Try “All time”, a different device,
+                          or tick “include unresolved” below.
+                        </span>
+                      )}
+                    </>
+                  );
+                })()
               ) : (
                 <span className="text-gray-400">
                   Count unavailable — the export will still run.
