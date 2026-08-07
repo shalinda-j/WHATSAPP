@@ -729,6 +729,49 @@ export function countExportableChatNumbers(
 }
 
 /**
+ * Pull a dialable number out of a CRM contact, or null.
+ *
+ * Deliberately strict. `AutoRegistrationService` stores the raw LID in
+ * `whatsappId` (and, for LID-only contacts, leaves `phone` unset), so a naive
+ * read of these fields would hand back `183746529384756@lid` — which looks like
+ * a phone number in a CSV column and is not one. Everything goes through
+ * `extractRealPhone`, which returns null for a LID.
+ */
+export function pickContactPhone(contact: {
+  phone?: string | null;
+  whatsappNumber?: string | null;
+  whatsappId?: string | null;
+}): string | null {
+  for (const raw of [
+    contact.phone,
+    contact.whatsappNumber,
+    contact.whatsappId,
+  ]) {
+    const phone = extractRealPhone(raw);
+    if (phone) return phone;
+  }
+  return null;
+}
+
+/**
+ * Every form a LID might have been stored under.
+ *
+ * The same identity turns up as `1837465@lid` and as bare `1837465` depending
+ * on which code path wrote the row, so a lookup keyed on one shape misses
+ * contacts saved in the other.
+ */
+export function lidLookupKeys(userId: string): string[] {
+  const keys = new Set<string>();
+  if (!userId) return [];
+  keys.add(userId);
+  const bare = userId.split('@')[0];
+  if (bare) keys.add(bare);
+  const normalised = normaliseLidJid(userId);
+  if (normalised) keys.add(normalised);
+  return Array.from(keys);
+}
+
+/**
  * Resolve each aggregated userId to a real phone number, or null.
  *
  * Priority: `metadata.realPhone` collected across the window (lifted from
@@ -745,6 +788,7 @@ export function countExportableChatNumbers(
 async function resolveChatNumberPhones(
   rows: { _id: string; realPhones?: (string | null | undefined)[] }[],
   sessionHint?: string,
+  tenantId?: string | null,
 ): Promise<Map<string, string | null>> {
   const phoneByUserId = new Map<string, string | null>(
     rows.map((row) => {
@@ -766,6 +810,79 @@ async function resolveChatNumberPhones(
     }
     if (phoneByUserId.has(lid)) phoneByUserId.set(lid, phone);
   }
+
+  // Last fallback: the CRM may already hold this person's number.
+  //
+  // AutoRegistrationService stamps the LID onto Contact.whatsappId when it
+  // creates a record, so a contact whose number was learned some other way —
+  // a form submission, a booking, an operator typing it in — is already linked
+  // to the LID we're looking at. Without this, the export reported "no phone"
+  // for people whose number is sitting in the CRM one collection away. That is
+  // most of the gap on a database populated by full history sync, where the
+  // historical payloads carry no senderPn to resolve from.
+  const unresolved = Array.from(phoneByUserId.entries())
+    .filter(([, phone]) => !phone)
+    .map(([userId]) => userId);
+
+  if (unresolved.length > 0) {
+    try {
+      const keyToUserId = new Map<string, string>();
+      for (const userId of unresolved) {
+        for (const key of lidLookupKeys(userId)) {
+          // First writer wins: two LIDs cannot share a key in practice, and
+          // overwriting would silently reassign someone else's number.
+          if (!keyToUserId.has(key)) keyToUserId.set(key, userId);
+        }
+      }
+      const keys = Array.from(keyToUserId.keys());
+      const tenantFilter =
+        tenantId && mongoose.Types.ObjectId.isValid(String(tenantId))
+          ? {
+              $or: [
+                { tenantId: new mongoose.Types.ObjectId(String(tenantId)) },
+                { tenantId: { $exists: false } },
+              ],
+            }
+          : {};
+      const contacts = (await (Contact as any)
+        .find({
+          ...tenantFilter,
+          $or: [
+            { whatsappId: { $in: keys } },
+            { whatsappNumber: { $in: keys } },
+          ],
+        })
+        .select('phone whatsappNumber whatsappId')
+        .limit(MAX_EXPORT_ROWS)
+        .lean()) as {
+        phone?: string;
+        whatsappNumber?: string;
+        whatsappId?: string;
+      }[];
+
+      for (const contact of contacts) {
+        const phone = pickContactPhone(contact);
+        if (!phone) continue;
+        for (const identifier of [contact.whatsappId, contact.whatsappNumber]) {
+          if (!identifier) continue;
+          const userId = keyToUserId.get(identifier);
+          // Only fill a gap — never overwrite a phone the message metadata
+          // already proved, which is the more trustworthy source.
+          if (userId && !phoneByUserId.get(userId)) {
+            phoneByUserId.set(userId, phone);
+          }
+        }
+      }
+    } catch (err) {
+      // Best-effort enrichment. A CRM lookup failure must not fail the export —
+      // those rows simply stay unresolved, exactly as before this existed.
+      console.warn(
+        'chat-numbers: CRM fallback lookup failed:',
+        (err as Error)?.message || err,
+      );
+    }
+  }
+
   return phoneByUserId;
 }
 
@@ -817,6 +934,7 @@ router.get('/chat-numbers.count', async (req: Request, res: Response) => {
     const phoneByUserId = await resolveChatNumberPhones(
       rows,
       scopedSessionIds[0] || (sessionId !== 'all' ? sessionId : undefined),
+      (req as any).tenant?._id ? String((req as any).tenant._id) : undefined,
     );
     const withPhone = countExportableChatNumbers(phoneByUserId.values(), false);
 
@@ -917,6 +1035,7 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
     const phoneByUserId = await resolveChatNumberPhones(
       agg,
       scopedSessionIds[0] || (sessionId !== 'all' ? sessionId : undefined),
+      (req as any).tenant?._id ? String((req as any).tenant._id) : undefined,
     );
     const distinctDigits = Array.from(
       new Set(
