@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../config';
 import { io, Socket } from 'socket.io-client';
 import {
@@ -193,6 +193,27 @@ export default function ChatInterface() {
   // who actually need the LID rows can still tick the box on.
   const [exportIncludeUnresolved, setExportIncludeUnresolved] = useState(false);
 
+  /**
+   * Date-range preset.
+   *
+   * All-time export was always possible — the server treats "no from/to" as
+   * no window — but the only way to ask for it was to clear both date fields
+   * by hand, with a hint buried under them. The modal opened pre-filled with
+   * the current month, so an operator wanting every contact quietly got one
+   * month's worth and no indication anything had been left out. One click now.
+   */
+  const [exportRange, setExportRange] = useState<
+    'all' | 'month' | 'last30' | 'custom'
+  >('month');
+  // How many contacts the current selection covers, so "export everything" is
+  // a number the operator can sanity-check instead of a leap of faith.
+  const [exportCount, setExportCount] = useState<{
+    total: number;
+    capped: boolean;
+    maxRows: number;
+  } | null>(null);
+  const [countingExport, setCountingExport] = useState(false);
+
   // Manual LID → phone mapping. Operator opens this when the chat list
   // shows "Unknown contact" because the automatic resolvers (Baileys
   // senderPn, contact-card vCard, address-book sync, text extraction)
@@ -206,28 +227,95 @@ export default function ChatInterface() {
 
   const openExportModal = () => {
     setExportSession(sessionFilter);
+    setExportRange('month');
     setExportFrom(new Date().toISOString().slice(0, 8) + '01');
     setExportTo(new Date().toISOString().slice(0, 10));
     setExportIncludeUnresolved(false);
+    setExportCount(null);
     setShowExportModal(true);
   };
+
+  /** Apply a preset to the two date inputs. 'all' clears them entirely. */
+  const applyExportRange = (range: 'all' | 'month' | 'last30' | 'custom') => {
+    setExportRange(range);
+    const today = new Date();
+    if (range === 'all') {
+      // Cleared, not widened: the server only skips the timestamp filter when
+      // BOTH are absent. A "very early" start date would still be a filter,
+      // and would drop anything older than whatever date we guessed.
+      setExportFrom('');
+      setExportTo('');
+    } else if (range === 'month') {
+      setExportFrom(today.toISOString().slice(0, 8) + '01');
+      setExportTo(today.toISOString().slice(0, 10));
+    } else if (range === 'last30') {
+      const start = new Date(today);
+      start.setDate(start.getDate() - 29);
+      setExportFrom(start.toISOString().slice(0, 10));
+      setExportTo(today.toISOString().slice(0, 10));
+    }
+    // 'custom' leaves whatever is in the inputs alone.
+  };
+
+  /**
+   * Build the query the export (and the count) runs on. One function so the
+   * number shown can never describe a different selection from the download.
+   */
+  const buildExportParams = useCallback((): URLSearchParams => {
+    const params = new URLSearchParams();
+    if (exportSession && exportSession !== 'all') {
+      params.set('sessionId', exportSession);
+    }
+    if (exportFrom) params.set('from', exportFrom);
+    if (exportTo) {
+      // `to` is exclusive ($lt) on the server — bump one day so the whole
+      // picked end-date is included.
+      const t = new Date(exportTo + 'T00:00:00Z');
+      t.setUTCDate(t.getUTCDate() + 1);
+      params.set('to', t.toISOString().slice(0, 10));
+    }
+    return params;
+  }, [exportSession, exportFrom, exportTo]);
+
+  // Refresh the count whenever the selection changes. Debounced because the
+  // date inputs fire on every keystroke while someone types a year.
+  useEffect(() => {
+    if (!showExportModal) return;
+    let cancelled = false;
+    setCountingExport(true);
+    const t = setTimeout(() => {
+      const params = buildExportParams();
+      api
+        .get(`/api/export/chat-numbers.count?${params.toString()}`)
+        .then((res) => {
+          if (cancelled) return;
+          setExportCount({
+            total: res.data?.total ?? 0,
+            capped: !!res.data?.capped,
+            maxRows: res.data?.maxRows ?? 0,
+          });
+        })
+        .catch(() => {
+          // A failed count must never block the download — the export itself
+          // is the source of truth, this is only a preview.
+          if (!cancelled) setExportCount(null);
+        })
+        .finally(() => {
+          if (!cancelled) setCountingExport(false);
+        });
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+      setCountingExport(false);
+    };
+  }, [showExportModal, buildExportParams]);
 
   const handleExportNumbers = async () => {
     if (exporting) return;
     setExporting(true);
     try {
-      const params = new URLSearchParams();
-      if (exportSession && exportSession !== 'all') {
-        params.set('sessionId', exportSession);
-      }
-      if (exportFrom) params.set('from', exportFrom);
-      if (exportTo) {
-        // `to` is exclusive ($lt) on the server — bump one day so the whole
-        // picked end-date is included.
-        const t = new Date(exportTo + 'T00:00:00Z');
-        t.setUTCDate(t.getUTCDate() + 1);
-        params.set('to', t.toISOString().slice(0, 10));
-      }
+      const params = buildExportParams();
       if (!exportIncludeUnresolved) params.set('includeUnresolved', 'false');
       const res = await api.get(
         `/api/export/chat-numbers.csv?${params.toString()}`,
@@ -241,8 +329,13 @@ export default function ChatInterface() {
       if (exportSession && exportSession !== 'all') {
         fnameParts.push(sessionLabel(exportSession).replace(/\s+/g, '_'));
       }
-      if (exportFrom || exportTo)
+      if (exportFrom || exportTo) {
         fnameParts.push(`${exportFrom || 'all'}_${exportTo || 'now'}`);
+      } else {
+        // Name the all-time file for what it is, so a folder of exports stays
+        // readable months later.
+        fnameParts.push('all-time');
+      }
       link.setAttribute('download', `${fnameParts.join('-')}.csv`);
       document.body.appendChild(link);
       link.click();
@@ -1433,37 +1526,80 @@ export default function ChatInterface() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">
-                    From
-                  </label>
-                  <input
-                    type="date"
-                    value={exportFrom}
-                    max={exportTo || undefined}
-                    onChange={(e) => setExportFrom(e.target.value)}
-                    disabled={exporting}
-                    className="w-full p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none disabled:opacity-50"
-                  />
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                  Date range
+                </label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {(
+                    [
+                      { key: 'all', label: 'All time' },
+                      { key: 'month', label: 'This month' },
+                      { key: 'last30', label: 'Last 30d' },
+                      { key: 'custom', label: 'Custom' },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => applyExportRange(opt.key)}
+                      disabled={exporting}
+                      className={`px-2 py-1.5 rounded-lg text-xs font-medium border transition-colors disabled:opacity-50 ${
+                        exportRange === opt.key
+                          ? 'bg-green-600 border-green-600 text-white'
+                          : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">
-                    To
-                  </label>
-                  <input
-                    type="date"
-                    value={exportTo}
-                    min={exportFrom || undefined}
-                    onChange={(e) => setExportTo(e.target.value)}
-                    disabled={exporting}
-                    className="w-full p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none disabled:opacity-50"
-                  />
-                </div>
-                <p className="col-span-2 mt-1 text-[11px] text-gray-400">
-                  Clear both to export all-time numbers.
-                </p>
               </div>
+
+              {exportRange === 'all' ? (
+                <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5">
+                  Every contact who has ever messaged
+                  {exportSession !== 'all'
+                    ? ' this device'
+                    : ' any connected device'}
+                  , with no date limit.
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">
+                      From
+                    </label>
+                    <input
+                      type="date"
+                      value={exportFrom}
+                      max={exportTo || undefined}
+                      onChange={(e) => {
+                        setExportFrom(e.target.value);
+                        setExportRange('custom');
+                      }}
+                      disabled={exporting}
+                      className="w-full p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none disabled:opacity-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">
+                      To
+                    </label>
+                    <input
+                      type="date"
+                      value={exportTo}
+                      min={exportFrom || undefined}
+                      onChange={(e) => {
+                        setExportTo(e.target.value);
+                        setExportRange('custom');
+                      }}
+                      disabled={exporting}
+                      className="w-full p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+              )}
 
               <label className="flex items-start gap-2 text-xs text-gray-600 cursor-pointer select-none">
                 <input
@@ -1485,7 +1621,41 @@ export default function ChatInterface() {
               </label>
             </div>
 
-            <div className="mt-6 flex justify-end gap-2">
+            {/* What this selection actually covers. The count is a preview —
+                the download is never blocked by it failing. */}
+            <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-xs">
+              {countingExport ? (
+                <span className="text-gray-400">Counting…</span>
+              ) : exportCount ? (
+                <>
+                  <span className="text-gray-700">
+                    <span className="font-bold text-gray-900">
+                      {exportCount.total.toLocaleString()}
+                    </span>{' '}
+                    contact{exportCount.total === 1 ? '' : 's'} match this
+                    selection
+                  </span>
+                  {exportCount.capped && (
+                    <span className="block mt-1 text-amber-700">
+                      Only the {exportCount.maxRows.toLocaleString()} most
+                      recent will be exported — narrow the range or filter by
+                      device to get the rest.
+                    </span>
+                  )}
+                  {exportCount.total === 0 && (
+                    <span className="block mt-1 text-gray-400">
+                      Nothing to export. Try “All time”, or a different device.
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="text-gray-400">
+                  Count unavailable — the export will still run.
+                </span>
+              )}
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={() => setShowExportModal(false)}
                 disabled={exporting}
