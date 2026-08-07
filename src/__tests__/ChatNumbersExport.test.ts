@@ -2,7 +2,9 @@ import {
   buildChatNumbersMatch,
   countExportableChatNumbers,
   isExportableChatNumber,
+  lidLookupKeys,
   parseChatNumbersWindow,
+  pickContactPhone,
 } from '../server/routes/exports';
 
 /**
@@ -111,6 +113,81 @@ describe('countExportableChatNumbers', () => {
   it('counts nothing from an empty selection', () => {
     expect(countExportableChatNumbers([], false)).toBe(0);
     expect(countExportableChatNumbers([], true)).toBe(0);
+  });
+});
+
+describe('pickContactPhone', () => {
+  // The CRM fallback: WhatsApp's LID privacy identifiers carry no phone
+  // number, and a database populated by full history sync has very few
+  // senderPn values to resolve from — but AutoRegistrationService stamps the
+  // LID onto Contact.whatsappId, so a number learned elsewhere (a form, a
+  // booking, an operator typing it in) is one collection away.
+  it('reads a normal phone number', () => {
+    expect(pickContactPhone({ phone: '+94771234567' })).toBe('94771234567');
+  });
+
+  it('falls back through whatsappNumber', () => {
+    expect(pickContactPhone({ whatsappNumber: '94771234567' })).toBe(
+      '94771234567',
+    );
+  });
+
+  it('reads a phone-backed JID', () => {
+    expect(pickContactPhone({ whatsappId: '94771234567@s.whatsapp.net' })).toBe(
+      '94771234567',
+    );
+  });
+
+  it('NEVER returns a LID as if it were a phone number', () => {
+    // The whole point of routing through extractRealPhone. A LID in the phone
+    // column looks dialable in a spreadsheet and is not — an operator would
+    // paste 1,751 of them into a dialer and reach nobody.
+    expect(pickContactPhone({ whatsappId: '183746529384756@lid' })).toBeNull();
+    expect(pickContactPhone({ phone: '183746529384756@lid' })).toBeNull();
+  });
+
+  it('prefers a real phone over a LID stored alongside it', () => {
+    expect(
+      pickContactPhone({
+        phone: '+94771234567',
+        whatsappId: '183746529384756@lid',
+      }),
+    ).toBe('94771234567');
+    // …and finds the phone even when the LID is checked first by field order.
+    expect(
+      pickContactPhone({
+        whatsappId: '183746529384756@lid',
+        whatsappNumber: '94771234567',
+      }),
+    ).toBe('94771234567');
+  });
+
+  it('returns null for a contact with nothing usable', () => {
+    expect(pickContactPhone({})).toBeNull();
+    expect(pickContactPhone({ phone: '', whatsappNumber: null })).toBeNull();
+  });
+});
+
+describe('lidLookupKeys', () => {
+  it('covers both shapes a LID gets stored under', () => {
+    // The same identity is written as `1837465@lid` by one path and bare
+    // `1837465` by another, so a lookup keyed on one shape misses the other.
+    const keys = lidLookupKeys('183746529384756@lid');
+    expect(keys).toContain('183746529384756@lid');
+    expect(keys).toContain('183746529384756');
+  });
+
+  it('handles an identifier with no suffix', () => {
+    expect(lidLookupKeys('183746529384756')).toContain('183746529384756');
+  });
+
+  it('de-duplicates rather than repeating a key', () => {
+    const keys = lidLookupKeys('183746529384756@lid');
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('returns nothing for an empty id', () => {
+    expect(lidLookupKeys('')).toEqual([]);
   });
 });
 
