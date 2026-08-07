@@ -702,13 +702,85 @@ async function resolveSessionLabels(
 }
 
 /**
+ * Whether a resolved row survives into the CSV.
+ *
+ * The single rule, used by both the download and the count that precedes it.
+ * With `includeUnresolved` off — the UI default — a contact we could not
+ * resolve to a dialable number is dropped, because an operator opening the
+ * file wants numbers they can call, not raw LIDs.
+ */
+export function isExportableChatNumber(
+  phone: string | null | undefined,
+  includeUnresolved: boolean,
+): boolean {
+  return includeUnresolved || Boolean(phone);
+}
+
+/** How many resolved rows the CSV would emit for this selection. */
+export function countExportableChatNumbers(
+  phones: Iterable<string | null | undefined>,
+  includeUnresolved: boolean,
+): number {
+  let n = 0;
+  for (const phone of phones) {
+    if (isExportableChatNumber(phone, includeUnresolved)) n++;
+  }
+  return n;
+}
+
+/**
+ * Resolve each aggregated userId to a real phone number, or null.
+ *
+ * Priority: `metadata.realPhone` collected across the window (lifted from
+ * Baileys senderPn at ingest) → `extractRealPhone()` for @s.whatsapp.net JIDs →
+ * the LID→phone mapping table. A LID with no phone anywhere stays null; we
+ * never coerce one into the phone column because an operator would dial it and
+ * reach nothing.
+ *
+ * Shared by the CSV and the count. The count previously ignored this step and
+ * reported every distinct chatter, while the CSV drops phone-less rows unless
+ * `includeUnresolved` is on — so the panel promised 239 contacts and the file
+ * delivered fewer, with nothing to explain the gap.
+ */
+async function resolveChatNumberPhones(
+  rows: { _id: string; realPhones?: (string | null | undefined)[] }[],
+  sessionHint?: string,
+): Promise<Map<string, string | null>> {
+  const phoneByUserId = new Map<string, string | null>(
+    rows.map((row) => {
+      const fromMetadata = (row.realPhones || []).find(
+        (p): p is string => typeof p === 'string' && p.length > 0,
+      );
+      if (fromMetadata) return [row._id, fromMetadata];
+      return [row._id, extractRealPhone(row._id)];
+    }),
+  );
+  const mappedPhones = await loadPhoneMapForLids(
+    rows.map((row) => row._id),
+    sessionHint,
+  );
+  for (const [lid, phone] of mappedPhones) {
+    const lidJid = normaliseLidJid(lid);
+    if (lidJid && (!phoneByUserId.get(lidJid) || !phoneByUserId.has(lidJid))) {
+      phoneByUserId.set(lidJid, phone);
+    }
+    if (phoneByUserId.has(lid)) phoneByUserId.set(lid, phone);
+  }
+  return phoneByUserId;
+}
+
+/**
  * GET /api/export/chat-numbers.count
  *
- * How many distinct contacts the current selection would export. The Live Chat
- * export panel shows this before the operator commits, so "export everything"
- * is a number they can sanity-check rather than a leap of faith — and so a
- * selection that would hit the row cap says so up front instead of silently
- * truncating the download.
+ * How many contacts the current selection would export. The Live Chat panel
+ * shows this before the operator commits, so "export everything" is a number
+ * they can sanity-check rather than a leap of faith — and so a selection that
+ * would hit the row cap says so up front instead of silently truncating.
+ *
+ * Reports `total` (every distinct chatter) AND `withPhone` (those with a
+ * dialable number), because the CSV drops the rest unless `includeUnresolved`
+ * is ticked. One number alone can't explain why a download is smaller than the
+ * count that preceded it.
  */
 router.get('/chat-numbers.count', async (req: Request, res: Response) => {
   try {
@@ -719,24 +791,39 @@ router.get('/chat-numbers.count', async (req: Request, res: Response) => {
       req.query as Record<string, unknown>,
     );
     const sessionLabelById = await resolveSessionLabels(sessionId);
+    const scopedSessionIds = Array.from(sessionLabelById.keys());
     const match = buildChatNumbersMatch({
       sessionId,
-      scopedSessionIds: Array.from(sessionLabelById.keys()),
+      scopedSessionIds,
       from,
       to,
     });
 
-    // Distinct userIds, not messages — one contact with 400 messages is one row
+    // Group by userId, not messages — one contact with 400 messages is one row
     // in the CSV, so counting documents would report a wildly inflated number.
-    const [row] = (await ChatMessage.aggregate([
+    // `realPhones` comes along so the phone resolution below matches the CSV's
+    // exactly, rather than being approximated with a second rule.
+    const rows = (await ChatMessage.aggregate([
       { $match: withTenantScope(req, match) },
-      { $group: { _id: '$userId' } },
-      { $count: 'total' },
-    ])) as { total: number }[];
+      {
+        $group: {
+          _id: '$userId',
+          realPhones: { $addToSet: '$metadata.realPhone' },
+        },
+      },
+      { $limit: MAX_EXPORT_ROWS + 1 },
+    ])) as { _id: string; realPhones: (string | null | undefined)[] }[];
 
-    const total = row?.total ?? 0;
+    const phoneByUserId = await resolveChatNumberPhones(
+      rows,
+      scopedSessionIds[0] || (sessionId !== 'all' ? sessionId : undefined),
+    );
+    const withPhone = countExportableChatNumbers(phoneByUserId.values(), false);
+
+    const total = rows.length;
     res.json({
       total,
+      withPhone,
       allTime: !from && !to,
       capped: total > MAX_EXPORT_ROWS,
       maxRows: MAX_EXPORT_ROWS,
@@ -826,36 +913,11 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
       return;
     }
 
-    // Map each userId to a *real* E.164-style phone or null. Priority:
-    //   1. metadata.realPhone collected across the message window (lifted
-    //      from Baileys senderPn / participantPn at ingest)
-    //   2. extractRealPhone(userId) for @s.whatsapp.net JIDs
-    // LIDs with no realPhone anywhere stay null — we never coerce them
-    // into the phone column because operators would dial them and get
-    // nothing.
-    const phoneByUserId = new Map<string, string | null>(
-      agg.map((row) => {
-        const fromMetadata = (row.realPhones || []).find(
-          (p): p is string => typeof p === 'string' && p.length > 0,
-        );
-        if (fromMetadata) return [row._id, fromMetadata];
-        return [row._id, extractRealPhone(row._id)];
-      }),
-    );
-    const mappedPhones = await loadPhoneMapForLids(
-      agg.map((row) => row._id),
+    // Same resolution the count endpoint runs — see resolveChatNumberPhones.
+    const phoneByUserId = await resolveChatNumberPhones(
+      agg,
       scopedSessionIds[0] || (sessionId !== 'all' ? sessionId : undefined),
     );
-    for (const [lid, phone] of mappedPhones) {
-      const lidJid = normaliseLidJid(lid);
-      if (
-        lidJid &&
-        (!phoneByUserId.get(lidJid) || !phoneByUserId.has(lidJid))
-      ) {
-        phoneByUserId.set(lidJid, phone);
-      }
-      if (phoneByUserId.has(lid)) phoneByUserId.set(lid, phone);
-    }
     const distinctDigits = Array.from(
       new Set(
         Array.from(phoneByUserId.values()).filter((p): p is string =>
@@ -946,7 +1008,7 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
           optedOut: contact?.optedOut ? 'true' : '',
         };
       })
-      .filter((row) => includeUnresolved || Boolean(row.phone));
+      .filter((row) => isExportableChatNumber(row.phone, includeUnresolved));
 
     const csv = toCsv(rows, [
       'phone',

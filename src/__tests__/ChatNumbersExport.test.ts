@@ -1,5 +1,7 @@
 import {
   buildChatNumbersMatch,
+  countExportableChatNumbers,
+  isExportableChatNumber,
   parseChatNumbersWindow,
 } from '../server/routes/exports';
 
@@ -67,6 +69,48 @@ describe('parseChatNumbersWindow', () => {
     expect(
       parseChatNumbersWindow({ month: '2026-13-99' }).from,
     ).toBeUndefined();
+  });
+});
+
+describe('countExportableChatNumbers', () => {
+  // Regression. The count endpoint reported every distinct chatter while the
+  // CSV silently dropped anyone without a resolved phone (the UI ships
+  // "include unresolved" OFF), so the panel promised 239 contacts and the file
+  // delivered fewer, with nothing on screen to explain the gap. Both sides now
+  // run this one predicate.
+  const phones = ['94771234567', null, '94712345678', undefined, null];
+
+  it('counts only dialable rows when unresolved are excluded', () => {
+    expect(countExportableChatNumbers(phones, false)).toBe(2);
+  });
+
+  it('counts every row when unresolved are included', () => {
+    expect(countExportableChatNumbers(phones, true)).toBe(5);
+  });
+
+  it('agrees with the per-row predicate the CSV filters on', () => {
+    // If these two ever disagree, the number on screen stops describing the
+    // file that downloads — which is the whole bug.
+    for (const includeUnresolved of [true, false]) {
+      const byPredicate = phones.filter((p) =>
+        isExportableChatNumber(p, includeUnresolved),
+      ).length;
+      expect(countExportableChatNumbers(phones, includeUnresolved)).toBe(
+        byPredicate,
+      );
+    }
+  });
+
+  it('treats an empty string as unresolved, not as a phone number', () => {
+    // An empty phone column is exactly what made operators think the export
+    // had lost its numbers.
+    expect(isExportableChatNumber('', false)).toBe(false);
+    expect(countExportableChatNumbers(['', '94771234567'], false)).toBe(1);
+  });
+
+  it('counts nothing from an empty selection', () => {
+    expect(countExportableChatNumbers([], false)).toBe(0);
+    expect(countExportableChatNumbers([], true)).toBe(0);
   });
 });
 
