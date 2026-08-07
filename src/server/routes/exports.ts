@@ -619,14 +619,140 @@ router.get(
  *      digits — O(1) round-trip instead of N per JID.
  *   3. CSV-serialise with the existing toCsv helper.
  */
+/**
+ * Parse the time window shared by chat-numbers.csv and chat-numbers.count.
+ *
+ * Explicit from/to wins; otherwise a YYYY-MM `month` becomes a UTC calendar
+ * month; otherwise **no window at all**, which is the all-time export. That
+ * last case is the point: the operator asking for "every contact" needs a
+ * request that carries no dates, not a very wide range they have to guess at.
+ */
+export function parseChatNumbersWindow(query: Record<string, unknown>): {
+  from?: Date;
+  to?: Date;
+} {
+  const str = (v: unknown): string => (v ? String(v).trim() : '');
+  const month = str(query.month);
+  const fromRaw = str(query.from);
+  const toRaw = str(query.to);
+
+  let from: Date | undefined;
+  let to: Date | undefined;
+  if (fromRaw) {
+    const d = new Date(fromRaw);
+    if (!Number.isNaN(d.getTime())) from = d;
+  }
+  if (toRaw) {
+    const d = new Date(toRaw);
+    if (!Number.isNaN(d.getTime())) to = d;
+  }
+  if (!from && !to && /^\d{4}-\d{2}$/.test(month)) {
+    const [y, m] = month.split('-').map(Number);
+    from = new Date(Date.UTC(y, m - 1, 1));
+    to = new Date(Date.UTC(y, m, 1));
+  }
+  return { from, to };
+}
+
+/**
+ * The ChatMessage `$match` for a chat-numbers export.
+ *
+ * Extracted so the count endpoint and the CSV run the *same* filter — a count
+ * that reports a different number from what downloads is worse than no count,
+ * because the operator trusts it.
+ */
+export function buildChatNumbersMatch(opts: {
+  sessionId?: string;
+  scopedSessionIds?: string[];
+  from?: Date;
+  to?: Date;
+}): Record<string, unknown> {
+  const match: Record<string, unknown> = { role: 'user' };
+  const { sessionId, scopedSessionIds = [], from, to } = opts;
+  if (sessionId && sessionId !== 'all') {
+    match['metadata.sessionId'] =
+      scopedSessionIds.length > 0 ? { $in: scopedSessionIds } : sessionId;
+  }
+  if (from || to) {
+    const range: Record<string, Date> = {};
+    if (from) range.$gte = from;
+    if (to) range.$lt = to;
+    match.timestamp = range;
+  }
+  return match;
+}
+
+/** Resolve a session filter to the real sessionIds it covers, with labels. */
+async function resolveSessionLabels(
+  sessionId: string,
+): Promise<Map<string, string>> {
+  const sessionLabelById = new Map<string, string>();
+  if (sessionId && sessionId !== 'all') {
+    const selectedSession = await Session.findOne({
+      $or: [{ sessionId }, { sessionName: sessionId }],
+    }).lean();
+    if (selectedSession?.sessionId) {
+      sessionLabelById.set(
+        selectedSession.sessionId,
+        selectedSession.sessionName || selectedSession.sessionId,
+      );
+    }
+  }
+  return sessionLabelById;
+}
+
+/**
+ * GET /api/export/chat-numbers.count
+ *
+ * How many distinct contacts the current selection would export. The Live Chat
+ * export panel shows this before the operator commits, so "export everything"
+ * is a number they can sanity-check rather than a leap of faith — and so a
+ * selection that would hit the row cap says so up front instead of silently
+ * truncating the download.
+ */
+router.get('/chat-numbers.count', async (req: Request, res: Response) => {
+  try {
+    const sessionId = req.query.sessionId
+      ? String(req.query.sessionId).trim()
+      : '';
+    const { from, to } = parseChatNumbersWindow(
+      req.query as Record<string, unknown>,
+    );
+    const sessionLabelById = await resolveSessionLabels(sessionId);
+    const match = buildChatNumbersMatch({
+      sessionId,
+      scopedSessionIds: Array.from(sessionLabelById.keys()),
+      from,
+      to,
+    });
+
+    // Distinct userIds, not messages — one contact with 400 messages is one row
+    // in the CSV, so counting documents would report a wildly inflated number.
+    const [row] = (await ChatMessage.aggregate([
+      { $match: withTenantScope(req, match) },
+      { $group: { _id: '$userId' } },
+      { $count: 'total' },
+    ])) as { total: number }[];
+
+    const total = row?.total ?? 0;
+    res.json({
+      total,
+      allTime: !from && !to,
+      capped: total > MAX_EXPORT_ROWS,
+      maxRows: MAX_EXPORT_ROWS,
+    });
+  } catch (err: any) {
+    console.error('chat-numbers.count failed:', err);
+    res.status(500).json({ error: err?.message ?? 'count_failed' });
+  }
+});
+
 router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
   try {
     const sessionId = req.query.sessionId
       ? String(req.query.sessionId).trim()
       : '';
     const month = req.query.month ? String(req.query.month).trim() : '';
-    const fromRaw = req.query.from ? String(req.query.from).trim() : '';
-    const toRaw = req.query.to ? String(req.query.to).trim() : '';
 
     // Default behaviour: include unresolved rows too. Operators use this
     // export to split conversations by country/device, so an empty sheet is
@@ -634,49 +760,19 @@ router.get('/chat-numbers.csv', async (req: Request, res: Response) => {
     const includeUnresolved =
       String(req.query.includeUnresolved ?? 'true').toLowerCase() !== 'false';
 
-    // Resolve the time window — explicit from/to wins; otherwise parse
-    // YYYY-MM into a UTC calendar-month range; otherwise no window (all-time).
-    let from: Date | undefined;
-    let to: Date | undefined;
-    if (fromRaw) {
-      const d = new Date(fromRaw);
-      if (!Number.isNaN(d.getTime())) from = d;
-    }
-    if (toRaw) {
-      const d = new Date(toRaw);
-      if (!Number.isNaN(d.getTime())) to = d;
-    }
-    if (!from && !to && /^\d{4}-\d{2}$/.test(month)) {
-      const [y, m] = month.split('-').map(Number);
-      from = new Date(Date.UTC(y, m - 1, 1));
-      to = new Date(Date.UTC(y, m, 1));
-    }
+    const { from, to } = parseChatNumbersWindow(
+      req.query as Record<string, unknown>,
+    );
 
-    const sessionLabelById = new Map<string, string>();
-    if (sessionId && sessionId !== 'all') {
-      const selectedSession = await Session.findOne({
-        $or: [{ sessionId }, { sessionName: sessionId }],
-      }).lean();
-      if (selectedSession?.sessionId) {
-        sessionLabelById.set(
-          selectedSession.sessionId,
-          selectedSession.sessionName || selectedSession.sessionId,
-        );
-      }
-    }
+    const sessionLabelById = await resolveSessionLabels(sessionId);
     const scopedSessionIds = Array.from(sessionLabelById.keys());
 
-    const match: Record<string, unknown> = { role: 'user' };
-    if (sessionId && sessionId !== 'all') {
-      match['metadata.sessionId'] =
-        scopedSessionIds.length > 0 ? { $in: scopedSessionIds } : sessionId;
-    }
-    if (from || to) {
-      const range: Record<string, Date> = {};
-      if (from) range.$gte = from;
-      if (to) range.$lt = to;
-      match.timestamp = range;
-    }
+    const match = buildChatNumbersMatch({
+      sessionId,
+      scopedSessionIds,
+      from,
+      to,
+    });
 
     type Agg = {
       _id: string;
