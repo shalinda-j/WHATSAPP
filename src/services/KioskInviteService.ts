@@ -32,7 +32,17 @@ const DEFAULT_BRANCH =
 // (mirrors AutoRegistrationService).
 const getContactModel = (): mongoose.Model<any> | null => {
   try {
-    return mongoose.model('Contact');
+    // Cast through `unknown`. `mongoose.model()` returns a Model whose generic
+    // parameters differ between mongoose 9.x releases — 9.8 infers
+    // `Model<any, {}, {}, {}, ...>`, later ones `Model<any, unknown, unknown,
+    // unknown, ...>` — and `unknown` is not assignable to `{}`. Naming the
+    // mongoose generic in the annotation therefore couples this file to
+    // whichever mongoose the build host happens to resolve, which is exactly
+    // how this broke on deploy while compiling clean locally. The sibling
+    // lookups in AutoRegistrationService / ConversationEnrichmentService avoid
+    // it by not annotating at all; the models use this same cast (see the
+    // TypeScript Patterns note in CLAUDE.md).
+    return mongoose.model('Contact') as unknown as mongoose.Model<any>;
   } catch {
     return null;
   }
