@@ -71,20 +71,50 @@ function pickConfigFields(body: unknown): Record<string, unknown> {
 }
 
 /**
- * Strip the decrypted apiKey from a Config document before sending it to a
- * client, replacing it with a `hasApiKey` boolean. The schema's toJSON/toObject
- * getters decrypt apiKey, so a raw res.json(config) would leak every provider's
- * API key (and unofficial session cookies) in plaintext to any authed caller.
+ * A recognisable, non-usable stand-in for a stored API key.
+ *
+ * `hasApiKey: true` alone tells an operator that *a* key is set, but not
+ * WHICH — so an edit form could only ever show an empty box, and there was no
+ * way to tell a stale key from the current one, or to notice an OpenAI key
+ * pasted into the Groq slot. This shows just enough to identify it.
+ *
+ * What "just enough" means here: the last 4 characters distinguish two keys,
+ * and a short prefix catches a key pasted into the wrong provider (`sk-`,
+ * `gsk`, `AIz`). Everything between is bulleted. Short values reveal only the
+ * tail, and very short ones reveal nothing at all — with few enough characters,
+ * "first 3 plus last 4" is most of the secret.
  */
-function redactConfig(doc: unknown): Record<string, unknown> {
+export function maskApiKey(key: unknown): string | undefined {
+  if (typeof key !== 'string') return undefined;
+  const trimmed = key.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.length < 8) return '••••';
+  const tail = trimmed.slice(-4);
+  if (trimmed.length < 16) return `••••${tail}`;
+  return `${trimmed.slice(0, 3)}••••${tail}`;
+}
+
+/**
+ * Strip the decrypted apiKey from a Config document before sending it to a
+ * client, replacing it with a `hasApiKey` boolean and a masked preview. The
+ * schema's toJSON/toObject getters decrypt apiKey, so a raw res.json(config)
+ * would leak every provider's API key (and unofficial session cookies) in
+ * plaintext to any authed caller.
+ *
+ * The full key is never returned from a GET. Reading it is a deliberate act
+ * with its own POST endpoint, so it lands in the audit log.
+ */
+export function redactConfig(doc: unknown): Record<string, unknown> {
   const o = (
     doc && typeof (doc as any).toObject === 'function'
       ? (doc as any).toObject()
       : { ...(doc as any) }
   ) as Record<string, unknown>;
   const hasApiKey = typeof o.apiKey === 'string' && o.apiKey.trim() !== '';
+  const preview = maskApiKey(o.apiKey);
   delete o.apiKey;
   o.hasApiKey = hasApiKey;
+  if (preview) o.apiKeyPreview = preview;
   return o;
 }
 
@@ -612,6 +642,38 @@ router.post('/reset-usage', requireSuperAdmin, async (req, res) => {
       resetCount: result.resetCount,
       resetAt: new Date(),
     });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/config/:id/reveal-key
+ *
+ * Return one provider's API key in the clear, for an operator who needs to
+ * check or copy it. GET /api/config deliberately never carries the key, so
+ * this is the only way to see one — and asking for it has to be a distinct,
+ * recorded act rather than a side effect of opening a page.
+ *
+ * POST rather than GET on purpose. The audit middleware only records mutating
+ * methods, so a GET would leave no trace of who read which provider's secret;
+ * a POST lands in the audit log with the account, IP and timestamp. It is also
+ * the reason this must not be made idempotent-looking enough to prefetch.
+ *
+ * requireSuperAdmin matches the write routes below: an account that cannot
+ * change the key has no reason to read it.
+ */
+router.post('/:id/reveal-key', requireSuperAdmin, async (req, res) => {
+  try {
+    const config = await Config.findById(String(req.params.id));
+    if (!config) return res.status(404).json({ error: 'Config not found' });
+
+    // The schema getter decrypts on read.
+    const apiKey = (config as unknown as { apiKey?: string }).apiKey;
+    if (typeof apiKey !== 'string' || apiKey.trim() === '') {
+      return res.status(404).json({ error: 'No API key stored' });
+    }
+    res.json({ apiKey });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
