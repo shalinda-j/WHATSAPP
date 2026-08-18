@@ -207,6 +207,35 @@ npm run start
   utterance to rebuild a byte-identical string. `/convert` and `/enroll` call
   `invalidateVisitor` so a stranger's history doesn't linger in memory.
 
+13. **Live Chat presence — who has this chat open**
+    (`src/services/ChatPresenceService.ts`, `src/server/chatPresenceSocket.ts`)
+
+- Now that several employees log in with their own accounts, the shared inbox
+  needs to say which of them is already reading a conversation. Selecting a
+  chat tags it with that operator's name for every colleague in the same
+  tenant — in the sidebar row and in the chat header.
+- **Presence, not assignment.** It says who is _looking_, holds no lock, and
+  disappears the moment they navigate away. An operator who steps away must not
+  leave a customer's chat blocked behind them.
+- **In memory, deliberately.** Presence is meaningless after a restart (every
+  socket died with it), so persisted rows would only be ghosts. Clients
+  re-announce on `connect`, which rebuilds the whole map — that same handler is
+  what stops an operator silently vanishing after a dropped connection, since a
+  reconnect arrives as a brand-new socket id.
+- **Scoped per tenant** (`presence:<tenantId>` rooms). Staff names are internal,
+  and two tenants sharing a contact JID is ordinary — the `default` tenant holds
+  every legacy row.
+- One pill **per person, not per browser tab**; the name comes from
+  `resolveIdentity` (so `fullName` beats the login handle), and the identity
+  lookup memoises the **promise**, not the value — clicking quickly down the
+  inbox fires several `chat:open` events before the first lookup returns, and
+  out-of-order continuations would strand the tag on a chat already left.
+- The client half lives in `client/src/pages/ChatInterface.tsx`. There is no
+  shared module across the two builds, so `PRESENCE_EVENTS` is the one
+  definition and `ChatPresenceSocket.test.ts` reads the client file to assert
+  the names still match — a renamed event otherwise breaks nothing except the
+  feature, silently.
+
 ### Key Services
 
 | Service                       | Purpose                                  |

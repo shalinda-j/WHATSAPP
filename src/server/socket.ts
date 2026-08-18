@@ -3,6 +3,11 @@ import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { ACTUAL_JWT_SECRET } from './jwt-secret';
 import { isDigitalOceanOrigin } from './corsOrigins';
+import {
+  attachChatPresence,
+  type PresenceSocket,
+  type SocketUser,
+} from './chatPresenceSocket';
 
 let io: Server;
 
@@ -68,17 +73,19 @@ export const initSocket = (server: HttpServer) => {
 
     try {
       // Verify JWT token
-      const decoded = jwt.verify(token as string, ACTUAL_JWT_SECRET) as {
-        userId?: string;
-        role?: string;
-      };
+      const decoded = jwt.verify(
+        token as string,
+        ACTUAL_JWT_SECRET,
+      ) as SocketUser;
 
       // Attach user info to socket for later use
       socket.data.user = decoded;
 
       console.log(
         `🔌 Authenticated WebSocket connection: ${socket.id} (user: ${
-          decoded.userId || 'unknown'
+          // The login route signs `id`, not `userId` — reading only the latter
+          // meant this line logged "unknown" for every connection ever made.
+          decoded.id || decoded.userId || 'unknown'
         })`,
       );
       next();
@@ -92,6 +99,13 @@ export const initSocket = (server: HttpServer) => {
 
   io.on('connection', (socket: Socket) => {
     console.log(`🔌 Client connected to WebSocket: ${socket.id}`);
+    // Live Chat presence — the "who has this chat open" tags. Bridged through
+    // a tiny interface so the protocol is testable without a live socket.
+    attachChatPresence(socket as unknown as PresenceSocket, {
+      toRoom: (room, event, payload) => {
+        io.to(room).emit(event, payload);
+      },
+    });
 
     socket.on('disconnect', () => {
       console.log(`🔌 Client disconnected from WebSocket: ${socket.id}`);
