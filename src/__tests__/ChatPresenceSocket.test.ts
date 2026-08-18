@@ -144,6 +144,54 @@ describe('attachChatPresence', () => {
     expect(broadcasts[0].payload.viewers[0].roleName).toBe('Support Agent');
   });
 
+  it('broadcasts to a room the announcing socket is itself in', async () => {
+    // The client shows the operator their OWN tag, so the broadcast has to
+    // reach the socket that triggered it. This pins one half of that — the room
+    // it is addressed to is the room the socket joined, not some other one. The
+    // other half (that the adapter fans out to the whole room rather than
+    // everyone-but-the-sender) lives in socket.ts and is checked below.
+    const f = fakeSocket();
+    const b = fakeBus();
+    attachChatPresence(f.socket, b.bus, new ChatPresenceRegistry());
+
+    f.fire(PRESENCE_EVENTS.open, { userId: CHAT });
+    await flush();
+
+    expect(f.joined).toContain(b.viewersFor(CHAT)[0].room);
+    expect(b.viewersFor(CHAT)[0].payload.viewers[0].adminId).toBe('admin-1');
+  });
+
+  it('lists everyone on the chat, not only the operator who arrived last', async () => {
+    // Two employees clicking the same conversation is the case the tag exists
+    // for; each of them has to see both names, not just the other's.
+    const registry = new ChatPresenceRegistry();
+    const b = fakeBus();
+
+    const first = fakeSocket();
+    attachChatPresence(first.socket, b.bus, registry);
+    first.fire(PRESENCE_EVENTS.open, { userId: CHAT });
+    await flush();
+
+    (resolveIdentity as jest.Mock).mockResolvedValue({
+      id: 'admin-2',
+      username: 'kamal',
+      fullName: 'Kamal Silva',
+    });
+    const second = fakeSocket({
+      id: 'sock-2',
+      user: { id: 'admin-2', username: 'kamal', tenantId: 'tenant-a' },
+    });
+    attachChatPresence(second.socket, b.bus, registry);
+    second.fire(PRESENCE_EVENTS.open, { userId: CHAT });
+    await flush();
+
+    const latest = b.viewersFor(CHAT).pop()!;
+    expect(latest.payload.viewers.map((v: any) => v.name)).toEqual([
+      'Nimal Perera',
+      'Kamal Silva',
+    ]);
+  });
+
   it('shows the full name, not the login handle', async () => {
     // The JWT only carries the username, which is why the name is resolved
     // from the database instead of read off the token.
@@ -330,6 +378,24 @@ describe('the client agrees on the protocol', () => {
       expect(client).toContain(`'${event}'`);
     },
   );
+
+  it('fans presence out to the whole room, sender included', () => {
+    // `io.to(room)` reaches every member; `socket.to(room)` reaches everyone
+    // EXCEPT the sender. Since the client renders the operator their own tag,
+    // the second form would make your own pill silently never appear — and
+    // because the adapter is a closure inside initSocket, nothing else in this
+    // file can see which one it used.
+    const server = fs.readFileSync(
+      path.join(__dirname, '../server/socket.ts'),
+      'utf8',
+    );
+    const adapter = server.slice(
+      server.indexOf('attachChatPresence('),
+      server.indexOf('.emit(event, payload)'),
+    );
+    expect(adapter).toContain('io.to(room)');
+    expect(adapter).not.toContain('socket.to(room)');
+  });
 
   it('asks for the snapshot on connect, not only on first render', () => {
     // A reconnect arrives as a brand new socket with nothing registered

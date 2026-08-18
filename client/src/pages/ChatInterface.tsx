@@ -909,15 +909,29 @@ export default function ChatInterface() {
   const selectedConv = conversations.find((c) => c.userId === selectedUser);
 
   /**
-   * Colleagues on a conversation — everyone the server reports EXCEPT this
-   * operator. Tagging yourself would put a pill on every row you click, which
-   * tells you nothing and hides the one thing the tag exists to say: that
-   * somebody else is already here.
+   * Everyone currently on a conversation, in the order they arrived — the
+   * operator reading this screen included.
+   *
+   * This deliberately does NOT hide your own tag. Seeing your own name appear
+   * the moment you click is what tells you the feature is working at all; with
+   * it filtered out, a single operator testing alone sees nothing happen and
+   * has no way to tell a working build from a broken one. It also matches what
+   * colleagues see of you, so there is one shared picture of the room rather
+   * than a different one per screen.
+   *
+   * Your own pill is styled apart (see `isSelf` at the render sites) so "who
+   * else is here" is still readable at a glance.
    */
-  const otherViewers = useCallback(
-    (userId: string): ChatViewer[] =>
-      (chatViewers[userId] || []).filter((v) => v.adminId !== user?.id),
-    [chatViewers, user?.id],
+  const viewersOf = useCallback(
+    (userId: string): ChatViewer[] => chatViewers[userId] || [],
+    [chatViewers],
+  );
+
+  /** Is this pill the operator reading the screen? */
+  const myAdminId = user?.id;
+  const isSelf = useCallback(
+    (viewer: ChatViewer) => !!myAdminId && viewer.adminId === myAdminId,
+    [myAdminId],
   );
 
   const currentToneInfo = TONE_MODES.find((t) => t.value === toneMode);
@@ -1076,7 +1090,7 @@ export default function ChatInterface() {
             filteredConversations.map((conv) => {
               const lang = conv.detectedLanguage;
               const langInfo = lang ? LANG_LABELS[lang] : null;
-              const watchers = otherViewers(conv.userId);
+              const watchers = viewersOf(conv.userId);
               return (
                 <div
                   key={conv.userId}
@@ -1148,19 +1162,29 @@ export default function ChatInterface() {
                           </span>
                         </div>
                       )}
-                    {/* Who else has this chat open. Rendered above the LID
-                        pill because it is the one thing an operator needs to
-                        see BEFORE they click into a conversation — after that
-                        they are already typing over a colleague. */}
+                    {/* Who has this chat open. Rendered above the LID pill
+                        because it is the one thing an operator needs to see
+                        BEFORE they click into a conversation — after that they
+                        are already typing over a colleague. */}
                     {watchers.length > 0 && (
                       <div className="mt-1 flex flex-wrap items-center gap-1">
                         {watchers.map((v) => (
                           <span
                             key={v.adminId}
-                            title={`${v.name}${
-                              v.roleName ? ` · ${v.roleName}` : ''
-                            } has this chat open (${formatViewingFor(v.since)})`}
-                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-indigo-100 text-indigo-800 ring-1 ring-indigo-200 max-w-full"
+                            title={`${
+                              isSelf(v)
+                                ? 'You have'
+                                : `${v.name}${
+                                    v.roleName ? ` · ${v.roleName}` : ''
+                                  } has`
+                            } this chat open (${formatViewingFor(v.since)})`}
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ring-1 max-w-full ${
+                              // Your own tag is muted so a crowded row still
+                              // reads as "who ELSE is here" at a glance.
+                              isSelf(v)
+                                ? 'bg-gray-100 text-gray-600 ring-gray-200'
+                                : 'bg-indigo-100 text-indigo-800 ring-indigo-200'
+                            }`}
                           >
                             <Eye className="h-2.5 w-2.5 flex-shrink-0" />
                             <span className="truncate">{v.name}</span>
@@ -1274,13 +1298,21 @@ export default function ChatInterface() {
                   {/* Same tag as the sidebar, repeated here because on mobile
                       the list is hidden entirely once a chat is open — this is
                       the only place the warning can still reach the operator. */}
-                  {otherViewers(selectedUser).map((v) => (
+                  {viewersOf(selectedUser).map((v) => (
                     <span
                       key={v.adminId}
-                      title={`${v.name}${
-                        v.roleName ? ` · ${v.roleName}` : ''
-                      } has this chat open (${formatViewingFor(v.since)})`}
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-indigo-100 text-indigo-800 ring-1 ring-indigo-200"
+                      title={`${
+                        isSelf(v)
+                          ? 'You have'
+                          : `${v.name}${
+                              v.roleName ? ` · ${v.roleName}` : ''
+                            } has`
+                      } this chat open (${formatViewingFor(v.since)})`}
+                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ring-1 ${
+                        isSelf(v)
+                          ? 'bg-gray-100 text-gray-600 ring-gray-200'
+                          : 'bg-indigo-100 text-indigo-800 ring-indigo-200'
+                      }`}
                     >
                       <Eye className="h-2.5 w-2.5 flex-shrink-0" />
                       <span className="truncate max-w-[10rem]">{v.name}</span>
