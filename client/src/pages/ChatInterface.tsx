@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../config';
+import { useAuth } from '../context/AuthContext';
 import { io, Socket } from 'socket.io-client';
 import {
   Search,
@@ -22,6 +23,7 @@ import {
   MessageSquare,
   Smartphone,
   Download,
+  Eye,
 } from 'lucide-react';
 
 interface Message {
@@ -72,6 +74,26 @@ interface SessionSummary {
   status?: string;
 }
 
+/**
+ * A colleague who currently has a conversation open, as broadcast by the
+ * presence registry on the server.
+ */
+interface ChatViewer {
+  adminId: string;
+  name: string;
+  roleName?: string;
+  /** Epoch ms — when they opened it. */
+  since: number;
+}
+
+/** How long a colleague has had the chat open, for the pill's tooltip. */
+function formatViewingFor(since: number): string {
+  const mins = Math.floor((Date.now() - since) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
 type ToneMode = 'auto' | 'formal' | 'casual' | 'professional' | 'friendly';
 type LangFilter = 'all' | 'en' | 'si' | 'ta';
 type SessionFilter = string; // 'all' | sessionId
@@ -120,6 +142,9 @@ const CONVERSATION_PAGE_SIZE = 200;
 const CONVERSATION_LOAD_ALL_CAP = 20000;
 
 export default function ChatInterface() {
+  // Only needed to recognise ourselves in the presence list — we tag
+  // colleagues, never the person reading the screen.
+  const { user } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   // Total conversations the server holds for the current device scope, and
   // whether more pages remain beyond what's loaded. `conversationsRef` lets
@@ -149,6 +174,18 @@ export default function ChatInterface() {
   // console.error'd, so the message silently didn't go out with no feedback.
   const [sendError, setSendError] = useState<string | null>(null);
   const [, setSocket] = useState<Socket | null>(null);
+  // The presence effect below has to emit on the SAME socket the listeners are
+  // attached to, and it must not re-run when the connection object changes
+  // identity — a ref gives it a stable handle without re-subscribing.
+  const socketRef = useRef<Socket | null>(null);
+  /**
+   * conversation id -> colleagues currently looking at it. Server-owned: we
+   * never add ourselves optimistically, because the merged list (us plus
+   * whoever else is on it) only exists on the server.
+   */
+  const [chatViewers, setChatViewers] = useState<Record<string, ChatViewer[]>>(
+    {},
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [toneMode, setToneMode] = useState<ToneMode>('auto');
@@ -465,8 +502,52 @@ export default function ChatInterface() {
       );
     });
 
+    // ---- Live Chat presence: who else has this conversation open ----
+
+    // One conversation changed. An empty list means the last viewer left, so
+    // the key is dropped rather than kept as an empty array — otherwise the
+    // record grows for the life of the page.
+    newSocket.on(
+      'chat:viewers',
+      (data: { userId: string; viewers: ChatViewer[] }) => {
+        setChatViewers((prev) => {
+          const next = { ...prev };
+          if (data.viewers?.length) next[data.userId] = data.viewers;
+          else delete next[data.userId];
+          return next;
+        });
+      },
+    );
+
+    // Full picture, sent in reply to our `chat:presence:list`. Replaces rather
+    // than merges: anything not in the snapshot is genuinely no longer open,
+    // and merging would strand tags from before a reconnect.
+    newSocket.on(
+      'chat:presence:state',
+      (rows: { userId: string; viewers: ChatViewer[] }[]) => {
+        const next: Record<string, ChatViewer[]> = {};
+        for (const row of rows || []) {
+          if (row?.userId && row.viewers?.length)
+            next[row.userId] = row.viewers;
+        }
+        setChatViewers(next);
+      },
+    );
+
+    // Runs on the first connect AND on every reconnect. The server keeps
+    // presence in memory keyed by socket id, so a reconnect arrives as a brand
+    // new socket with nothing registered — re-announcing here is what stops an
+    // operator silently vanishing from a chat after a dropped connection.
+    newSocket.on('connect', () => {
+      newSocket.emit('chat:presence:list');
+      const active = selectedUserRef.current;
+      if (active) newSocket.emit('chat:open', { userId: active });
+    });
+
+    socketRef.current = newSocket;
     setSocket(newSocket);
     return () => {
+      socketRef.current = null;
       newSocket.disconnect();
     };
     // Empty deps on purpose: the socket lifecycle is now decoupled from
@@ -474,6 +555,22 @@ export default function ChatInterface() {
     // so we don't churn the websocket every time the operator switches
     // tabs or scopes. Previously this reconnected on every selection.
   }, []);
+
+  /**
+   * Tell the server which conversation this operator is on.
+   *
+   * The cleanup fires both when they pick a different chat and when they leave
+   * the page, which is what makes the tag disappear the moment somebody moves
+   * on. The server also clears presence on disconnect, so a closed tab or a
+   * dead connection is covered even though no cleanup runs for those.
+   */
+  useEffect(() => {
+    if (!selectedUser) return;
+    socketRef.current?.emit('chat:open', { userId: selectedUser });
+    return () => {
+      socketRef.current?.emit('chat:close', { userId: selectedUser });
+    };
+  }, [selectedUser]);
 
   const fetchSessions = async () => {
     try {
@@ -811,6 +908,18 @@ export default function ChatInterface() {
 
   const selectedConv = conversations.find((c) => c.userId === selectedUser);
 
+  /**
+   * Colleagues on a conversation — everyone the server reports EXCEPT this
+   * operator. Tagging yourself would put a pill on every row you click, which
+   * tells you nothing and hides the one thing the tag exists to say: that
+   * somebody else is already here.
+   */
+  const otherViewers = useCallback(
+    (userId: string): ChatViewer[] =>
+      (chatViewers[userId] || []).filter((v) => v.adminId !== user?.id),
+    [chatViewers, user?.id],
+  );
+
   const currentToneInfo = TONE_MODES.find((t) => t.value === toneMode);
 
   return (
@@ -967,6 +1076,7 @@ export default function ChatInterface() {
             filteredConversations.map((conv) => {
               const lang = conv.detectedLanguage;
               const langInfo = lang ? LANG_LABELS[lang] : null;
+              const watchers = otherViewers(conv.userId);
               return (
                 <div
                   key={conv.userId}
@@ -1038,6 +1148,26 @@ export default function ChatInterface() {
                           </span>
                         </div>
                       )}
+                    {/* Who else has this chat open. Rendered above the LID
+                        pill because it is the one thing an operator needs to
+                        see BEFORE they click into a conversation — after that
+                        they are already typing over a colleague. */}
+                    {watchers.length > 0 && (
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {watchers.map((v) => (
+                          <span
+                            key={v.adminId}
+                            title={`${v.name}${
+                              v.roleName ? ` · ${v.roleName}` : ''
+                            } has this chat open (${formatViewingFor(v.since)})`}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-indigo-100 text-indigo-800 ring-1 ring-indigo-200 max-w-full"
+                          >
+                            <Eye className="h-2.5 w-2.5 flex-shrink-0" />
+                            <span className="truncate">{v.name}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     {/* Unresolved LID — show a pill + one-click map action.
                         Click on the pill stops the row-select handler so the
                         modal opens without ALSO opening the conversation. */}
@@ -1141,6 +1271,21 @@ export default function ChatInterface() {
                         {LANG_LABELS[selectedConv.detectedLanguage].label}
                       </span>
                     )}
+                  {/* Same tag as the sidebar, repeated here because on mobile
+                      the list is hidden entirely once a chat is open — this is
+                      the only place the warning can still reach the operator. */}
+                  {otherViewers(selectedUser).map((v) => (
+                    <span
+                      key={v.adminId}
+                      title={`${v.name}${
+                        v.roleName ? ` · ${v.roleName}` : ''
+                      } has this chat open (${formatViewingFor(v.since)})`}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-indigo-100 text-indigo-800 ring-1 ring-indigo-200"
+                    >
+                      <Eye className="h-2.5 w-2.5 flex-shrink-0" />
+                      <span className="truncate max-w-[10rem]">{v.name}</span>
+                    </span>
+                  ))}
                 </div>
               </div>
 
