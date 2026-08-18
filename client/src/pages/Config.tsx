@@ -24,6 +24,9 @@ import {
   CheckCircle2,
   Loader2,
   Wand2,
+  Eye,
+  EyeOff,
+  Copy,
 } from 'lucide-react';
 
 const IMAGE_PROVIDER_TYPES = ['image-openai', 'image-stability'] as const;
@@ -69,6 +72,8 @@ interface Config {
   providerType?: string;
   apiKey?: string;
   hasApiKey?: boolean;
+  /** Masked stand-in, e.g. `sk-••••a3f9`. The real key never arrives via GET. */
+  apiKeyPreview?: string;
   aiModel?: string;
   baseUrl?: string;
   usageLimit?: number;
@@ -303,6 +308,28 @@ export default function Config() {
     isActive: false,
   });
 
+  /**
+   * The stored API key, once the operator has explicitly asked to see it.
+   * Null means "not revealed" — which is the state every time the dialog
+   * opens, so a key is never left sitting on screen from a previous edit.
+   */
+  const [revealedKey, setRevealedKey] = useState<string | null>(null);
+  const [revealing, setRevealing] = useState(false);
+  const [revealError, setRevealError] = useState<string | null>(null);
+
+  /**
+   * Drop the revealed key the moment the dialog closes, by whichever of the
+   * several close paths (Cancel, the X, a successful save). Clearing it in each
+   * handler instead would leave a plaintext provider secret in React state the
+   * first time somebody added a fourth way out of this dialog.
+   */
+  useEffect(() => {
+    if (!isEditing) {
+      setRevealedKey(null);
+      setRevealError(null);
+    }
+  }, [isEditing]);
+
   const fetchUsageCycle = useCallback(async () => {
     try {
       const res = await api.get('/api/config/usage-cycle');
@@ -464,6 +491,31 @@ export default function Config() {
     setFormData(c);
     setEditingId(c._id);
     setIsEditing(true);
+    // The key is never in `c` — GET redacts it. Start from the masked preview
+    // and let the operator ask for the real one.
+    setRevealedKey(null);
+    setRevealError(null);
+  };
+
+  /**
+   * Fetch the stored key in the clear.
+   *
+   * A POST, not a GET: the server only audits mutating methods, and reading a
+   * provider secret should leave a record of who did it. That also means this
+   * must stay an explicit click — never something the dialog does on open.
+   */
+  const handleRevealKey = async () => {
+    if (!editingId) return;
+    setRevealing(true);
+    setRevealError(null);
+    try {
+      const res = await api.post(`/api/config/${editingId}/reveal-key`);
+      setRevealedKey(res.data?.apiKey ?? '');
+    } catch (err: unknown) {
+      setRevealError(getErrorMessage(err));
+    } finally {
+      setRevealing(false);
+    }
   };
 
   const handleCreate = () => {
@@ -726,6 +778,60 @@ export default function Config() {
                 <label className="block text-sm font-medium text-gray-700">
                   API Key
                 </label>
+                {/* Editing a provider that already has a key.
+                    The field itself has to stay empty-means-unchanged (the
+                    server preserves the stored key on a blank save), but an
+                    empty box with a "sk-..." placeholder looks exactly like a
+                    provider with NO key — which is what made this form read as
+                    broken. So the stored key is shown here instead, masked
+                    until asked for. */}
+                {editingId && formData.hasApiKey && (
+                  <div className="mt-1 mb-2 flex flex-wrap items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+                    <code className="flex-1 min-w-0 break-all font-mono text-xs text-gray-700">
+                      {revealedKey ?? formData.apiKeyPreview ?? '••••'}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        revealedKey ? setRevealedKey(null) : handleRevealKey()
+                      }
+                      disabled={revealing}
+                      className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200 disabled:opacity-50"
+                      title={
+                        revealedKey
+                          ? 'Hide the key again'
+                          : 'Show the stored key (recorded in the audit log)'
+                      }
+                    >
+                      {revealing ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : revealedKey ? (
+                        <EyeOff className="h-3.5 w-3.5" />
+                      ) : (
+                        <Eye className="h-3.5 w-3.5" />
+                      )}
+                      {revealedKey ? 'Hide' : 'Show'}
+                    </button>
+                    {revealedKey && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void navigator.clipboard?.writeText(revealedKey)
+                        }
+                        className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200"
+                        title="Copy to clipboard"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        Copy
+                      </button>
+                    )}
+                  </div>
+                )}
+                {revealError && (
+                  <p className="mb-2 text-xs text-red-600">
+                    Could not read the key: {revealError}
+                  </p>
+                )}
                 <input
                   type="password"
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
@@ -734,13 +840,21 @@ export default function Config() {
                     setFormData({ ...formData, apiKey: e.target.value })
                   }
                   placeholder={
-                    isImageProviderType(formData.providerType)
-                      ? IMAGE_PROVIDER_META[
-                          formData.providerType as ImageProviderType
-                        ].apiKeyPlaceholder
-                      : 'sk-...'
+                    editingId && formData.hasApiKey
+                      ? 'Leave blank to keep the key above'
+                      : isImageProviderType(formData.providerType)
+                        ? IMAGE_PROVIDER_META[
+                            formData.providerType as ImageProviderType
+                          ].apiKeyPlaceholder
+                        : 'sk-...'
                   }
                 />
+                {editingId && formData.hasApiKey && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Type here only to replace it — saving an empty box keeps the
+                    current key.
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">
