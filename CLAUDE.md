@@ -225,6 +225,12 @@ npm run start
 - **Scoped per tenant** (`presence:<tenantId>` rooms). Staff names are internal,
   and two tenants sharing a contact JID is ordinary — the `default` tenant holds
   every legacy row.
+- **Your own tag shows too**, muted grey next to colleagues' indigo. Hiding it
+  means an operator testing alone clicks a chat, sees nothing happen, and
+  cannot tell a working build from a broken one; showing it also gives everyone
+  the same picture of the room. The broadcast therefore has to reach the sender
+  — `io.to(room)`, never `socket.to(room)` — which a test in
+  `ChatPresenceSocket.test.ts` pins by reading `socket.ts`.
 - One pill **per person, not per browser tab**; the name comes from
   `resolveIdentity` (so `fullName` beats the login handle), and the identity
   lookup memoises the **promise**, not the value — clicking quickly down the
