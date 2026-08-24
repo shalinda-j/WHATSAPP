@@ -7,3 +7,6 @@
 
 **Learning:** When using Mongoose to fetch read-only queries, not using `.lean()` adds unnecessary overhead since documents are hydrated as Mongoose objects. In performance-sensitive routes where we only need plain objects for serialization or simple reading, this overhead is noticeable, especially for analytics endpoints which fetch large volumes of chat messages or datasets.
 **Action:** Always append `.lean()` to Mongoose read-only queries (e.g., `ChatMessage.find().lean()`) to bypass document hydration and improve performance.
+## 2025-05-24 - Use .lean() on read-only KnowledgeEntry queries
+**Learning:** Bypassing Mongoose document hydration with `.lean()` on read-only queries provides measurable performance benefits, especially for repeated read loops, APIs serving large JSON bodies, and formatting strings. However, when formatting code globally, we must restrict linting and fixing exclusively to the modified files to avoid polluting the PR with massive formatting diffs.
+**Action:** Always append `.lean()` to read-only queries, and scope formatting/linting fixes directly to the individual files edited via `npx eslint <file> --fix`.
