@@ -122,18 +122,14 @@ describe('ChatPresenceRegistry', () => {
     expect(registry.open(chat, viewer())).toEqual([chat]);
   });
 
-  it('untags the previous chat when the operator clicks a different row', () => {
-    // Without this, every click would leave a tag behind and the sidebar would
-    // fill with the names of people who had long since moved on.
+  it('keeps previous chats claimed when the operator clicks another row', () => {
     const other = { ...chat, userId: 'chat-2' };
     registry.open(chat, viewer());
     const changed = registry.open(other, viewer());
 
-    expect(registry.list(chat)).toEqual([]);
+    expect(registry.list(chat)).toHaveLength(1);
     expect(registry.list(other)).toHaveLength(1);
-    // Both the chat left and the chat entered have to be re-broadcast.
-    expect(changed).toEqual(expect.arrayContaining([chat, other]));
-    expect(changed).toHaveLength(2);
+    expect(changed).toEqual([other]);
   });
 
   it('does not reset the open time when the same chat is re-announced', () => {
@@ -188,15 +184,14 @@ describe('ChatPresenceRegistry', () => {
     expect(registry.list(chat)).toHaveLength(1);
   });
 
-  it('does not grow without bound as chats are opened and left', () => {
+  it('clears every accumulated claim when its socket disconnects', () => {
     // Empty viewer maps have to be deleted, not left as husks: this runs in a
     // long-lived process and an operator works through hundreds of chats a
     // day.
     for (let i = 0; i < 50; i++) {
       registry.open({ ...chat, userId: `chat-${i}` }, viewer());
     }
-    // Each open released the previous one, so only the last chat is tagged.
-    expect(registry.size()).toBe(1);
+    expect(registry.size()).toBe(50);
 
     registry.dropSocket('sock-1');
     expect(registry.size()).toBe(0);

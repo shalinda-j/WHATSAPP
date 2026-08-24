@@ -9,9 +9,9 @@ import {
   OutboundMessage,
 } from './types';
 import ChannelConnection from '../models/ChannelConnection';
+import { META_GRAPH_BASE_URL } from '../config/meta';
 
-const GRAPH_API_VERSION = 'v19.0';
-const GRAPH_BASE_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
+const GRAPH_BASE_URL = META_GRAPH_BASE_URL;
 
 interface InstagramConnectionState {
   accessToken: string;
@@ -90,7 +90,7 @@ export class InstagramAdapter implements IChannelAdapter {
       };
     }
     try {
-      // Instagram Messenger API: POST /v19.0/{IG_USER_ID}/messages
+      // Instagram Messenger API: POST /{version}/{IG_USER_ID}/messages
       // Hard limit per Meta: 1000 chars in message.text.
       const res = await axios.post(
         `${GRAPH_BASE_URL}/${state.businessAccountId}/messages`,

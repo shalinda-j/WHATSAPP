@@ -1,8 +1,6 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
 import multer from 'multer';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const pdf = require('pdf-parse');
 import * as xlsx from 'xlsx';
 import Dataset, { DatasetType, Language } from '../../models/Dataset';
 import { authenticateToken } from '../middleware/auth';
@@ -14,6 +12,7 @@ import {
 import { validateObjectId } from '../middleware/validation';
 import { extractTextFromImage } from '../../services/gemini';
 import { configurationManager } from '../../services/ConfigurationManagerService';
+import { extractPdfText } from '../../utils/pdf';
 
 const router = Router();
 
@@ -271,8 +270,7 @@ router.post('/extract', upload.single('file'), async (req, res) => {
 
     // 1. PDF Handling
     if (mimetype === 'application/pdf') {
-      const data = await pdf(buffer);
-      extractedText = data.text;
+      extractedText = await extractPdfText(buffer);
     }
     // 2. Excel/CSV Handling
     else if (

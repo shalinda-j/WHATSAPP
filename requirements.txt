@@ -1,17 +1,17 @@
 # WhatsApp Bot NLP Inference Server Dependencies
-# Python 3.8+ required
+# Python 3.10+ required
 
 # Web Framework
-fastapi>=0.100.0
+fastapi==0.141.1
 
 # Deep Learning
-torch>=2.0.0
+torch==2.13.0
 
 # ASGI Server
-uvicorn>=0.23.0
+uvicorn==0.52.4
 
 # Data Validation
-pydantic>=2.0.0
+pydantic==2.13.4
 
 # Optional: GPU support (uncomment if using CUDA)
-# torch>=2.0.0+cu118 --index-url https://download.pytorch.org/whl/cu118
+# Install the matching CUDA build from https://pytorch.org/get-started/locally/

@@ -22,6 +22,7 @@ import axios, { AxiosRequestConfig } from 'axios';
 import { channelRouter } from '../../channels';
 import type { Channel } from '../../types/agent';
 import type { OutboundMessage } from '../../channels/types';
+import { META_GRAPH_BASE_URL } from '../../config/meta';
 
 export interface ExecutorContext {
   /** Tenant the workflow is running in — used to resolve channel adapters. */
@@ -175,7 +176,7 @@ const facebookPagePost: Executor = async (cfg) => {
     const res = await withHardDeadline(
       'facebook_pages',
       axios.post(
-        `https://graph.facebook.com/v19.0/${encodeURIComponent(pageId)}/feed`,
+        `${META_GRAPH_BASE_URL}/${encodeURIComponent(pageId)}/feed`,
         { message, access_token: accessToken },
         { timeout: 20000 },
       ),
@@ -205,7 +206,7 @@ const instagramBusinessPost: Executor = async (cfg) => {
     const containerRes = await withHardDeadline(
       'instagram_business.container',
       axios.post(
-        `https://graph.facebook.com/v19.0/${encodeURIComponent(igUserId)}/media`,
+        `${META_GRAPH_BASE_URL}/${encodeURIComponent(igUserId)}/media`,
         {
           image_url: imageUrl,
           caption,
@@ -221,7 +222,7 @@ const instagramBusinessPost: Executor = async (cfg) => {
     const publishRes = await withHardDeadline(
       'instagram_business.publish',
       axios.post(
-        `https://graph.facebook.com/v19.0/${encodeURIComponent(igUserId)}/media_publish`,
+        `${META_GRAPH_BASE_URL}/${encodeURIComponent(igUserId)}/media_publish`,
         { creation_id: containerId, access_token: accessToken },
         { timeout: 20000 },
       ),
@@ -429,7 +430,7 @@ const whatsappCloudSend: Executor = async (cfg) => {
     const res = await withHardDeadline(
       'whatsapp_business',
       axios.post(
-        `https://graph.facebook.com/v19.0/${encodeURIComponent(phoneNumberId)}/messages`,
+        `${META_GRAPH_BASE_URL}/${encodeURIComponent(phoneNumberId)}/messages`,
         {
           messaging_product: 'whatsapp',
           to,

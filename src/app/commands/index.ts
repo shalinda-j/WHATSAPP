@@ -32,7 +32,7 @@ export const initializeCommands = (): void => {
 // Initialize commands immediately when the module is loaded
 initializeCommands();
 
-import { proto } from '@whiskeysockets/baileys';
+import type { proto } from '@whiskeysockets/baileys';
 import { getMessageText } from '../../services/whatsapp';
 
 // ... (existing imports)

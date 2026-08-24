@@ -5,17 +5,15 @@
 # Why a Dockerfile and not the Node buildpack?
 #   The Heroku-style Node buildpack used by DO requires a lockfile that
 #   matches the local npm version. With contributors on mixed Node
-#   versions (20.x engines vs 22.x dev machines) the buildpack repeatedly
-#   fails with "npm lockfile is not in sync". Docker pins Node 20 for
+#   versions across dev machines the buildpack repeatedly
+#   fails with "npm lockfile is not in sync". Docker pins Node 22 for
 #   everyone, eliminating the class of error.
 
 ############################
 # Stage 1: build everything
 ############################
-# Node 20.19+ is required by resolved deps (vite 7 needs ^20.19.0; mongoose 9
-# needs >=20.19.0). 20.18.1 is below that minimum and fails the client build's
-# engine check.
-FROM node:20.19.0-bookworm-slim AS builder
+# Node 22 is required by current dependencies (OpenAI 7 and Nano ID 6).
+FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 
@@ -51,7 +49,7 @@ RUN npm prune --omit=dev
 ############################
 # Stage 2: minimal runtime
 ############################
-FROM node:20.19.0-bookworm-slim AS runtime
+FROM node:22-bookworm-slim AS runtime
 
 ENV NODE_ENV=production \
     PORT=8080

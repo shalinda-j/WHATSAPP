@@ -1,7 +1,7 @@
 import { getSocket } from '../../services/whatsapp';
 import { company } from '../../config/integrantes.json';
 import { BaseCommand } from '../utils/BaseCommand';
-import { proto } from '@whiskeysockets/baileys';
+import type { proto } from '@whiskeysockets/baileys';
 
 /**
  * Command to mention all group members

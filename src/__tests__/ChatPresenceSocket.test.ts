@@ -243,7 +243,7 @@ describe('attachChatPresence', () => {
     expect(b.viewersFor(CHAT).pop()!.payload.viewers).toEqual([]);
   });
 
-  it('untags the old chat and tags the new one on a switch', async () => {
+  it('keeps the old chat tagged and tags the new one on a switch', async () => {
     const f = fakeSocket();
     const b = fakeBus();
     attachChatPresence(f.socket, b.bus, new ChatPresenceRegistry());
@@ -253,11 +253,11 @@ describe('attachChatPresence', () => {
     f.fire(PRESENCE_EVENTS.open, { userId: 'chat-2' });
     await flush();
 
-    expect(b.viewersFor(CHAT).pop()!.payload.viewers).toEqual([]);
+    expect(b.viewersFor(CHAT).pop()!.payload.viewers).toHaveLength(1);
     expect(b.viewersFor('chat-2').pop()!.payload.viewers).toHaveLength(1);
   });
 
-  it('leaves the last chat tagged when several are opened in a burst', async () => {
+  it('leaves every claimed chat tagged when several are opened in a burst', async () => {
     // Clicking quickly down the inbox fires all three before the first identity
     // lookup returns. The handler memoises the lookup PROMISE precisely so the
     // continuations run in emit order; memoising the resolved value instead
@@ -288,8 +288,8 @@ describe('attachChatPresence', () => {
     const at = (userId: string) =>
       registry.list({ tenantId: 'tenant-a', userId });
     expect(at('chat-3')).toHaveLength(1);
-    expect(at('chat-1')).toEqual([]);
-    expect(at('chat-2')).toEqual([]);
+    expect(at('chat-1')).toHaveLength(1);
+    expect(at('chat-2')).toHaveLength(1);
   });
 
   it('replies to a snapshot request with what the tenant can see', async () => {
@@ -372,7 +372,7 @@ describe('the client agrees on the protocol', () => {
     'utf8',
   );
 
-  it.each(Object.entries(PRESENCE_EVENTS))(
+  it.each(Object.entries(PRESENCE_EVENTS).filter(([name]) => name !== 'close'))(
     'uses %s ("%s") in ChatInterface.tsx',
     (_name, event) => {
       expect(client).toContain(`'${event}'`);

@@ -3,6 +3,7 @@ import { CryptoService } from './CryptoService';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import type { LiveCallMode, CallTtsModel } from './LiveCallService';
+import { META_GRAPH_VERSION } from '../config/meta';
 
 const CONFIG_KEY = 'live_call_settings';
 const FALLBACK_PATH = join(process.cwd(), 'data', 'live_call_settings.json');
@@ -37,7 +38,7 @@ export interface LiveCallSettings {
   phoneNumberId: string;
   /** Token echoed on Meta's GET webhook verification handshake. */
   webhookVerifyToken: string;
-  /** Graph API version, e.g. 'v21.0'. */
+  /** Graph API version, e.g. 'v25.0'. */
   graphVersion: string;
   /** Encrypted: Business Calling API access token. */
   apiToken: string;
@@ -75,7 +76,7 @@ class LiveCallSettingsService {
         process.env.WHATSAPP_CLOUD_PHONE_NUMBER_ID ||
         '',
       webhookVerifyToken: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || '',
-      graphVersion: process.env.WHATSAPP_GRAPH_VERSION || 'v21.0',
+      graphVersion: process.env.WHATSAPP_GRAPH_VERSION || META_GRAPH_VERSION,
       apiToken:
         process.env.WHATSAPP_CALLING_API_TOKEN ||
         process.env.WHATSAPP_CLOUD_ACCESS_TOKEN ||

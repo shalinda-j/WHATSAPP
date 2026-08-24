@@ -11,6 +11,9 @@ export interface IChatMessage {
   type: 'text' | 'voice' | 'image' | 'video' | 'document' | 'sticker';
   content: string;
   mediaUrl?: string;
+  mediaMimeType?: string;
+  mediaFileName?: string;
+  mediaSize?: number;
   timestamp: Date;
   read?: boolean; // Track if message has been seen by admin
   /**
@@ -67,6 +70,9 @@ const ChatMessageSchema = new Schema({
   },
   content: { type: String, required: true },
   mediaUrl: { type: String },
+  mediaMimeType: { type: String },
+  mediaFileName: { type: String },
+  mediaSize: { type: Number },
   timestamp: { type: Date, default: Date.now, index: true },
   read: { type: Boolean, default: false, index: true }, // Track if message has been seen by admin
   // Sparse + unique: only rows that carry WhatsApp's message id participate,

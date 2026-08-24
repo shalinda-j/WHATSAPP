@@ -9,9 +9,9 @@ import {
   OutboundMessage,
 } from './types';
 import ChannelConnection from '../models/ChannelConnection';
+import { META_GRAPH_BASE_URL } from '../config/meta';
 
-const GRAPH_API_VERSION = 'v19.0';
-const GRAPH_BASE_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
+const GRAPH_BASE_URL = META_GRAPH_BASE_URL;
 
 interface FacebookConnectionState {
   pageId: string;
@@ -87,7 +87,7 @@ export class FacebookMessengerAdapter implements IChannelAdapter {
       };
     }
     try {
-      // Messenger Send API: POST /v19.0/{PAGE_ID}/messages
+      // Messenger Send API: POST /{version}/{PAGE_ID}/messages
       // 2000-char hard cap on text per Meta docs.
       const res = await axios.post(
         `${GRAPH_BASE_URL}/${state.pageId}/messages`,

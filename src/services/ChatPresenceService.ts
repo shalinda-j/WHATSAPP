@@ -111,24 +111,18 @@ export function dedupeViewersByAdmin(viewers: ChatViewer[]): ChatViewer[] {
 export class ChatPresenceRegistry {
   /** conversation key -> socketId -> viewer */
   private byChat = new Map<string, Map<string, ChatViewer>>();
-  /** socketId -> conversation keys it is currently viewing */
+  /** socketId -> conversation keys it has claimed during this live-chat session */
   private bySocket = new Map<string, Set<string>>();
 
   /**
-   * Mark a socket as viewing a conversation.
-   *
-   * A socket views ONE conversation at a time — the operator clicked a
-   * different row, they did not open a second one — so this first clears
-   * whatever that socket was on. Without that, every click would leave the
-   * previous chat tagged forever and the sidebar would slowly fill with the
-   * names of people who had long since moved on.
-   *
-   * Returns every conversation whose viewer list changed, so the caller knows
-   * exactly what to broadcast: the newly opened chat, plus the one just left.
+   * Claim a conversation for this operator's current live-chat session.
+   * Claims intentionally survive switching rows, so a multi-user team can
+   * see every conversation a colleague is handling. They are released by an
+   * explicit close or when the socket/tab disconnects.
    */
   open(target: PresenceTarget, viewer: ChatViewer): PresenceTarget[] {
     const key = presenceKey(target.tenantId, target.userId);
-    const changed = this.releaseSocketExcept(viewer.socketId, key);
+    const changed: PresenceTarget[] = [];
 
     const viewers = this.byChat.get(key) ?? new Map<string, ChatViewer>();
     const previous = viewers.get(viewer.socketId);

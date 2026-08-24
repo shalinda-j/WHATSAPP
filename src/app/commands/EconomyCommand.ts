@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { BaseCommand } from '../utils/BaseCommand';
-import { proto } from '@whiskeysockets/baileys';
+import type { proto } from '@whiskeysockets/baileys';
 
 /**
  * Command to query currency exchange rates

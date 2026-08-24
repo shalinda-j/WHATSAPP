@@ -1,9 +1,16 @@
 import { Router, Request, Response } from 'express';
+import multer from 'multer';
 import ChatMessage from '../../models/ChatMessage';
 import Session from '../../models/Session';
 import { Contact } from '../../models/CRM';
 import LidPhoneMapping from '../../models/LidPhoneMapping';
-import { sendMessage, resolveActiveSessionId } from '../../services/whatsapp';
+import {
+  sendMessage,
+  sendMediaMessage,
+  sendVoiceMessage,
+  resolveActiveSessionId,
+} from '../../services/whatsapp';
+import { storeChatMedia } from '../../services/ChatMediaStorageService';
 import { getIO } from '../socket';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import {
@@ -18,6 +25,30 @@ import {
 } from '../../services/LidPhoneMappingService';
 
 const router = Router();
+const mediaUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 64 * 1024 * 1024, files: 1 },
+});
+const SAFE_CHAT_UPLOAD_MIMES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'video/mp4',
+  'video/webm',
+  'audio/ogg',
+  'audio/opus',
+  'audio/webm',
+  'audio/mpeg',
+  'audio/mp4',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain',
+  'text/csv',
+]);
 
 // SECURITY FIX: All chat routes require authentication + tenant context.
 router.use(authenticateToken);
@@ -315,6 +346,10 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
           role: conv.lastMessage.role,
           type: conv.lastMessage.type,
           content: conv.lastMessage.content,
+          mediaUrl: conv.lastMessage.mediaUrl,
+          mediaMimeType: conv.lastMessage.mediaMimeType,
+          mediaFileName: conv.lastMessage.mediaFileName,
+          mediaSize: conv.lastMessage.mediaSize,
           timestamp: conv.lastMessage.timestamp,
           metadata: conv.lastMessage.metadata,
         },
@@ -446,6 +481,88 @@ router.post('/send', async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to send message' });
   }
 });
+
+/** Send an attachment or browser-recorded voice note from Live Chat. */
+router.post(
+  '/send-media',
+  mediaUpload.single('file'),
+  async (req: Request, res: Response) => {
+    try {
+      const {
+        userId,
+        sessionId = 'default',
+        caption = '',
+        kind = '',
+      } = req.body;
+      const file = req.file;
+      if (!userId || !file) {
+        return res.status(400).json({ error: 'userId and file are required' });
+      }
+      const activeSessionId = resolveActiveSessionId(sessionId);
+      if (!activeSessionId) {
+        return res
+          .status(503)
+          .json({ error: 'No WhatsApp session is connected' });
+      }
+
+      const mime = (file.mimetype || 'application/octet-stream')
+        .split(';', 1)[0]
+        .trim()
+        .toLowerCase();
+      if (!SAFE_CHAT_UPLOAD_MIMES.has(mime)) {
+        return res.status(415).json({ error: 'Unsupported attachment type' });
+      }
+      const messageType =
+        kind === 'voice'
+          ? 'voice'
+          : mime.startsWith('image/')
+            ? 'image'
+            : mime.startsWith('video/')
+              ? 'video'
+              : mime.startsWith('audio/')
+                ? 'voice'
+                : 'document';
+
+      const sent =
+        kind === 'voice'
+          ? await sendVoiceMessage(userId, file.buffer, activeSessionId)
+          : await sendMediaMessage(
+              userId,
+              file.buffer,
+              messageType === 'voice' ? 'audio' : messageType,
+              {
+                caption: String(caption).trim() || undefined,
+                mimetype: mime,
+                fileName: file.originalname,
+              },
+              activeSessionId,
+            );
+      if (!sent) {
+        return res.status(500).json({ error: 'Failed to send WhatsApp media' });
+      }
+
+      const stored = await storeChatMedia(file.buffer, mime, file.originalname);
+      const savedMessage = await ChatMessage.create({
+        userId,
+        role: 'assistant',
+        type: messageType,
+        content:
+          String(caption).trim() ||
+          (messageType === 'voice' ? 'Voice message' : file.originalname),
+        ...stored,
+        timestamp: new Date(),
+        read: true,
+        tenantId: tenantIdOf(req),
+        metadata: { sessionId: activeSessionId, source: 'admin_panel' },
+      });
+      getIO().emit('new-message', savedMessage);
+      return res.json({ success: true, message: savedMessage });
+    } catch (error) {
+      console.error('Error sending media:', error);
+      return res.status(500).json({ error: 'Failed to send media' });
+    }
+  },
+);
 
 /**
  * GET /api/chat/status

@@ -33,6 +33,10 @@ import {
   analyzeIncomingMedia,
   buildMediaPromptText,
 } from './services/mediaUnderstanding';
+import {
+  storeChatMedia,
+  type StoredChatMedia,
+} from './services/ChatMediaStorageService';
 import { chatPersonality } from './services/ChatPersonality';
 import { leadScoringService } from './services/LeadScoringService';
 import { messageQuality } from './services/MessageQualityService';
@@ -1001,6 +1005,8 @@ onMessage(async (message, sock, sessionId) => {
     let messageType:
       'text' | 'voice' | 'image' | 'video' | 'document' | 'sticker' = 'text';
     let detectedVoiceLanguage: string | null = null;
+    let storedMedia: StoredChatMedia | undefined;
+    let voiceTranscriptionFailed = false;
 
     // Helper to extract audio message from various wrappers
 
@@ -1012,6 +1018,15 @@ onMessage(async (message, sock, sessionId) => {
       const audioBuffer = await downloadWhatsAppAudio(message);
 
       if (audioBuffer) {
+        try {
+          storedMedia = await storeChatMedia(
+            audioBuffer,
+            audioMsg.mimetype || 'audio/ogg',
+            `voice-${message.key?.id || Date.now()}.ogg`,
+          );
+        } catch (err) {
+          console.error('   ⚠️ Failed to store voice for Live Chat:', err);
+        }
         // Transcription — NEVER throws (voice.ts handles all failures gracefully)
         const transcriptionResult =
           await transcribeAudioWithLanguage(audioBuffer);
@@ -1023,28 +1038,25 @@ onMessage(async (message, sock, sessionId) => {
           console.warn(
             '   ⚠️ Transcription returned empty result — all STT providers failed',
           );
-          // Language-aware "try again" messages
-          const retryMessages: Record<string, string> = {
-            si: '🎤 ඔබේ හඬ පණිවිඩය තේරුම් ගත නොහැකි විය. කරුණාකර නැවත උත්සාහ කරන්න.',
-            ta: '🎤 உங்கள் குரல் செய்தி புரியவில்லை. மீண்டும் முயற்சிக்கவும்.',
-            en: '🎤 Could not understand your voice message. Please speak clearly and try again.',
-          };
-          // Use Sinhala as default since most users are Sinhala
-          await sendMessage(jid, retryMessages.si, sessionId);
-          return;
+          // Still persist and broadcast the playable recording before asking
+          // the customer to retry. Previously this early return made failed
+          // transcriptions completely invisible in Live Chat.
+          text = 'Voice message (transcription unavailable)';
+          voiceTranscriptionFailed = true;
+          isVoiceMessage = true;
+        } else {
+          console.log(
+            `   📝 Transcription: "${transcriptionResult.text.substring(0, 80)}"`,
+          );
+          console.log(
+            `   🌐 Language: ${transcriptionResult.detectedLanguage} (${(
+              transcriptionResult.languageConfidence * 100
+            ).toFixed(0)}%)`,
+          );
+          text = transcriptionResult.text;
+          detectedVoiceLanguage = transcriptionResult.detectedLanguage;
+          isVoiceMessage = true;
         }
-
-        console.log(
-          `   📝 Transcription: "${transcriptionResult.text.substring(0, 80)}"`,
-        );
-        console.log(
-          `   🌐 Language: ${transcriptionResult.detectedLanguage} (${(
-            transcriptionResult.languageConfidence * 100
-          ).toFixed(0)}%)`,
-        );
-        text = transcriptionResult.text;
-        detectedVoiceLanguage = transcriptionResult.detectedLanguage;
-        isVoiceMessage = true;
       } else {
         console.error('   ❌ Failed to download audio');
         return;
@@ -1066,6 +1078,17 @@ onMessage(async (message, sock, sessionId) => {
         messageType = analysis.kind;
         mediaCaption = (text || '').trim();
         text = buildMediaPromptText(analysis);
+        if (analysis.buffer) {
+          try {
+            storedMedia = await storeChatMedia(
+              analysis.buffer,
+              analysis.mimeType,
+              analysis.fileName,
+            );
+          } catch (err) {
+            console.error('   ⚠️ Failed to store media for Live Chat:', err);
+          }
+        }
         if (analysis.description) {
           console.log(
             `   📝 ${analysis.kind} analysis: "${analysis.description.substring(0, 80)}..."`,
@@ -1119,6 +1142,7 @@ onMessage(async (message, sock, sessionId) => {
         role: 'user',
         type: messageType,
         content: text,
+        ...storedMedia,
         // Stamp the tenant so chat-derived exports/analytics scope correctly.
         tenantId: defaultTenantId || undefined,
         // WhatsApp's own id — lets the history back-fill recognise a message
@@ -1165,6 +1189,15 @@ onMessage(async (message, sock, sessionId) => {
       );
     } catch (dbErr) {
       console.error('   ❌ Failed to save user message:', dbErr);
+    }
+
+    if (voiceTranscriptionFailed) {
+      await sendMessage(
+        jid,
+        '🎤 ඔබේ හඬ පණිවිඩය තේරුම් ගත නොහැකි විය. කරුණාකර නැවත උත්සාහ කරන්න.',
+        sessionId,
+      );
+      return;
     }
 
     // Global kill-switch: operator paused the bot (e.g. a reply loop). The

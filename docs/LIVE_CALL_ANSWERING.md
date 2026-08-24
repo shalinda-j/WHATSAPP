@@ -168,7 +168,7 @@ applies the choice (falling back safely if the engine can't handle the language)
 | `WHATSAPP_PHONE_NUMBER_ID`      | WABA phone number id (or `WHATSAPP_CLOUD_PHONE_NUMBER_ID`)    | —               |
 | `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | Token echoed back on the Meta `GET` verification handshake    | —               |
 | `WHATSAPP_APP_SECRET`           | Meta app secret — enables `X-Hub-Signature-256` verification  | — (skipped)     |
-| `WHATSAPP_GRAPH_VERSION`        | Graph API version for the calls endpoint                      | `v21.0`         |
+| `WHATSAPP_GRAPH_VERSION`        | Graph API version for the calls endpoint                      | `v25.0`         |
 
 ## Summary
 

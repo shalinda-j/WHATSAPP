@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import { META_GRAPH_VERSION } from '../../config/meta';
 
 /**
  * WhatsAppCallingClient — thin wrapper over the official WhatsApp Business
@@ -8,8 +9,8 @@ import axios, { AxiosInstance } from 'axios';
  * audio — it only tells Meta to accept/reject/terminate a call and exchanges
  * the SDP (session description) that the media plane (MediaBridge) produces.
  *
- * Endpoint shape (Graph API v21.0+):
- *   POST https://graph.facebook.com/v21.0/{PHONE_NUMBER_ID}/calls
+ * Endpoint shape (current Graph API):
+ *   POST https://graph.facebook.com/v25.0/{PHONE_NUMBER_ID}/calls
  *   body: { messaging_product: 'whatsapp', call_id, action, session? }
  *     action: 'pre_accept' | 'accept' | 'reject' | 'terminate'
  *     session: { sdp_type: 'answer', sdp: '<our answer SDP>' }   (accept/pre_accept)
@@ -20,14 +21,14 @@ import axios, { AxiosInstance } from 'axios';
  * resolved from the encrypted ChannelConnection.credentials by the caller).
  */
 
-const DEFAULT_GRAPH_VERSION = 'v21.0';
+const DEFAULT_GRAPH_VERSION = META_GRAPH_VERSION;
 
 export interface WhatsAppCallingCreds {
   /** Permanent / system-user access token with whatsapp_business_messaging. */
   accessToken: string;
   /** The WABA phone number id that owns the call. */
   phoneNumberId: string;
-  /** Graph API version, e.g. 'v21.0'. Defaults when omitted. */
+  /** Graph API version, e.g. 'v25.0'. Defaults when omitted. */
   graphVersion?: string;
 }
 

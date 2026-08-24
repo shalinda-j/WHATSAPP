@@ -1,6 +1,6 @@
 import { getSocket, sendMessage } from '../../services/whatsapp';
 import { BaseCommand } from '../utils/BaseCommand';
-import { proto } from '@whiskeysockets/baileys';
+import type { proto } from '@whiskeysockets/baileys';
 
 /**
  * Command to view a user's profile picture

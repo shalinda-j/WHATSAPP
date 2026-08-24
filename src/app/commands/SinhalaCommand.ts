@@ -1,7 +1,7 @@
 import { BaseCommand } from '../utils/BaseCommand';
 import { generateSinhalaResponse } from '../../services/gemini';
 import { sendMessage } from '../../services/whatsapp';
-import { proto } from '@whiskeysockets/baileys';
+import type { proto } from '@whiskeysockets/baileys';
 
 /**
  * Sinhala AI Command - Chat with AI in Sinhala language

@@ -1,11 +1,5 @@
-import makeWASocket, {
-  DisconnectReason,
-  useMultiFileAuthState,
-  WASocket,
-  proto,
-  fetchLatestBaileysVersion,
-  downloadMediaMessage,
-} from '@whiskeysockets/baileys';
+import type { WASocket, proto } from '@whiskeysockets/baileys';
+import { loadBaileys } from './baileys';
 import { callAssistant } from './CallAssistantService';
 import * as qrcode from 'qrcode-terminal';
 import pino from 'pino';
@@ -159,6 +153,12 @@ export class WhatsAppSessionManager {
     }
 
     try {
+      const {
+        default: makeWASocket,
+        DisconnectReason,
+        useMultiFileAuthState,
+        fetchLatestWaWebVersion,
+      } = await loadBaileys();
       console.log(`🔄 Starting session: ${sessionId}`);
       this.connectionStates.set(sessionId, 'connecting');
 
@@ -189,13 +189,16 @@ export class WhatsAppSessionManager {
         };
       }
 
-      const { version } = await fetchLatestBaileysVersion();
+      // The npm/package version endpoint can lag behind WhatsApp Web and has
+      // recently caused otherwise-valid QR links to be rejected. Pair with
+      // the live WhatsApp Web version instead; Baileys exposes this helper
+      // specifically for socket version negotiation.
+      const { version } = await fetchLatestWaWebVersion();
 
       const sock = makeWASocket({
         version,
         auth: authState,
         logger,
-        printQRInTerminal: false, // We update DB instead
         browser: [BRAND_NAME, 'Chrome', '120.0.0'],
         connectTimeoutMs: 60000,
         // A finite defaultQueryTimeoutMs makes the initial app-state sync
@@ -287,6 +290,13 @@ export class WhatsAppSessionManager {
             statusCode === DisconnectReason.loggedOut ||
             reason?.reason === 'logged_out' ||
             statusCode === 401;
+          // WhatsApp deliberately closes the pre-pairing socket with 515
+          // after credentials are accepted. This is a successful hand-off,
+          // not a failed attempt, and must be restarted immediately while
+          // preserving the freshly-written auth state.
+          const isRestartRequired =
+            statusCode === DisconnectReason.restartRequired ||
+            statusCode === 515;
 
           console.log(
             `⚠️ Session ${sessionId} Closed: ${statusCode} (conflict: ${isConflict}, loggedOut: ${isLoggedOut}, deleted: ${this.deletedSessions.has(
@@ -327,6 +337,18 @@ export class WhatsAppSessionManager {
 
             // MEMORY LEAK FIX: Use tracked timer
             this.scheduleReconnect(sessionId, 2000);
+            return;
+          }
+
+          if (isRestartRequired) {
+            console.log(
+              `🔄 Session ${sessionId}: Pairing completed; restarting socket with saved credentials...`,
+            );
+            this.sessions.delete(sessionId);
+            this.connectionStates.delete(sessionId);
+            this.retryCounters.delete(sessionId);
+            this.conflictCounters.delete(sessionId);
+            this.scheduleReconnect(sessionId, 250);
             return;
           }
 
@@ -891,6 +913,7 @@ export async function downloadWhatsAppAudio(
   message: proto.IWebMessageInfo,
 ): Promise<Buffer | null> {
   try {
+    const { downloadMediaMessage } = await loadBaileys();
     return (await downloadMediaMessage(message as any, 'buffer', {})) as Buffer;
   } catch (e) {
     return null;

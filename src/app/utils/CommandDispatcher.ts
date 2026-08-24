@@ -1,5 +1,5 @@
 import type { ICommand } from '../interfaces/ICommand';
-import { proto } from '@whiskeysockets/baileys';
+import type { proto } from '@whiskeysockets/baileys';
 import { sendMessage } from '../../services/whatsapp';
 
 /**
