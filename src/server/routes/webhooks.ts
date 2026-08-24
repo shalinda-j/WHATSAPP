@@ -671,8 +671,20 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const tid = tenantIdOf(req);
+    // Explicitly extract allowed fields to prevent mass assignment
+    const { name, url, events, secret, isActive, category, format } =
+      req.body || {};
+    const webhookData: any = {};
+    if (name !== undefined) webhookData.name = name;
+    if (url !== undefined) webhookData.url = url;
+    if (events !== undefined) webhookData.events = events;
+    if (secret !== undefined) webhookData.secret = secret;
+    if (isActive !== undefined) webhookData.isActive = isActive;
+    if (category !== undefined) webhookData.category = category;
+    if (format !== undefined) webhookData.format = format;
+
     const webhook = new (Webhook as any)({
-      ...req.body,
+      ...webhookData,
       ...(tid ? { tenantId: tid } : {}),
     });
     await webhook.save();
@@ -685,19 +697,32 @@ router.post('/', async (req, res) => {
 // Update webhook (tenant-scoped: a tenant can only update its own webhooks)
 router.put('/:id', async (req, res) => {
   try {
+    // Explicitly extract allowed fields to prevent mass assignment
+    const { name, url, events, secret, isActive, category, format } =
+      req.body || {};
+    const updateData: any = {};
+
+    if (name !== undefined) updateData.name = name;
+    if (url !== undefined) updateData.url = url;
+    if (events !== undefined) updateData.events = events;
+    if (isActive !== undefined) updateData.isActive = isActive;
+    if (category !== undefined) updateData.category = category;
+    if (format !== undefined) updateData.format = format;
+
     // Never overwrite a stored secret with an empty/blank value (edit forms
     // come back with the secret redacted, so an omitted/blank secret must
     // PRESERVE the existing one rather than wipe it).
-    const body = { ...req.body };
     if (
-      Object.prototype.hasOwnProperty.call(body, 'secret') &&
-      (typeof body.secret !== 'string' || body.secret.trim() === '')
+      secret !== undefined &&
+      typeof secret === 'string' &&
+      secret.trim() !== ''
     ) {
-      delete body.secret;
+      updateData.secret = secret;
     }
+
     const webhook = await (Webhook as any).findOneAndUpdate(
       withTenantScope(req, { _id: req.params.id }),
-      body,
+      updateData,
       { new: true },
     );
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
