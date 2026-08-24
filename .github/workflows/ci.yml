@@ -38,7 +38,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 22.x
           # Restores ~/.npm between runs. The dependency tree here (baileys and
           # friends) is large enough that a cold install cost more than the
           # checks themselves, in every job.
@@ -85,7 +85,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 22.x
           cache: 'npm'
           cache-dependency-path: client/package-lock.json
 
