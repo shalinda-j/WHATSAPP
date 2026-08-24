@@ -118,10 +118,13 @@ export class WebhookService {
         },
       ];
       if (tenantClause) andClauses.push(tenantClause);
-      const webhooks = await (Webhook as any).find({
-        isActive: true,
-        $and: andClauses,
-      });
+      // ⚡ Bolt: Use lean() to avoid full Mongoose hydration for read-only webhooks.
+      const webhooks = await (Webhook as any)
+        .find({
+          isActive: true,
+          $and: andClauses,
+        })
+        .lean();
 
       if (webhooks.length === 0) return;
 
@@ -147,10 +150,13 @@ export class WebhookService {
    */
   public static async triggerOpsAlert(alert: OpsAlertInput): Promise<void> {
     try {
-      const webhooks = (await (Webhook as any).find({
-        isActive: true,
-        category: 'ops',
-      })) as IWebhook[];
+      // ⚡ Bolt: Use lean() to avoid full Mongoose hydration for read-only webhooks.
+      const webhooks = (await (Webhook as any)
+        .find({
+          isActive: true,
+          category: 'ops',
+        })
+        .lean()) as IWebhook[];
 
       if (webhooks.length === 0) return;
 
