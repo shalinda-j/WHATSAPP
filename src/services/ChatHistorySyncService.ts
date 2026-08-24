@@ -1,4 +1,4 @@
-import { proto } from '@whiskeysockets/baileys';
+import type { proto } from '@whiskeysockets/baileys';
 import ChatMessage from '../models/ChatMessage';
 import { getDefaultTenantId } from './TenantBootstrapService';
 import { extractPhoneJidFromMessage, extractRealPhone } from '../utils/jid';

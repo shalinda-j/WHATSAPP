@@ -3,6 +3,7 @@ import cors from 'cors';
 import * as path from 'path';
 import * as fs from 'fs';
 import { isDigitalOceanOrigin } from './corsOrigins';
+import { CHAT_MEDIA_DIR } from '../services/ChatMediaStorageService';
 
 // Routes
 import authRoutes from './routes/auth';
@@ -361,7 +362,10 @@ app.use('/api/kiosk-admin', authenticateToken, resolveTenant, kioskAdminRouter);
 app.use('/api/api-keys', apiKeysRouter);
 app.use('/api/integrations', integrationsRouter);
 
-// Serve uploaded files
+// Chat attachments can point at a mounted/persistent volume independently of
+// the legacy uploads directory. UUID filenames avoid collisions.
+app.use('/uploads/chat-media', express.static(CHAT_MEDIA_DIR));
+// Serve legacy uploaded files.
 app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
 
 // Global Error Handler

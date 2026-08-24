@@ -1,10 +1,8 @@
-import {
-  proto,
+import type {
   AuthenticationState,
   SignalDataTypeMap,
-  initAuthCreds,
-  BufferJSON,
 } from '@whiskeysockets/baileys';
+import { loadBaileys } from './baileys';
 
 // Use require to bypass top-level type inference issues with Mongoose
 import mongoose from 'mongoose';
@@ -154,6 +152,7 @@ export const useMongoDBAuthState = async (
   saveCreds: () => Promise<void>;
   clearState: () => Promise<void>;
 }> => {
+  const { BufferJSON, initAuthCreds, proto } = await loadBaileys();
   // Add in-memory cache to prevent 'Bad MAC' decryption errors caused by slow DB reads/writes
   const cache: { [key: string]: any } = {};
 

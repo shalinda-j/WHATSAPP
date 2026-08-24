@@ -1,7 +1,8 @@
 import axios from 'axios';
-import { proto, downloadMediaMessage } from '@whiskeysockets/baileys';
+import type { proto } from '@whiskeysockets/baileys';
 import { describeMediaContent } from './gemini';
 import { getOpenRouterApiKey } from './openrouterVoice';
+import { loadBaileys } from './baileys';
 
 /**
  * Media understanding for inbound WhatsApp messages.
@@ -27,6 +28,8 @@ export interface DetectedMedia {
 export interface MediaAnalysis extends DetectedMedia {
   /** Gemini's description of the media. Empty when analysis wasn't possible. */
   description: string;
+  /** Downloaded bytes, retained so Live Chat can persist and render them. */
+  buffer?: Buffer;
 }
 
 // Gemini inline payloads are capped around 20MB for the whole request and
@@ -37,6 +40,7 @@ const MAX_BYTES: Record<IncomingMediaKind, number> = {
   video: 14 * 1024 * 1024,
   document: 14 * 1024 * 1024,
 };
+const MAX_STORAGE_BYTES = 64 * 1024 * 1024;
 
 // Gemini can read PDFs inline but not Office formats; images/videos are fine.
 const ANALYZABLE_DOCUMENT_MIMES = new Set(['application/pdf']);
@@ -192,25 +196,16 @@ export async function analyzeIncomingMedia(
 
   const result: MediaAnalysis = { ...media, description: '' };
 
-  if (media.fileLength > MAX_BYTES[media.kind]) {
+  if (media.fileLength > MAX_STORAGE_BYTES) {
     console.warn(
-      `   📦 ${media.kind} too large to analyze (${media.fileLength} bytes) — skipping AI analysis`,
+      `   📦 ${media.kind} exceeds Live Chat's 64MB storage cap — metadata only`,
     );
-    return result;
-  }
-
-  if (
-    media.kind === 'document' &&
-    !ANALYZABLE_DOCUMENT_MIMES.has(media.mimeType) &&
-    !media.mimeType.startsWith('image/')
-  ) {
-    // Office/zip/etc. — Gemini can't read these inline. Caller falls back to
-    // acknowledging the file by name.
     return result;
   }
 
   let buffer: Buffer | null = null;
   try {
+    const { downloadMediaMessage } = await loadBaileys();
     buffer = (await downloadMediaMessage(
       message as any,
       'buffer',
@@ -225,10 +220,27 @@ export async function analyzeIncomingMedia(
   }
 
   if (!buffer || buffer.length === 0) return result;
+  if (buffer.length > MAX_STORAGE_BYTES) {
+    console.warn(
+      `   📦 Downloaded ${media.kind} exceeds Live Chat's 64MB storage cap`,
+    );
+    return result;
+  }
+  result.buffer = buffer;
   if (buffer.length > MAX_BYTES[media.kind]) {
     console.warn(
       `   📦 Downloaded ${media.kind} exceeds analysis cap (${buffer.length} bytes) — skipping`,
     );
+    return result;
+  }
+
+  if (
+    media.kind === 'document' &&
+    !ANALYZABLE_DOCUMENT_MIMES.has(media.mimeType) &&
+    !media.mimeType.startsWith('image/')
+  ) {
+    // Office/zip/etc. cannot be analyzed inline, but the bytes above are kept
+    // so the operator can still download the attachment in Live Chat.
     return result;
   }
 

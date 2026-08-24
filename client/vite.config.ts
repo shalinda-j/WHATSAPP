@@ -19,6 +19,10 @@ export default defineConfig({
         changeOrigin: true,
         ws: true,
       },
+      '/uploads': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
     },
   },
   build: {
@@ -31,15 +35,21 @@ export default defineConfig({
       // link is per-document) and pulls in only the kiosk page. Without listing
       // it here Vite would emit index.html alone and kiosk.html would 404.
       input: {
-        main: resolve(__dirname, 'index.html'),
-        kiosk: resolve(__dirname, 'kiosk.html'),
+        main: resolve(import.meta.dirname, 'index.html'),
+        kiosk: resolve(import.meta.dirname, 'kiosk.html'),
       },
       output: {
-        manualChunks: {
-          react: ['react', 'react-dom', 'react-router-dom'],
-          socket: ['socket.io-client'],
-          icons: ['lucide-react'],
-          qr: ['qrcode.react'],
+        manualChunks(id) {
+          if (id.includes('/node_modules/socket.io-client/')) return 'socket';
+          if (id.includes('/node_modules/lucide-react/')) return 'icons';
+          if (id.includes('/node_modules/qrcode.react/')) return 'qr';
+          if (
+            id.includes('/node_modules/react/') ||
+            id.includes('/node_modules/react-dom/') ||
+            id.includes('/node_modules/react-router-dom/')
+          ) {
+            return 'react';
+          }
         },
       },
     },

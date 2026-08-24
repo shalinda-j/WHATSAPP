@@ -22,6 +22,7 @@ import Tenant from '../../models/Tenant';
 import { resolveTenant } from '../middleware/tenantContext';
 import { authenticateToken } from '../middleware/auth';
 import { Channel } from '../../types/agent';
+import { META_GRAPH_BASE_URL, META_GRAPH_VERSION } from '../../config/meta';
 
 const router = Router();
 
@@ -52,8 +53,8 @@ interface ProviderConfig {
 const PROVIDERS: Record<string, ProviderConfig> = {
   facebook: {
     channel: 'facebook',
-    authorizeUrl: 'https://www.facebook.com/v19.0/dialog/oauth',
-    tokenUrl: 'https://graph.facebook.com/v19.0/oauth/access_token',
+    authorizeUrl: `https://www.facebook.com/${META_GRAPH_VERSION}/dialog/oauth`,
+    tokenUrl: `${META_GRAPH_BASE_URL}/oauth/access_token`,
     scopes: ['pages_messaging', 'pages_show_list', 'pages_manage_metadata'],
     clientIdEnv: 'FB_APP_ID',
     clientSecretEnv: 'FB_APP_SECRET',
@@ -68,8 +69,8 @@ const PROVIDERS: Record<string, ProviderConfig> = {
   },
   instagram: {
     channel: 'instagram',
-    authorizeUrl: 'https://www.facebook.com/v19.0/dialog/oauth',
-    tokenUrl: 'https://graph.facebook.com/v19.0/oauth/access_token',
+    authorizeUrl: `https://www.facebook.com/${META_GRAPH_VERSION}/dialog/oauth`,
+    tokenUrl: `${META_GRAPH_BASE_URL}/oauth/access_token`,
     scopes: ['instagram_basic', 'instagram_manage_messages', 'pages_show_list'],
     clientIdEnv: 'FB_APP_ID',
     clientSecretEnv: 'FB_APP_SECRET',

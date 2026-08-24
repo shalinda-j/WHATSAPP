@@ -1,9 +1,9 @@
 import {
-  Facebook,
-  Twitter,
-  Instagram,
-  Linkedin,
-  Youtube,
+  BookOpen,
+  AtSign,
+  Camera,
+  BriefcaseBusiness,
+  CirclePlay,
   Mail,
   MessageCircle,
   Share2,
@@ -13,7 +13,7 @@ import {
   CreditCard,
   BarChart,
   Database,
-  Slack,
+  MessagesSquare,
   FileText,
   type LucideIcon,
 } from 'lucide-react';
@@ -59,7 +59,7 @@ export const INTEGRATIONS: Record<string, IntegrationPreset> = {
     id: 'facebook_pages',
     label: 'Facebook Pages',
     category: 'Social',
-    icon: Facebook,
+    icon: BookOpen,
     fields: [
       { key: 'pageId', label: 'Page ID', type: 'text' },
       { key: 'accessToken', label: 'Page Access Token', type: 'password' },
@@ -69,7 +69,7 @@ export const INTEGRATIONS: Record<string, IntegrationPreset> = {
     id: 'instagram_business',
     label: 'Instagram Business',
     category: 'Social',
-    icon: Instagram,
+    icon: Camera,
     fields: [
       { key: 'businessAccountId', label: 'Business Account ID', type: 'text' },
       { key: 'accessToken', label: 'Access Token', type: 'password' },
@@ -79,7 +79,7 @@ export const INTEGRATIONS: Record<string, IntegrationPreset> = {
     id: 'twitter',
     label: 'Twitter / X',
     category: 'Social',
-    icon: Twitter,
+    icon: AtSign,
     fields: [
       { key: 'apiKey', label: 'API Key', type: 'text' },
       { key: 'apiSecret', label: 'API Secret', type: 'password' },
@@ -89,7 +89,7 @@ export const INTEGRATIONS: Record<string, IntegrationPreset> = {
     id: 'linkedin_company',
     label: 'LinkedIn Company',
     category: 'Social',
-    icon: Linkedin,
+    icon: BriefcaseBusiness,
     fields: [
       { key: 'organizationId', label: 'Organization ID', type: 'text' },
       { key: 'accessToken', label: 'OAuth Token', type: 'password' },
@@ -118,7 +118,7 @@ export const INTEGRATIONS: Record<string, IntegrationPreset> = {
     id: 'youtube',
     label: 'YouTube',
     category: 'Social',
-    icon: Youtube,
+    icon: CirclePlay,
     fields: [
       { key: 'channelId', label: 'Channel ID', type: 'text' },
       { key: 'apiKey', label: 'API Key', type: 'password' },
@@ -224,7 +224,7 @@ export const INTEGRATIONS: Record<string, IntegrationPreset> = {
     id: 'meta_pixel',
     label: 'Meta Pixel',
     category: 'Ads',
-    icon: Facebook,
+    icon: BookOpen,
     fields: [
       { key: 'pixelId', label: 'Pixel ID', type: 'text' },
       { key: 'accessToken', label: 'Conversions API Token', type: 'password' },
@@ -254,7 +254,7 @@ export const INTEGRATIONS: Record<string, IntegrationPreset> = {
     id: 'linkedin_insight',
     label: 'LinkedIn Insight Tag',
     category: 'Ads',
-    icon: Linkedin,
+    icon: BriefcaseBusiness,
     fields: [{ key: 'partnerId', label: 'Partner ID', type: 'text' }],
   },
   ga4: {
@@ -326,7 +326,7 @@ export const INTEGRATIONS: Record<string, IntegrationPreset> = {
     id: 'slack',
     label: 'Slack',
     category: 'Workflow',
-    icon: Slack,
+    icon: MessagesSquare,
     fields: [{ key: 'webhookUrl', label: 'Webhook URL', type: 'url' }],
   },
   google_sheets: {

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type { IResponse, IServerData } from '../interfaces/Cep';
 import { BaseCommand } from '../utils/BaseCommand';
-import { proto } from '@whiskeysockets/baileys';
+import type { proto } from '@whiskeysockets/baileys';
 
 /**
  * Command to query postal code information

@@ -20,7 +20,9 @@ import path from 'path';
 const WORKFLOW_DIR = path.join(__dirname, '../../.github/workflows');
 
 function read(name: string): string {
-  return fs.readFileSync(path.join(WORKFLOW_DIR, name), 'utf8');
+  return fs
+    .readFileSync(path.join(WORKFLOW_DIR, name), 'utf8')
+    .replace(/\r\n/g, '\n');
 }
 
 /**
@@ -207,7 +209,7 @@ describe('runner setup', () => {
     const pkg = JSON.parse(
       fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf8'),
     );
-    expect(pkg.scripts['lint:ci']).toBe('eslint . --ext .js,.ts');
+    expect(pkg.scripts['lint:ci']).toBe('eslint .');
     expect(pkg.scripts['lint:ci']).not.toContain('--fix');
     expect(readYaml('ci.yml')).toContain('npm run lint:ci');
   });

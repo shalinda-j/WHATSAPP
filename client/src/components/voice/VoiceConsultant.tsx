@@ -579,9 +579,8 @@ export default function VoiceConsultant({
     // --- gesture may end here -------------------------------------------
 
     setStarting(true);
-    let stream: MediaStream | null = null;
     try {
-      stream = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
+      const stream = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
       // Unmounted, or the visitor tapped again while the prompt was up — in
       // both cases the mic we just opened must be handed straight back.
       if (!mountedRef.current || startTokenRef.current !== startToken) {

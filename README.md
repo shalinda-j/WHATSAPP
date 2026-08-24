@@ -17,7 +17,7 @@ A full-stack, multi-tenant, multi-channel marketing automation platform built on
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22.22+
 - MongoDB 6+ (Atlas or local)
 - At least one AI provider key (Gemini, OpenAI, Groq, or OpenRouter)
 

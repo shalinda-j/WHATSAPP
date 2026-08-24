@@ -1,4 +1,4 @@
-import { proto } from '@whiskeysockets/baileys';
+import type { proto } from '@whiskeysockets/baileys';
 import { ICommand } from '../interfaces/ICommand';
 import { sendTyping, sendMessage } from '../../services/whatsapp';
 

@@ -1,5 +1,5 @@
 import { BaseCommand } from '../utils/BaseCommand';
-import { proto } from '@whiskeysockets/baileys';
+import type { proto } from '@whiskeysockets/baileys';
 import { aiLoadBalancer } from '../../services/AILoadBalancer';
 import { sendMessage } from '../../services/whatsapp';
 import { SecurityService } from '../../services/SecurityService';

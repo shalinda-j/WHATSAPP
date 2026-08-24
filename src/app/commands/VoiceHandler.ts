@@ -1,4 +1,4 @@
-import { proto } from '@whiskeysockets/baileys';
+import type { proto } from '@whiskeysockets/baileys';
 import { aiLoadBalancer } from '../../services/AILoadBalancer';
 import { getDefaultTenantId } from '../../services/TenantBootstrapService';
 import {

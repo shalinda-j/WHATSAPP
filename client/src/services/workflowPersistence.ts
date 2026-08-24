@@ -51,7 +51,7 @@ class WorkflowPersistenceService {
       return workflowData;
     } catch (error) {
       console.error('Failed to save workflow to localStorage:', error);
-      throw new Error('Failed to save workflow locally');
+      throw new Error('Failed to save workflow locally', { cause: error });
     }
   }
 
@@ -77,7 +77,7 @@ class WorkflowPersistenceService {
       return workflows[index];
     } catch (error) {
       console.error('Failed to update workflow in localStorage:', error);
-      throw new Error('Failed to update workflow');
+      throw new Error('Failed to update workflow', { cause: error });
     }
   }
 
@@ -101,7 +101,7 @@ class WorkflowPersistenceService {
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(filtered));
     } catch (error) {
       console.error('Failed to delete workflow from localStorage:', error);
-      throw new Error('Failed to delete workflow');
+      throw new Error('Failed to delete workflow', { cause: error });
     }
   }
 
@@ -223,7 +223,7 @@ class WorkflowPersistenceService {
       return templateData;
     } catch (error) {
       console.error('Failed to save template:', error);
-      throw new Error('Failed to save template');
+      throw new Error('Failed to save template', { cause: error });
     }
   }
 
@@ -315,7 +315,7 @@ class WorkflowPersistenceService {
       return JSON.stringify(exportData, null, 2);
     } catch (error) {
       console.error('Failed to export workflow:', error);
-      throw new Error('Failed to export workflow');
+      throw new Error('Failed to export workflow', { cause: error });
     }
   }
 
@@ -343,7 +343,7 @@ class WorkflowPersistenceService {
       return workflowData;
     } catch (error) {
       console.error('Failed to import workflow:', error);
-      throw new Error('Failed to import workflow');
+      throw new Error('Failed to import workflow', { cause: error });
     }
   }
 }

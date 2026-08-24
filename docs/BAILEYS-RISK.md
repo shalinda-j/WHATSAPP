@@ -1,6 +1,6 @@
 # Baileys (WhatsApp) — ToS & Maintenance Risk Acknowledgement
 
-**Finding #69** — `@whiskeysockets/baileys` (pinned `6.6.0`) is an **unofficial,
+**Finding #69** — `@whiskeysockets/baileys` (pinned `7.0.0-rc14`) is an **unofficial,
 reverse-engineered WhatsApp Web library**. This document is the accepted
 mitigation for #69 (no code change); it records the risk so it is visible during
 compliance review.
@@ -37,7 +37,10 @@ which keeps a future migration off Baileys low-friction.
   ban-exposed** infrastructure.
 - For any deployment that cannot tolerate a ban, **migrate to the official
   WhatsApp Cloud API** before going live.
-- Keep `@whiskeysockets/baileys` **version-pinned** (currently `6.6.0`) and
+- Keep `@whiskeysockets/baileys` **version-pinned** (currently `7.0.0-rc14`) and
   upgrade deliberately, testing session auth after each bump.
+- Keep socket negotiation on `fetchLatestWaWebVersion()`. The package-version
+  endpoint can lag WhatsApp Web and produce QR pairing failures even when the
+  installed Baileys release itself is current.
 
 _Status: risk acknowledged. No code change required for #69._

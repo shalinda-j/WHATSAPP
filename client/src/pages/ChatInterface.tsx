@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { api } from '../config';
+import { api, API_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { io, Socket } from 'socket.io-client';
 import {
@@ -24,14 +24,20 @@ import {
   Smartphone,
   Download,
   Eye,
+  Paperclip,
+  FileText,
 } from 'lucide-react';
 
 interface Message {
   _id: string;
   userId: string;
   role: 'user' | 'assistant' | 'system';
-  type: 'text' | 'voice' | 'image' | 'document';
+  type: 'text' | 'voice' | 'image' | 'video' | 'document' | 'sticker';
   content: string;
+  mediaUrl?: string;
+  mediaMimeType?: string;
+  mediaFileName?: string;
+  mediaSize?: number;
   timestamp: Date;
   language?: string;
   metadata?: {
@@ -75,18 +81,17 @@ interface SessionSummary {
 }
 
 /**
- * A colleague who currently has a conversation open, as broadcast by the
- * presence registry on the server.
+ * A colleague who claimed a conversation during this live-chat session.
  */
 interface ChatViewer {
   adminId: string;
   name: string;
   roleName?: string;
-  /** Epoch ms — when they opened it. */
+  /** Epoch ms — when they first claimed it. */
   since: number;
 }
 
-/** How long a colleague has had the chat open, for the pill's tooltip. */
+/** How long a colleague has handled the chat, for the pill's tooltip. */
 function formatViewingFor(since: number): string {
   const mins = Math.floor((Date.now() - since) / 60000);
   if (mins < 1) return 'just now';
@@ -141,6 +146,11 @@ const CONVERSATION_PAGE_SIZE = 200;
 /** Hard stop for the "load everything" loop so a runaway can't hang the tab. */
 const CONVERSATION_LOAD_ALL_CAP = 20000;
 
+function mediaSrc(url?: string): string {
+  if (!url || /^(https?:|data:|blob:)/i.test(url)) return url || '';
+  return `${API_URL.replace(/\/$/, '')}${url.startsWith('/') ? url : `/${url}`}`;
+}
+
 export default function ChatInterface() {
   // Only needed to recognise ourselves in the presence list — we tag
   // colleagues, never the person reading the screen.
@@ -170,6 +180,13 @@ export default function ChatInterface() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recorderStreamRef = useRef<MediaStream | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   // Surface send failures to the operator — previously a failed send was only
   // console.error'd, so the message silently didn't go out with no feedback.
   const [sendError, setSendError] = useState<string | null>(null);
@@ -178,8 +195,11 @@ export default function ChatInterface() {
   // attached to, and it must not re-run when the connection object changes
   // identity — a ref gives it a stable handle without re-subscribing.
   const socketRef = useRef<Socket | null>(null);
+  // Chats claimed in this tab remain tagged when the operator switches rows.
+  // Re-announce all of them after a transient socket reconnect.
+  const claimedChatsRef = useRef<Set<string>>(new Set());
   /**
-   * conversation id -> colleagues currently looking at it. Server-owned: we
+   * conversation id -> colleagues handling it in this session. Server-owned: we
    * never add ourselves optimistically, because the merged list (us plus
    * whoever else is on it) only exists on the server.
    */
@@ -540,8 +560,9 @@ export default function ChatInterface() {
     // operator silently vanishing from a chat after a dropped connection.
     newSocket.on('connect', () => {
       newSocket.emit('chat:presence:list');
-      const active = selectedUserRef.current;
-      if (active) newSocket.emit('chat:open', { userId: active });
+      for (const userId of claimedChatsRef.current) {
+        newSocket.emit('chat:open', { userId });
+      }
     });
 
     socketRef.current = newSocket;
@@ -557,19 +578,13 @@ export default function ChatInterface() {
   }, []);
 
   /**
-   * Tell the server which conversation this operator is on.
-   *
-   * The cleanup fires both when they pick a different chat and when they leave
-   * the page, which is what makes the tag disappear the moment somebody moves
-   * on. The server also clears presence on disconnect, so a closed tab or a
-   * dead connection is covered even though no cleanup runs for those.
+   * Claim every conversation this operator handles. Switching conversations
+   * does not release the previous claim; disconnecting the tab releases all.
    */
   useEffect(() => {
     if (!selectedUser) return;
+    claimedChatsRef.current.add(selectedUser);
     socketRef.current?.emit('chat:open', { userId: selectedUser });
-    return () => {
-      socketRef.current?.emit('chat:close', { userId: selectedUser });
-    };
   }, [selectedUser]);
 
   const fetchSessions = async () => {
@@ -803,6 +818,98 @@ export default function ChatInterface() {
     }
   };
 
+  const uploadMedia = async (file: File, kind?: 'voice') => {
+    if (!selectedUser || sending) return;
+    setSending(true);
+    setSendError(null);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('userId', selectedUser);
+      form.append('caption', kind ? '' : newMessage.trim());
+      if (kind) form.append('kind', kind);
+      if (sessionFilter !== 'all') form.append('sessionId', sessionFilter);
+      await api.post('/api/chat/send-media', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      if (!kind) setNewMessage('');
+    } catch (error) {
+      console.error('Failed to send media:', error);
+      setSendError(
+        'Attachment could not be sent. Check the WhatsApp connection and file size.',
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const stopRecorderTracks = () => {
+    recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
+    recorderStreamRef.current = null;
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    recordingTimerRef.current = null;
+  };
+
+  const toggleRecording = async () => {
+    if (recording) {
+      recorderRef.current?.stop();
+      setRecording(false);
+      return;
+    }
+    if (!selectedUser || sending) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const preferred = [
+        'audio/webm;codecs=opus',
+        'audio/ogg;codecs=opus',
+        'audio/mp4',
+      ].find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = new MediaRecorder(
+        stream,
+        preferred ? { mimeType: preferred } : undefined,
+      );
+      recorderStreamRef.current = stream;
+      recorderRef.current = recorder;
+      recordingChunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size) recordingChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const mime = recorder.mimeType || preferred || 'audio/webm';
+        const blob = new Blob(recordingChunksRef.current, { type: mime });
+        recordingChunksRef.current = [];
+        stopRecorderTracks();
+        setRecordingSeconds(0);
+        if (blob.size) {
+          const extension = mime.includes('ogg') ? 'ogg' : mime.includes('mp4') ? 'm4a' : 'webm';
+          void uploadMedia(
+            new File([blob], `voice-${Date.now()}.${extension}`, { type: mime }),
+            'voice',
+          );
+        }
+      };
+      recorder.start(250);
+      setRecording(true);
+      setRecordingSeconds(0);
+      recordingTimerRef.current = setInterval(
+        () => setRecordingSeconds((seconds) => seconds + 1),
+        1000,
+      );
+    } catch (error) {
+      console.error('Microphone unavailable:', error);
+      stopRecorderTracks();
+      setRecording(false);
+      setSendError('Microphone permission is required to record a voice note.');
+    }
+  };
+
+  useEffect(
+    () => () => {
+      if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
+      stopRecorderTracks();
+    },
+  );
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -909,7 +1016,7 @@ export default function ChatInterface() {
   const selectedConv = conversations.find((c) => c.userId === selectedUser);
 
   /**
-   * Everyone currently on a conversation, in the order they arrived — the
+   * Everyone who claimed a conversation, in the order they arrived — the
    * operator reading this screen included.
    *
    * This deliberately does NOT hide your own tag. Seeing your own name appear
@@ -1162,7 +1269,7 @@ export default function ChatInterface() {
                           </span>
                         </div>
                       )}
-                    {/* Who has this chat open. Rendered above the LID pill
+                    {/* Who is handling this chat. Rendered above the LID pill
                         because it is the one thing an operator needs to see
                         BEFORE they click into a conversation — after that they
                         are already typing over a colleague. */}
@@ -1177,7 +1284,7 @@ export default function ChatInterface() {
                                 : `${v.name}${
                                     v.roleName ? ` · ${v.roleName}` : ''
                                   } has`
-                            } this chat open (${formatViewingFor(v.since)})`}
+                            } claimed this chat (${formatViewingFor(v.since)})`}
                             className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ring-1 max-w-full ${
                               // Your own tag is muted so a crowded row still
                               // reads as "who ELSE is here" at a glance.
@@ -1307,7 +1414,7 @@ export default function ChatInterface() {
                           : `${v.name}${
                               v.roleName ? ` · ${v.roleName}` : ''
                             } has`
-                      } this chat open (${formatViewingFor(v.since)})`}
+                      } claimed this chat (${formatViewingFor(v.since)})`}
                       className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ring-1 ${
                         isSelf(v)
                           ? 'bg-gray-100 text-gray-600 ring-gray-200'
@@ -1478,9 +1585,55 @@ export default function ChatInterface() {
                               : 'bg-green-600 text-white rounded-br-sm'
                           }`}
                         >
-                          <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                            {msg.content}
-                          </p>
+                          {(msg.type === 'image' || msg.type === 'sticker') &&
+                            msg.mediaUrl && (
+                              <img
+                                src={mediaSrc(msg.mediaUrl)}
+                                alt={msg.mediaFileName || msg.type}
+                                loading="lazy"
+                                className="mb-2 max-h-80 max-w-full rounded-lg object-contain"
+                              />
+                            )}
+                          {msg.type === 'video' && msg.mediaUrl && (
+                            <video
+                              src={mediaSrc(msg.mediaUrl)}
+                              controls
+                              preload="metadata"
+                              className="mb-2 max-h-80 max-w-full rounded-lg"
+                            />
+                          )}
+                          {msg.type === 'voice' && msg.mediaUrl && (
+                            <audio
+                              src={mediaSrc(msg.mediaUrl)}
+                              controls
+                              preload="metadata"
+                              className="mb-2 max-w-full"
+                            />
+                          )}
+                          {msg.type === 'document' && msg.mediaUrl && (
+                            <a
+                              href={mediaSrc(msg.mediaUrl)}
+                              target="_blank"
+                              rel="noreferrer"
+                              download={msg.mediaFileName}
+                              className={`mb-2 flex items-center gap-2 rounded-lg border p-3 ${
+                                isUser
+                                  ? 'border-gray-200 bg-gray-50 text-blue-700'
+                                  : 'border-green-400 bg-green-700 text-white'
+                              }`}
+                            >
+                              <FileText className="h-5 w-5 flex-shrink-0" />
+                              <span className="truncate text-sm">
+                                {msg.mediaFileName || 'Download document'}
+                              </span>
+                              <Download className="ml-auto h-4 w-4 flex-shrink-0" />
+                            </a>
+                          )}
+                          {msg.content && (
+                            <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                              {msg.content}
+                            </p>
+                          )}
                           <div
                             className={`flex items-center gap-1 mt-1 ${
                               isUser ? 'justify-start' : 'justify-end'
@@ -1589,22 +1742,53 @@ export default function ChatInterface() {
                 <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full flex-shrink-0">
                   <Smile className="h-5 w-5" />
                 </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void uploadMedia(file);
+                    event.currentTarget.value = '';
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={sending || recording}
+                  title="Send an attachment"
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full flex-shrink-0 disabled:opacity-40"
+                >
+                  <Paperclip className="h-5 w-5" />
+                </button>
                 <div className="flex-1 relative">
                   <textarea
                     rows={1}
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     onKeyDown={handleKeyPress}
-                    placeholder="Type a message... (supports Sinhala, Tamil, English)"
+                    placeholder={
+                      recording
+                        ? `Recording voice… ${recordingSeconds}s (tap mic to send)`
+                        : 'Type a message... (supports Sinhala, Tamil, English)'
+                    }
                     className="w-full px-4 py-2.5 bg-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none leading-5"
-                    disabled={sending}
+                    disabled={sending || recording}
                     style={{ maxHeight: '120px', overflowY: 'auto' }}
                   />
                 </div>
                 <button
-                  onClick={sendMessage}
-                  disabled={!newMessage.trim() || sending}
-                  className="p-2.5 bg-green-600 text-white rounded-full hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0 shadow-sm"
+                  onClick={() =>
+                    newMessage.trim() ? void sendMessage() : void toggleRecording()
+                  }
+                  disabled={sending || (!newMessage.trim() && !selectedUser)}
+                  title={recording ? 'Stop and send recording' : undefined}
+                  className={`p-2.5 text-white rounded-full disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0 shadow-sm ${
+                    recording
+                      ? 'bg-red-600 hover:bg-red-700 animate-pulse'
+                      : 'bg-green-600 hover:bg-green-700'
+                  }`}
                 >
                   {sending ? (
                     <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />

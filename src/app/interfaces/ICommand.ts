@@ -1,4 +1,4 @@
-import { proto } from '@whiskeysockets/baileys';
+import type { proto } from '@whiskeysockets/baileys';
 
 /**
  * Base interface for all bot commands

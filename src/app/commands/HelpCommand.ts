@@ -1,7 +1,7 @@
 import { BaseCommand } from '../utils/BaseCommand';
 import { commandDispatcher } from '../utils/CommandDispatcher';
 import { sendMessage } from '../../services/whatsapp';
-import { proto } from '@whiskeysockets/baileys';
+import type { proto } from '@whiskeysockets/baileys';
 
 /**
  * Command to display all available commands with their descriptions and aliases

@@ -7,7 +7,7 @@ import { authenticateToken } from '../middleware/auth';
 import { strictRateLimit } from '../middleware/rateLimit';
 import { validateObjectId } from '../middleware/validation';
 import { resolveTenant, withTenantScope } from '../middleware/tenantContext';
-import pdf from 'pdf-parse';
+import { extractPdfText } from '../../utils/pdf';
 import ChatMessage from '../../models/ChatMessage';
 import { configurationManager } from '../../services/ConfigurationManagerService';
 import { agentReflectionService } from '../../services/AgentReflectionService';
@@ -532,8 +532,7 @@ router.post(
       if (req.file.mimetype === 'application/pdf') {
         try {
           const dataBuffer = fs.readFileSync(req.file.path);
-          const data = await pdf(dataBuffer);
-          extractedText = data.text;
+          extractedText = await extractPdfText(dataBuffer);
         } catch (pdfErr) {
           console.error('PDF parsing error:', pdfErr);
         }
