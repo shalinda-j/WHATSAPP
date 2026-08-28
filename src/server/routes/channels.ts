@@ -138,7 +138,7 @@ router.patch(
     const conn = await ChannelConnection.findOneAndUpdate(
       { _id: req.params.id, tenantId },
       { agentBindings: parsed.data.agentBindings },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!conn) return res.status(404).json({ error: 'not_found' });
     res.json({

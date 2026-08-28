@@ -45,7 +45,7 @@ export class SessionStateService {
         expiresAt,
         updatedAt: new Date(),
       },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: 'after' },
     );
 
     return session;

@@ -101,7 +101,7 @@ export class SegmentationService {
     return ContactSegment.findOneAndUpdate(
       { _id: segmentId, tenantId },
       { $set: patch },
-      { new: true },
+      { returnDocument: 'after' },
     );
   }
 

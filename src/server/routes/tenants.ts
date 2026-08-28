@@ -86,7 +86,7 @@ router.patch(
     const updated = await Tenant.findOneAndUpdate(
       { slug: req.params.slug },
       { $set: parsed.data },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!updated) return res.status(404).json({ error: 'not_found' });
     res.json(updated);

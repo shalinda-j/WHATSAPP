@@ -6,6 +6,10 @@ import { loadBaileys } from './baileys';
 
 // Use require to bypass top-level type inference issues with Mongoose
 import mongoose from 'mongoose';
+import {
+  reconcileSessionStateExpiresAtIndex,
+  type SessionStateDatabase,
+} from './SessionStateIndexService';
 
 // --- Mongoose Schema ---
 // --- Interface for strict typing ---
@@ -115,6 +119,21 @@ export const connectToMongoDB = async (uri: string): Promise<void> => {
             console.warn('⚠️ Migration warning:', migrationError.message);
           }
         }
+
+        // Reconcile legacy SessionState.expiresAt indexes before serving
+        // requests. Older deployments may have created expiresAt_1 as an
+        // ordinary index, which a schema declaration alone cannot convert to
+        // TTL. collMod preserves the index in place; restricted Atlas users
+        // fall back to dropping/recreating only this index.
+        const sessionStateIndexResult =
+          await reconcileSessionStateExpiresAtIndex(
+            mongoose.connection.db as unknown as SessionStateDatabase,
+          );
+        if (sessionStateIndexResult !== 'unchanged') {
+          console.log(
+            `🔧 SessionState expiresAt TTL index ${sessionStateIndexResult}.`,
+          );
+        }
       }
 
       // If successful, break the loop
@@ -190,7 +209,7 @@ export const useMongoDBAuthState = async (
       await AuthModel.findOneAndUpdate(
         { sessionId, key },
         { value: jsonValue },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: 'after' },
       );
     } catch (error) {
       console.error(

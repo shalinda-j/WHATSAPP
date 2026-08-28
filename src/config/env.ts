@@ -150,7 +150,7 @@ export function validateEnvironment(): void {
   const hasAIProvider = aiProviders.some((key) => process.env[key]);
   if (!hasAIProvider) {
     warnings.push(
-      'WARNING: No AI provider API keys configured. AI features will not work.',
+      'WARNING: No environment-based AI provider API key configured. Database-configured providers will be checked after MongoDB connects.',
     );
   }
 

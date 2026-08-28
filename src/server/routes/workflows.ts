@@ -784,7 +784,7 @@ router.put('/:id', validateObjectId(), async (req: Request, res: Response) => {
         metadata,
         updatedAt: new Date(),
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!workflow) return res.status(404).json({ error: 'Workflow not found' });
     res.json(workflow);

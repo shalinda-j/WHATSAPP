@@ -156,7 +156,7 @@ router.patch(
     const updated = await AgentConfig.findOneAndUpdate(
       { name: String(req.params.name) },
       { $set: patch },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!updated) throw new Error('Agent not found');
     await agentRegistry.forceReload();
@@ -291,7 +291,7 @@ router.patch(
     const updated = await AgentConfig.findOneAndUpdate(
       { name },
       { $set: { candidateTrafficPercent: body.trafficPercent } },
-      { new: true },
+      { returnDocument: 'after' },
     );
     await agentRegistry.forceReload();
     res.json({ success: true, config: updated });
@@ -782,7 +782,7 @@ router.patch(
     const skill = await AgentSkill.findOneAndUpdate(
       { _id: req.params.id, tenantId },
       { $set: body },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!skill) throw new Error('Skill not found');
     await agentRegistry.forceReload();
@@ -814,7 +814,7 @@ router.post(
     const skill = await AgentSkill.findOneAndUpdate(
       { _id: req.params.id, tenantId },
       { $addToSet: { assignedAgents: { $each: agents } } },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!skill) throw new Error('Skill not found');
     await agentRegistry.forceReload();
@@ -833,7 +833,7 @@ router.post(
     const skill = await AgentSkill.findOneAndUpdate(
       { _id: req.params.id, tenantId },
       { $pull: { assignedAgents: { $in: agents } } as any },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!skill) throw new Error('Skill not found');
     await agentRegistry.forceReload();

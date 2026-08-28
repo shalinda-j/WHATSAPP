@@ -110,7 +110,7 @@ router.post('/', async (req: Request, res: Response) => {
       update.googleApiKey = googleApiKey;
 
     const config = await VoiceConfig.findOneAndUpdate({ provider }, update, {
-      new: true,
+      returnDocument: 'after',
       upsert: true,
       setDefaultsOnInsert: true,
     });

@@ -152,7 +152,7 @@ export class AgentReflectionService {
       const claimed = await AgentApprovalQueue.findOneAndUpdate(
         { _id: entry._id, status: 'pending' },
         { $set: { status: 'expired', reviewedAt: now } },
-        { new: true },
+        { returnDocument: 'after' },
       );
       if (!claimed) continue;
 

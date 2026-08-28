@@ -805,7 +805,7 @@ router.put('/registrations/:id/status', async (req, res) => {
     const registration = await Lead.findOneAndUpdate(
       query,
       { status, notes, updatedAt: new Date() },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!registration) {
       return res.status(404).json({ error: 'Registration not found' });

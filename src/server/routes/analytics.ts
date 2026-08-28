@@ -488,7 +488,7 @@ router.patch('/bookings/:id', async (req, res) => {
         ...(time && { time }),
         ...(location && { location }),
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).lean();
 
     if (!booking) {

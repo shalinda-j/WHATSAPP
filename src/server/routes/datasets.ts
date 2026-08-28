@@ -241,7 +241,7 @@ router.put('/:id/language/:lang', validateObjectId(), async (req, res) => {
     const updatedDataset = await Dataset.findOneAndUpdate(
       withTenantScope(req, { _id: id }),
       { $set: { [updatePath]: content } },
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     if (!updatedDataset) {
@@ -465,7 +465,7 @@ router.put('/:id', validateObjectId(), async (req, res) => {
     let updatedDataset = await Dataset.findOneAndUpdate(
       withTenantScope(req, { _id: req.params.id }),
       updateOp,
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     // Stale `_id` recovery: if the doc the frontend thought it had has been
@@ -484,7 +484,7 @@ router.put('/:id', validateObjectId(), async (req, res) => {
         updatedDataset = await Dataset.findOneAndUpdate(
           withTenantScope(req, { _id: byKey._id }),
           updateOp,
-          { new: true },
+          { returnDocument: 'after' },
         );
       }
     }
