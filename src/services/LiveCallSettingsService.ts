@@ -158,7 +158,7 @@ class LiveCallSettingsService {
       await Config.findOneAndUpdate(
         { key: CONFIG_KEY },
         { key: CONFIG_KEY, value, description: 'Live Call Settings' },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: 'after' },
       );
     } catch {
       /* Mongo unavailable — file fallback below */

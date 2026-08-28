@@ -506,7 +506,7 @@ export class KnowledgeTrainingService {
       const entry = await KnowledgeEntry.findOneAndUpdate(
         byIdTenantFilter(id, tenantId),
         { ...updates, updatedAt: new Date() },
-        { new: true },
+        { returnDocument: 'after' },
       );
 
       if (entry) {

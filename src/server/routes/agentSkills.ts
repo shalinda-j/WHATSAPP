@@ -124,7 +124,7 @@ router.patch(
     const skill = await AgentSkill.findOneAndUpdate(
       { _id: req.params.id, tenantId },
       { $set: parsed.data },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!skill) return res.status(404).json({ error: 'not_found' });
     res.json({ skill });
@@ -151,7 +151,7 @@ router.patch(
     const skill = await AgentSkill.findOneAndUpdate(
       { _id: req.params.id, tenantId },
       { $set: { assignedAgents: parsed.data.assignedAgents } },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!skill) return res.status(404).json({ error: 'not_found' });
     res.json({ skill });

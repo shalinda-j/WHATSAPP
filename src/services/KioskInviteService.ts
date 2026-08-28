@@ -337,7 +337,7 @@ class KioskInviteService {
         expiresAt: { $gt: new Date() },
       },
       { $set: { status: 'redeemed', redeemedAt: new Date() } },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!invite) return null;
 
@@ -371,7 +371,7 @@ class KioskInviteService {
     const invite: any = await KioskInvite.findOneAndUpdate(
       { _id: inviteId, status: { $ne: 'converted' } },
       { $set: { status: 'converted' } },
-      { new: true },
+      { returnDocument: 'after' },
     ).catch(() => null);
 
     if (!invite) return false; // already converted, or not found

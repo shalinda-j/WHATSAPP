@@ -177,7 +177,7 @@ router.put(
           isDefault,
           updatedAt: new Date(),
         },
-        { new: true },
+        { returnDocument: 'after' },
       );
 
       if (!template) {
@@ -233,7 +233,7 @@ router.post(
       const template = await FormTemplate.findOneAndUpdate(
         withTenantScope(req, { _id: req.params.id }),
         { isDefault: true, updatedAt: new Date() },
-        { new: true },
+        { returnDocument: 'after' },
       );
       if (!template) {
         return res.status(404).json({ error: 'Template not found' });
@@ -503,7 +503,7 @@ router.put(
           reviewedAt: status !== 'new' ? new Date() : undefined,
           updatedAt: new Date(),
         },
-        { new: true },
+        { returnDocument: 'after' },
       );
 
       if (!submission) {

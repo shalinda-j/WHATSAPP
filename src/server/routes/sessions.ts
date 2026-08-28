@@ -68,7 +68,7 @@ router.post('/', async (req, res) => {
       session = await Session.findOneAndUpdate(
         { sessionId: newId },
         { deleted: false, status: 'connecting', qr: null },
-        { new: true },
+        { returnDocument: 'after' },
       );
       console.log(`   ✅ Session ${newId} restored from deleted state.`);
       // Also clear from in-memory deleted set
@@ -133,7 +133,7 @@ router.put('/:id/name', async (req, res) => {
     const session = await Session.findOneAndUpdate(
       withTenantScope(req, { sessionId: id }),
       { sessionName },
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     if (!session) {

@@ -195,7 +195,7 @@ export class LeadQualifierAgent implements IAgent {
             ...(tenantId ? { tenantId } : {}),
           },
         },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: 'after' },
       );
     }
 

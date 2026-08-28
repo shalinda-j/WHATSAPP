@@ -392,7 +392,7 @@ export class ConfigurationManagerService {
             description: `Configuration for ${this.formatKeyName(key)}`,
           },
         },
-        { new: true, upsert: true },
+        { returnDocument: 'after', upsert: true },
       );
 
       // Clear cache for this key

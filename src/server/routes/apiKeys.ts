@@ -94,7 +94,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     const doc = await ApiKey.findOneAndUpdate(
       withTenantScope(req, { _id: req.params.id }),
       { $set: { isActive: false } },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!doc) return res.status(404).json({ error: 'not_found' });
     res.json({ success: true, ...redact(doc) });

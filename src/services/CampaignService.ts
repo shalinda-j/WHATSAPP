@@ -142,7 +142,7 @@ export class CampaignService {
     return MarketingCampaign.findOneAndUpdate(
       { _id: campaignId, tenantId },
       { $set: patch },
-      { new: true },
+      { returnDocument: 'after' },
     );
   }
 
@@ -471,7 +471,7 @@ export class CampaignService {
         const claimed = await CampaignExecution.findOneAndUpdate(
           { _id: exec._id, status: 'queued' },
           { $set: { status: 'sending' }, $inc: { attemptCount: 1 } },
-          { new: true },
+          { returnDocument: 'after' },
         );
         if (!claimed) continue;
 

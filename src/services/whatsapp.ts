@@ -16,6 +16,7 @@ import { promises as fsPromises } from 'fs';
 import { randomBytes } from 'crypto';
 import { HumanizerService } from './HumanizerService';
 import { extractPhoneJidFromMessage, isLidJid } from '../utils/jid';
+import { shouldIgnoreWhatsAppJid } from '../utils/whatsappJid';
 import {
   extractPhoneFromText,
   rememberLidPhoneMapping,
@@ -219,6 +220,10 @@ export class WhatsAppSessionManager {
         // that device has to be unlinked and re-scanned.
         syncFullHistory: isHistorySyncEnabled(),
         markOnlineOnConnect: false,
+        // Status broadcasts are outside this bot's feature set. Skipping them
+        // before decryption avoids stale libsignal PreKey errors after rolling
+        // deployments while leaving direct and group chats untouched.
+        shouldIgnoreJid: shouldIgnoreWhatsAppJid,
       });
 
       // Re-check the deleted flag before adopting this socket. deleteSession
@@ -670,7 +675,7 @@ export class WhatsAppSessionManager {
       await Session.findOneAndUpdate(
         { sessionId },
         { deleted: true, status: 'deleted', qr: null },
-        { new: true },
+        { returnDocument: 'after' },
       );
       console.log(`   ✅ Marked session as deleted in database: ${sessionId}`);
     } catch (dbErr: any) {

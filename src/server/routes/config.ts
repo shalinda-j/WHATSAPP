@@ -191,7 +191,7 @@ router.put('/humanizer', async (req, res) => {
         description: 'Timing parameters for message humanization',
         updatedAt: new Date(),
       },
-      { new: true, upsert: true, setDefaultsOnInsert: true },
+      { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
     );
 
     // Clear cache to apply changes immediately
@@ -239,7 +239,7 @@ router.put('/conversation-examples', async (req, res) => {
       const dataset = await Dataset.findOneAndUpdate(
         { key: 'CONVERSATION_EXAMPLES' },
         { content: { en: [] }, isActive: true, updatedAt: new Date() },
-        { new: true, upsert: true, setDefaultsOnInsert: true },
+        { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
       );
       configService.clearCache();
       return res.json({ success: true, examples: [] });
@@ -266,7 +266,7 @@ router.put('/conversation-examples', async (req, res) => {
         description: 'Training examples for AI conversation context',
         updatedAt: new Date(),
       },
-      { new: true, upsert: true, setDefaultsOnInsert: true },
+      { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
     );
 
     // Clear cache to apply changes immediately
@@ -323,7 +323,7 @@ router.put('/job-types', async (req, res) => {
         description: 'Available job types for lead registration',
         updatedAt: new Date(),
       },
-      { new: true, upsert: true, setDefaultsOnInsert: true },
+      { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
     );
 
     // Clear cache to apply changes immediately
@@ -380,7 +380,7 @@ router.put('/booking-keywords', async (req, res) => {
         description: 'Keywords that trigger booking intent detection',
         updatedAt: new Date(),
       },
-      { new: true, upsert: true, setDefaultsOnInsert: true },
+      { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
     );
 
     // Clear cache to apply changes immediately
@@ -430,7 +430,7 @@ router.put('/booking', async (req, res) => {
         description: 'Booking system configuration (location, organizer, etc.)',
         updatedAt: new Date(),
       },
-      { new: true, upsert: true, setDefaultsOnInsert: true },
+      { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
     );
 
     // Clear cache to apply changes immediately
@@ -481,7 +481,7 @@ router.put('/company-info', async (req, res) => {
         description: 'General company contact details',
         updatedAt: new Date(),
       },
-      { new: true, upsert: true, setDefaultsOnInsert: true },
+      { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
     );
 
     // Clear cache to apply changes immediately
@@ -535,7 +535,7 @@ router.put('/countries', async (req, res) => {
         description: 'Countries available for job placement',
         updatedAt: new Date(),
       },
-      { new: true, upsert: true, setDefaultsOnInsert: true },
+      { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
     );
 
     // Clear cache to apply changes immediately
@@ -592,7 +592,7 @@ router.put('/experience-levels', async (req, res) => {
         description: 'Experience level options for lead registration',
         updatedAt: new Date(),
       },
-      { new: true, upsert: true, setDefaultsOnInsert: true },
+      { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
     );
 
     // Clear cache to apply changes immediately
@@ -795,7 +795,7 @@ router.post('/session/save', requireSuperAdmin, async (req, res) => {
       saved = await Config.findByIdAndUpdate(
         (existing as any)._id,
         { $set: payload },
-        { new: true },
+        { returnDocument: 'after' },
       );
     } else {
       payload.key = `provider_${providerType}_${Date.now()}`;
@@ -860,7 +860,7 @@ router.put('/:id', requireSuperAdmin, async (req, res) => {
     const updatedConfig = await Config.findByIdAndUpdate(
       req.params.id,
       { $set: updates },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!updatedConfig) {
       return res.status(404).json({ error: 'Config not found' });

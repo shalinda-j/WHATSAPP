@@ -758,7 +758,7 @@ router.post(
               const updated = await KioskInvite.findByIdAndUpdate(
                 kiosk.inviteId,
                 { $set: { ...dotted, completed: done } },
-                { new: true },
+                { returnDocument: 'after' },
               ).lean();
               if (updated) latestInvite = updated;
             } catch (err: any) {

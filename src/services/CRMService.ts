@@ -194,7 +194,7 @@ export class CRMService {
     return Contact.findOneAndUpdate(
       query,
       { ...safeData, updatedAt: new Date() },
-      { new: true },
+      { returnDocument: 'after' },
     );
   }
 
@@ -418,7 +418,9 @@ export class CRMService {
         { tenantId: null },
       ];
     }
-    return Deal.findOneAndUpdate(query, updateData, { new: true });
+    return Deal.findOneAndUpdate(query, updateData, {
+      returnDocument: 'after',
+    });
   }
 
   /**
@@ -601,7 +603,9 @@ export class CRMService {
         { tenantId: null },
       ];
     }
-    return Activity.findOneAndUpdate(query, updateData, { new: true });
+    return Activity.findOneAndUpdate(query, updateData, {
+      returnDocument: 'after',
+    });
   }
 
   /**
@@ -664,7 +668,9 @@ export class CRMService {
    * Update a pipeline stage
    */
   static async updatePipelineStage(id: string, data: any) {
-    return PipelineStage.findByIdAndUpdate(id, data, { new: true });
+    return PipelineStage.findByIdAndUpdate(id, data, {
+      returnDocument: 'after',
+    });
   }
 
   /**

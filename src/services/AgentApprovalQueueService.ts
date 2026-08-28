@@ -126,7 +126,7 @@ export class AgentApprovalQueueService {
           reviewedAt: new Date(),
         },
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!entry) {
       // Differentiate "doesn't exist" vs "already resolved" so the
@@ -169,7 +169,7 @@ export class AgentApprovalQueueService {
           reviewerNotes: note,
         },
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!entry) {
       const existing = await AgentApprovalQueue.findById(approvalId).lean();

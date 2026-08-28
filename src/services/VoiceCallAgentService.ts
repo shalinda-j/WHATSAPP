@@ -83,7 +83,7 @@ export class VoiceCallAgentService {
       await Config.findOneAndUpdate(
         { key: CONFIG_KEY },
         { key: CONFIG_KEY, value, description: 'Voice Call Agent Settings' },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: 'after' },
       );
     } catch {
       /* MongoDB unavailable — file fallback below */

@@ -698,7 +698,7 @@ router.put('/:id', async (req, res) => {
     const webhook = await (Webhook as any).findOneAndUpdate(
       withTenantScope(req, { _id: req.params.id }),
       body,
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
     res.json(redactWebhook(webhook));

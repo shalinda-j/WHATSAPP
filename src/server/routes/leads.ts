@@ -465,7 +465,7 @@ router.put('/:id', validateObjectId(), async (req, res) => {
     const lead = await Lead.findOneAndUpdate(
       query,
       { ...updateBody, updatedAt: new Date() },
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     // Outcome correlation: when a status moves to a terminal state, push a

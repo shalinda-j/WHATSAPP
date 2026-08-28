@@ -49,7 +49,6 @@ const SessionStateSchema = new (mongoose as any).Schema({
   expiresAt: {
     type: Date,
     required: true,
-    index: true,
   },
 });
 
