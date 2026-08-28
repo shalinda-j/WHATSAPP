@@ -2,7 +2,7 @@ import { Router } from 'express';
 import ChatMessage from '../../models/ChatMessage';
 import Lead from '../../models/Lead';
 import Booking from '../../models/Booking';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, type AuthRequest } from '../middleware/auth';
 import { resolveTenant, withTenantScope } from '../middleware/tenantContext';
 import { kioskInviteService } from '../../services/KioskInviteService';
 import { resolveActiveSessionId } from '../../services/whatsapp';
@@ -425,6 +425,7 @@ router.post('/bookings', async (req, res) => {
       location,
       status: 'confirmed',
       tenantId: req.tenant?._id,
+      createdByUsername: (req as AuthRequest).user?.username,
     });
 
     // Invite the lead: issue an in-branch kiosk code, save it on the booking so

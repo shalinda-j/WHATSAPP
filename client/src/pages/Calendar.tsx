@@ -33,6 +33,7 @@ interface Booking {
   // visit is booked). Shown so branch staff can verify/announce it.
   kioskCode?: string;
   kioskCodeExpiresAt?: string;
+  createdByUsername?: string;
   createdAt: string;
 }
 
@@ -724,6 +725,17 @@ export default function Calendar() {
                     <p className="text-xs text-gray-500">Type</p>
                     <p className="font-semibold text-gray-900">
                       {selectedBooking.type}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {selectedBooking.createdByUsername && (
+                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                  <User className="h-5 w-5 text-cyan-600" />
+                  <div>
+                    <p className="text-xs text-gray-500">Booked By</p>
+                    <p className="font-semibold text-gray-900">
+                      {selectedBooking.createdByUsername}
                     </p>
                   </div>
                 </div>
